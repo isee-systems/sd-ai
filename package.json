@@ -1,0 +1,14 @@
+{
+  "dependencies": {
+    "express": "^4.21.1",
+    "express-session": "^1.18.1",
+    "openai": "^4.73.1"
+  },
+  "scripts": {
+    "start": "nodemon --env-file=.env app.js"
+  },
+  "type": "module",
+  "devDependencies": {
+    "nodemon": "^3.1.7"
+  }
+}

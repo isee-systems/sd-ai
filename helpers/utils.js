@@ -1,0 +1,139 @@
+import OpenAI from "openai";
+import path from "path";
+import fs from "fs";
+
+let utils = {};
+
+//this will let us deny old clients in the future
+utils.supportedPlatform = function(clientProduct, clientVersion) {
+  //both product and version may be null or undefined if not passed in
+  return true;
+}
+
+utils.arrayify = function(chatGPTObj) {
+  let arr = [];
+  for (const [key, value] of Object.entries(chatGPTObj)) {
+      arr.push(value);
+  }
+
+  return arr;
+}
+
+utils.xmileName = function(name) {
+  let cleanName = name.replaceAll("\n", " ")
+             .replaceAll("\r", " ");
+
+  const splits = cleanName.split(" ").filter((c) => {
+    return c !== " ";
+  });
+
+  return splits.join("_");
+}
+
+utils.caseFold = function(variableName) {
+  let xname = utils.xmileName(variableName);
+  return xname.toLowerCase();
+}
+
+utils.convertToXMILE = function(relationships) {
+
+  let xmileConnectors = "";
+  let xmileEqns = "";
+
+  let variablesObj = {}; //variable to causers
+  relationships.forEach(function(relationship) {
+    if (!variablesObj[relationship.end]) {
+      variablesObj[relationship.end] = [];
+    }
+
+    let arr = variablesObj[relationship.end];
+    if (!arr.includes(relationship.start)) {
+      arr.push(relationship.start);
+      variablesObj[relationship.end] = arr;
+
+      let polarity = "";
+      if (relationship.polarity !== "?")
+        polarity =  "polarity=\"" + relationship.polarity + "\"";
+
+      xmileConnectors += "<connector " + polarity + ">";
+      xmileConnectors += "<from>" + utils.xmileName(relationship.start) + "</from>";
+      xmileConnectors += "<to>" + utils.xmileName(relationship.end) + "</to>";
+      xmileConnectors += "</connector>";
+    }
+  });
+
+  for (const [variable, causers] of Object.entries(variablesObj)) {
+    let prettyName = variable.replaceAll("\n", "\\\n").replaceAll("\r", "\\\r");
+    xmileEqns += "<aux name=\"" + prettyName + "\">";
+    xmileEqns += "<eqn>NAN(";
+    causers.forEach(function(cause, index) {
+      if (index > 0)
+        xmileEqns += ",";
+      xmileEqns += utils.xmileName(cause);
+    });
+    xmileEqns += ")</eqn>";
+    xmileEqns += "<isee:delay_aux/>";
+    xmileEqns += "</aux>";
+  }
+  
+  let value = '<?xml version="1.0" encoding="utf-8"?>';
+  value += '<xmile version="1.0" xmlns="http://docs.oasis-open.org/xmile/ns/XMILE/v1.0" xmlns:isee="http://iseesystems.com/XMILE">';
+  value += '<header>';
+  value += '<smile version="1.0" namespace="std, isee"/>';
+  value += '<vendor>AI Proxy Service</vendor>';
+  value += '<product version="1.0.0" lang="en">AI Proxy Service</product>';
+  value += '</header>';
+  value += '<model>';
+  
+  value += '<variables>';
+  value += xmileEqns;
+  value += '</variables>';
+
+  value += '<views>';
+  value += '<view type="stock_flow">';
+  value += '<style><aux><shape type="name_only"/></aux></style>';
+  value += xmileConnectors;
+  value += '</view>';
+  value += '</views>';
+  value += '</model>';
+  value += '</xmile>';
+
+  return value;
+};
+
+function getSubDirectories(path) {
+  return fs.readdirSync(path).filter(function (file) {
+    return fs.statSync(path+'/'+file).isDirectory();
+  });
+}
+
+async function setupPromptingSchemes() {
+  return new Promise((success)=> {
+    console.log("Reading prompt directory")
+    let response = {};
+    const dirname = './prompts/';
+    
+    const dirnames = getSubDirectories(dirname);
+    dirnames.forEach(function(subDir) {
+      const systemPrompt = fs.readFileSync(dirname + subDir + "/system.txt", 'utf-8'); 
+      const checkRelationshipPolarityPrompt = fs.readFileSync(dirname + subDir + "/check.txt", 'utf-8'); 
+      const feedbackPrompt = fs.readFileSync(dirname + subDir + "/feedback.txt", 'utf-8'); 
+      const assistantPrompt = fs.readFileSync(dirname + subDir + "/assistant.txt", 'utf-8'); 
+
+      response[subDir] = {
+        displayName: subDir,
+        systemPrompt: systemPrompt,
+        checkRelationshipPolarityPrompt: checkRelationshipPolarityPrompt,
+        feedbackPrompt: feedbackPrompt,
+        assistantPrompt: assistantPrompt
+
+      };
+    });
+    success(response);
+    return;
+  });
+};
+
+utils.promptingSchemes = await setupPromptingSchemes();
+
+export default utils; 
