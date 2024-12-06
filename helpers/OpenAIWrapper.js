@@ -74,6 +74,14 @@ class OpenAIWrapper{
         //include as the second to last (two) messages, what it has given us to date, asking it to close feedback loops and consider all of this previous information
         if (this.#lastRelationshipList) {
             let relationshipStr = this.#lastRelationshipList.filter((relationship) => {
+                //if there isn't a valid key, then assume it is valid
+                if (!relationship.hasOwnProperty("valid"))
+                    return true;
+                
+                //if there isn't a relationship there skip it
+                if (!relationship.hasOwnProperty("causal relationship"))
+                    return true;
+
                 return relationship.valid;
             }).map((relationship) => {
                 return relationship["causal relationship"] + " which is because " + relationship.reasoning; 
@@ -85,6 +93,10 @@ class OpenAIWrapper{
 
         //give it the user prompt
         messages.push({ role: "user", content: userPrompt });
+        messages.push({ role: "user", content: promptObj.feedbackPrompt }); //then have it try to close feedback
+
+        console.log("Original Prompt...");
+        console.log(messages.slice(1)); //pop off the system prompt for logging purposes
 
         //get what it thinks the relationships are with this information
         const originalCompletion = await this.#openAIAPI.chat.completions.create({
@@ -93,37 +105,26 @@ class OpenAIWrapper{
             response_format: { "type": "json_object" }
         });
 
-        //give it what it thought of already and ask it to close feedback loops
-        const assistantPrompt =  "Here is your original list of relationships in JSON format.\n" + originalCompletion.choices[0].message.content;
-
-        const feedbackCompletion = await this.#openAIAPI.chat.completions.create({
-            messages: [
-                { role: "assistant", content: assistantPrompt },
-                { role: "user", content: promptObj.feedbackPrompt }
-            ],
-            response_format: { "type": "json_object" },
-            model: this.#openAIModel,
-        });
-
         let origObj = {};
-        let feedObj = {};
-
         try {
            origObj = JSON.parse(originalCompletion.choices[0].message.content);
-           feedObj = JSON.parse(feedbackCompletion.choices[0].message.content);
         } catch (err) {
             throw err;
             return;
         }
 
         const originalResponseArr = utils.arrayify(origObj);
-        const feedbackResponseArr = utils.arrayify(feedObj);
 
         //the actual relationship list 
-        let relationships = originalResponseArr.concat(feedbackResponseArr)
-            .map(relationship => { //split each relationship into start, end, polarity, valid
+        let relationships = originalResponseArr.map(relationship => { //split each relationship into start, end, polarity, valid
                 let ret = Object.assign({}, relationship); 
                 let str = relationship["causal relationship"];
+                
+                if (!str || str.length == 0) {
+                    ret.valid = false;
+                    return ret;
+                }
+                
                 const splits = str.split("-->");
                 
                 if (splits.length != 2) {
@@ -159,6 +160,18 @@ class OpenAIWrapper{
             
             //go through and check the polarity of each relationship
             for (let relationship of relationships) {
+
+                let origRelationship = this.#lastRelationshipList.find((oldRelationship) => {
+                    return oldRelationship.start === relationship.start && oldRelationship.end === relationship.end;
+                })
+
+                if (origRelationship && (relationship.polarity === "+" || relationship.polarity === "-")) {
+                    relationship.polarity = origRelationship.polarity;
+                    relationship["polarity reasoning"] = origRelationship["polarity reasoning"]; 
+                    continue;
+                }
+
+
                 let checkPrompt = promptObj.checkRelationshipPolarityPrompt;
                 checkPrompt = checkPrompt.replaceAll("{relationship}", relationship["causal relationship"]);
                 checkPrompt = checkPrompt.replaceAll("{relevant_text}", relationship["relevant text"]);
@@ -166,6 +179,9 @@ class OpenAIWrapper{
                 checkPrompt = checkPrompt.replaceAll("{var1}", relationship.start);
                 checkPrompt = checkPrompt.replaceAll("{var2}", relationship.end);
                 
+                console.log("Polarity Prompting...")
+                console.log(relationship["causal relationship"]);
+
                 const completion = await this.#openAIAPI.chat.completions.create({
                     messages: [
                         { role: "user", content: checkPrompt }
@@ -188,8 +204,11 @@ class OpenAIWrapper{
                     } catch (err) {
                         continue;
                     }
-                    const reinforcing = response.answers.includes(1) || response.answers.includes(2);
-                    const balancing = response.answers.includes(3) || response.answers.includes(4);
+
+                    const isArray = Array.isArray(response.answers);
+
+                    const reinforcing = isArray && (response.answers.includes(1) || response.answers.includes(2));
+                    const balancing = isArray && (response.answers.includes(3) || response.answers.includes(4));
         
                     if (reinforcing && balancing) {
                         relationship.polarity = "?";

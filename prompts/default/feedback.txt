@@ -1,1 +1,1 @@
-Find out if there are any possibilities of forming closed loops that are implied in the text. If yes, then close the loops by adding the extra relationships and provide them in our established JSON format please.
+Find out if there are any possibilities of forming closed loops that are implied in your forthcoming response. If yes, then close the loops by adding the extra relationships and provide them in our established JSON format please.
