@@ -64,7 +64,14 @@ class OpenAIWrapper{
         const promptObj = utils.promptingSchemes[this.#promptSchemeId];
 
         //start with the system prompt
-        let messages = [{ role: "system", content: promptObj.systemPrompt }];
+        let systemRole = 'system';
+        let responseFormat = { "type": "json_object" };
+
+        if (this.#openAIModel.startsWith("o1")) {
+            systemRole = "user";
+            responseFormat = undefined;
+        }
+        let messages = [{ role: systemRole, content: promptObj.systemPrompt }];
 
         //replay the full conversation from the beginning (maybe we can skip this because of the next step!)
         messages = messages.concat(this.#userPrompts.map((promptStr) => {
@@ -102,7 +109,7 @@ class OpenAIWrapper{
         const originalCompletion = await this.#openAIAPI.chat.completions.create({
             messages: messages,
             model: this.#openAIModel,
-            response_format: { "type": "json_object" }
+            response_format: responseFormat
         });
 
         let origObj = {};
@@ -114,6 +121,8 @@ class OpenAIWrapper{
         }
 
         const originalResponseArr = utils.arrayify(origObj);
+        console.log("here are the responses....");
+        console.log(originalResponseArr);
 
         //the actual relationship list 
         let relationships = originalResponseArr.map(relationship => { //split each relationship into start, end, polarity, valid
@@ -186,7 +195,7 @@ class OpenAIWrapper{
                     messages: [
                         { role: "user", content: checkPrompt }
                     ],
-                    response_format: { "type": "json_object" },
+                    response_format: responseFormat,
                     model: this.#openAIModel,
                 });
                 
@@ -197,6 +206,9 @@ class OpenAIWrapper{
                 } catch (err) {
                     continue;
                 }
+
+                console.log("Response");
+                console.log(response);
 
                 if (response.answers) {
                     try {
