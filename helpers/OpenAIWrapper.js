@@ -79,7 +79,7 @@ class OpenAIWrapper{
         }));
 
         //include as the second to last (two) messages, what it has given us to date, asking it to close feedback loops and consider all of this previous information
-        if (this.#lastRelationshipList) {
+        if (this.#lastRelationshipList && this.#lastRelationshipList.length > 0) {
             let relationshipStr = this.#lastRelationshipList.filter((relationship) => {
                 //if there isn't a valid key, then assume it is valid
                 if (!relationship.hasOwnProperty("valid"))
