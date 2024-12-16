@@ -174,7 +174,7 @@ class OpenAIWrapper{
                     return oldRelationship.start === relationship.start && oldRelationship.end === relationship.end;
                 })
 
-                if (origRelationship && (relationship.polarity === "+" || relationship.polarity === "-")) {
+                if (origRelationship && (origRelationship.polarity === "+" || origRelationship.polarity === "-")) {
                     relationship.polarity = origRelationship.polarity;
                     relationship["polarity reasoning"] = origRelationship["polarity reasoning"]; 
                     continue;
