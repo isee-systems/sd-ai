@@ -2,7 +2,7 @@ import express from 'express'
 import OpenAI from "openai";
 
 import config from './../../config.js'
-import utils from './../../helpers/utils.js'
+import utils from '../../engines/default/utils.js'
 
 const router = express.Router()
 

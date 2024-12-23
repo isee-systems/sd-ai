@@ -6,9 +6,7 @@
  */
 
 const config = {
-    "port": 3000,
-    "defaultModel": "gpt-4o-mini",
-    "defaultPromptSchemeId": "default"
+    "port": 3000
 };
 
 export default config
