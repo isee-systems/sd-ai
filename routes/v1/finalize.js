@@ -1,8 +1,5 @@
 import express from 'express'
 
-import config from './../../config.js'
-import utils from './../../helpers/utils.js'
-
 const router = express.Router()
 
 router.get('/', async (req, res) => {

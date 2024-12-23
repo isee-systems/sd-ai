@@ -78,5 +78,5 @@ Returns `{success: <bool>, message: <string> }`
 
 ### Important Note 
 You must have a .env file at the top level which can have the following keys  
- * OPEN_API_KEY which is your open AI access token, if provided then clients do not need to provide one to either the intialize or generate calls  
+ * OPENAI_API_KEY which is your open AI access token, if provided then clients do not need to provide one to either the intialize or generate calls  
  * SESSION_SECRET which is a string used by express-session to secure the cookies this is required
