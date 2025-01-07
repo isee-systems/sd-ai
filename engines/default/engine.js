@@ -8,9 +8,12 @@ class Engine {
     }
 
     additionalParameters()  {
-        const models = [ 'gpt-4o-mini',
-            'chatgpt-4o-latest', 'gpt-4o', 'gpt-4-turbo', 'gpt-4', 'gpt-3.5-turbo',
-            'o1-preview', 'o1-mini'
+        const models = [ 
+            {label: "ChatGPT Latest - Best", value: 'chatgpt-4o-latest'}, 
+            {label: "GPT-4o-mini Cheap", value: 'gpt-4o-mini'}, 
+            {label: "o1-mini - New/Flaky", value: 'o1-mini'},
+            {label: "o1-preview - New/Flaky", value: 'o1-preview'}, 
+            {label: "o1 - Newest/Flaky", value: 'o1'}, 
         ];
 
         return [{
@@ -26,12 +29,7 @@ class Engine {
                 type: "string",
                 defaultValue: config.defaultModel,
                 required: false,
-                options: models.map(function(model) {
-                    return {
-                        label: model,
-                        value: model,
-                    };
-                }),
+                options: models,
                 uiElement: "combobox",
                 saveForUser: "local",
                 label: "Open AI Model",
