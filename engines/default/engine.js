@@ -63,7 +63,7 @@ class Engine {
         ];
     }
 
-    async generate(prompt, currentModel, session, parameters) {
+    async generate(prompt, currentModel, parameters) {
         const openAIModel = parameters.openAIModel;
         const promptSchemeId = parameters.promptSchemeId;
         const openAIKey = parameters.openAIKey;

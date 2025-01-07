@@ -26,7 +26,7 @@ router.post("/:engine/generate", async (req, res) => {
       })
     }
   
-    let model = await instance.generate(prompt, currentModel, req.session, engineSpecificParameters);
+    let model = await instance.generate(prompt, currentModel, engineSpecificParameters);
   
     if (model.err) {
       return res.send({
