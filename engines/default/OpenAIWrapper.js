@@ -2,6 +2,7 @@ import OpenAI from "openai";
 
 import config from './config.js'
 import utils from './utils.js'
+import async from "async"
 
 class OpenAIWrapper{
     #promptSchemeId;
@@ -133,9 +134,7 @@ class OpenAIWrapper{
         });
             
         //go through and check the polarity of each relationship
-        console.log(relationships, "boor")
-        for (let relationship of relationships) {
-
+        await async.each(relationships, async (relationship) => {
             let origRelationship = null;
             if (lastRelationships) {
                 origRelationship = lastRelationships.find((oldRelationship) => {
@@ -146,7 +145,7 @@ class OpenAIWrapper{
             if (origRelationship && (origRelationship.polarity === "+" || origRelationship.polarity === "-")) {
                 relationship.polarity = origRelationship.polarity;
                 relationship["polarityReasoning"] = origRelationship["polarityReasoning"]; 
-                continue;
+                return;
             }
 
 
@@ -173,7 +172,7 @@ class OpenAIWrapper{
             try {
                 response = JSON.parse(completion.choices[0].message.content);
             } catch (err) {
-                continue;
+                return;
             }
 
             console.log("Response");
@@ -183,7 +182,7 @@ class OpenAIWrapper{
                 try {
                     response.answers = JSON.parse(response.answers) || [];
                 } catch (err) {
-                    continue;
+                    return;
                 }
 
                 const isArray = Array.isArray(response.answers);
@@ -204,9 +203,7 @@ class OpenAIWrapper{
 
             relationship["polarityReasoning"] = response.reasoning; 
             delete relationship.valid;
-        }
-
-
+        });
         return relationships;
     }
 }
