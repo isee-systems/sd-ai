@@ -11,19 +11,19 @@ Example 1 of a user input:
 "when death rate goes up, population decreases"
 
 Corresponding JSON response:
-{"1": {"reasoning": "<your reasoning for this causal relationship>", "causal relationship": "Death rate --> population",  "relevant text": "<the full text paragraph that highlights this relationship>"}}
+{"1": {"reasoning": "<your reasoning for this causal relationship>", "causalRelationship": "Death rate --> population",  "relevantText": "<the full text paragraph that highlights this relationship>"}}
 
 Example 2 of a user input:
 "increased death rate reduces population"
 
 Corresponding JSON response:
-{"1": {"reasoning": "<your reasoning for this causal relationship>", "causal relationship": "Death rate --> population",  "relevant text": "<the full text paragraph that highlights this relationship>"}}
+{"1": {"reasoning": "<your reasoning for this causal relationship>", "causalRelationship": "Death rate --> population",  "relevantText": "<the full text paragraph that highlights this relationship>"}}
 
 Example 3 of a user input:
 "lower death rate increases population"
 
 Corresponding JSON response:
-{"1": {"reasoning": "<your reasoning for this causal relationship>", "causal relationship": "Death rate --> population",  "relevant text": "<the full text paragraph that highlights this relationship>"}}
+{"1": {"reasoning": "<your reasoning for this causal relationship>", "causalRelationship": "Death rate --> population",  "relevantText": "<the full text paragraph that highlights this relationship>"}}
 
 Example 4 of a user input:
 "The engineers compare the work remaining to be done against the time remaining before the deadline. The larger the gap, the more Schedule Pressure they feel.
@@ -32,17 +32,17 @@ When schedule pressure builds up, engineers have several choices. First, they ca
 
 Corresponding JSON response:
 {
-  "1": {"reasoning": "<your reasoning for this causal relationship>", "causal relationship": "work remaining --> Schedule Pressure", "relevant text": "<the full text/paragraph that highlights this relationship>"},
-  "2": {"reasoning": "<your reasoning for this causal relationship>", "causal relationship": "time remaining --> Schedule Pressure", "relevant text": "<the full text/paragraph that highlights this relationship>"},
-  "3": {"reasoning": "<your reasoning for this causal relationship>", "causal relationship": "Schedule Pressure --> overtime", "relevant text": "<the full text/paragraph that highlights this relationship>"},
-  "4": {"reasoning": "<your reasoning for this causal relationship>", "causal relationship": "overtime --> completion rate", "relevant text": "<the full text/paragraph that highlights this relationship>"},
-  "5": {"reasoning": "<your reasoning for this causal relationship>", "causal relationship": "completion rate --> work remaining", "relevant text": "<the full text/paragraph that highlights this relationship>"},
-  "6": {"reasoning": "<your reasoning for this causal relationship>", "causal relationship": "overtime --> fatigue", "relevant text": "<the full text/paragraph that highlights this relationship>"},
-  "7": {"reasoning": "<your reasoning for this causal relationship>", "causal relationship": "fatigue --> productivity", "relevant text": "<the full text/paragraph that highlights this relationship>"},
-  "8": {"reasoning": "<your reasoning for this causal relationship>", "causal relationship": "productivity --> completion rate", "relevant text": "<the full text/paragraph that highlights this relationship>"},
-  "9": {"reasoning": "<your reasoning for this causal relationship>", "causal relationship": "Schedule Pressure --> Time per task", "relevant text": "<the full text/paragraph that highlights this relationship>"},
-  "10": {"reasoning": "<your reasoning for this causal relationship>", "causal relationship": "Time per task --> error rate", "relevant text": "<the full text/paragraph that highlights this relationship>"},
-  "11": {"reasoning": "<your reasoning for this causal relationship>", "causal relationship": "error rate --> productivity", "relevant text": "<the full text/paragraph that highlights this relationship>"}
+  "1": {"reasoning": "<your reasoning for this causal relationship>", "causalRelationship": "work remaining --> Schedule Pressure", "relevantText": "<the full text/paragraph that highlights this relationship>"},
+  "2": {"reasoning": "<your reasoning for this causal relationship>", "causalRelationship": "time remaining --> Schedule Pressure", "relevantText": "<the full text/paragraph that highlights this relationship>"},
+  "3": {"reasoning": "<your reasoning for this causal relationship>", "causalRelationship": "Schedule Pressure --> overtime", "relevantText": "<the full text/paragraph that highlights this relationship>"},
+  "4": {"reasoning": "<your reasoning for this causal relationship>", "causalRelationship": "overtime --> completion rate", "relevantText": "<the full text/paragraph that highlights this relationship>"},
+  "5": {"reasoning": "<your reasoning for this causal relationship>", "causalRelationship": "completion rate --> work remaining", "relevantText": "<the full text/paragraph that highlights this relationship>"},
+  "6": {"reasoning": "<your reasoning for this causal relationship>", "causalRelationship": "overtime --> fatigue", "relevantText": "<the full text/paragraph that highlights this relationship>"},
+  "7": {"reasoning": "<your reasoning for this causal relationship>", "causalRelationship": "fatigue --> productivity", "relevantText": "<the full text/paragraph that highlights this relationship>"},
+  "8": {"reasoning": "<your reasoning for this causal relationship>", "causalRelationship": "productivity --> completion rate", "relevantText": "<the full text/paragraph that highlights this relationship>"},
+  "9": {"reasoning": "<your reasoning for this causal relationship>", "causalRelationship": "Schedule Pressure --> Time per task", "relevantText": "<the full text/paragraph that highlights this relationship>"},
+  "10": {"reasoning": "<your reasoning for this causal relationship>", "causalRelationship": "Time per task --> error rate", "relevantText": "<the full text/paragraph that highlights this relationship>"},
+  "11": {"reasoning": "<your reasoning for this causal relationship>", "causalRelationship": "error rate --> productivity", "relevantText": "<the full text/paragraph that highlights this relationship>"}
 }
 
 Example 5 of a user input:
@@ -50,19 +50,19 @@ Example 5 of a user input:
 
 Corresponding JSON response:
 {
-  "1": {"reasoning": "<your reasoning for this causal relationship>", "causal relationship": "travel time --> pressure for new roads", "relevant text": "<the full text/paragraph that highlights this relationship>"},
-  "2": {"reasoning": "<your reasoning for this causal relationship>", "causal relationship": "pressure for new roads --> road construction", "relevant text": "<the full text/paragraph that highlights this relationship>"},
-  "3": {"reasoning": "<your reasoning for this causal relationship>", "causal relationship": "road construction --> Highway capacity", "relevant text": "<the full text/paragraph that highlights this relationship>"},
-  "4": {"reasoning": "<your reasoning for this causal relationship>", "causal relationship": "Highway capacity --> travel time", "relevant text": "<the full text/paragraph that highlights this relationship>"},
-  "5": {"reasoning": "<your reasoning for this causal relationship>", "causal relationship": "travel time --> attractiveness of driving", "relevant text": "<the full text/paragraph that highlights this relationship>"},
-  "6": {"reasoning": "<your reasoning for this causal relationship>", "causal relationship": "attractiveness of driving --> trips per day", "relevant text": "<the full text/paragraph that highlights this relationship>"},
-  "7": {"reasoning": "<your reasoning for this causal relationship>", "causal relationship": "trips per day --> traffic volume", "relevant text": "<the full text/paragraph that highlights this relationship>"},
-  "8": {"reasoning": "<your reasoning for this causal relationship>", "causal relationship": "traffic volume --> travel time", "relevant text": "<the full text/paragraph that highlights this relationship>"},
-  "9": {"reasoning": "<your reasoning for this causal relationship>", "causal relationship": "attractiveness of driving --> trip length", "relevant text": "<the full text/paragraph that highlights this relationship>"},
-  "10": {"reasoning": "<your reasoning for this causal relationship>", "causal relationship": "trip length --> traffic volume", "relevant text": "<the full text/paragraph that highlights this relationship>"},
-  "11": {"reasoning": "<your reasoning for this causal relationship>", "causal relationship": "attractiveness of driving --> public transit", "relevant text": "<the full text/paragraph that highlights this relationship>"},
-  "12": {"reasoning": "<your reasoning for this causal relationship>", "causal relationship": "public transit --> cars per person", "relevant text": "<the full text/paragraph that highlights this relationship>"},
-  "13": {"reasoning": "<your reasoning for this causal relationship>", "causal relationship": "cars per person --> traffic volume", "relevant text": "<the full text/paragraph that highlights this relationship>"}
+  "1": {"reasoning": "<your reasoning for this causal relationship>", "causalRelationship": "travel time --> pressure for new roads", "relevantText": "<the full text/paragraph that highlights this relationship>"},
+  "2": {"reasoning": "<your reasoning for this causal relationship>", "causalRelationship": "pressure for new roads --> road construction", "relevantText": "<the full text/paragraph that highlights this relationship>"},
+  "3": {"reasoning": "<your reasoning for this causal relationship>", "causalRelationship": "road construction --> Highway capacity", "relevantText": "<the full text/paragraph that highlights this relationship>"},
+  "4": {"reasoning": "<your reasoning for this causal relationship>", "causalRelationship": "Highway capacity --> travel time", "relevantText": "<the full text/paragraph that highlights this relationship>"},
+  "5": {"reasoning": "<your reasoning for this causal relationship>", "causalRelationship": "travel time --> attractiveness of driving", "relevantText": "<the full text/paragraph that highlights this relationship>"},
+  "6": {"reasoning": "<your reasoning for this causal relationship>", "causalRelationship": "attractiveness of driving --> trips per day", "relevantText": "<the full text/paragraph that highlights this relationship>"},
+  "7": {"reasoning": "<your reasoning for this causal relationship>", "causalRelationship": "trips per day --> traffic volume", "relevantText": "<the full text/paragraph that highlights this relationship>"},
+  "8": {"reasoning": "<your reasoning for this causal relationship>", "causalRelationship": "traffic volume --> travel time", "relevantText": "<the full text/paragraph that highlights this relationship>"},
+  "9": {"reasoning": "<your reasoning for this causal relationship>", "causalRelationship": "attractiveness of driving --> trip length", "relevantText": "<the full text/paragraph that highlights this relationship>"},
+  "10": {"reasoning": "<your reasoning for this causal relationship>", "causalRelationship": "trip length --> traffic volume", "relevantText": "<the full text/paragraph that highlights this relationship>"},
+  "11": {"reasoning": "<your reasoning for this causal relationship>", "causalRelationship": "attractiveness of driving --> public transit", "relevantText": "<the full text/paragraph that highlights this relationship>"},
+  "12": {"reasoning": "<your reasoning for this causal relationship>", "causalRelationship": "public transit --> cars per person", "relevantText": "<the full text/paragraph that highlights this relationship>"},
+  "13": {"reasoning": "<your reasoning for this causal relationship>", "causalRelationship": "cars per person --> traffic volume", "relevantText": "<the full text/paragraph that highlights this relationship>"}
 }
 
 Example 6 of a user input:

@@ -5,6 +5,9 @@ let utils = {};
 
 //this will let us deny old clients in the future
 utils.supportedPlatform = function(clientProduct, clientVersion) {
+  if (!clientProduct || !clientVersion)
+    return false;
+  
   //both product and version may be null or undefined if not passed in
   return true;
 }
@@ -41,14 +44,15 @@ async function setupPromptingSchemes() {
       const checkRelationshipPolarityPrompt = fs.readFileSync(dirname + subDir + "/check.txt", 'utf-8'); 
       const feedbackPrompt = fs.readFileSync(dirname + subDir + "/feedback.txt", 'utf-8'); 
       const assistantPrompt = fs.readFileSync(dirname + subDir + "/assistant.txt", 'utf-8'); 
+      const backgroundPrompt = fs.readFileSync(dirname + subDir + "/background.txt", 'utf-8');
 
       response[subDir] = {
         displayName: subDir,
         systemPrompt: systemPrompt,
         checkRelationshipPolarityPrompt: checkRelationshipPolarityPrompt,
         feedbackPrompt: feedbackPrompt,
-        assistantPrompt: assistantPrompt
-
+        assistantPrompt: assistantPrompt,
+        backgroundPrompt: backgroundPrompt
       };
     });
     success(response);
