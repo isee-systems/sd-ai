@@ -39,7 +39,7 @@ This call takes 2 optional query parameters
 
 `clientProduct` - String - The product name of the client that is talking with the service (for support checks) (e.g. Stella Architect).  
 `clientVersion` - String - The version number of the client that is talking with the service (for support checks) (e.g. 3.8.0).  
-`
+
 Returns `{success: <bool>, message: <string> }`
 
 2. GET /api/v1/engines
