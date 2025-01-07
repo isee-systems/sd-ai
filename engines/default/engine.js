@@ -5,7 +5,7 @@ import config from './config.js'
 /*
 Good sample prompt
 
-In my work I have observed that as the population of rabbits grows, their birth rate increases.  Likewise as the population of rabbits growth, their death rate also increases.  I have also seen that the more rabbits we have, the fewer resources there are, and when there are fewer resources, the birth rate goes down, and the death rate goes up.
+In my work I have observed that as the population of rabbits grows, their birth rate increases.  Likewise as the population of rabbits grows, their death rate also increases.  I have also seen that the more rabbits we have, the fewer resources there are, and when there are fewer resources, the birth rate goes down, and the death rate goes up.
 */
 
 class Engine {
