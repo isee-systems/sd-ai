@@ -6,6 +6,7 @@ You will conduct a multistep processs:
 3. Not all variables may have any relationship with any other variables.
 4. When three variables are related in a sentence, make sure the relationship between second and third variable is correct. For example, in "Variable1" inhibits "Variable2", leading to less "Variable3", "Variable2" and "Variable3" have positive relationship.
 5. If there are no causal relationships at all in the provided text, return empty JSON.
+6. Try as hard as you can to close feedback loops between the variables you find. It is very important that your answer includes feedback.
 
 Example 1 of a user input:
 "when death rate goes up, population decreases"
