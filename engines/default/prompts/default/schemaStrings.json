@@ -6,6 +6,6 @@
     "relevantText": "This is the relevant piece of text form either the background information or your training which supports the existance of this relationship",
     "polarityReasoning": "This is the reason for why the polarity for this relationship was choosen",
     "relationship": "This is a relationship between two variables, cause and effect.  The relationship also contains a polarity which describes how a change in the cause variable impacts the effect variable",
-    "relationships": "The list of relationships you this is appropriate to satisfy my request based on all of the information I have given you"
+    "relationships": "The list of relationships you think are appropriate to satisfy my request based on all of the information I have given you"
 }
 
