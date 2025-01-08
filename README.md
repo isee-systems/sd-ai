@@ -96,8 +96,9 @@ sd-json format is:
     }], 
     relationships: [{
         "reasoning": <string, explanation for why this relationship is here> 
-        "causalRelationship": <string, "source --> destination">,  
-        "relevantRext": <string, portion of the prompt or research for why this relationship is here>, 
+        "start": <string, the variable the connection starts wtih>,
+        "end": <string, the variable the connection ends with>,  
+        "relevantText": <string, portion of the prompt or research for why this relationship is here>, 
         "polarity": <string ?|+|- >, 
         "polarityReasoning": <string explanation for why this polarity was chosen> 
     }]
