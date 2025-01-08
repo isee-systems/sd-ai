@@ -28,7 +28,7 @@ class OpenAIWrapper{
         const lastRelationships = lastModel.relationships || [];
         
         //start with the system prompt
-        let systemRole = 'system';
+        let systemRole = 'developer';
         let responseFormat = { "type": "json_object" };
 
         if (this.#openAIModel.startsWith("o1")) {
