@@ -63,7 +63,7 @@ Returns
         name: <string, unique name for the parmater that is passed to generate call>,
         type: <string, currently this service only supports 'string' for this attribute>,
         required: <boolean, whether or not this parameter must be passed to the generate call>,
-        uiElement: <string, type of UI element the client should use so that the user can enter this value.  Valid values are textarea|lineedit|password|combobox|hidden>,
+        uiElement: <string, type of UI element the client should use so that the user can enter this value.  Valid values are textarea|lineedit|password|combobox|hidden|checkbox>,
         label: <string, name to put next to the UI element in the client>,
         description: <string, description of what this parameter does, used as a tooltip or placeholder text in the client>,
         defaultValue: <string, default value for this parameter if there is one, otherwise skipped>,
