@@ -1,8 +1,30 @@
 import OpenAI from "openai";
+import { z } from "zod";
+import { zodResponseFormat } from "openai/helpers/zod";
 
 import config from './config.js'
 import utils from './utils.js'
-import async from "async"
+
+class ResponseFormatError extends Error {
+    constructor(message) {
+        super(message);
+        this.name = "ResponseFormatError";
+    }
+};
+
+const PolarityEnum = z.enum(["positive", "negative"]).describe("There are two possible kinds of relationships.  Those with positive polarity where an increase in the causing variable causes an increase in the effect variable, and those with negative polarity where an increase in the causing variable causes a decrease in the effect variable.");
+const Relationship = z.object({
+    cause: z.string().describe('This is a variable which causes the effect variable in this relationship that is between two variables, cause and effect'),
+    effect: z.string().describe('This is a variable which is impacted by the cause variable in this relationship that is between two variables, cause and effect'),
+    polarity: PolarityEnum,
+    reasoning: z.string().describe('This is an explanation for why this relationship exists'),
+    relevantText: z.string().describe('This is the relevant piece of text which supports the existance of this relationship'),
+    polarityReasoning: z.string().describe('This is the reason for why the polarity for this relationship was choosen')
+}).describe('This is a relationship between two variables, cause and effect.  The relationship also contains a polarity which describes how a change in the cause variable impacts the effect variable');
+    
+const Relationships = z.object({
+    relationships: z.array(Relationship).describe("The list of relationships implied by the information that has been given")
+});
 
 class OpenAIWrapper{
     #promptSchemeId;
@@ -23,24 +45,72 @@ class OpenAIWrapper{
     #sameVars(a,b) {
         return utils.caseFold(a) === utils.caseFold(b);
     }
+
+    #processResponse(originalResponseArr) {
+        console.log("here are the responses....");
+        console.log(originalResponseArr);
+
+        //split each relationship into start, end, polarity, valid
+        let relationships = originalResponseArr.map(relationship => { 
+            let ret = Object.assign({}, relationship); 
+            ret.start = relationship.cause.trim();
+            ret.end = relationship.effect.trim();
+            ret.valid = !this.#sameVars(ret.start, ret.end);
+
+            switch (relationship.polarity) {
+                case "positive":
+                    ret.polarity = "+";
+                    break;
+                case "negative":
+                    ret.polarity = "-";
+                    break;
+                default:
+                    ret.polarity = "?";
+                    if (relationship.polarity != "unknown") {
+                        debugger; //this shouldn't happen!
+                    }
+                    break;
+            }
+            return ret;
+        });
+            
+        //mark for removal any relationships which are duplicates, keep the first one we encounter
+        for (let i=1,len=relationships.length; i < len; ++i) {
+            for (let j=0; j < i; ++j) {
+                let relJ = relationships[j];
+                let relI = relationships[i];
+                
+                //who cares if its an invalid link
+                if (!relI.valid || !relJ.valid)
+                    continue;
+
+                if (this.#sameVars(relJ.start, relI.start) && this.#sameVars(relJ.end, relI.end)) {
+                    relI.valid = false;
+                }
+            }
+        }
+
+        //remove the invalid ones
+        relationships = relationships.filter((relationship) => { 
+            return relationship.valid;
+        });
+            
+        return relationships;
+    }
+
     async generateDiagram(userPrompt, lastModel) {
         const promptObj = utils.promptingSchemes[this.#promptSchemeId];
         const lastRelationships = lastModel.relationships || [];
         
         //start with the system prompt
         let systemRole = 'developer';
-        let responseFormat = { "type": "json_object" };
-
-        if (this.#openAIModel.startsWith("o1")) {
-            systemRole = "user";
-            responseFormat = undefined;
-        }
+        let responseFormat = zodResponseFormat(Relationships, "relationships_response");
 
         let messages = [{ role: systemRole, content: promptObj.systemPrompt }];
         if (this.#backgroundKnowledge) {
             messages.push({
                 role: "user",
-                content: promptObj.backgroundPrompt.replaceAll("{background_knowledge}", this.#backgroundKnowledge),
+                content: promptObj.backgroundPrompt.replaceAll("{backgroundKnowledge}", this.#backgroundKnowledge),
             });
         }
 
@@ -70,7 +140,7 @@ class OpenAIWrapper{
 
         console.log("Original Prompt...");
         console.log(messages.slice(1)); //pop off the system prompt for logging purposes
-
+        
         //get what it thinks the relationships are with this information
         const originalCompletion = await this.#openAIAPI.chat.completions.create({
             messages: messages,
@@ -78,133 +148,21 @@ class OpenAIWrapper{
             response_format: responseFormat
         });
 
-        let origObj = {};
-        try {
-           origObj = JSON.parse(originalCompletion.choices[0].message.content);
-        } catch (err) {
-            throw err;
-            return;
-        }
-
-        const originalResponseArr = utils.arrayify(origObj);
-        console.log("here are the responses....");
-        console.log(originalResponseArr);
-
-        //the actual relationship list 
-        let relationships = originalResponseArr.map(relationship => { //split each relationship into start, end, polarity, valid
-                let ret = Object.assign({}, relationship); 
-                let str = relationship["causalRelationship"];
-                
-                if (!str || str.length == 0) {
-                    ret.valid = false;
-                    return ret;
-                }
-                
-                const splits = str.split("-->");
-                
-                if (splits.length != 2) {
-                    ret.valid = false;
-                    return ret;
-                }
-
-                ret.start = splits[0].trim();
-                ret.end = splits[1].trim();
-                ret.valid = !this.#sameVars(ret.start, ret.end);
-                return ret;
-        });
-            
-        //mark for removal any relationships which are duplicates, keep the first one we encounter
-        for (let i=1,len=relationships.length; i < len; ++i) {
-            for (let j=0; j < i; ++j) {
-                let relJ = relationships[j];
-                let relI = relationships[i];
-                
-                //who cares if its an invalid link
-                if (!relI.valid || !relJ.valid)
-                    continue;
-
-                if (this.#sameVars(relJ.start, relI.start) && this.#sameVars(relJ.end, relI.end)) {
-                    relI.valid = false;
-                }
-            }
-        }
-
-        relationships = relationships.filter((relationship) => { //remove the invalid ones
-            return relationship.valid;
-        });
-            
-        //go through and check the polarity of each relationship
-        await async.each(relationships, async (relationship) => {
-            let origRelationship = null;
-            if (lastRelationships) {
-                origRelationship = lastRelationships.find((oldRelationship) => {
-                    return oldRelationship.start === relationship.start && oldRelationship.end === relationship.end;
-                });
-            }
-
-            if (origRelationship && (origRelationship.polarity === "+" || origRelationship.polarity === "-")) {
-                relationship.polarity = origRelationship.polarity;
-                relationship["polarityReasoning"] = origRelationship["polarityReasoning"]; 
-                return;
-            }
-
-
-            let checkPrompt = promptObj.checkRelationshipPolarityPrompt;
-            checkPrompt = checkPrompt.replaceAll("{relationship}", relationship["causalRelationship"]);
-            checkPrompt = checkPrompt.replaceAll("{relevant_text}", relationship["relevantText"]);
-            checkPrompt = checkPrompt.replaceAll("{reasoning}", relationship.reasoning);
-            checkPrompt = checkPrompt.replaceAll("{var1}", relationship.start);
-            checkPrompt = checkPrompt.replaceAll("{var2}", relationship.end);
-            
-            console.log("Polarity Prompting...")
-            console.log(relationship["causalRelationship"]);
-
-            const completion = await this.#openAIAPI.chat.completions.create({
-                messages: [
-                    { role: "user", content: checkPrompt }
-                ],
-                response_format: responseFormat,
-                model: this.#openAIModel,
-            });
-            
-            let response = {};
-            
+        const originalResponse = originalCompletion.choices[0].message;
+        if (originalResponse.refusal) {
+            return new ResponseFormatError(originalResponse.refusal);
+        } else if (originalResponse.parsed) {
+            return this.#processResponse(originalResponse.parsed.relationships);
+        } else if (originalResponse.content) {
+            let parsedObj = {relationships: []};
             try {
-                response = JSON.parse(completion.choices[0].message.content);
+                parsedObj = JSON.parse(originalResponse.content);
             } catch (err) {
-                return;
+                return new ResponseFormatError("Bad JSON returned by OpenAI");
             }
 
-            console.log("Response");
-            console.log(response);
-
-            if (response.answers) {
-                try {
-                    response.answers = JSON.parse(response.answers) || [];
-                } catch (err) {
-                    return;
-                }
-
-                const isArray = Array.isArray(response.answers);
-
-                const reinforcing = isArray && (response.answers.includes(1) || response.answers.includes(2));
-                const balancing = isArray && (response.answers.includes(3) || response.answers.includes(4));
-    
-                if (reinforcing && balancing) {
-                    relationship.polarity = "?";
-                } else if (reinforcing) {
-                    relationship.polarity = "+";
-                } else if (balancing) {
-                    relationship.polarity = "-";
-                } else {
-                    relationship.polarity = "?";
-                }
-            }
-
-            relationship["polarityReasoning"] = response.reasoning; 
-            delete relationship.valid;
-        });
-        return relationships;
+            return this.#processResponse(parsedObj.relationships || []);
+        }
     }
 }
 

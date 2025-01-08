@@ -15,11 +15,9 @@ class Engine {
 
     additionalParameters()  {
         const models = [ 
-            {label: "ChatGPT Latest - Best", value: 'chatgpt-4o-latest'}, 
+            {label: "GPT-4o Best", value: 'gpt-4o'}, 
             {label: "GPT-4o-mini Cheap", value: 'gpt-4o-mini'}, 
-            {label: "o1-mini - New/Flaky", value: 'o1-mini'},
-            {label: "o1-preview - New/Flaky", value: 'o1-preview'}, 
-            {label: "o1 - Newest/Flaky", value: 'o1'}, 
+            {label: "o1 Expensive", value: 'o1'}, 
         ];
 
         return [{

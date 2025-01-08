@@ -41,7 +41,6 @@ async function setupPromptingSchemes() {
     const dirnames = getSubDirectories(dirname);
     dirnames.forEach(function(subDir) {
       const systemPrompt = fs.readFileSync(dirname + subDir + "/system.txt", 'utf-8'); 
-      const checkRelationshipPolarityPrompt = fs.readFileSync(dirname + subDir + "/check.txt", 'utf-8'); 
       const feedbackPrompt = fs.readFileSync(dirname + subDir + "/feedback.txt", 'utf-8'); 
       const assistantPrompt = fs.readFileSync(dirname + subDir + "/assistant.txt", 'utf-8'); 
       const backgroundPrompt = fs.readFileSync(dirname + subDir + "/background.txt", 'utf-8');
@@ -49,7 +48,6 @@ async function setupPromptingSchemes() {
       response[subDir] = {
         displayName: subDir,
         systemPrompt: systemPrompt,
-        checkRelationshipPolarityPrompt: checkRelationshipPolarityPrompt,
         feedbackPrompt: feedbackPrompt,
         assistantPrompt: assistantPrompt,
         backgroundPrompt: backgroundPrompt

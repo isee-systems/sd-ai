@@ -1,5 +1,5 @@
 const config = {
-    "defaultModel": "chatgpt-4o-latest",
+    "defaultModel": "gpt-4o-mini",
     "defaultPromptSchemeId": "default"
 }
 
