@@ -12,20 +12,6 @@ class ResponseFormatError extends Error {
     }
 };
 
-const PolarityEnum = z.enum(["positive", "negative"]).describe("There are two possible kinds of relationships.  Those with positive polarity where an increase in the causing variable causes an increase in the effect variable, and those with negative polarity where an increase in the causing variable causes a decrease in the effect variable.");
-const Relationship = z.object({
-    cause: z.string().describe('This is a variable which causes the effect variable in this relationship that is between two variables, cause and effect'),
-    effect: z.string().describe('This is a variable which is impacted by the cause variable in this relationship that is between two variables, cause and effect'),
-    polarity: PolarityEnum,
-    reasoning: z.string().describe('This is an explanation for why this relationship exists'),
-    relevantText: z.string().describe('This is the relevant piece of text which supports the existance of this relationship'),
-    polarityReasoning: z.string().describe('This is the reason for why the polarity for this relationship was choosen')
-}).describe('This is a relationship between two variables, cause and effect.  The relationship also contains a polarity which describes how a change in the cause variable impacts the effect variable');
-    
-const Relationships = z.object({
-    relationships: z.array(Relationship).describe("The list of relationships implied by the information that has been given")
-});
-
 class OpenAIWrapper{
     #promptSchemeId;
     #openAIModel;
@@ -98,13 +84,31 @@ class OpenAIWrapper{
         return relationships;
     }
 
+    #generateResponseSchema(promptObj) {
+        const PolarityEnum = z.enum(["positive", "negative"]).describe(promptObj.schemaStrings.polarity);
+        const Relationship = z.object({
+            cause: z.string().describe(promptObj.schemaStrings.cause),
+            effect: z.string().describe(promptObj.schemaStrings.effect),
+            polarity: PolarityEnum,
+            reasoning: z.string().describe(promptObj.schemaStrings.reasoning),
+            relevantText: z.string().describe(promptObj.schemaStrings.relevantText),
+            polarityReasoning: z.string().describe(promptObj.schemaStrings.polarityReasoning)
+        }).describe(promptObj.schemaStrings.relationship);
+            
+        const Relationships = z.object({
+            relationships: z.array(Relationship).describe(promptObj.schemaStrings.relationships)
+        });
+
+        return zodResponseFormat(Relationships, "relationships_response");
+    }
+
     async generateDiagram(userPrompt, lastModel) {
         const promptObj = utils.promptingSchemes[this.#promptSchemeId];
         const lastRelationships = lastModel.relationships || [];
         
         //start with the system prompt
         let systemRole = 'developer';
-        let responseFormat = zodResponseFormat(Relationships, "relationships_response");
+        let responseFormat = this.#generateResponseSchema(promptObj);
 
         let messages = [{ role: systemRole, content: promptObj.systemPrompt }];
         if (this.#backgroundKnowledge) {

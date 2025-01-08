@@ -44,13 +44,15 @@ async function setupPromptingSchemes() {
       const feedbackPrompt = fs.readFileSync(dirname + subDir + "/feedback.txt", 'utf-8'); 
       const assistantPrompt = fs.readFileSync(dirname + subDir + "/assistant.txt", 'utf-8'); 
       const backgroundPrompt = fs.readFileSync(dirname + subDir + "/background.txt", 'utf-8');
+      const schemaStrings = fs.readFileSync(dirname + subDir + "/schemaStrings.json", 'utf-8');
 
       response[subDir] = {
         displayName: subDir,
         systemPrompt: systemPrompt,
         feedbackPrompt: feedbackPrompt,
         assistantPrompt: assistantPrompt,
-        backgroundPrompt: backgroundPrompt
+        backgroundPrompt: backgroundPrompt,
+        schemaStrings: JSON.parse(schemaStrings)
       };
     });
     success(response);

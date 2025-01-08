@@ -15,8 +15,8 @@ class Engine {
 
     additionalParameters()  {
         const models = [ 
-            {label: "GPT-4o Best", value: 'gpt-4o'}, 
             {label: "GPT-4o-mini Cheap", value: 'gpt-4o-mini'}, 
+            {label: "GPT-4o Mid Price", value: 'gpt-4o'}, 
             {label: "o1 Expensive", value: 'o1'}, 
         ];
 

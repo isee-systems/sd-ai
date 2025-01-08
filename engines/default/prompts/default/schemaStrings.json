@@ -1,0 +1,11 @@
+{
+    "polarity": "There are two possible kinds of relationships.  Those with positive polarity where an increase in the causing variable causes an increase in the effect variable, and those with negative polarity where an increase in the causing variable causes a decrease in the effect variable.",
+    "cause": "This is a variable which causes the effect variable in this relationship that is between two variables, cause and effect",
+    "effect": "This is a variable which is impacted by the cause variable in this relationship that is between two variables, cause and effect",
+    "reasoning": "This is an explanation for why this relationship exists",
+    "relevantText": "This is the relevant piece of text form either the background information or your training which supports the existance of this relationship",
+    "polarityReasoning": "This is the reason for why the polarity for this relationship was choosen",
+    "relationship": "This is a relationship between two variables, cause and effect.  The relationship also contains a polarity which describes how a change in the cause variable impacts the effect variable",
+    "relationships": "The list of relationships you this is appropriate to satisfy my request based on all of the information I have given you"
+}
+
