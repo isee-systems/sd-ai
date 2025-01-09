@@ -48,7 +48,7 @@ This call can be skipped, but is useful if your client wants to know what engine
 
 This call takes no query parameters
 
-Returns `{success: <bool>, engines:['default', 'predprey', .... any other engines in the /engines folder] }`
+Returns `{success: <bool>, engines:[{name: 'default', supports: ['cld']}, {name: 'predprey', supports: ['cld']}, .... any other engines in the /engines folder] }`
 
 3. GET /api/v1/engines/:engine/parameters
 
@@ -92,7 +92,8 @@ sd-json format is:
 {
     variables: [{
         name: <string>,
-        type: <string - stock|flow|variable>
+        type: <string - stock|flow|variable>,
+        eqn: <string - XMILE equation, not used yet>
     }], 
     relationships: [{
         "reasoning": <string, explanation for why this relationship is here> 

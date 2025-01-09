@@ -9,7 +9,12 @@ router.get("/", async (req, res) => {
     
     return res.send({
         success: true, 
-        engines: folders 
+        engines: folders.map((folder) => {
+            return {
+                name: folder,
+                supports:["cld"] //in the future this may include sfd or equations
+            }
+        }) 
     });
 })
 
