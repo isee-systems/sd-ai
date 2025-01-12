@@ -17,11 +17,13 @@ class OpenAIWrapper{
     #openAIModel;
     #openAIAPI;
     #backgroundKnowledge;
+    #problemStatement;
 
-    constructor(openAIModel, promptSchemeId, backgroundKnowledge, openAIKey) {
+    constructor(openAIModel, promptSchemeId, backgroundKnowledge, problemStatement, openAIKey) {
         this.#openAIModel = openAIModel || config.defaultModel;
         this.#promptSchemeId = promptSchemeId || config.defaultPromptSchemeId || "default";
         this.#backgroundKnowledge = backgroundKnowledge || null;
+        this.#problemStatement = problemStatement || null;
 
         this.#openAIAPI = new OpenAI({
             apiKey: openAIKey || process.env.OPENAI_API_KEY,
@@ -104,7 +106,6 @@ class OpenAIWrapper{
 
     async generateDiagram(userPrompt, lastModel) {
         const promptObj = utils.promptingSchemes[this.#promptSchemeId];
-        const lastRelationships = lastModel.relationships || [];
         
         //start with the system prompt
         let systemRole = 'developer';
@@ -117,24 +118,16 @@ class OpenAIWrapper{
                 content: promptObj.backgroundPrompt.replaceAll("{backgroundKnowledge}", this.#backgroundKnowledge),
             });
         }
+        if (this.#problemStatement) {
+            messages.push({
+                role: "user",
+                content: promptObj.problemStatementPrompt.replaceAll("{problemStatement}", this.#problemStatement),
+            });
+        }
 
-        //include as the second to last (two) messages, what it has given us to date, asking it to close feedback loops and consider all of this previous information
+        const lastRelationships = lastModel.relationships || [];
         if (lastRelationships && lastRelationships.length > 0) {
-            let relationshipStr = lastRelationships.filter((relationship) => {
-                //if there isn't a valid key, then assume it is valid
-                if (!relationship.hasOwnProperty("valid"))
-                    return true;
-                
-                //if there isn't a relationship there skip it
-                if (!relationship.hasOwnProperty("causalRelationship"))
-                    return true;
-
-                return relationship.valid;
-            }).map((relationship) => {
-                return relationship["causalRelationship"] + " which is because " + relationship.reasoning; 
-            }).join("\n");
-
-            messages.push({ role: "assistant", content: relationshipStr });
+            messages.push({ role: "assistant", content: JSON.stringify(lastModel.relationships, null, 2) });
             messages.push({ role: "user", content: promptObj.assistantPrompt });
         }
 
@@ -149,7 +142,8 @@ class OpenAIWrapper{
         const originalCompletion = await this.#openAIAPI.chat.completions.create({
             messages: messages,
             model: this.#openAIModel,
-            response_format: responseFormat
+            response_format: responseFormat,
+            temperature: 0
         });
 
         const originalResponse = originalCompletion.choices[0].message;

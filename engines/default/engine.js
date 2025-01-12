@@ -54,6 +54,14 @@ class Engine {
                 label: "Prompt Scheme",
                 description: "The collection of templates you want your queries to use.  These templates instruct the OpenAI model how to respond to your queries."
             },{
+                name: "problemStatement",
+                type: "string",
+                required: false,
+                uiElement: "textarea",
+                saveForUser: "local",
+                label: "Problem Statement",
+                description: "Description of a dynamic issue within the system you are studying that highlights an undesirable behavior over time."
+            },{
                 name: "backgroundKnowledge",
                 type: "string",
                 required: false,
@@ -70,15 +78,18 @@ class Engine {
         const promptSchemeId = parameters.promptSchemeId;
         const openAIKey = parameters.openAIKey;
         const backgroundKnowledge = parameters.backgroundKnowledge;
+        const problemStatement = parameters.problemStatement;
 
         try {
-            let wrapper = new OpenAIWrapper(openAIModel, promptSchemeId, backgroundKnowledge, openAIKey);
+            let wrapper = new OpenAIWrapper(openAIModel, promptSchemeId, backgroundKnowledge, problemStatement, openAIKey);
             const relationships = await wrapper.generateDiagram(prompt, currentModel);
             const variables =  [...new Set([...relationships.map( e => e.start),...relationships.map( e => e.end )])];
             return {
                 success: true,
-                relationships: relationships,
-                variables: variables
+                model: {
+                    relationships: relationships,
+                    variables: variables
+                }
             };
         } catch(err) {
             console.error(err);
