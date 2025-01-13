@@ -126,7 +126,24 @@ class OpenAIWrapper{
             });
         }
 
-        const lastRelationships = lastModel.relationships || [];
+        //sd-json format has polarity as + or -, for OpenAI we have it as positive or negative
+        const lastRelationships = (lastModel.relationships || []).map((relationship)=> {
+            switch (relationship.polarity) {
+                case "+":
+                    relationship.polarity = "positive";
+                    break;
+
+                case "-":
+                    relationship.polarity = "negative";
+                    break;
+
+                default:
+                    delete relationship.polarity;
+                    break;
+            }
+            return relationship;
+        });
+
         if (lastRelationships && lastRelationships.length > 0) {
             messages.push({ role: "assistant", content: JSON.stringify(lastModel.relationships, null, 2) });
             messages.push({ role: "user", content: promptObj.assistantPrompt });
