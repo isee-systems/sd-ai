@@ -1,5 +1,5 @@
 import express from 'express'
-import utils from '../../engines/default/utils.js'
+import utils from './../../utils.js'
 
 const router = express.Router()
 

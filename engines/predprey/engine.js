@@ -11,6 +11,7 @@ class Engine {
         return {
             success: true,
             model: {
+                supportingInfo: {},
                 variables: [
                     {
                         name: "predator",

@@ -1,5 +1,14 @@
 let utils = {};
 
+//this will let us deny old clients in the future
+utils.supportedPlatform = function(clientProduct, clientVersion) {
+  if (!clientProduct || !clientVersion)
+    return false;
+  
+  //both product and version may be null or undefined if not passed in
+  return true;
+}
+
 utils.xmileName = function(name) {
   let cleanName = name.replaceAll("\n", " ")
              .replaceAll("\r", " ");
