@@ -25,8 +25,9 @@ class OpenAIWrapper{
         this.#backgroundKnowledge = backgroundKnowledge || null;
         this.#problemStatement = problemStatement || null;
 
+        const apiKey = openAIKey || process.env.OPENAI_API_KEY;
         this.#openAIAPI = new OpenAI({
-            apiKey: openAIKey || process.env.OPENAI_API_KEY,
+            apiKey: apiKey,
         });
     }
 
