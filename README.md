@@ -75,6 +75,8 @@ Returns
 
 4. POST /api/v1/:engine/generate
 
+This call MUST be JSON encoded!
+
 This call is the work-horse of the service, doing the job of diagram generation.
 
 This call takes at least 3 post parameters, all other parameters are found via a call to /api/v1/:engine/parameters
