@@ -60,7 +60,9 @@ class Engine {
                 uiElement: "textarea",
                 saveForUser: "local",
                 label: "Problem Statement",
-                description: "Description of a dynamic issue within the system you are studying that highlights an undesirable behavior over time."
+                description: "Description of a dynamic issue within the system you are studying that highlights an undesirable behavior over time.",
+                minHeight: 50,
+                maxHeight: 100
             },{
                 name: "backgroundKnowledge",
                 type: "string",
@@ -68,7 +70,8 @@ class Engine {
                 uiElement: "textarea",
                 saveForUser: "local",
                 label: "Background Knowledge",
-                description: "Background information you want the OpenAI model to consider when generating a diagram for you"
+                description: "Background information you want the OpenAI model to consider when generating a diagram for you",
+                minHeight: 100
             }
         ];
     }

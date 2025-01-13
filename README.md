@@ -74,6 +74,8 @@ Returns
         defaultValue: <string, default value for this parameter if there is one, otherwise skipped>,
         options: <array, of objects with two attributes 'label' and 'value' only used if 'uiElement' is combobox>,
         saveForUser: <string, whether or not this field should be saved for the user by the client, valid values are local|global leave unspecified if not saved>,
+        minHeight: <int, NOT REQUIRED, default 100 only relevant if 'uiElement' is textarea -- this is the minimum height of that text area>,
+        maxHeight: <int, NOT REQUIRED, default intmax, only relevant if 'uiElement' is textarea -- this is the maximum height of that text area>
     }] 
 }
 ```
