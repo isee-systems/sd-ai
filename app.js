@@ -11,13 +11,11 @@ const app = express()
 
 app.use(cors())
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({limit: '50mb', extended: true }));
 
 if (app.get('env') === 'production') {
   app.set('trust proxy', 1) // trust first proxy
 }
-
-app.use(express.urlencoded({limit: '50mb', extended: true }));
 
 app.use("/api/v1/initialize", v1Initialize);
 app.use("/api/v1/engines", v1Engines);
