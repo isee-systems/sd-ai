@@ -9,9 +9,7 @@ class Engine {
 
     async generate(prompt, currentModel, parameters) {
         return {
-            success: true,
             model: {
-                supportingInfo: {},
                 variables: [
                     {
                         name: "predator",

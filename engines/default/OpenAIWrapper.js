@@ -179,7 +179,7 @@ You will conduct a multistep process:
         if (this.#data.problemStatement) {
             messages.push({
                 role: systemRole,
-                content: this.#data.problemStatementPrompt.replaceAll("{problemStatement}", this.#data.problemStatementt),
+                content: this.#data.problemStatementPrompt.replaceAll("{problemStatement}", this.#data.problemStatement),
             });
         }
 

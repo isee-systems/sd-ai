@@ -1,0 +1,14 @@
+[Unit]
+Description=SD-AI Service
+After=network.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/comodel/sd-ai/
+Environment="PATH=/home/ubuntu/.nvm/versions/node/v22.4.0/bin:$PATH"
+ExecStart=/home/ubuntu/comodel/sd-ai/node_modules/.bin/npm start 
+
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

@@ -34,12 +34,18 @@ router.post("/:engine/generate", async (req, res) => {
     } else {
       format = "sd-json";
     }
-  
-    return res.send({
+    
+    let response = {
       success: true,
       format: format,
-      model: model 
-    })
+      model: model,
+    }
+
+    if ('supportingInfo' in generateResponse) {
+      response.supportingInfo = generateResponse.supportingInfo
+    }
+  
+    return res.send(response)
 })
 
 export default router;
