@@ -13,6 +13,11 @@ The prompts in /engine/default/prompts/default use https://github.com/bear96/Sys
 
 We recommend VSCode using a launch.json for the Node type applications (you get a debugger, and hot-reloading)  
 
+#### Important Note 
+You must have a .env file at the top level which must have the following keys  
+ * OPENAI_API_KEY which is your open AI access token, if provided then clients do not need to provide one to either the intialize or generate calls.  If not provided this value should be blank.  
+
+
 ### How it works
 
 The intent is to allow the community to build their own "engines" for doing SD model (or for the momment CLD only) generation using LLMs.  We provide a simple to implement interface that allows developers to create their own SD model generation engines or to extend and do research using the default OpenAI based engine which has been designed to be very flexible for modifiation without deep knowledge of coding.  The engine interface specifies everything Stella Architect v3.8 or greater needs to present a GUI to an end user and interact with any engine written by any memeber of the community.
@@ -107,8 +112,3 @@ sd-json format is:
     }]
 }
 ```  
-
-
-### Important Note 
-You must have a .env file at the top level which can have the following keys  
- * OPENAI_API_KEY which is your open AI access token, if provided then clients do not need to provide one to either the intialize or generate calls  
