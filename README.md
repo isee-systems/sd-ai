@@ -4,7 +4,7 @@ Proxy service to support compact prompts returning System Dynamics content.
 
 The intention is for this to be a free and public service hosted by isee systems and/or anyone else to do the engineering work of prompting LLM models for the purposes of generating CLDs and (eventually) quantitative SD models.  The service returns model information both as a JSON object of variables of relationships, and XMILE.  This service is what we at isee systems are using / will use in the future to build our LLM features around.  
 
-The prompts in /engine/default/prompts/default use https://github.com/bear96/System-Dynamics-Bot as a point of departure.  
+The prompts in the OpenAIWrapper.js class use https://github.com/bear96/System-Dynamics-Bot as a rough point of departure.  
 
 ### To get started using this service....
 
