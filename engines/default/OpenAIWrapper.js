@@ -87,14 +87,7 @@ You will conduct a multistep process:
         }
 
         if (!this.#data.openAIKey) {
-            if ("RESTRICT_KEY" in process.env && process.env.RESTRICT_KEY === 'true') {
-                if (Buffer.from(params.secret, 'hex').toString() === process.env.RESTRICT_KEY_PHRASE) {
-                    this.#data.openAIKey = process.env.OPENAI_API_KEY;
-                }
-
-            } else {
-                this.#data.openAIKey = process.env.OPENAI_API_KEY
-            }
+            this.#data.openAIKey = process.env.OPENAI_API_KEY
         }
 
         this.#openAIAPI = new OpenAI({

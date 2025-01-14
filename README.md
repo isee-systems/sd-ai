@@ -14,8 +14,9 @@ The prompts in the OpenAIWrapper.js class use https://github.com/bear96/System-D
 We recommend VSCode using a launch.json for the Node type applications (you get a debugger, and hot-reloading)  
 
 #### Important note 
-You must have a .env file at the top level which must have the following keys  
- * OPENAI_API_KEY which is either your open AI access token or a blank string.  If an OpenAI key is provied then clients do not need to provide one to generate models.
+You must have a .env file at the top level which can have the following keys:
+ * OPENAI_API_KEY which is either your OpenAI access token or a blank string. If an OpenAI key is provided then clients do not need to provide one to generate models.
+ * AUTHENTICATION_KEY optional but when present requires client pass an Authentication header matching this value. e.g. `curl -H "Authentication: my_super_secret_value_in_env_file"` 
 
 ### The purpose of this project
 
