@@ -111,7 +111,7 @@ sd-json format is:
         "reasoning": <string, explanation for why this relationship is here> 
         "from": <string, the variable the connection starts wtih>,
         "to": <string, the variable the connection ends with>,  
-        "polarity": <string "+" or "-" or " " >, 
+        "polarity": <string "+" or "-" or "" >, 
         "polarityReasoning": <string explanation for why this polarity was chosen> 
     }]
 }
