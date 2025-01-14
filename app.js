@@ -17,6 +17,18 @@ if (app.get('env') === 'production') {
   app.set('trust proxy', 1) // trust first proxy
 }
 
+const restrictKeyCode = process.env.RESTRICT_KEY_CODE;
+
+if (restrictKeyCode) {
+  app.use((req, res, next) => {
+    if (!req.header('Authentication') || req.header('Authentication') !== restrictKeyCode) {
+      return res.status(403).send({ error: 'Unauthorized' });
+    }
+    next();
+  });
+}
+
+
 app.use("/api/v1/initialize", v1Initialize);
 app.use("/api/v1/engines", v1Engines);
 app.use("/api/v1/engines/", v1EngineParameters); //:engine/parameters
