@@ -1,8 +1,8 @@
 
 # sd-ai
-Proxy service to support compact prompts returning System Dynamics content.  
+Web service to support compact prompts returning System Dynamics content.  
 
-The intention is for this to be a free and public service hosted by isee systems and/or anyone else to do the engineering work of prompting LLM models for the purposes of generating CLDs and (eventually) quantitative SD models.  The service returns model information both as a JSON object of variables of relationships, and XMILE.  This service is what we at isee systems are using / will use in the future to build our LLM features around.  
+The intention is for this to be a free and public service hosted by isee systems and/or anyone else to do the engineering work of prompting LLM models for the purposes of generating CLDs and (eventually) quantitative SD models.  The service returns model information both as a sd-json (see below) object or XMILE.
 
 The prompts in the OpenAIWrapper.js class use https://github.com/bear96/System-Dynamics-Bot as a rough point of departure.  
 
@@ -13,24 +13,24 @@ The prompts in the OpenAIWrapper.js class use https://github.com/bear96/System-D
 
 We recommend VSCode using a launch.json for the Node type applications (you get a debugger, and hot-reloading)  
 
-#### Important Note 
+#### Important note 
 You must have a .env file at the top level which must have the following keys  
- * OPENAI_API_KEY which is your open AI access token, if provided then clients do not need to provide one to either the intialize or generate calls.  If not provided this value should be blank.  
+ * OPENAI_API_KEY which is either your open AI access token or a blank string.  If an OpenAI key is provied then clients do not need to provide one to generate models.
 
+### The purpose of this project
+
+The intent is to allow the community to build their own "engines" for doing SD model (or for the momment CLD only) generation using LLMs.  We provide a simple to implement interface that allows developers to create their own SD model generation engines or to extend and do research using the default OpenAI based engine which has been designed to be very flexible for modifiation without deep knowledge of programming.  The engine interface specifies everything a client application needs to present a GUI to an end user and interact with any engine written by any memeber of the community.
+
+In the advanced engine, the intent is to externalize all prompts, and LLM choices so that every possible option is made availble to the end user. The default engine uses our current (and everchanging!) assumptions of what is best.  If the community desires, we're open to supporting other LLMs besides OpenAI provided models.  
+
+For now, the current system allows researchers in the field to do prompt engineering, and develop the science of generating SD content from LLMs without having to worry about the engineering to make their work more generally available (or even engineering itself, if all one prefers to study are prompts).  Client applications which consume this service will do the work of graph drawing (diagram generation), and user editing of returned models, allowing researchers within the field to focus purely on developing better ways to interact with LLMs. 
+
+To experiment with prompt engineering, use the advanced engine, and overwrite/change any of the default values we've come up with.  If you find a set that you are especially proud of, let us know, and we can bake them into a new engine or replace the defaults in the default engine!
+
+Likewise if you are a skilled JS developer you can write your own engine following the three example engines we have developed.  The first, fully featured engine is the default engine.  The second engine is a dummy predator prey engine which always returns the same content just as a simple demo for developers who are coming on board.  The third engine is the advanced engine which allows users to do their own prompt engineering, and can builds upon the default engine.  Yup, thats right, we expect that people will build engines ontop of other, existing engines!
 
 ### How it works
-
-The intent is to allow the community to build their own "engines" for doing SD model (or for the momment CLD only) generation using LLMs.  We provide a simple to implement interface that allows developers to create their own SD model generation engines or to extend and do research using the default OpenAI based engine which has been designed to be very flexible for modifiation without deep knowledge of coding.  The engine interface specifies everything Stella Architect v3.8 or greater needs to present a GUI to an end user and interact with any engine written by any memeber of the community.
-
-In the advanced engine, the intent is to externalize all prompts, and LLM choices and make them availble as options for the end user. The default engine uses our assumptions of what is best for each of these choices.  If the community desires, we're open to supporting other APIs besides OpenAI.  But for now, the current system allows researchers in the field to do prompt engineering, and perfect the science around generating SD content from LLMs without having to worry about the engineering to make their work more generally available.  Stella Professional/Stella Architect/CoModel or any other client which consumes this service will do the work of graph drawing, and user editing of returned models, allowing researchers within the field to focus purely on developing better ways to interact with LLMs. 
-
-To experiment with prompt engineering, use the advanced engine, and overwrite/change any of the default values we've come up with.  If you find a set that you are especially proud of, let us know, and we can bake them into a new engine for you!
-
-Likewise if you are a skilled JS developer you can write your own engine following the three example engines we have developed.  The first, fully featured engine is the default engine.  The second is a dummy predator prey engine which always returns the same content just as a simple demo.  The third engine is the advanced engine which allows users to do their own prompt engineering, and can builds upon the default engine.  Yup, thats right, we expect that people will build engines ontop of other, existing engines!
-
-The service can be run with an embedded OpenAI key (see note below) or an OpenAI key can be provided to each API call which interacts with OpenAI.  The Stella client has a place where a key can be provided, as well as a service address so that the Stella client can be pointed at any version of this service hosted by anyone else, including localhost for developers.
-
-The service returns either a minimally viable XMILE representation of the model (no diagram information) which can be opened directly in Stella v3.7.3 or later and the view information will be machine generated by Stella, or a sd-json object that contains an array of relationship information and an array of variables.  This JSON object is how state is maintained by the service.  See below for what the sd-json format is.  
+The service can be run with an embedded OpenAI key (see note above) or an OpenAI key can be provided to each API call which interacts with OpenAI.  The service returns either a minimally viable XMILE representation of the model (no diagram information) which can be opened directly in Stella v3.7.3 or later and the view information will be machine generated by Stella, or a sd-json object that contains an array of relationship information and an array of variables.  This JSON object is how state is maintained by the service.  See below for what the sd-json format is. 
 
 ### API Documentation
 
@@ -63,7 +63,8 @@ This call takes no query parameters
 
 Returns 
 ```
-{ success: <bool>, 
+{ 
+    success: <bool>, 
     parameters:[{
         name: <string, unique name for the parmater that is passed to generate call>,
         type: <string, currently this service only supports 'string' for this attribute>,
@@ -96,6 +97,8 @@ Returns `{success: <bool>, message: <string>, format: <string>, model: {variable
 
 All relationships in the entire diagram will be returned irregardless of whether they are new or not.  The client is expected to do any diff/update operations if desired.  The "normal" usecase is that each call to generate returns a whole "new" model.
 
+### SD-JSON format specification
+
 sd-json format is:
 ```
 {
@@ -108,7 +111,7 @@ sd-json format is:
         "reasoning": <string, explanation for why this relationship is here> 
         "from": <string, the variable the connection starts wtih>,
         "to": <string, the variable the connection ends with>,  
-        "polarity": <string ?|+|- >, 
+        "polarity": <string "+" or "-" or " " >, 
         "polarityReasoning": <string explanation for why this polarity was chosen> 
     }]
 }
