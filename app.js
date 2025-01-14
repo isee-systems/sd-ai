@@ -17,12 +17,12 @@ if (app.get('env') === 'production') {
   app.set('trust proxy', 1) // trust first proxy
 }
 
-const restrictKeyCode = process.env.RESTRICT_KEY_CODE;
+const authenticationKey = process.env.AUTHENTICATION_KEY;
 
-if (restrictKeyCode) {
+if (authenticationKey) {
   app.use((req, res, next) => {
-    if (!req.header('Authentication') || req.header('Authentication') !== restrictKeyCode) {
-      return res.status(403).send({ error: 'Unauthorized' });
+    if (!req.header('Authentication') || req.header('Authentication') !== authenticationKey) {
+      return res.status(403).send({ "success": false, err: 'Unauthorized, please pass valid Authentication header.' });
     }
     next();
   });
