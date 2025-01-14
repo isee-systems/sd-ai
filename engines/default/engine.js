@@ -43,7 +43,6 @@ class Engine {
             const response = await wrapper.generateDiagram(prompt, currentModel);
             const variables =  [...new Set([...response.relationships.map( e => e.from),...response.relationships.map( e => e.to )])];
             return {
-                success: true,
                 supportingInfo: {
                     explanation: response.explanation,
                     title: response.title
@@ -56,7 +55,6 @@ class Engine {
         } catch(err) {
             console.error(err);
             return { 
-                success: false, 
                 err: err.toString() 
             };
         }
