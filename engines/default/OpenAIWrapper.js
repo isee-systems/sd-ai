@@ -87,7 +87,7 @@ You will conduct a multistep process:
         }
 
         if (!this.#data.openAIKey) {
-            if (config.restrictKey) {
+            if ("RESTRICT_KEY" in process.env && process.env.RESTRICT_KEY === 'true') {
                 if (Buffer.from(params.secret, 'hex').toString() === process.env.RESTRICT_KEY_PHRASE) {
                     this.#data.openAIKey = process.env.OPENAI_API_KEY;
                 }
