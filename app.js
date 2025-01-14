@@ -17,6 +17,18 @@ if (app.get('env') === 'production') {
   app.set('trust proxy', 1) // trust first proxy
 }
 
+const authenticationKey = process.env.AUTHENTICATION_KEY;
+
+if (authenticationKey) {
+  app.use((req, res, next) => {
+    if (!req.header('Authentication') || req.header('Authentication') !== authenticationKey) {
+      return res.status(403).send({ "success": false, err: 'Unauthorized, please pass valid Authentication header.' });
+    }
+    next();
+  });
+}
+
+
 app.use("/api/v1/initialize", v1Initialize);
 app.use("/api/v1/engines", v1Engines);
 app.use("/api/v1/engines/", v1EngineParameters); //:engine/parameters
