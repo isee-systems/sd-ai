@@ -2,6 +2,8 @@ import OpenAI from "openai";
 import { z } from "zod";
 import { zodResponseFormat } from "openai/helpers/zod";
 import projectUtils from './../../utils.js'
+import config from './../../config.js'
+import crypto from 'crypto'
 
 class ResponseFormatError extends Error {
     constructor(message) {
@@ -62,15 +64,15 @@ You will conduct a multistep process:
     #data = {
         backgroundKnowledge: null,
         problemStatement: null,
-        openAIKey: process.env.OPENAI_API_KEY,
+        openAIKey: null,
         openAIModel: OpenAIWrapper.DEFAULT_MODEL,
         systemPrompt: OpenAIWrapper.DEFAULT_SYSTEM_PROPMT,
         assistantPrompt: OpenAIWrapper.DEFAULT_ASSISTANT_PROMPT,
         feedbackPrompt: OpenAIWrapper.DEFAULT_FEEDBACK_PROMPT,
         backgroundPrompt: OpenAIWrapper.DEFAULT_BACKGROUND_PROMPT,
         problemStatementPrompt: OpenAIWrapper.DEFAULT_PROBLEM_STATEMENT_PROMPT
-
     };
+
     #openAIAPI;
 
     constructor(params) {
@@ -82,6 +84,17 @@ You will conduct a multistep process:
 
         if (!this.#data.backgroundPrompt.includes('{backgroundKnowledge')) {
             this.#data.backgroundPrompt = this.#data.backgroundPrompt.trim() + "\n\n{backgroundKnowledge}";
+        }
+
+        if (!this.#data.openAIKey) {
+            if (config.restrictKey) {
+                if (Buffer.from(params.secret, 'hex').toString() === process.env.RESTRICT_KEY_PHRASE) {
+                    this.#data.openAIKey = process.env.OPENAI_API_KEY;
+                }
+
+            } else {
+                this.#data.openAIKey = process.env.OPENAI_API_KEY
+            }
         }
 
         this.#openAIAPI = new OpenAI({
