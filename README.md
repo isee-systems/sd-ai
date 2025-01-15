@@ -111,8 +111,8 @@ We welcome Github Issues and Pull Requests from everyone! Here are some ideas fo
 OPENAI_API_KEY="sk-asdjkshd" # if you're doing work with `default` or `advanced` engine or any engine that uses the OpenAIWrapper.js class 
 AUTHENTICATION_KEY="my_secret_key" # only needed for securing publically accessible deployments. Requires client pass an Authentication header matching this value. e.g. `curl -H "Authentication: my_super_secret_value_in_env_file"` to the engine generate request only
 ```
-2. npm install 
-3. npm start
+3. npm install 
+4. npm start
 
 We recommend VSCode using a launch.json for the Node type applications (you get a debugger, and hot-reloading)
 
