@@ -106,8 +106,6 @@ You will conduct a multistep process:
 
     #processResponse(originalResponse) {
         let origRelationships = originalResponse.relationships || [];
-        console.log("Here are the responses....");
-        console.log(origRelationships);
 
         let relationships = origRelationships.map(relationship => { 
             let ret = Object.assign({}, relationship);
@@ -199,9 +197,6 @@ You will conduct a multistep process:
         //give it the user prompt
         messages.push({ role: "user", content: userPrompt });
         messages.push({ role: "user", content: this.#data.feedbackPrompt }); //then have it try to close feedback
-
-        console.log("Original Prompt...");
-        console.log(messages);
         
         //get what it thinks the relationships are with this information
         const originalCompletion = await this.#openAIAPI.chat.completions.create({

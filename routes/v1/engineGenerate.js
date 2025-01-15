@@ -10,9 +10,7 @@ router.post("/:engine/generate", async (req, res) => {
           return res.status(403).send({ "success": false, err: 'Unauthorized, please pass valid Authentication header.' });
         }
     }
-  
-  
-  
+    
     const engine = await import(`./../../engines/${req.params.engine}/engine.js`);
     const instance = new engine.default();
 
