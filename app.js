@@ -8,16 +8,6 @@ import v1EngineParameters from './routes/v1/engineParameters.js'
 import v1EngineGenerate from './routes/v1/engineGenerate.js'
 
 const app = express()
-const authenticationKey = process.env.AUTHENTICATION_KEY;
-
-if (authenticationKey) {
-  app.use((req, res, next) => {
-    if (!req.header('Authentication') || req.header('Authentication') !== authenticationKey) {
-      return res.status(403).send({ "success": false, err: 'Unauthorized, please pass valid Authentication header.' });
-    }
-    next();
-  });
-}
 
 app.use(cors())
 app.use(express.json());
