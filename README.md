@@ -1,68 +1,45 @@
-
 # sd-ai
-Web service to support compact prompts returning System Dynamics content.  
+Fully open source web service that generates causal loop diagrams from user prompts. This service supports the AI functionality found in [Stella](https://www.iseesystems.com/store/products/stella-architect.aspx) (v3.8.0 or greater) and [CoModel](https://comodel.io).
 
-The intention is for this to be a free and public service hosted by isee systems and/or anyone else to do the engineering work of prompting LLM models for the purposes of generating CLDs and (eventually) quantitative SD models.  The service returns model information both as a sd-json (see below) object or XMILE.
+# Goals
+- provide pathways for folks with different levels of technical skill to get involved in refining best practices for using LLMs in System Dynamics work
+- provide a centralized location for the current state of the art for using LLMs in SD work
+- provide a flexible framework to support immediate integration of new AI concepts into existing SD applications
+- begin to support AI generation of quantitative SD models
+- easily support swapping out OpenAI for other LLM vendors or even generate models without using LLMs
 
-The prompts in the OpenAIWrapper.js class use https://github.com/bear96/System-Dynamics-Bot as a rough point of departure.  
+# Get Involved
+We welcome Github Issues and Pull Requests from everyone! Here are some ideas for how to support this work:
+- **Anyone with an SD background**
+    - feedback on your experience building CLDs in either Stella (using AI Assistant) or CoModel (using Copilot)
+- **Techy folks**
+   - prompt engineering recommendations surfaced by using "Advanced" Assistant in Stella
+- **Peeps comfortable with programming**
+    - refinement of the `default` (our state of the art) engine or contribution of a brand new AI engine
 
-### To get started using this service....
+# Architecture and Data Structures 
+- sd-ai is a NodeJS Express app with simple JSON-encoded HTTP API
+- all AI functionality in sd-ai is implemented as an "engine"
+- an engine is a javascript class that can implement ai functionality using any libraries/apis supported by javascript
+    - `/engines` folder contains examples including the simplest possible engine: `predprey` and the current state of the art engine: `default`
+- sd-ai wraps engines to provides endpoints to:
+    - list all engines
+    - list parameters required/supported by each specific engine
+    - generating a model using a specific engine
+- models can be returned in sd-json (see below) or XMILE
 
-1. npm i 
-2. npm start 
+## Engine
+- an engine only needs to do 2 things:
+    - provide a function to generate a model based on a prompt
+    - tell us what additional parameters users can pass to it
 
-We recommend VSCode using a launch.json for the Node type applications (you get a debugger, and hot-reloading)  
+### Additional Parameters
+- defined via `additionalParameters()` function on each engine class
+- format specifically crafted to allow your engine to be automatically incorporated into the Stella GUI
 
-#### Important note 
-You must have a .env file at the top level which can have the following keys:
- * OPENAI_API_KEY which is either your OpenAI access token or a blank string. If an OpenAI key is provided then clients do not need to provide one to generate models.
- * AUTHENTICATION_KEY optional but when present requires client pass an Authentication header matching this value. e.g. `curl -H "Authentication: my_super_secret_value_in_env_file"` 
-
-### The purpose of this project
-
-The intent is to allow the community to build their own "engines" for doing SD model (or for the momment CLD only) generation using LLMs.  We provide a simple to implement interface that allows developers to create their own SD model generation engines or to extend and do research using the default OpenAI based engine which has been designed to be very flexible for modifiation without deep knowledge of programming.  The engine interface specifies everything a client application needs to present a GUI to an end user and interact with any engine written by any memeber of the community.
-
-In the advanced engine, the intent is to externalize all prompts, and LLM choices so that every possible option is made availble to the end user. The default engine uses our current (and everchanging!) assumptions of what is best.  If the community desires, we're open to supporting other LLMs besides OpenAI provided models.  
-
-For now, the current system allows researchers in the field to do prompt engineering, and develop the science of generating SD content from LLMs without having to worry about the engineering to make their work more generally available (or even engineering itself, if all one prefers to study are prompts).  Client applications which consume this service will do the work of graph drawing (diagram generation), and user editing of returned models, allowing researchers within the field to focus purely on developing better ways to interact with LLMs. 
-
-To experiment with prompt engineering, use the advanced engine, and overwrite/change any of the default values we've come up with.  If you find a set that you are especially proud of, let us know, and we can bake them into a new engine or replace the defaults in the default engine!
-
-Likewise if you are a skilled JS developer you can write your own engine following the three example engines we have developed.  The first, fully featured engine is the default engine.  The second engine is a dummy predator prey engine which always returns the same content just as a simple demo for developers who are coming on board.  The third engine is the advanced engine which allows users to do their own prompt engineering, and can builds upon the default engine.  Yup, thats right, we expect that people will build engines ontop of other, existing engines!
-
-### How it works
-The service can be run with an embedded OpenAI key (see note above) or an OpenAI key can be provided to each API call which interacts with OpenAI.  The service returns either a minimally viable XMILE representation of the model (no diagram information) which can be opened directly in Stella v3.7.3 or later and the view information will be machine generated by Stella, or a sd-json object that contains an array of relationship information and an array of variables.  This JSON object is how state is maintained by the service.  See below for what the sd-json format is. 
-
-### API Documentation
-
-Below are the four REST API calls this service support, written in the order they are typically made
-
-1. GET /api/v1/initialize
-
-This call can be skipped, but is useful for determining if your client is supported by the service.  
-
-This call takes 2 optional query parameters
-
-`clientProduct` - String - The product name of the client that is talking with the service (for support checks) (e.g. Stella Architect).  
-`clientVersion` - String - The version number of the client that is talking with the service (for support checks) (e.g. 3.8.0).  
-
-Returns `{success: <bool>, message: <string> }`
-
-2. GET /api/v1/engines
-
-This call can be skipped, but is useful if your client wants to know what engines are available.
-
-This call takes no query parameters
-
-Returns `{success: <bool>, engines:[{name: 'default', supports: ['cld']}, {name: 'predprey', supports: ['cld']}, .... any other engines in the /engines folder] }`
-
-3. GET /api/v1/engines/:engine/parameters
-
-This call can be skipped, but is useful if your client wants to know what parameters a particular engine supports
-
-This call takes no query parameters
-
-Returns 
+#### API Example
+- `GET` `/api/v1/engines/:engine/parameters`
+- Returns 
 ```
 { 
     success: <bool>, 
@@ -82,25 +59,34 @@ Returns
 }
 ```
 
-4. POST /api/v1/:engine/generate
+### Generate
+- does the job of diagram generation, it's the workhorse of the engine
+- defined via `generate(prompt, currentModel, parameters)` function on each engine class
+- a complete diagram should be returned by each request, even if that just means returning an empty diagram or the same diagram the user passed in via `currentModel`
+  
+#### API Example
+- `POST` `/api/v1/:engine/generate`
+- JSON data
+```
+{
+    "prompt": "", # Requested model or changes to model to be provided to the AI
+    "format": "xmile", # The return type for the information. Either sd-json or xmile, default is sd-json",
+    "currentModel": { "relationships": [], "variables": []} # Optional sd-json representation of the current model
+    ....
+    # additionalParameters given by `/api/v1/:engine/parameters`
+}
+```
+- Returns
+```
+{
+    success: <bool>,
+    format: <string>,
+    model: {variables: [], relationships: []},
+    supportingInfo: {} # only provided if supported by engine
+}
+```
 
-This call MUST be JSON encoded!
-
-This call is the work-horse of the service, doing the job of diagram generation.
-
-This call takes at least 3 post parameters, all other parameters are found via a call to /api/v1/:engine/parameters
-
-`prompt` - The prompt typed in by the end user
-`format` - The return type for the information. Either sd-json or xmile, default is sd-json
-`currentModel` - The sd-json representation of the current model as JSON.
-
-Returns `{success: <bool>, message: <string>, format: <string>, model: {variables: [], relationships: []},  supportingInfo: {} }`  
-
-All relationships in the entire diagram will be returned irregardless of whether they are new or not.  The client is expected to do any diff/update operations if desired.  The "normal" usecase is that each call to generate returns a whole "new" model.
-
-### SD-JSON format specification
-
-sd-json format is:
+## SD-JSON
 ```
 {
     variables: [{
@@ -117,3 +103,19 @@ sd-json format is:
     }]
 }
 ```  
+
+# Setup
+1. fork this repo and git clone your fork locally 
+2. create an `.env` file at the top level which has the following keys:
+```
+OPENAI_API_KEY="sk-asdjkshd" # if you're doing work with `default` or `advanced` engine or any engine that uses the OpenAIWrapper.js class 
+AUTHENTICATION_KEY="my_secret_key" # only needed for securing publically accessible deployments. Requires client pass an Authentication header matching this value. e.g. `curl -H "Authentication: my_super_secret_value_in_env_file"` to every request
+```
+2. npm install 
+3. npm start
+
+We recommend VSCode using a launch.json for the Node type applications (you get a debugger, and hot-reloading)
+
+# Inspiration and Related Work
+- https://github.com/bear96/System-Dynamics-Bot served as departure point the `default` prompts
+- [CoModel](https://comodel.io) created by the team at [Skip Designed](https://skipdesigned.com/) to use Generative AI in their CBSD work
