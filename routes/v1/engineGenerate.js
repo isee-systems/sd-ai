@@ -5,12 +5,12 @@ const router = express.Router()
 
 router.post("/:engine/generate", async (req, res) => {
     const authenticationKey = process.env.AUTHENTICATION_KEY;
-    if (authenticationKey) {
+    if (!req.body.openAIKey && authenticationKey) {
         if (!req.header('Authentication') || req.header('Authentication') !== authenticationKey) {
           return res.status(403).send({ "success": false, err: 'Unauthorized, please pass valid Authentication header.' });
         }
     }
-    
+
     const engine = await import(`./../../engines/${req.params.engine}/engine.js`);
     const instance = new engine.default();
 
