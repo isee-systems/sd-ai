@@ -9,6 +9,7 @@ Fully open source web service that generates causal loop diagrams from user prom
 - easily support swapping out OpenAI for other LLM vendors or even generate models without using LLMs
 
 # Get Involved
+Join the discussion on the [sd-ai groups.io](https://groups.io/g/sd-ai/)<br/><br/> 
 We welcome Github Issues and Pull Requests from everyone! Here are some ideas for how to support this work:
 - **Anyone with an SD background**
     - feedback on your experience building CLDs in either Stella (using AI Assistant) or CoModel (using Copilot)
