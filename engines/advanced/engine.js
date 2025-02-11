@@ -27,9 +27,19 @@ It ensures the AI’s responses align with the intended user experience, such as
 
     additionalParameters()  {
         const models = [ 
-            {label: "GPT-4o-mini Cheap", value: 'gpt-4o-mini'}, 
-            {label: "GPT-4o Mid Price", value: 'gpt-4o'}, 
-            {label: "o1 Expensive", value: 'o1'}, 
+            {label: "GPT-4o", value: 'gpt-4o'}, 
+            {label: "GPT-4o-mini", value: 'gpt-4o-mini'}, 
+            {label: "Gemini 2.0", value: 'gemini-2.0-flash'},
+            {label: "Gemini 2.0-Lite", value: 'gemini-2.0-flash-lite-preview-02-05'},
+            {label: "Gemini 1.5", value: 'gemini-1.5-flash'},
+            {label: "o1-mini Flaky!", value: 'o1-mini'}, 
+            {label: "o1 Restricted Access", value: 'o1'}, 
+/*
+            {label: "o3-mini", value: 'o3-mini'}, 
+            {label: "o3-mini-low", value: 'o3-mini-low'}, 
+            {label: "o3-mini-medium", value: 'o3-mini-medium'}, 
+            {label: "o3-mini-high", value: 'o3-mini-high'}
+*/
         ];
 
         return [{
@@ -41,15 +51,23 @@ It ensures the AI’s responses align with the intended user experience, such as
                 label: "Open AI API Key",
                 description: "Leave blank for the default, or your Open AI key - skprojectXXXXX"
             },{
-                name: "openAIModel",
+                name: "googleKey",
+                type: "string",
+                required: true,
+                uiElement: "password",
+                saveForUser: "global",
+                label: "Google API Key",
+                description: "Leave blank for the default, or your Google API key - XXXXXX"
+            },{
+                name: "underlyingModel",
                 type: "string",
                 defaultValue: OpenAIWrapper.DEFAULT_MODEL,
                 required: false,
                 options: models,
                 uiElement: "combobox",
                 saveForUser: "local",
-                label: "Open AI Model",
-                description: "The OpenAI model that you want to use to process your queries."
+                label: "LLM Model",
+                description: "The LLM model that you want to use to process your queries."
             },{
                 name: "systemPrompt",
                 type: "string",
