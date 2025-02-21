@@ -11,13 +11,16 @@ const problemStatement = "I'm trying to do causal discovery, and extract every c
 //random variable names to pick from
 let nouns = [ "frimbulator",  "whatajig", "balack", "whoziewhat", "funkado", "maxabizer", "marticatene", "reflupper", "exeminte", "oc", "proptimatire", "priary", "houtal", "poval", "auspong", "dominitoxing", "outrance", "illigent", "yelb", "traze", "pablanksill", "posistorather", "crypteral", "oclate", "reveforly", "yoffa", "buwheal", "geyflorrin", "ih", "aferraron", "paffling", "pershipfulty", "copyring", "dickstonyx", "bellignorance", "hashtockle", "succupserva", "relity", "hazmick", "ku", "obvia", "unliescatice", "gissorm", "phildiscals", "loopnova", "hoza", "arinterpord", "burgination", "perstablintome", "memostorer", "baxtoy", "hensologic", "estintant", "perfecton", "raez", "younjuring"];
 
-const clean = function(relationships) {
-    return relationships.map((r) => {
-        delete r.polarityReasoning;
-        delete r.reasoning;
-        return r;
-    });
-}
+const compareRelationshipLists = function(fromAI, groundTruth) {
+    const stringifyRelationships = function(r) {
+        return r.from + " --> (" + r.polarity + ") " + r.to;
+    };
+    
+    const cleanedSortedAI = fromAI.map(stringifyRelationships).sort();
+    const sortedGroundTruth = groundTruth.map(stringifyRelationships).sort();
+
+    expect(cleanedSortedAI).toEqual(sortedGroundTruth);
+};
 
 //polarity = "+" or "-""
 //polarityStart = "up" or "down"
@@ -170,7 +173,7 @@ describe("Causal Reasoning Test Suite", function() {
         it("can for a single relationship: " + test.description, async() => {
             const engine = new DefaultEngine();
             const response = await engine.generate(test.prompt, {}, {problemStatement: test.problemStatement, backgroundKnowledge: test.backgroundKnowledge});
-            expect(clean(response.model.relationships)).toEqual(test.expectedRelationships);
+            compareRelationshipLists(response.model.relationships, test.expectedRelationships);
         })
     }
 
@@ -178,7 +181,7 @@ describe("Causal Reasoning Test Suite", function() {
         it("can for a single feedback loop: " + test.description, async() => {
             const engine = new DefaultEngine();
             const response = await engine.generate(test.prompt, {}, {problemStatement: test.problemStatement, backgroundKnowledge: test.backgroundKnowledge});
-            expect(clean(response.model.relationships)).toEqual(test.expectedRelationships);
+            compareRelationshipLists(response.model.relationships, test.expectedRelationships);
         })
     }
 
@@ -186,7 +189,7 @@ describe("Causal Reasoning Test Suite", function() {
         it("can for a multiple feedback loops: " + test.description, async() => {
             const engine = new DefaultEngine();
             const response = await engine.generate(test.prompt, {}, {problemStatement: test.problemStatement, backgroundKnowledge: test.backgroundKnowledge});
-            expect(clean(response.model.relationships)).toEqual(test.expectedRelationships);
+            compareRelationshipLists(response.model.relationships, test.expectedRelationships);
         })
     }
 });
