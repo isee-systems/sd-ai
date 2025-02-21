@@ -1,5 +1,5 @@
 import pluralize from 'pluralize';
-import DefaultEngine from './../engines/default/engine.js'
+import AdvancedEngine from './../engines/advanced/engine.js'
 import 'dotenv/config'
 
 jasmine.DEFAULT_TIMEOUT_INTERVAL = 60000;
@@ -11,15 +11,34 @@ const problemStatement = "I'm trying to do causal discovery, and extract every c
 //random variable names to pick from
 let nouns = [ "frimbulator",  "whatajig", "balack", "whoziewhat", "funkado", "maxabizer", "marticatene", "reflupper", "exeminte", "oc", "proptimatire", "priary", "houtal", "poval", "auspong", "dominitoxing", "outrance", "illigent", "yelb", "traze", "pablanksill", "posistorather", "crypteral", "oclate", "reveforly", "yoffa", "buwheal", "geyflorrin", "ih", "aferraron", "paffling", "pershipfulty", "copyring", "dickstonyx", "bellignorance", "hashtockle", "succupserva", "relity", "hazmick", "ku", "obvia", "unliescatice", "gissorm", "phildiscals", "loopnova", "hoza", "arinterpord", "burgination", "perstablintome", "memostorer", "baxtoy", "hensologic", "estintant", "perfecton", "raez", "younjuring"];
 
-const compareRelationshipLists = function(fromAI, groundTruth) {
-    const stringifyRelationships = function(r) {
+const compareRelationshipLists = function(fromAI, groundTruth, backgroundKnowledge) {
+    const stringifyRelationship = function(r) {
         return r.from + " --> (" + r.polarity + ") " + r.to;
     };
-    
-    const cleanedSortedAI = fromAI.map(stringifyRelationships).sort();
-    const sortedGroundTruth = groundTruth.map(stringifyRelationships).sort();
 
-    expect(cleanedSortedAI).toEqual(sortedGroundTruth);
+    const comparator = function(a, b) {
+        if ( a.textRepresentation < b.textRepresentation ){
+            return -1;
+        }
+        if ( a.textRepresentation > b.textRepresentation ){
+            return 1;
+        }
+        return 0;
+    }
+
+    const cleanedSortedAI = fromAI.map((r)=> {
+        delete r.reasoning; //these attributes aren't in ground truth
+        delete r.polarityReasoning; //these attributes aren't in ground truth
+        r.textRepresentation = stringifyRelationship(r);
+        return r;
+    }).sort(comparator);
+
+    const sortedGroundTruth = groundTruth.map((r)=> {
+        r.textRepresentation = stringifyRelationship(r);
+        return r;
+    }).sort(comparator);
+
+    expect(cleanedSortedAI).withContext("Ground Truth, Background Knowledge is:\n"+ backgroundKnowledge.replaceAll(". ", ".\n")).toEqual(sortedGroundTruth);
 };
 
 //polarity = "+" or "-""
@@ -141,7 +160,7 @@ const generateMultipleFeedbackLoopTest = function(polarityVec, numVarsVec) {
     return {
         prompt: prompt,
         problemStatement: problemStatement,
-        description: "extract a " + polarityVec.length + " feedback loops with [" + polarityVec.join(", ") + "] polarities",
+        description: "extract " + polarityVec.length + " feedback loops with [" + polarityVec.join(", ") + "] polarities",
         expectedRelationships: relationships,
         backgroundKnowledge: causalText.trim(),
     }
@@ -155,11 +174,13 @@ const singleRelationshipTests = [
 ];
 
 const singleFeedbackLoopTests = [
+    //7 feedback loops from size 2 to size 8 with positive polarity
    ...generateSingleFeedbackLoopTests(2, 8, "+"),
    ...generateSingleFeedbackLoopTests(2, 8, "-")
 ];
 
 const multipleFeedbackLoopTests = [
+    //two feedback loops both positive, with 3 and 6 variables
     generateMultipleFeedbackLoopTest(["+", "+"], [3,6]),
     generateMultipleFeedbackLoopTest(["-", "+"], [3,6]),
     generateMultipleFeedbackLoopTest(["+", "+", "-"], [5,2,4]),
@@ -168,28 +189,32 @@ const multipleFeedbackLoopTests = [
     generateMultipleFeedbackLoopTest(["-", "+", "+", "-", "-"], [3,5,6,2,6])
 ];
 
-describe("Causal Reasoning Test Suite", function() {
-    for (const test of singleRelationshipTests) {
-        it("can for a single relationship: " + test.description, async() => {
-            const engine = new DefaultEngine();
-            const response = await engine.generate(test.prompt, {}, {problemStatement: test.problemStatement, backgroundKnowledge: test.backgroundKnowledge});
-            compareRelationshipLists(response.model.relationships, test.expectedRelationships);
-        })
-    }
+const llmsToTest = ['gpt-4o', 'gpt-4o-mini', 'gemini-2.0-flash', 'gemini-2.0-flash-lite-preview-02-05', 'gemini-1.5-flash'];
 
-    for (const test of singleFeedbackLoopTests) {
-        it("can for a single feedback loop: " + test.description, async() => {
-            const engine = new DefaultEngine();
-            const response = await engine.generate(test.prompt, {}, {problemStatement: test.problemStatement, backgroundKnowledge: test.backgroundKnowledge});
-            compareRelationshipLists(response.model.relationships, test.expectedRelationships);
-        })
-    }
+for (const llm of llmsToTest) {
+    describe(llm + ": a causal reasoning engine", function() {
+        for (const test of singleRelationshipTests) {
+            it("can for a single relationship: " + test.description, async() => {
+                const engine = new AdvancedEngine();
+                const response = await engine.generate(test.prompt, {}, {underlyingModel: llm, problemStatement: test.problemStatement, backgroundKnowledge: test.backgroundKnowledge});
+                compareRelationshipLists(response.model.relationships, test.expectedRelationships, test.backgroundKnowledge);
+            })
+        }
 
-    for (const test of multipleFeedbackLoopTests) {
-        it("can for a multiple feedback loops: " + test.description, async() => {
-            const engine = new DefaultEngine();
-            const response = await engine.generate(test.prompt, {}, {problemStatement: test.problemStatement, backgroundKnowledge: test.backgroundKnowledge});
-            compareRelationshipLists(response.model.relationships, test.expectedRelationships);
-        })
-    }
-});
+        for (const test of singleFeedbackLoopTests) {
+            it("can for a single feedback loop: " + test.description, async() => {
+                const engine = new AdvancedEngine();
+                const response = await engine.generate(test.prompt, {}, {underlyingModel: llm, problemStatement: test.problemStatement, backgroundKnowledge: test.backgroundKnowledge});
+                compareRelationshipLists(response.model.relationships, test.expectedRelationships, test.backgroundKnowledge);
+            })
+        }
+
+        for (const test of multipleFeedbackLoopTests) {
+            it("can for a multiple feedback loops: " + test.description, async() => {
+                const engine = new AdvancedEngine();
+                const response = await engine.generate(test.prompt, {}, {underlyingModel: llm, problemStatement: test.problemStatement, backgroundKnowledge: test.backgroundKnowledge});
+                compareRelationshipLists(response.model.relationships, test.expectedRelationships, test.backgroundKnowledge);
+            })
+        }
+    });
+}
