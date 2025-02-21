@@ -122,7 +122,7 @@ You will conduct a multistep process:
 `I want your response to consider all of the above relationships which you have already so helpfully given to us.  Your response should add new relationships and close feedback loops wherever you have evidence to support the existence of the relationships needed to close the feedback loop.  Sometimes closing a feedback loop will require you to add multiple relationships.`
 
     static DEFAULT_BACKGROUND_PROMPT =
-`Please be sure to consider the following critically important information when you give your answer.
+`Please be sure to consider the following critically important background information when you give your answer.
 
 {backgroundKnowledge}`
 
