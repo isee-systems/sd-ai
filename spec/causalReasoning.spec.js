@@ -191,6 +191,9 @@ const multipleFeedbackLoopTests = [
 
 const llmsToTest = ['gpt-4o', 'gpt-4o-mini', 'gemini-2.0-flash', 'gemini-2.0-flash-lite-preview-02-05', 'gemini-1.5-flash'];
 
+//For quick tests
+llmsToTest.splice(1);
+
 for (const llm of llmsToTest) {
     describe(llm + ": a causal reasoning engine", function() {
         for (const test of singleRelationshipTests) {
