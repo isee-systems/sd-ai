@@ -34,7 +34,46 @@ const extractVariables = function(relationshipList) {
 };
 
 const countLoops = function(relationshipList) {
-    return NaN; //TODO implement me
+    let graph = {};
+
+    for (const relationship of relationshipList) {
+        if (relationship.from in graph)
+            graph[relationship.from].push(relationship.to);
+        else
+            graph[relationship.from] = [relationship.to];
+    }
+
+    let count = 0;
+    const numNodes = Object.keys(graph).length;
+    const visited = new Array(numNodes).fill(false);
+    const recursionStack = new Array(numNodes).fill(false);
+
+    function dfs(node) {
+        visited[node] = true;
+        recursionStack[node] = true;
+
+        for (const neighbor of graph[node] || []) {
+            if (!visited[neighbor]) {
+                if (dfs(neighbor)) {
+                    return true;
+                }
+            } else if (recursionStack[neighbor]) {
+                count++; // Cycle detected
+                return true;
+            }
+        }
+
+        recursionStack[node] = false;
+        return false;
+    }
+
+    for (const node of Object.keys(graph)) {
+        if (!visited[node]) {
+            dfs(node);
+        }
+    }
+
+    return count;
 };
 
 const compareRelationshipLists = function(fromAI, requirements) {
@@ -43,7 +82,7 @@ const compareRelationshipLists = function(fromAI, requirements) {
 
     if ("variables" in requirements) {    
         for (const requiredVar of requirements.variables)
-            expect(fromAIVariables).toContain(requiredVar);
+            expect(fromAIVariables).withContext("Variables are: " + Array.from(fromAIVariables).join(', ')).toContain(requiredVar);
     }
 
     if ("minVariables" in requirements) {
@@ -55,11 +94,11 @@ const compareRelationshipLists = function(fromAI, requirements) {
     }
     
     if ("minFeedback" in requirements) {
-        expect(fromAIFeedbackLoops).toBeGreaterThanOrEqual(requirements.minFeedback);
+        expect(fromAIFeedbackLoops).withContext("The number of feedback loops found was " + fromAIFeedbackLoops).toBeGreaterThanOrEqual(requirements.minFeedback);
     }
 
     if ("maxFeedback" in requirements) {
-        expect(fromAIFeedbackLoops).toBeLessThanOrEqual(requirements.maxFeedback);
+        expect(fromAIFeedbackLoops).withContext("The number of feedback loops found was " + fromAIFeedbackLoops).toBeLessThanOrEqual(requirements.maxFeedback);
     }
 };
 
@@ -76,52 +115,52 @@ const conformanceElements = [
             ]
         }
     }, {
-        text: 'Your response must include at least 10 variables',
+        text: 'Your response must include at least 10 variables.',
         description: "include a minimum number of variables",
         response: {
             minVariables: 10
         }
     }, {
-        text: 'Your response must include no more then 5 variables',
+        text: 'Your response must include no more then 5 variables.',
         description: "include a maximum number of variables",
         response: {
             maxVariables: 5
         }
     }, {
-        text: 'Your response must include at least 8 feedback loops',
+        text: 'Your response must include at least 8 feedback loops.',
         description: "include a minimum number of feedback loops",
         response: {
             minFeedback: 8
         }
     }, {
-        text: 'Your response must include no more then 4 feedback loops',
+        text: 'Your response must include no more then 4 feedback loops.',
         description: "include a maximum number of feedback loops",
         response: {
             maxFeedback: 4
         }
     }, {
-        text: 'Your response must include no more then 4 feedback loops and no more then 5 variables',
+        text: 'Your response must include no more then 4 feedback loops and no more then 5 variables.',
         description: "include a maximum number of feedback loops and a maximum number of variables",
         response: {
             maxFeedback: 4,
             maxVariables: 5
         }
     }, {
-        text: 'Your response must include at least 6 feedback loops and at least 8 variables',
+        text: 'Your response must include at least 6 feedback loops and at least 8 variables.',
         description: "include a minimum number of feedback loops and a minimum number of variables",
         response: {
             minFeedback: 6,
             minVariables: 8
         }
     }, {
-        text: 'Your response must include no more then 4 feedback loops and at least 5 variables',
+        text: 'Your response must include no more then 4 feedback loops and at least 5 variables.',
         description: "include a maximum number of feedback loops and a minimum number of variables",
         response: {
             maxFeedback: 4,
             minVariables: 5
         }
     }, {
-        text: 'Your response must include at least 6 feedback loops and no more then 15 variables',
+        text: 'Your response must include at least 6 feedback loops and no more then 15 variables.',
         description: "include a min number of feedback loops and a maximum number of variables",
         response: {
             minFeedback: 6,
@@ -132,7 +171,7 @@ const conformanceElements = [
 
 const generateConformanceTest = function(conformanceElement) {
     return {
-        prompt: prompt + conformanceElement.text,
+        prompt: prompt + " " + conformanceElement.text,
         problemStatement: problemStatement,
         backgroundKnowledge: backgroundKnowledge,
         description: conformanceElement.description,
@@ -145,15 +184,11 @@ const conformanceTests = conformanceElements.map(generateConformanceTest);
 const llmsToTest = ['gpt-4o', 'gpt-4o-mini', 'gemini-2.0-flash', 'gemini-2.0-flash-lite-preview-02-05', 'gemini-1.5-flash'];
 
 //For quick tests
-llmsToTest.splice(1);
+//llmsToTest.splice(1);
 
 for (const llm of llmsToTest) {
-    describe(llm + ": a causal reasoning engine", function() {
+    describe(llm + ": conformance testing", function() {
         for (const test of conformanceTests) {
-            //TODO: We don't support feedback right now, remove this one countLoops is implemented
-            if ("minFeedback" in test.responseCheck || "maxFeedback" in test.responseCheck) {
-                continue;
-            }
             it("can conform to the instruction: " + test.description, async() => {
                 const engine = new AdvancedEngine();
                 const response = await engine.generate(test.prompt, {}, {underlyingModel: llm, problemStatement: test.problemStatement, backgroundKnowledge: test.backgroundKnowledge});
