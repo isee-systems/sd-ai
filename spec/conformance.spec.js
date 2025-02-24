@@ -1,8 +1,9 @@
-import { response } from 'express';
 import AdvancedEngine from './../engines/advanced/engine.js'
 import 'dotenv/config'
+import setup from './support/setup.js'
 
-jasmine.DEFAULT_TIMEOUT_INTERVAL = 60000;
+setup();
+
 
 //generic prompt problem statement and and background knowledge used for all tests
 const prompt = "Using your knowledge of how the american revolution started and the additional information I have given you, please give me a feedback based explanation for how the american revolution came about.";
@@ -184,10 +185,10 @@ const conformanceTests = conformanceElements.map(generateConformanceTest);
 const llmsToTest = ['gpt-4o', 'gpt-4o-mini', 'gemini-2.0-flash', 'gemini-2.0-flash-lite-preview-02-05', 'gemini-1.5-flash'];
 
 //For quick tests
-llmsToTest.splice(1);
+//llmsToTest.splice(1);
 
 for (const llm of llmsToTest) {
-    describe(llm + ": conformance testing", function() {
+    describe(`${llm}|conformance testing|`, function() {
         for (const test of conformanceTests) {
             it("can conform to the instruction: " + test.description, async() => {
                 const engine = new AdvancedEngine();

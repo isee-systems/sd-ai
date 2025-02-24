@@ -1,8 +1,9 @@
 import pluralize from 'pluralize';
 import AdvancedEngine from './../engines/advanced/engine.js'
 import 'dotenv/config'
+import setup from './support/setup.js'
 
-jasmine.DEFAULT_TIMEOUT_INTERVAL = 60000;
+setup();
 
 //generic prompt and problem statement used for all tests
 const prompt = "Please find all causal relationships in the background information.";
@@ -192,10 +193,10 @@ const multipleFeedbackLoopTests = [
 const llmsToTest = ['gpt-4o', 'gpt-4o-mini', 'gemini-2.0-flash', 'gemini-2.0-flash-lite-preview-02-05', 'gemini-1.5-flash'];
 
 //For quick tests
-llmsToTest.splice(1);
+//llmsToTest.splice(1);
 
 for (const llm of llmsToTest) {
-    describe(llm + ": causal reasoning testing", function() {
+    describe(`${llm}|causal reasoning testing|`, function() {
         for (const test of singleRelationshipTests) {
             it("can for a single relationship: " + test.description, async() => {
                 const engine = new AdvancedEngine();
