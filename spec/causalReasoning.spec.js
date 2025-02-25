@@ -196,9 +196,9 @@ const llmsToTest = ['gpt-4o', 'gpt-4o-mini', 'gemini-2.0-flash', 'gemini-2.0-fla
 //llmsToTest.splice(1);
 
 for (const llm of llmsToTest) {
-    describe(`${llm}|causal reasoning testing|`, function() {
+    describe(`${llm} | causal reasoning testing |`, function() {
         for (const test of singleRelationshipTests) {
-            it("can for a single relationship: " + test.description, async() => {
+            it("single relationship | " + test.description, async() => {
                 const engine = new AdvancedEngine();
                 const response = await engine.generate(test.prompt, {}, {underlyingModel: llm, problemStatement: test.problemStatement, backgroundKnowledge: test.backgroundKnowledge});
                 compareRelationshipLists(response.model.relationships, test.expectedRelationships, test.backgroundKnowledge);
@@ -206,7 +206,7 @@ for (const llm of llmsToTest) {
         }
 
         for (const test of singleFeedbackLoopTests) {
-            it("can for a single feedback loop: " + test.description, async() => {
+            it("single feedback loop | " + test.description, async() => {
                 const engine = new AdvancedEngine();
                 const response = await engine.generate(test.prompt, {}, {underlyingModel: llm, problemStatement: test.problemStatement, backgroundKnowledge: test.backgroundKnowledge});
                 compareRelationshipLists(response.model.relationships, test.expectedRelationships, test.backgroundKnowledge);
@@ -214,7 +214,7 @@ for (const llm of llmsToTest) {
         }
 
         for (const test of multipleFeedbackLoopTests) {
-            it("can for a multiple feedback loops: " + test.description, async() => {
+            it("multiple feedback loops | " + test.description, async() => {
                 const engine = new AdvancedEngine();
                 const response = await engine.generate(test.prompt, {}, {underlyingModel: llm, problemStatement: test.problemStatement, backgroundKnowledge: test.backgroundKnowledge});
                 compareRelationshipLists(response.model.relationships, test.expectedRelationships, test.backgroundKnowledge);

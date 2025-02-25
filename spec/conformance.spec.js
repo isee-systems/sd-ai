@@ -4,6 +4,55 @@ import setup from './support/setup.js'
 
 setup();
 
+const cases = {
+    "American Revolution": {
+        prompt: "Using your knowledge of how the american revolution started and the additional information I have given you, please give me a feedback based explanation for how the american revolution came about.",
+        problemStatement: "I am trying to understand how the american revolution started.  I'd like to know what caused hostilities to break out.",
+        backgroundKnowledge:
+`The American Revolution was caused by a number of factors, including:
+Taxation
+The British imposed new taxes on the colonies to raise money, such as the Stamp Act of 1765, which taxed legal documents, newspapers, and playing cards. The colonists were angry because they had no representatives in Parliament. 
+The Boston Massacre
+In 1770, British soldiers fired on a crowd of colonists in Boston, killing five people. The massacre intensified anti-British sentiment and became a propaganda tool for the colonists. 
+The Boston Tea Party
+The Boston Tea Party was a major act of defiance against British rule. It showed that Americans would not tolerate tyranny and taxation. 
+The Intolerable Acts
+The British government passed harsh laws that the colonists called the Intolerable Acts. One of the acts closed the port of Boston until the colonists paid for the tea they had ruined. 
+The French and Indian War
+The British wanted the colonies to repay them for their defense during the French and Indian War (1754–63). 
+Colonial identity
+The colonists developed a stronger sense of American identity`
+    }, 
+    "Road Rage": {
+        prompt: "Using your knowledge of how road rage happens and the additional information I have given you, please give me a feedback based explanation for how road rage incidents might change in the future.",
+        problemStatement: "I am trying to understand how road rage happens.  I'd like to know what causes road rage in society.",
+        backgroundKnowledge: 
+`Road rage, defined as aggressive driving behavior caused by anger and frustration, can be triggered by various factors: 
+Psychological Factors: 
+Stress and Anxiety:
+High stress levels can make drivers more irritable and prone to aggressive reactions. 
+Personality Traits:
+Individuals with impulsive, hostile, or competitive personalities may be more likely to engage in road rage. 
+Frustration:
+Feeling frustrated or blocked by other drivers can lead to anger and aggression. 
+Situational Factors: 
+Traffic Congestion:
+Heavy traffic, delays, and stop-and-go conditions can increase stress and impatience. 
+Perceived Provocations:
+Being cut off, tailgated, or honked at can provoke anger and retaliatory behavior. 
+Impatience:
+Drivers who are running late or have a low tolerance for delays may become aggressive. 
+Environmental Factors: 
+Road Design:
+Poor road design, such as narrow lanes or confusing intersections, can contribute to traffic congestion and frustration. 
+Weather Conditions:
+Adverse weather conditions, such as heavy rain or snow, can increase stress and make driving more challenging. 
+Other Factors: 
+Learned Behavior: Observing aggressive driving behavior from others can normalize it and increase the likelihood of engaging in road rage. 
+Lack of Sleep: Fatigue can impair judgment and make drivers more susceptible to anger. 
+Distracted Driving: Using a phone, texting, or eating while driving can increase the risk of accidents and provoke anger.`
+    }
+};
 
 //generic prompt problem statement and and background knowledge used for all tests
 const prompt = "Using your knowledge of how the american revolution started and the additional information I have given you, please give me a feedback based explanation for how the american revolution came about.";
@@ -104,18 +153,8 @@ const compareRelationshipLists = function(fromAI, requirements) {
 };
 
 //elements by which we measure conformance.  these are specific instructions to append to the prompt
-const conformanceElements = [
+const genericConformanceElements = [
     {
-        text: 'Your response must include the variables "Taxation", "Anti-British Sentiment" and "Colonial Identity".',
-        description: "include requested variables",
-        response: { 
-            variables: [
-                "Taxation",
-                "Anti-British Sentiment",
-                "Colonial Identity"
-            ]
-        }
-    }, {
         text: 'Your response must include at least 10 variables.',
         description: "include a minimum number of variables",
         response: {
@@ -168,19 +207,56 @@ const conformanceElements = [
             maxVariables: 15
         }
     }
-]
+];
 
-const generateConformanceTest = function(conformanceElement) {
+const specificConformanceElements = {
+    "Road Rage" : [
+        {
+            text: 'Your response must include the variables "Traffic Congestion", "Driver Stress" and "Accidents".',
+            description: "include requested variables",
+            response: { 
+                variables: [
+                    "Traffic Congestion",
+                    "Driver Stress",
+                    "Accidents"
+                ]
+            }
+        }, 
+    ],
+
+    "American Revolution": [
+        {
+            text: 'Your response must include the variables "Taxation", "Anti-British Sentiment" and "Colonial Identity".',
+            description: "include requested variables",
+            response: { 
+                variables: [
+                    "Taxation",
+                    "Anti-British Sentiment",
+                    "Colonial Identity"
+                ]
+            }
+        }, 
+    ]
+}
+
+const generateConformanceTest = function(conformanceElement, specificCase) {
     return {
-        prompt: prompt + " " + conformanceElement.text,
-        problemStatement: problemStatement,
-        backgroundKnowledge: backgroundKnowledge,
-        description: conformanceElement.description,
+        prompt: cases[specificCase].prompt + " " + conformanceElement.text,
+        problemStatement: cases[specificCase].problemStatement,
+        backgroundKnowledge: cases[specificCase].backgroundKnowledge,
+        description: specificCase + " | " + conformanceElement.description,
         responseCheck: conformanceElement.response
     };
 };
 
-const conformanceTests = conformanceElements.map(generateConformanceTest);
+let conformanceTests = [];
+for (const specificCase in cases) {
+    conformanceTests = conformanceTests.concat(genericConformanceElements.map((e)=>{
+        return generateConformanceTest(e, specificCase);
+    })).concat(specificConformanceElements[specificCase].map((e)=>{
+        return generateConformanceTest(e, specificCase);
+    }));
+}
 
 const llmsToTest = ['gpt-4o', 'gpt-4o-mini', 'gemini-2.0-flash', 'gemini-2.0-flash-lite-preview-02-05', 'gemini-1.5-flash'];
 
@@ -188,9 +264,9 @@ const llmsToTest = ['gpt-4o', 'gpt-4o-mini', 'gemini-2.0-flash', 'gemini-2.0-fla
 //llmsToTest.splice(1);
 
 for (const llm of llmsToTest) {
-    describe(`${llm}|conformance testing|`, function() {
+    describe(`${llm} | conformance testing |`, function() {
         for (const test of conformanceTests) {
-            it("can conform to the instruction: " + test.description, async() => {
+            it("can conform to the instruction | " + test.description, async() => {
                 const engine = new AdvancedEngine();
                 const response = await engine.generate(test.prompt, {}, {underlyingModel: llm, problemStatement: test.problemStatement, backgroundKnowledge: test.backgroundKnowledge});
                 compareRelationshipLists(response.model.relationships, test.responseCheck);
