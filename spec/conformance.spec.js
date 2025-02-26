@@ -54,26 +54,6 @@ Distracted Driving: Using a phone, texting, or eating while driving can increase
     }
 };
 
-//generic prompt problem statement and and background knowledge used for all tests
-const prompt = "Using your knowledge of how the american revolution started and the additional information I have given you, please give me a feedback based explanation for how the american revolution came about.";
-const problemStatement = "I am trying to understand how the american revolution started.  I'd like to know what caused hostilities to break out.";
-const backgroundKnowledge =
-`
-The American Revolution was caused by a number of factors, including:
-Taxation
-The British imposed new taxes on the colonies to raise money, such as the Stamp Act of 1765, which taxed legal documents, newspapers, and playing cards. The colonists were angry because they had no representatives in Parliament. 
-The Boston Massacre
-In 1770, British soldiers fired on a crowd of colonists in Boston, killing five people. The massacre intensified anti-British sentiment and became a propaganda tool for the colonists. 
-The Boston Tea Party
-The Boston Tea Party was a major act of defiance against British rule. It showed that Americans would not tolerate tyranny and taxation. 
-The Intolerable Acts
-The British government passed harsh laws that the colonists called the Intolerable Acts. One of the acts closed the port of Boston until the colonists paid for the tea they had ruined. 
-The French and Indian War
-The British wanted the colonies to repay them for their defense during the French and Indian War (1754–63). 
-Colonial identity
-The colonists developed a stronger sense of American identity
-`;
-
 const extractVariables = function(relationshipList) {
     let set = new Set();
     for (const relationship of relationshipList) {
