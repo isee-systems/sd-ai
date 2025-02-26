@@ -132,23 +132,23 @@ const compareRelationshipLists = function(fromAI, requirements) {
 
     if ("variables" in requirements) {    
         for (const requiredVar of requirements.variables)
-            expect(fromAIVariables).withContext("Variables are: " + Array.from(fromAIVariables).join(', ')).toContain(requiredVar);
+            expect(fromAIVariables).withContext("Missing required variables: Variables are: " + Array.from(fromAIVariables).join(', ')).toContain(requiredVar);
     }
 
     if ("minVariables" in requirements) {
-        expect(fromAIVariables.size).withContext("Variables are: " + Array.from(fromAIVariables).join(', ')).toBeGreaterThanOrEqual(requirements.minVariables);
+        expect(fromAIVariables.size).withContext("Too many variables: Variables are: " + Array.from(fromAIVariables).join(', ')).toBeGreaterThanOrEqual(requirements.minVariables);
     }
 
     if ("maxVariables" in requirements) {
-        expect(fromAIVariables.size).withContext("Variables are: " + Array.from(fromAIVariables).join(', ')).toBeLessThanOrEqual(requirements.maxVariables);
+        expect(fromAIVariables.size).withContext("Too few variables: Variables are: " + Array.from(fromAIVariables).join(', ')).toBeLessThanOrEqual(requirements.maxVariables);
     }
     
     if ("minFeedback" in requirements) {
-        expect(fromAIFeedbackLoops).withContext("The number of feedback loops found was " + fromAIFeedbackLoops).toBeGreaterThanOrEqual(requirements.minFeedback);
+        expect(fromAIFeedbackLoops).withContext("Too many feedback loops: The number of feedback loops found was " + fromAIFeedbackLoops).toBeGreaterThanOrEqual(requirements.minFeedback);
     }
 
     if ("maxFeedback" in requirements) {
-        expect(fromAIFeedbackLoops).withContext("The number of feedback loops found was " + fromAIFeedbackLoops).toBeLessThanOrEqual(requirements.maxFeedback);
+        expect(fromAIFeedbackLoops).withContext("Too few feedback loops: The number of feedback loops found was " + fromAIFeedbackLoops).toBeLessThanOrEqual(requirements.maxFeedback);
     }
 };
 
@@ -161,7 +161,7 @@ const genericConformanceElements = [
             minVariables: 10
         }
     }, {
-        text: 'Your response must include no more then 5 variables.',
+        text: 'Your response must include no more than 5 variables.',
         description: "include a maximum number of variables",
         response: {
             maxVariables: 5
@@ -173,13 +173,13 @@ const genericConformanceElements = [
             minFeedback: 8
         }
     }, {
-        text: 'Your response must include no more then 4 feedback loops.',
+        text: 'Your response must include no more than 4 feedback loops.',
         description: "include a maximum number of feedback loops",
         response: {
             maxFeedback: 4
         }
     }, {
-        text: 'Your response must include no more then 4 feedback loops and no more then 5 variables.',
+        text: 'Your response must include no more than 4 feedback loops and no more than 5 variables.',
         description: "include a maximum number of feedback loops and a maximum number of variables",
         response: {
             maxFeedback: 4,
@@ -193,14 +193,14 @@ const genericConformanceElements = [
             minVariables: 8
         }
     }, {
-        text: 'Your response must include no more then 4 feedback loops and at least 5 variables.',
+        text: 'Your response must include no more than 4 feedback loops and at least 5 variables.',
         description: "include a maximum number of feedback loops and a minimum number of variables",
         response: {
             maxFeedback: 4,
             minVariables: 5
         }
     }, {
-        text: 'Your response must include at least 6 feedback loops and no more then 15 variables.',
+        text: 'Your response must include at least 6 feedback loops and no more than 15 variables.',
         description: "include a min number of feedback loops and a maximum number of variables",
         response: {
             minFeedback: 6,
@@ -244,8 +244,9 @@ const generateConformanceTest = function(conformanceElement, specificCase) {
         prompt: cases[specificCase].prompt + " " + conformanceElement.text,
         problemStatement: cases[specificCase].problemStatement,
         backgroundKnowledge: cases[specificCase].backgroundKnowledge,
-        description: specificCase + " | " + conformanceElement.description,
-        responseCheck: conformanceElement.response
+        description: conformanceElement.description,
+        responseCheck: conformanceElement.response,
+        case: specificCase
     };
 };
 
@@ -258,7 +259,7 @@ for (const specificCase in cases) {
     }));
 }
 
-const llmsToTest = ['gpt-4o', 'gpt-4o-mini', 'gemini-2.0-flash', 'gemini-2.0-flash-lite-preview-02-05', 'gemini-1.5-flash'];
+const llmsToTest = ['gpt-4o', 'gpt-4o-mini', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash'];
 
 //For quick tests
 //llmsToTest.splice(1);
@@ -266,7 +267,7 @@ const llmsToTest = ['gpt-4o', 'gpt-4o-mini', 'gemini-2.0-flash', 'gemini-2.0-fla
 for (const llm of llmsToTest) {
     describe(`${llm} | conformance testing |`, function() {
         for (const test of conformanceTests) {
-            it("can conform to the instruction | " + test.description, async() => {
+            it("can conform to the instruction " + test.description + "| for the case " + test.case, async() => {
                 const engine = new AdvancedEngine();
                 const response = await engine.generate(test.prompt, {}, {underlyingModel: llm, problemStatement: test.problemStatement, backgroundKnowledge: test.backgroundKnowledge});
                 compareRelationshipLists(response.model.relationships, test.responseCheck);

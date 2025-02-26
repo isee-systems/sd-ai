@@ -4,6 +4,7 @@
 node_modules/
 
 # Logs and temporary files
+output.csv
 *.log
 npm-debug.log*
 pids/

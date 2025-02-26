@@ -25,7 +25,13 @@ const compareRelationshipLists = function(fromAI, groundTruth, backgroundKnowled
             return 1;
         }
         return 0;
-    }
+    };
+
+    const relationshipEqualityComparatorGenerator = function(a) {
+        return (b) => {
+            return (a.from === b.from && a.to === b.to); 
+        };
+    };
 
     const cleanedSortedAI = fromAI.map((r)=> {
         delete r.reasoning; //these attributes aren't in ground truth
@@ -39,7 +45,19 @@ const compareRelationshipLists = function(fromAI, groundTruth, backgroundKnowled
         return r;
     }).sort(comparator);
 
-    expect(cleanedSortedAI).withContext("Ground Truth, Background Knowledge is:\n"+ backgroundKnowledge.replaceAll(". ", ".\n")).toEqual(sortedGroundTruth);
+    const removed = sortedGroundTruth.filter((element) => { return !cleanedSortedAI.some(relationshipEqualityComparatorGenerator(element))});
+    const added = cleanedSortedAI.filter((element) => { return !sortedGroundTruth.some(relationshipEqualityComparatorGenerator(element))});
+
+    expect(added.length).withContext("Fake relationships found").toBe(0);
+    expect(removed.length).withContext("Real relationships not found").toBe(0);
+
+    for (const groundTruthRelationship of sortedGroundTruth) {
+        let aiRelationship = cleanedSortedAI.find(relationshipEqualityComparatorGenerator(groundTruthRelationship));
+        if (aiRelationship)
+            expect(aiRelationship.polarity).withContext("Incorrect polarity discovered").toBe(groundTruthRelationship.polarity);
+    }
+
+    //expect(cleanedSortedAI).withContext("Ground Truth, Background Knowledge is:\n"+ backgroundKnowledge.replaceAll(". ", ".\n")).toEqual(sortedGroundTruth);
 };
 
 //polarity = "+" or "-""
@@ -190,7 +208,7 @@ const multipleFeedbackLoopTests = [
     generateMultipleFeedbackLoopTest(["-", "+", "+", "-", "-"], [3,5,6,2,6])
 ];
 
-const llmsToTest = ['gpt-4o', 'gpt-4o-mini', 'gemini-2.0-flash', 'gemini-2.0-flash-lite-preview-02-05', 'gemini-1.5-flash'];
+const llmsToTest = ['gpt-4o', 'gpt-4o-mini', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash'];
 
 //For quick tests
 //llmsToTest.splice(1);
