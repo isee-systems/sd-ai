@@ -30,7 +30,7 @@ It ensures the AI’s responses align with the intended user experience, such as
             {label: "GPT-4o", value: 'gpt-4o'}, 
             {label: "GPT-4o-mini", value: 'gpt-4o-mini'}, 
             {label: "Gemini 2.0", value: 'gemini-2.0-flash'},
-            {label: "Gemini 2.0-Lite", value: 'gemini-2.0-flash-lite-preview-02-05'},
+            {label: "Gemini 2.0-Lite", value: 'gemini-2.0-flash-lite'},
             {label: "Gemini 1.5", value: 'gemini-1.5-flash'},
             {label: "o1-mini Flaky!", value: 'o1-mini'}, 
             {label: "o1 Restricted Access", value: 'o1'}, 
