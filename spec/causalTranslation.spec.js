@@ -1,5 +1,5 @@
 import pluralize from 'pluralize';
-import AdvancedEngine from './../engines/advanced/engine.js'
+import AdvancedEngine from '../engines/advanced/engine.js'
 import 'dotenv/config'
 import setup from './support/setup.js'
 
@@ -214,7 +214,7 @@ const llmsToTest = ['gpt-4o', 'gpt-4o-mini', 'gemini-2.0-flash', 'gemini-2.0-fla
 //llmsToTest.splice(1);
 
 for (const llm of llmsToTest) {
-    describe(`${llm} | causal reasoning testing |`, function() {
+    describe(`${llm} | causal translation testing |`, function() {
         for (const test of singleRelationshipTests) {
             it("single relationship | " + test.description, async() => {
                 const engine = new AdvancedEngine();
