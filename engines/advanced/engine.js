@@ -29,6 +29,7 @@ It ensures the AI’s responses align with the intended user experience, such as
         const models = [ 
             {label: "GPT-4o", value: 'gpt-4o'}, 
             {label: "GPT-4o-mini", value: 'gpt-4o-mini'}, 
+            {label: "GPT-4.5-preview", value: 'gpt-4.5-preview'}, 
             {label: "Gemini 2.0", value: 'gemini-2.0-flash'},
             {label: "Gemini 2.0-Lite", value: 'gemini-2.0-flash-lite'},
             {label: "Gemini 1.5", value: 'gemini-1.5-flash'},
