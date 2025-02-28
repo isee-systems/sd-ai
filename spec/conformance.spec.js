@@ -239,10 +239,11 @@ for (const specificCase in cases) {
     }));
 }
 
-const llmsToTest = ['gpt-4o', 'gpt-4o-mini', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash'];
+let llmsToTest = ['gpt-4o', 'gpt-4o-mini', 'gpt-4.5-preview', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash'];
 
 //For quick tests
 //llmsToTest.splice(1);
+//llmsToTest = ['gpt-4.5-preview']
 
 for (const llm of llmsToTest) {
     describe(`${llm} | conformance testing |`, function() {
