@@ -238,7 +238,6 @@ for (const llm of llmsToTest) {
         }
 
         for (const test of multipleFeedbackLoopTests) {
-            console.log(test);
             it("multiple feedback loops | " + test.description, async() => {
                 const engine = new AdvancedEngine();
                 const response = await engine.generate(test.prompt, {}, {underlyingModel: llm, problemStatement: test.problemStatement, backgroundKnowledge: test.backgroundKnowledge});
