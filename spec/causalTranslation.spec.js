@@ -29,7 +29,8 @@ const compareRelationshipLists = function(fromAI, groundTruth, backgroundKnowled
 
     const relationshipEqualityComparatorGenerator = function(a) {
         return (b) => {
-            return (a.from === b.from && a.to === b.to); 
+            return (a.from.toLowerCase() === b.from.toLowerCase() && 
+                a.to.toLowerCase() === b.to.toLowerCase()); 
         };
     };
 
@@ -48,8 +49,12 @@ const compareRelationshipLists = function(fromAI, groundTruth, backgroundKnowled
     const removed = sortedGroundTruth.filter((element) => { return !cleanedSortedAI.some(relationshipEqualityComparatorGenerator(element))});
     const added = cleanedSortedAI.filter((element) => { return !sortedGroundTruth.some(relationshipEqualityComparatorGenerator(element))});
 
-    expect(added.length).withContext("Fake relationships found").toBe(0);
-    expect(removed.length).withContext("Real relationships not found").toBe(0);
+    const addedStr = added.map((r)=>{return r.textRepresentation}).join(", ");
+    const removedStr = removed.map((r)=>{return r.textRepresentation}).join(", ");
+    const groundTruthStr = sortedGroundTruth.map((r)=>{return r.textRepresentation}).join(", ");
+
+    expect(added.length).withContext("Fake relationships found\n" + addedStr + "\nGround Truth\n" + groundTruthStr).toBe(0);
+    expect(removed.length).withContext("Real relationships not found\n" + removedStr + "\nGround Truth\n" + groundTruthStr).toBe(0);
 
     for (const groundTruthRelationship of sortedGroundTruth) {
         let aiRelationship = cleanedSortedAI.find(relationshipEqualityComparatorGenerator(groundTruthRelationship));
@@ -208,11 +213,11 @@ const multipleFeedbackLoopTests = [
     generateMultipleFeedbackLoopTest(["-", "+", "+", "-", "-"], [3,5,6,2,6])
 ];
 
-let llmsToTest = ['gpt-4o', 'gpt-4o-mini', 'gpt-4.5-preview', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash'];
+let llmsToTest = ['gpt-4o', 'gpt-4o-mini', 'gpt-4.5-preview', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash', 'o3-mini high', 'o3-mini medium', 'o1'];
 
 //For quick tests
 //llmsToTest.splice(1);
-//llmsToTest = ['gpt-4.5-preview']
+//llmsToTest = ['o3-mini high']
 
 for (const llm of llmsToTest) {
     describe(`${llm} | causal translation testing |`, function() {

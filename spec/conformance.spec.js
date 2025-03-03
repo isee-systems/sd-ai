@@ -116,19 +116,19 @@ const compareRelationshipLists = function(fromAI, requirements) {
     }
 
     if ("minVariables" in requirements) {
-        expect(fromAIVariables.size).withContext("Too many variables: Variables are: " + Array.from(fromAIVariables).join(', ')).toBeGreaterThanOrEqual(requirements.minVariables);
+        expect(fromAIVariables.size).withContext("Too few variables: Variables are: " + Array.from(fromAIVariables).join(', ')).toBeGreaterThanOrEqual(requirements.minVariables);
     }
 
     if ("maxVariables" in requirements) {
-        expect(fromAIVariables.size).withContext("Too few variables: Variables are: " + Array.from(fromAIVariables).join(', ')).toBeLessThanOrEqual(requirements.maxVariables);
+        expect(fromAIVariables.size).withContext("Too many variables: Variables are: " + Array.from(fromAIVariables).join(', ')).toBeLessThanOrEqual(requirements.maxVariables);
     }
     
     if ("minFeedback" in requirements) {
-        expect(fromAIFeedbackLoops).withContext("Too many feedback loops: The number of feedback loops found was " + fromAIFeedbackLoops).toBeGreaterThanOrEqual(requirements.minFeedback);
+        expect(fromAIFeedbackLoops).withContext("Too few feedback loops: The number of feedback loops found was " + fromAIFeedbackLoops).toBeGreaterThanOrEqual(requirements.minFeedback);
     }
 
     if ("maxFeedback" in requirements) {
-        expect(fromAIFeedbackLoops).withContext("Too few feedback loops: The number of feedback loops found was " + fromAIFeedbackLoops).toBeLessThanOrEqual(requirements.maxFeedback);
+        expect(fromAIFeedbackLoops).withContext("Too many feedback loops: The number of feedback loops found was " + fromAIFeedbackLoops).toBeLessThanOrEqual(requirements.maxFeedback);
     }
 };
 
@@ -239,11 +239,11 @@ for (const specificCase in cases) {
     }));
 }
 
-let llmsToTest = ['gpt-4o', 'gpt-4o-mini', 'gpt-4.5-preview', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash'];
+let llmsToTest = ['gpt-4o', 'gpt-4o-mini', 'gpt-4.5-preview', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash', 'o3-mini high', 'o3-mini medium', 'o1'];
 
 //For quick tests
 //llmsToTest.splice(1);
-//llmsToTest = ['gpt-4.5-preview']
+llmsToTest = [ 'o3-mini high']
 
 for (const llm of llmsToTest) {
     describe(`${llm} | conformance testing |`, function() {
