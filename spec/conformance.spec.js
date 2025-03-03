@@ -243,7 +243,7 @@ let llmsToTest = ['gpt-4o', 'gpt-4o-mini', 'gpt-4.5-preview', 'gemini-2.0-flash'
 
 //For quick tests
 //llmsToTest.splice(1);
-llmsToTest = [ 'o3-mini high']
+//llmsToTest = [ 'o3-mini high']
 
 for (const llm of llmsToTest) {
     describe(`${llm} | conformance testing |`, function() {

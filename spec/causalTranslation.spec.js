@@ -172,13 +172,13 @@ const generateMultipleFeedbackLoopTest = function(polarityVec, numVarsVec) {
     let relationships = [];
 
     let offset = 0;
-    for (let loop=0; loop < polarityVec; ++loop) {
+    for (let loop=0; loop < polarityVec.length; ++loop) {
         const variables = nouns.slice(offset, offset + numVarsVec[loop]);
         offset += numVarsVec[loop] - 1;
 
         let response = generateFeedbackLoop(variables, polarityVec[loop]);
         causalText += " " + response.english;
-        relationships  = relationships.concat(response.releationships);
+        relationships = relationships.concat(response.relationships);
     }
 
     return {
@@ -238,6 +238,7 @@ for (const llm of llmsToTest) {
         }
 
         for (const test of multipleFeedbackLoopTests) {
+            console.log(test);
             it("multiple feedback loops | " + test.description, async() => {
                 const engine = new AdvancedEngine();
                 const response = await engine.generate(test.prompt, {}, {underlyingModel: llm, problemStatement: test.problemStatement, backgroundKnowledge: test.backgroundKnowledge});
