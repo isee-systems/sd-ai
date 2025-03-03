@@ -33,14 +33,10 @@ It ensures the AI’s responses align with the intended user experience, such as
             {label: "Gemini 2.0", value: 'gemini-2.0-flash'},
             {label: "Gemini 2.0-Lite", value: 'gemini-2.0-flash-lite'},
             {label: "Gemini 1.5", value: 'gemini-1.5-flash'},
-            {label: "o1-mini Flaky!", value: 'o1-mini'}, 
-            {label: "o1 Restricted Access", value: 'o1'}, 
-/*
-            {label: "o3-mini", value: 'o3-mini'}, 
-            {label: "o3-mini-low", value: 'o3-mini-low'}, 
-            {label: "o3-mini-medium", value: 'o3-mini-medium'}, 
-            {label: "o3-mini-high", value: 'o3-mini-high'}
-*/
+            {label: "o1", value: 'o1'}, 
+            {label: "o3-mini low", value: 'o3-mini low'}, 
+            {label: "o3-mini medium", value: 'o3-mini medium'}, 
+            {label: "o3-mini high", value: 'o3-mini high'}
         ];
 
         return [{

@@ -150,6 +150,7 @@ You will conduct a multistep process:
     #noStructuredOutputMode = false;
     #noSystemMode = false;
     #geminiMode = false;
+    #noTemperature = false;
 
     #openAIAPI;
 
@@ -174,6 +175,7 @@ You will conduct a multistep process:
         
         this.#noStructuredOutputMode = this.#data.underlyingModel === 'o1-mini';
         this.#noSystemMode = this.#data.underlyingModel === 'o1-mini';
+        this.#noTemperature = this.#data.underlyingModel.startsWith('o')
         this.#geminiMode = this.#data.underlyingModel.includes('gemini');
 
         if (this.#geminiMode) {
@@ -259,10 +261,18 @@ You will conduct a multistep process:
 
     async generateDiagram(userPrompt, lastModel) {        
         //start with the system prompt
+        let underlyingModel = this.#data.underlyingModel;
         let systemRole = 'developer';
         let systemPrompt = this.#data.systemPrompt;
         let responseFormat = this.#generateResponseSchema();
         let temperature = 0;
+        let reasoningEffort = undefined;
+
+        if (underlyingModel.startsWith('o3-mini ')) {
+            const parts = underlyingModel.split(' ');
+            underlyingModel = 'o3-mini';
+            reasoningEffort = parts[1].trim();
+        }
 
         if (this.#geminiMode) {
             systemRole = "system";
@@ -276,6 +286,10 @@ You will conduct a multistep process:
         if (this.#noSystemMode) {
             systemRole = "user";
             temperature = 1;
+        }
+
+        if (this.#noTemperature) {
+            temperature = undefined;
         }
 
         let messages = [{ 
@@ -310,9 +324,10 @@ You will conduct a multistep process:
         //get what it thinks the relationships are with this information
         const originalCompletion = await this.#openAIAPI.chat.completions.create({
             messages: messages,
-            model: this.#data.underlyingModel,
+            model: underlyingModel,
             response_format: responseFormat,
-            temperature: temperature
+            temperature: temperature,
+            reasoning_effort: reasoningEffort
         });
 
         const originalResponse = originalCompletion.choices[0].message;
