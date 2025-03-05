@@ -15,7 +15,8 @@ class ResponseFormatError extends Error {
 const ModelType = Object.freeze({
     GEMINI:   Symbol("Gemini"),
     OPEN_AI:  Symbol("OpenAI"),
-    LLAMA: Symbol("Llama")
+    LLAMA: Symbol("Llama"),
+    DEEPSEEK: Symbol("Deepseek")
 });
 
 
@@ -45,6 +46,8 @@ class ModelCapabilities {
             return ModelType.GEMINI;
         } else if (this.name.includes('llama')) {
             return ModelType.LLAMA;
+        } else if (this.name.includes('deepseek')) {
+            return ModelType.DEEPSEEK;
         } else {
             return ModelType.OPEN_AI;
         }
@@ -223,9 +226,10 @@ You will conduct a multistep process:
                     apiKey: this.#data.openAIKey,
                 });
                 break;
+            case ModelType.DEEPSEEK:
             case ModelType.LLAMA:
                 this.#openAIAPI = new OpenAI({
-                    apiKey: 'ollama', // required but unused
+                    apiKey: 'junk', // required but unused
                     baseURL: 'http://localhost:11434/v1',
                 });
                 break;
