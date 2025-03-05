@@ -10,7 +10,46 @@ class ResponseFormatError extends Error {
         super(message);
         this.name = "ResponseFormatError";
     }
-};
+}
+
+const ModelType = Object.freeze({
+    GEMINI:   Symbol("Gemini"),
+    OPEN_AI:  Symbol("OpenAI"),
+    LLAMA: Symbol("Llama")
+});
+
+
+class ModelCapabilities {
+    hasStructuredOutput= true;
+    hasSystemMode = true;
+    hasTemperature = true;
+    systemModeUser = 'system';
+
+    name = 'model';
+
+    constructor(modelName) {
+        this.name = modelName;
+
+        this.hasStructuredOutput = modelName !== 'o1-mini';
+        this.hasSystemMode = modelName !== 'o1-mini';
+        this.hasTemperature = modelName.startsWith('o');
+        if (modelName.includes('gemini') || modelName.includes('llama')) {
+            this.systemModeUser = 'system';
+        } else {
+            this.systemModeUser = 'developer';
+        }
+    }
+
+    get kind() {
+        if (this.name.includes('gemini')) {
+            return ModelType.GEMINI;
+        } else if (this.name.includes('llama')) {
+            return ModelType.LLAMA;
+        } else {
+            return ModelType.OPEN_AI;
+        }
+    }
+}
 
 class OpenAIWrapper {
     
@@ -147,10 +186,7 @@ You will conduct a multistep process:
         problemStatementPrompt: OpenAIWrapper.DEFAULT_PROBLEM_STATEMENT_PROMPT
     };
 
-    #noStructuredOutputMode = false;
-    #noSystemMode = false;
-    #geminiMode = false;
-    #noTemperature = false;
+    #model = new ModelCapabilities('model');
 
     #openAIAPI;
 
@@ -172,21 +208,27 @@ You will conduct a multistep process:
         if (!this.#data.googleKey) {
             this.#data.googleKey = process.env.GOOGLE_API_KEY
         }
-        
-        this.#noStructuredOutputMode = this.#data.underlyingModel === 'o1-mini';
-        this.#noSystemMode = this.#data.underlyingModel === 'o1-mini';
-        this.#noTemperature = this.#data.underlyingModel.startsWith('o')
-        this.#geminiMode = this.#data.underlyingModel.includes('gemini');
 
-        if (this.#geminiMode) {
-            this.#openAIAPI = new OpenAI({
-                apiKey: this.#data.googleKey,
-                baseURL: "https://generativelanguage.googleapis.com/v1beta/openai"
-            });
-        } else {
-            this.#openAIAPI = new OpenAI({
-                apiKey: this.#data.openAIKey,
-            });
+        this.#model = new ModelCapabilities(this.#data.underlyingModel);
+
+        switch (this.#model.kind) {
+            case ModelType.GEMINI:
+                this.#openAIAPI = new OpenAI({
+                    apiKey: this.#data.googleKey,
+                    baseURL: "https://generativelanguage.googleapis.com/v1beta/openai"
+                });
+                break;
+            case ModelType.OPEN_AI:
+                this.#openAIAPI = new OpenAI({
+                    apiKey: this.#data.openAIKey,
+                });
+                break;
+            case ModelType.LLAMA:
+                this.#openAIAPI = new OpenAI({
+                    apiKey: 'ollama', // required but unused
+                    baseURL: 'http://localhost:11434/v1',
+                });
+                break;
         }
     }
 
@@ -262,7 +304,7 @@ You will conduct a multistep process:
     async generateDiagram(userPrompt, lastModel) {        
         //start with the system prompt
         let underlyingModel = this.#data.underlyingModel;
-        let systemRole = 'developer';
+        let systemRole = this.#model.systemModeUser;
         let systemPrompt = this.#data.systemPrompt;
         let responseFormat = this.#generateResponseSchema();
         let temperature = 0;
@@ -274,21 +316,18 @@ You will conduct a multistep process:
             reasoningEffort = parts[1].trim();
         }
 
-        if (this.#geminiMode) {
-            systemRole = "system";
-        }
 
-        if (this.#noStructuredOutputMode) {
+        if (!this.#model.hasStructuredOutput) {
             systemPrompt += "\n" + OpenAIWrapper.NON_STRUCTURED_OUTPUT_SYSTEM_PROMPT_ADDITION;
             responseFormat = undefined;
         }
 
-        if (this.#noSystemMode) {
+        if (!this.#model.hasSystemMode) {
             systemRole = "user";
             temperature = 1;
         }
 
-        if (this.#noTemperature) {
+        if (!this.#model.hasTemperature) {
             temperature = undefined;
         }
 
