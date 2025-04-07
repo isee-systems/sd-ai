@@ -239,7 +239,7 @@ for (const specificCase in cases) {
     }));
 }
 
-let llmsToTest = ['gpt-4o', 'gpt-4o-mini', 'gpt-4.5-preview', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash', 'o3-mini high', 'o3-mini medium', 'o1'];
+let llmsToTest = ['gpt-4o', 'gpt-4o-mini', 'gpt-4.5-preview', 'gemini-2.5-pro-preview', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash', 'o3-mini high', 'o3-mini medium', 'o1'];
 
 //For quick tests
 //llmsToTest.splice(1);
