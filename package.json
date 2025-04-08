@@ -8,6 +8,7 @@
   },
   "scripts": {
     "start": "nodemon --env-file=.env app.js",
+    "eval": "node evals/run.js",
     "test": "jasmine"
   },
   "type": "module",
