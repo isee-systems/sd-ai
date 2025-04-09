@@ -79,35 +79,15 @@ const compareRelationshipLists = function(fromAI, groundTruth) {
     };
 };
 
-const expirement = {
-	engine_configs: [
-		{
-            name: "predprey",
-            engine: "predprey",
-        },
-		{
-            name: "advanced-gpt-4o-mini",
-            engine: "advanced",
-            underlyingModel: "gpt-4o-mini"
-        },
-		{
-            name: "advanced-gpt-4o",
-            engine: "advanced",
-            underlyingModel: "gpt-4o"
-        }
-	],
-    criteria: {
-        "causalTranslation": ["singleRelationshipTests"] 
-    },
-};
+const experiment = JSON.parse(fs.readFileSync('./evals/experiment.json', 'utf8'));
 
 // goal of tests is to create a pretty flat denormaized structure
 // but all keyed on engine name so that we can easily rate limit by engine
-const tests = Object.fromEntries(await Promise.all(expirement.engine_configs.map(async engine_config => {
+const tests = Object.fromEntries(await Promise.all(experiment.engine_configs.map(async engine_config => {
     // return all the map of all tests in a group if filter is true
     // return only the tests in the groups specified by filter if list is provided
     // return nothing if criteria isn't mentioned
-    const allTests = Object.fromEntries(await Promise.all(Object.entries(expirement.criteria).map(async ([c, filter]) => {
+    const allTests = Object.fromEntries(await Promise.all(Object.entries(experiment.categories).map(async ([c, filter]) => {
         const { groups } = await import(`./categories/${c}.js`);
         if (filter === true) 
             return [c, groups]
@@ -161,7 +141,7 @@ const progress = new cliProgress.MultiBar(
 
 // using promise.all here to kick off all the engine configs tests at once 
 const responses = await Promise.all(Object.entries(tests).map(async ([engine_config_name, engine_tests]) => {
-    const limiter = new RateLimiter({ tokensPerInterval: 1, interval: "second" });
+    const limiter = new RateLimiter({ tokensPerInterval: 5, interval: "second" });
     const engine_bar = progress.create(engine_tests.length, 0, { engine_config_name });
 
     const inProgress = new Set()
