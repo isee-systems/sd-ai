@@ -67,14 +67,16 @@ const generateFeedbackLoop = function(variables, polarity) {
     };
 };
 
-const generateSingleRelationshipTest = function(description, fromRaw, toRaw, polarity, polarityStart) {
+const generateSingleRelationshipTest = function(name, fromRaw, toRaw, polarity, polarityStart) {
     const result = generateCausalRelationship(fromRaw, toRaw, polarity, polarityStart);
     return {
+        name: name,
         prompt: prompt,
-        problemStatement: problemStatement,
-        backgroundKnowledge: result.english,
-        description: description,
-        expectedRelationships: [result.relationship]
+        additionalParameters: {
+            problemStatement: problemStatement,
+            backgroundKnowledge: result.english,
+        },
+        expectations: [result.relationship]
     };
 };
 
@@ -90,11 +92,13 @@ const generateSingleFeedbackLoopTest = function(offset, numVars, polarity) {
     const variables = nouns.slice(offset, offset+numVars);
     const response = generateFeedbackLoop(variables, polarity);
     return {
+        name: "extract a " + kind + " feedback loop with " + numVars + " variables",
         prompt: prompt,
-        problemStatement: problemStatement,
-        description: "extract a " + kind + " feedback loop with " + numVars + " variables",
-        expectedRelationships: response.relationships,
-        backgroundKnowledge: response.english
+        additionalParameters: {
+            problemStatement: problemStatement,
+            backgroundKnowledge: response.english
+        },
+        expectations: response.relationships,
     }
 };
 
@@ -124,27 +128,99 @@ const generateMultipleFeedbackLoopTest = function(polarityVec, numVarsVec) {
     }
 
     return {
+        name: "extract " + polarityVec.length + " feedback loops with [" + polarityVec.join(", ") + "] polarities",
         prompt: prompt,
-        problemStatement: problemStatement,
-        description: "extract " + polarityVec.length + " feedback loops with [" + polarityVec.join(", ") + "] polarities",
-        expectedRelationships: relationships,
-        backgroundKnowledge: causalText.trim(),
+        additionalParameters: {
+            problemStatement: problemStatement,
+            backgroundKnowledge: causalText.trim(),
+        },
+        expectations: relationships,
     }
 };
 
+export const evaluate = function(fromAI, groundTruth) {
+    const failures = [];
+    
+    const stringifyRelationship = function(r) {
+        return r.from + " --> (" + r.polarity + ") " + r.to;
+    };
+
+    const comparator = function(a, b) {
+        if ( a.textRepresentation < b.textRepresentation ){
+            return -1;
+        }
+        if ( a.textRepresentation > b.textRepresentation ){
+            return 1;
+        }
+        return 0;
+    };
+
+    const relationshipEqualityComparatorGenerator = function(a) {
+        return (b) => {
+            return (a.from.toLowerCase() === b.from.toLowerCase() && 
+                a.to.toLowerCase() === b.to.toLowerCase()); 
+        };
+    };
+
+    const cleanedSortedAI = fromAI.map((r)=> {
+        delete r.reasoning; //these attributes aren't in ground truth
+        delete r.polarityReasoning; //these attributes aren't in ground truth
+        r.textRepresentation = stringifyRelationship(r);
+        return r;
+    }).sort(comparator);
+
+    const sortedGroundTruth = groundTruth.map((r)=> {
+        r.textRepresentation = stringifyRelationship(r);
+        return r;
+    }).sort(comparator);
+
+    const removed = sortedGroundTruth.filter((element) => { return !cleanedSortedAI.some(relationshipEqualityComparatorGenerator(element))});
+    const added = cleanedSortedAI.filter((element) => { return !sortedGroundTruth.some(relationshipEqualityComparatorGenerator(element))});
+
+    const addedStr = added.map((r)=>{return r.textRepresentation}).join(", ");
+    const removedStr = removed.map((r)=>{return r.textRepresentation}).join(", ");
+    const groundTruthStr = sortedGroundTruth.map((r)=>{return r.textRepresentation}).join(", ");
+
+    if (added.length > 0) {
+        failures.push({
+            type: "Fake relationships found",
+            details: "Fake relationships found\n" + addedStr + "\nGround Truth\n" + groundTruthStr
+        })
+    }
+    
+    if (removed.length > 0) {
+        failures.push({
+            type: "Real relationships not found",
+            details: "Real relationships not found\n" + removedStr + "\nGround Truth\n" + groundTruthStr
+        })
+    }
+
+    for (const groundTruthRelationship of sortedGroundTruth) {
+        let aiRelationship = cleanedSortedAI.find(relationshipEqualityComparatorGenerator(groundTruthRelationship));
+        if (aiRelationship && aiRelationship.polarity !== groundTruthRelationship.polarity) {
+            failures.push({
+                type: "Incorrect polarity discovered"
+            });
+        }
+    }
+
+    return failures 
+};
+
+
 export const groups = {
-    "singleRelationshipTests": [
+    "singleRelationship": [
         generateSingleRelationshipTest("extract a reinforcing relationship up", nouns[0], nouns[1], "+", "up"),
         generateSingleRelationshipTest("extract a reinforcing relationship down", nouns[0], nouns[1], "+", "down"),
         generateSingleRelationshipTest("extract a balancing relationship up", nouns[0], nouns[1], "-", "up"),
         generateSingleRelationshipTest("extract a balancing relationship down", nouns[0], nouns[1], "-", "down")
     ],
-    "singleFeedbackLoopTests": [
+    "singleFeedbackLoop": [
         //7 feedback loops from size 2 to size 8 with positive polarity
         ...generateSingleFeedbackLoopTests(2, 8, "+"),
         ...generateSingleFeedbackLoopTests(2, 8, "-")
     ],
-    "multipleFeedbackLoopTests": [
+    "multipleFeedbackLoops": [
         //two feedback loops both positive, with 3 and 6 variables
         generateMultipleFeedbackLoopTest(["+", "+"], [3,6]),
         generateMultipleFeedbackLoopTest(["-", "+"], [3,6]),

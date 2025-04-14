@@ -1,0 +1,101 @@
+{
+    "engine_configs": {
+        "advanced-gpt-4o": {
+            "engine": "advanced",
+            "additionalParameters": {
+                "underlyingModel": "gpt-4o"
+            }
+        },
+        "advanced-gpt-4o-mini": {
+            "engine": "advanced",
+            "additionalParameters": {
+                "underlyingModel": "gpt-4o-mini"
+            },
+            "limits": {
+                "tokensPerMinute": 90000 
+            }
+        },
+        "advanced-o1": {
+            "engine": "advanced",
+            "additionalParameters": {
+                "underlyingModel": "o1"
+            },
+            "limits": {
+                "baselineTokenUsage": 10000 
+            }
+        },
+        "advanced-gpt-4.5-preview": {
+            "engine": "advanced",
+            "additionalParameters": {
+                "underlyingModel": "gpt-4.5-preview"
+            },
+            "limits": {
+                "tokensPerMinute": 100000 
+            }
+        },
+        "advanced-o3-mini-low": {
+            "engine": "advanced",
+            "additionalParameters": {
+                "underlyingModel": "o3-mini low"
+            },
+            "limits": {
+                "baselineTokenUsage": 5000,
+                "tokensPerMinute": 60000
+            }
+        },
+        "advanced-o3-mini-medium": {
+            "engine": "advanced",
+            "additionalParameters": {
+                "underlyingModel": "o3-mini medium"
+            },
+            "limits": {
+                "baselineTokenUsage": 10000,
+                "tokensPerMinute": 60000
+            }
+        },
+        "advanced-o3-mini-high": {
+            "engine": "advanced",
+            "additionalParameters": {
+                "underlyingModel": "o3-mini high"
+            },
+            "limits": {
+                "baselineTokenUsage": 18000,
+                "tokensPerMinute": 60000
+            }
+        },
+        "advanced-gemini-2.0-flash": {
+            "engine": "advanced",
+            "additionalParameters": {
+                "underlyingModel": "gemini-2.0-flash"
+            },
+            "limits": {
+                "tokensPerMinute": 90000,
+                "requestsPerMinute": 10
+            }
+        },
+        "advanced-gemini-2.0-flash-lite": {
+            "engine": "advanced",
+            "additionalParameters": {
+                "underlyingModel": "gemini-2.0-flash-lite"
+            },
+            "limits": {
+                "tokensPerMinute": 90000,
+                "requestsPerMinute": 10
+            }
+        },
+        "advanced-gemini-1.5-flash": {
+            "engine": "advanced",
+            "additionalParameters": {
+                "underlyingModel": "gemini-1.5-flash"
+            },
+            "limits": {
+                "tokensPerMinute": 90000,
+                "requestsPerMinute": 10
+            }
+        }
+    },
+    "categories": {
+        "causalTranslation": true,
+        "conformance": true
+    }
+}
