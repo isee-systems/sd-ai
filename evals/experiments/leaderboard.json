@@ -1,5 +1,5 @@
 {
-    "engine_configs": {
+    "engineConfigs": {
         "advanced-gpt-4o": {
             "engine": "advanced",
             "additionalParameters": {

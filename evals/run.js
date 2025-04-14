@@ -35,26 +35,26 @@ const TOKENS_PER_MINUTE = 30_000;
 // openai typically allows 500 requests per minute, so 400 is safe bet
 const REQUESTS_PER_MINUTE = 400;
 
-const expirementId = uniqueFileId();
+const experimentId = uniqueFileId();
 const experiment = JSON.parse(fs.readFileSync(argv.experiment, "utf8"));
 
 // goal of tests is to create a pretty flat denormaized structure
 // but all keyed on engine name so that we can easily rate limit by engine
 const tests = Object.fromEntries(
   await Promise.all(
-    Object.entries(experiment.engine_configs).map(
-      async ([engine_config_name, engine_config]) => {
+    Object.entries(experiment.engineConfigs).map(
+      async ([engineConfigName, engineConfig]) => {
         // return all the map of all tests in a group if filter is true
         // return only the tests in the groups specified by filter if list is provided
         // return nothing if criteria isn't mentioned
 
-        engine_config.limits = engine_config.limits || {};
-        engine_config.limits.tokensPerMinute =
-          engine_config.limits.tokensPerMinute || TOKENS_PER_MINUTE;
-        engine_config.limits.requestsPerMinute =
-          engine_config.limits.requestsPerMinute || REQUESTS_PER_MINUTE;
-        engine_config.limits.baselineTokenUsage =
-          engine_config.limits.baselineTokenUsage || BASELINE_TOKEN_USAGE;
+        engineConfig.limits = engineConfig.limits || {};
+        engineConfig.limits.tokensPerMinute =
+          engineConfig.limits.tokensPerMinute || TOKENS_PER_MINUTE;
+        engineConfig.limits.requestsPerMinute =
+          engineConfig.limits.requestsPerMinute || REQUESTS_PER_MINUTE;
+        engineConfig.limits.baselineTokenUsage =
+          engineConfig.limits.baselineTokenUsage || BASELINE_TOKEN_USAGE;
 
         const allTests = Object.fromEntries(
           await Promise.all(
@@ -64,9 +64,9 @@ const tests = Object.fromEntries(
               return [
                 c,
                 Object.fromEntries(
-                  Object.entries(groups).filter(([group_name, _]) => {
+                  Object.entries(groups).filter(([groupName, _]) => {
                     // only include groups that are specified
-                    return filter.indexOf(group_name) > -1;
+                    return filter.indexOf(groupName) > -1;
                   })
                 ),
               ];
@@ -76,22 +76,22 @@ const tests = Object.fromEntries(
 
         // jam the details of the engine and the category and group into the test itself
         const fullTests = Object.entries(allTests).map(([category, groups]) => {
-          return Object.entries(groups).map(([group_name, tests]) => {
+          return Object.entries(groups).map(([groupName, tests]) => {
             return tests.map((test) => {
               const testObj = {};
               // also have a look at additionalParameters parsing when we run
               // the engine, changes here might require changes there too
-              testObj["engine_config"] = engine_config;
-              testObj["engine_config_name"] = engine_config_name;
+              testObj["engineConfig"] = engineConfig;
+              testObj["engineConfigName"] = engineConfigName;
               testObj["category"] = category;
-              testObj["group"] = group_name;
-              testObj["test_params"] = test;
+              testObj["group"] = groupName;
+              testObj["testParams"] = test;
               return testObj;
             });
           });
         });
 
-        return [engine_config_name, fullTests.flat(2)];
+        return [engineConfigName, fullTests.flat(2)];
       }
     )
   )
@@ -100,31 +100,31 @@ const tests = Object.fromEntries(
 console.log(chalk.blue("Experiment Configuration:"));
 console.log("Sequential: " + (experiment.sequential || "false"));
 console.log("Verbose: " + (experiment.verbose || "false"));
-console.log("Experiment Id: " + expirementId);
+console.log("Experiment Id: " + experimentId);
 console.log();
 
 console.log(chalk.blue("Engine Configurations:"));
 printTable(
   new dataForge.DataFrame({
-    values: Object.entries(tests).map(([engine_config_name, engine_tests]) => {
+    values: Object.entries(tests).map(([engineConfigName, engineTests]) => {
       return {
-        engine_config_name: engine_config_name,
-        engine: engine_tests[0].engine_config.engine,
+        engineConfigName: engineConfigName,
+        engine: engineTests[0].engineConfig.engine,
         "tokensPerMinute (TPM)":
-          engine_tests[0].engine_config.limits.tokensPerMinute +
-          (engine_tests[0].engine_config.limits.tokensPerMinute !=
+          engineTests[0].engineConfig.limits.tokensPerMinute +
+          (engineTests[0].engineConfig.limits.tokensPerMinute !=
           TOKENS_PER_MINUTE
             ? "*"
             : ""),
         "requestsPerMinute (RPM)":
-          engine_tests[0].engine_config.limits.requestsPerMinute +
-          (engine_tests[0].engine_config.limits.requestsPerMinute !=
+          engineTests[0].engineConfig.limits.requestsPerMinute +
+          (engineTests[0].engineConfig.limits.requestsPerMinute !=
           REQUESTS_PER_MINUTE
             ? "*"
             : ""),
         baselineTokenUsage:
-          engine_tests[0].engine_config.limits.baselineTokenUsage +
-          (engine_tests[0].engine_config.limits.baselineTokenUsage !=
+          engineTests[0].engineConfig.limits.baselineTokenUsage +
+          (engineTests[0].engineConfig.limits.baselineTokenUsage !=
           BASELINE_TOKEN_USAGE
             ? "*"
             : ""),
@@ -159,7 +159,7 @@ const progress = new cliProgress.MultiBar(
     clearOnComplete: true,
     hideCursor: true,
     format:
-      "{bar} | ETA: {eta}s | {earlyResults} = {value} of {total} |  | {engine_config_name} | {inProgress}",
+      "{bar} | ETA: {eta}s | {earlyResults} = {value} of {total} | {engineConfigName} | {inProgress}",
     stream: experiment.verbose
       ? fs.createWriteStream("/dev/null")
       : process.stderr,
@@ -179,13 +179,13 @@ const printEarlyResults = (r) => {
   )}`;
 };
 
-const runEngineTests = async ([engine_config_name, engine_tests]) => {
+const runEngineTests = async ([engineConfigName, engineTests]) => {
   const tokenLimitConfig = {
-    tokensPerInterval: engine_tests[0].engine_config.limits.tokensPerMinute,
+    tokensPerInterval: engineTests[0].engineConfig.limits.tokensPerMinute,
     interval: "minute",
   };
   const requestLimitConfig = {
-    tokensPerInterval: engine_tests[0].engine_config.limits.requestsPerMinute,
+    tokensPerInterval: engineTests[0].engineConfig.limits.requestsPerMinute,
     interval: "minute",
   };
 
@@ -194,17 +194,17 @@ const runEngineTests = async ([engine_config_name, engine_tests]) => {
 
   const inProgress = new Set();
   const earlyResults = { true: 0, false: 0 };
-  const engine_bar = progress.create(engine_tests.length, 0, {
-    engine_config_name,
+  const engineBar = progress.create(engineTests.length, 0, {
+    engineConfigName,
     earlyResults: printEarlyResults(earlyResults),
     inProgress: printProgress(inProgress),
   });
   if (experiment.verbose)
-    console.log(chalk.blue(`Running tests for: ${engine_config_name}`));
+    console.log(chalk.blue(`Running tests for: ${engineConfigName}`));
 
   let testRuns = [];
   if (experiment.sequential) {
-    testRuns = await engine_tests.reduce(async (promise, test) => {
+    testRuns = await engineTests.reduce(async (promise, test) => {
       const acc = await promise;
       const result = await runSingleTest(
         test,
@@ -212,29 +212,29 @@ const runEngineTests = async ([engine_config_name, engine_tests]) => {
         tokenLimiter,
         inProgress,
         earlyResults,
-        engine_bar
+        engineBar
       );
 
       return [...acc, result];
     }, Promise.resolve([]));
   } else {
     testRuns = await Promise.all(
-      engine_tests.map((test) =>
+      engineTests.map((test) =>
         runSingleTest(
           test,
           requestLimiter,
           tokenLimiter,
           inProgress,
           earlyResults,
-          engine_bar
+          engineBar
         )
       )
     );
   }
 
-  engine_bar.update({ inProgress: "[Done]" });
+  engineBar.update({ inProgress: "[Done]" });
   if (experiment.verbose)
-    console.log(chalk.blue(`Finished all tests for: ${engine_config_name}`));
+    console.log(chalk.blue(`Finished all tests for: ${engineConfigName}`));
 
   return testRuns;
 };
@@ -245,9 +245,9 @@ const runSingleTest = async (
   tokenLimiter,
   inProgress,
   earlyResults,
-  engine_bar
+  engineBar
 ) => {
-  const name = test.test_params["name"];
+  const name = test.testParams["name"];
 
   if (experiment.verbose)
     console.log(chalk.blue(`Starting test: ${name}, awaiting rate limit`));
@@ -255,8 +255,8 @@ const runSingleTest = async (
   await requestLimiter.removeTokens(1);
 
   const additionalTestParametersTokenCount =
-    enc.encode(test.test_params["prompt"]).length +
-    Object.entries(test.test_params.additionalParameters)
+    enc.encode(test.testParams["prompt"]).length +
+    Object.entries(test.testParams.additionalParameters)
       .map(([_, v]) => {
         return enc.encode(v).length;
       })
@@ -264,11 +264,11 @@ const runSingleTest = async (
 
   const totalTokens =
     additionalTestParametersTokenCount +
-    test.engine_config.limits.baselineTokenUsage;
+    test.engineConfig.limits.baselineTokenUsage;
   await tokenLimiter.removeTokens(totalTokens);
 
   const engine = await import(
-    `../engines/${test["engine_config"]["engine"]}/engine.js`
+    `../engines/${test["engineConfig"]["engine"]}/engine.js`
   );
   const instance = new engine.default();
 
@@ -278,17 +278,17 @@ const runSingleTest = async (
     );
 
   inProgress.add(name);
-  engine_bar.update({ inProgress: printProgress(inProgress) });
+  engineBar.update({ inProgress: printProgress(inProgress) });
 
   const additionalParameters = {
-    ...test.engine_config.additionalParameters,
-    ...test.test_params.additionalParameters,
+    ...test.engineConfig.additionalParameters,
+    ...test.testParams.additionalParameters,
   };
 
   const startTime = Date.now();
   let generateResponse = await instance.generate(
-    test.test_params["prompt"],
-    test.test_params["currentModel"],
+    test.testParams["prompt"],
+    test.testParams["currentModel"],
     additionalParameters
   );
 
@@ -297,9 +297,7 @@ const runSingleTest = async (
   testWithResult["generatedRelationships"] =
     generateResponse.model.relationships;
 
-  const { evaluate } = await import(`./categories/${test.category}.js`);
   if (experiment.verbose) {
-    // print relationships with polarities
     console.log(
       chalk.blue(
         `Response returned: ${name}, awaiting evaluation of these generated relationships:`
@@ -315,14 +313,16 @@ const runSingleTest = async (
     console.log();
     // pretty json print the expectations
     console.log(chalk.blue("Against these expectations:"));
-    console.log(JSON.stringify(test.test_params["expectations"], null, 2));
+    console.log(JSON.stringify(test.testParams["expectations"], null, 2));
   }
+
+  const { evaluate } = await import(`./categories/${test.category}.js`);
   testWithResult["failures"] = evaluate(
     testWithResult["generatedRelationships"],
-    test.test_params["expectations"]
+    test.testParams["expectations"]
   );
   // return count of each failure type
-  testWithResult["failure_summary"] = testWithResult["failures"].reduce(
+  testWithResult["failureSummary"] = testWithResult["failures"].reduce(
     (acc, failure) => {
       acc[failure.type] = (acc[failure.type] || 0) + 1;
       return acc;
@@ -350,8 +350,8 @@ const runSingleTest = async (
 
   inProgress.delete(name);
   earlyResults[testWithResult["pass"]] += 1;
-  engine_bar.increment(1, { inProgress: printProgress(inProgress) });
-  engine_bar.update({ earlyResults: printEarlyResults(earlyResults) });
+  engineBar.increment(1, { inProgress: printProgress(inProgress) });
+  engineBar.update({ earlyResults: printEarlyResults(earlyResults) });
 
   testWithResult["name"] = name;
   return testWithResult;
@@ -371,7 +371,7 @@ const responses = output.flat(1);
 const results = new dataForge.DataFrame({ values: responses });
 
 const experimentName = path.basename(path.resolve(argv.experiment)).split(".")[0];
-const experimentResultsName = `${experimentName}_${expirementId}`;
+const experimentResultsName = `${experimentName}_${experimentId}`;
 
 // write the full results to json file
 fs.writeFileSync(
@@ -381,17 +381,19 @@ fs.writeFileSync(
 
 const engineFailureTypes = [];
 results.forEach((result) => {
-  if (Object.keys(result["failure_summary"]).length > 1) {
+  if (Object.keys(result["failureSummary"]).length > 1) {
     engineFailureTypes.push({
-      engine_config_name: result["engine_config_name"],
-      failure_type: `${result["category"]} - Multiple kinds of failures`,
+      engineConfigName: result["engineConfigName"],
+      failureType: `${result["category"]} - Multiple kinds of failures`,
+      id: engineFailureTypes.length,
     });
-  } else if (Object.keys(result["failure_summary"]).length == 1) {
+  } else if (Object.keys(result["failureSummary"]).length == 1) {
     engineFailureTypes.push({
-      engine_config_name: result["engine_config_name"],
-      failure_type: `${result["category"]} - ${
-        Object.keys(result["failure_summary"])[0]
+      engineConfigName: result["engineConfigName"],
+      failureType: `${result["category"]} - ${
+        Object.keys(result["failureSummary"])[0]
       }`,
+      id: engineFailureTypes.length,
     });
   }
 });
@@ -399,9 +401,9 @@ fs.writeFileSync(
   `${experimentResultsName}_failure_summary.csv`,
   await pivotAndUnstack(
     new dataForge.DataFrame({ values: engineFailureTypes }),
-    "engine_config_name",
-    "failure_type",
-    "failure_type",
+    "engineConfigName",
+    "failureType",
+    "id",
     (v) => v.count()
   ).toCSV()
 );
@@ -410,7 +412,7 @@ const summary = pivotAndUnstack(
   results.withSeries({
     pass: (df) => df.select((row) => (row["pass"] ? 1 : 0)),
   }),
-  "engine_config_name",
+  "engineConfigName",
   "category",
   "pass",
   (values) => values.average()
@@ -418,4 +420,4 @@ const summary = pivotAndUnstack(
 printTable(summary);
 fs.writeFileSync(`${experimentResultsName}_summary.csv`, await summary.toCSV());
 
-console.log(chalk.blue(`Wrote results to: ${experimentResultsName} files`));
+console.log(chalk.blue(`Wrote result and summaries to various ${chalk.bold(experimentResultsName)} files`));

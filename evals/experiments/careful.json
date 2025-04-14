@@ -1,7 +1,7 @@
 {
     "sequential": true,
     "verbose": true,
-    "engine_configs": {
+    "engineConfigs": {
         "advanced-gemini-2.0-flash": {
             "engine": "advanced",
             "additionalParameters": {

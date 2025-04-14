@@ -33,7 +33,7 @@ class ModelCapabilities {
 
         this.hasStructuredOutput = modelName !== 'o1-mini';
         this.hasSystemMode = modelName !== 'o1-mini';
-        this.hasTemperature = modelName.startsWith('o');
+        this.hasTemperature = !modelName.startsWith('o');
         if (modelName.includes('gemini') || modelName.includes('llama')) {
             this.systemModeUser = 'system';
         } else {
