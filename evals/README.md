@@ -13,7 +13,7 @@ CLI (command line interface) app that runs within sd-ai project to measure outpu
     - execute the tests, creating several results files in top-level project directory 
 - everything is configured in the required (`-e`) experiment json file defined in `evals/experiments/`
 - an `experiment.json` runs all specified test categories against all specified engine configurations
-- by default two experiments are included by you're welcome to add your own
+- by default two experiments are included but feel free to add your own too
     - `leaderboard.json` runs every engine against every test
         - **warning** this can be quite expensive, $50+ for a single execution
     - `careful.json`, is an example of using evals for testing and development
