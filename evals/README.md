@@ -44,7 +44,7 @@ CLI (command line interface) app that runs within sd-ai project to measure outpu
             - additional input tokens are gonna be used by a specific engine
             - how many output tokens will come back
             - how many reasoning tokens the llm will wanna use
-- default values should be safe for openai, teir 1, non-reasoning models anything else and you should consider "Configuration Recommendations" below
+- default values should be safe for default/advanced engine using openai, teir 1, non-reasoning models anything else and you should consider "Configuration Recommendations" below
 
 ## Configuration Recommendations 
 - limits specified in `leaderboard.json` experiment should be a good starting place to see what you might need to add for a given llm provider
