@@ -1,8 +1,14 @@
-# Purpose
-- aligned
+# Evals
+CLI (command line interface) app that runs within sd-ai project to measure outputs of an engine against various quality benchmarks.
+
+# Goals
+- provide a single executable source of truth that answers the question: how good is this sd-ai engine?
+- translate benchmarks outline by [BEAMS](https://www.buffalo.edu/ai-data-science/research/projects.host.html/content/shared/www/ai-data-science/research-projects/BEAMS-Initiative.detail.html) into executable code
+- allow engine creators to rapidly retest with detailed feedback (see `careful.json`)
+- provide summary outputs that are useful in a variety of contexts (e.g. industry papers, leaderboards, regression tests, etc)
 
 # Getting Started
-- execute evals with `npm run eval -- -e evals/experiments/leaderboard.json`, this will do 2 things:
+- execute evals with `npm run evals -- -e evals/experiments/leaderboard.json`, this will do 2 things:
     - allow you to first review the engines, tests and configuration that evals intends to run
     - execute the tests, creating several results files in top-level project directory 
 - everything is configured in the required (`-e`) experiment json file
