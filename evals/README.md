@@ -16,9 +16,9 @@ CLI (command line interface) app that runs within sd-ai project to measure outpu
 - by default two experiments are included but feel free to add your own too
     - `leaderboard.json` runs every engine against every test
         - **warning** this can be quite expensive, $50+ for a single execution
-    - `careful.json`, is an example of using evals for testing and development
-        - `verbose: true`: removes the progress bar in favor of detailed output
-        - `sequential: true`: runs only a single test at a time
+    - `careful.json` is an example of using evals for testing and development
+        - `verbose: true` removes the progress bar in favor of detailed output
+        - `sequential: true` runs only a single test at a time
         - `categoryName: [ "specificGroupsOnly" ]` specifies specific groups rather than run all tests in a category
 
 # Evals Structure
