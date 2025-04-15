@@ -1,5 +1,9 @@
 **/.DS_Store
 
+# ignore the eval results
+*_summary.csv
+*_results.json
+
 # Node.js dependencies
 node_modules/
 

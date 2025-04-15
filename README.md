@@ -13,10 +13,12 @@ Join the discussion on the [sd-ai groups.io](https://groups.io/g/sd-ai/)<br/><br
 We welcome Github Issues and Pull Requests from everyone! Here are some ideas for how to support this work:
 - **Anyone with an SD background**
     - feedback on your experience building CLDs in either Stella (using AI Assistant) or CoModel (using Copilot)
+    - join [BEAMS](https://www.buffalo.edu/ai-data-science/research/projects.host.html/content/shared/www/ai-data-science/research-projects/BEAMS-Initiative.detail.html) to steer our strategy for evaluating the accuracy, safety and bias of sd-ai models
 - **Techy folks**
    - prompt engineering recommendations surfaced by using "Advanced" Assistant in Stella
 - **Peeps comfortable with programming**
     - refinement of the `default` (our state of the art) engine or contribution of a brand new AI engine
+    - add or refine our [evals](#using-evals) used to measure model performance according to [BEAMS](https://www.buffalo.edu/ai-data-science/research/projects.host.html/content/shared/www/ai-data-science/research-projects/BEAMS-Initiative.detail.html) goals
 
 # Architecture and Data Structures 
 - sd-ai is a NodeJS Express app with simple JSON-encoded HTTP API
@@ -28,6 +30,7 @@ We welcome Github Issues and Pull Requests from everyone! Here are some ideas fo
     - list parameters required/supported by each specific engine
     - generating a model using a specific engine
 - models can be returned in sd-json (see below) or XMILE
+- all engines can be automatically tested for quality using `evals`
 
 ## Engine
 - an engine only needs to do 2 things:
@@ -115,9 +118,14 @@ AUTHENTICATION_KEY="my_secret_key" # only needed for securing publically accessi
 ```
 3. npm install 
 4. npm start
+5. (optional) npm run evals -- -e evals/experiments/careful.json 
 
 We recommend VSCode using a launch.json for the Node type applications (you get a debugger, and hot-reloading)
 
+## Evals
+- checkout the [Evals README](evals/README.md)
+
+  
 # Inspiration and Related Work
 - https://github.com/bear96/System-Dynamics-Bot served as departure point the `default` prompts
 - [CoModel](https://comodel.io) created by the team at [Skip Designed](https://skipdesigned.com/) to use Generative AI in their CBSD work

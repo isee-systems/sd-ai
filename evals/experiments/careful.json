@@ -1,0 +1,20 @@
+{
+    "sequential": true,
+    "verbose": true,
+    "engineConfigs": {
+        "advanced-gemini-2.0-flash": {
+            "engine": "advanced",
+            "additionalParameters": {
+                "underlyingModel": "gemini-2.0-flash"
+            },
+            "limits": {
+                "tokensPerMinute": 90000,
+                "requestsPerMinute": 10
+            }
+        }
+    },
+    "categories": {
+        "causalTranslation": ["singleFeedbackLoop"],
+        "conformance": ["genericConformance"] 
+    }
+}

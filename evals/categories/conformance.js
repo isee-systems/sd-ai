@@ -1,9 +1,3 @@
-import AdvancedEngine from './../engines/advanced/engine.js'
-import 'dotenv/config'
-import setup from './support/setup.js'
-
-setup();
-
 const cases = {
     "American Revolution": {
         prompt: "Using your knowledge of how the american revolution started and the additional information I have given you, please give me a feedback based explanation for how the american revolution came about.",
@@ -106,83 +100,58 @@ const countLoops = function(relationshipList) {
     return count;
 };
 
-const compareRelationshipLists = function(fromAI, requirements) {
-    const fromAIVariables = extractVariables(fromAI);
-    const fromAIFeedbackLoops = countLoops(fromAI);
-
-    if ("variables" in requirements) {    
-        for (const requiredVar of requirements.variables)
-            expect(fromAIVariables).withContext("Missing required variables: Variables are: " + Array.from(fromAIVariables).join(', ')).toContain(requiredVar);
-    }
-
-    if ("minVariables" in requirements) {
-        expect(fromAIVariables.size).withContext("Too few variables: Variables are: " + Array.from(fromAIVariables).join(', ')).toBeGreaterThanOrEqual(requirements.minVariables);
-    }
-
-    if ("maxVariables" in requirements) {
-        expect(fromAIVariables.size).withContext("Too many variables: Variables are: " + Array.from(fromAIVariables).join(', ')).toBeLessThanOrEqual(requirements.maxVariables);
-    }
-    
-    if ("minFeedback" in requirements) {
-        expect(fromAIFeedbackLoops).withContext("Too few feedback loops: The number of feedback loops found was " + fromAIFeedbackLoops).toBeGreaterThanOrEqual(requirements.minFeedback);
-    }
-
-    if ("maxFeedback" in requirements) {
-        expect(fromAIFeedbackLoops).withContext("Too many feedback loops: The number of feedback loops found was " + fromAIFeedbackLoops).toBeLessThanOrEqual(requirements.maxFeedback);
-    }
-};
 
 //elements by which we measure conformance.  these are specific instructions to append to the prompt
 const genericConformanceElements = [
     {
         text: 'Your response must include at least 10 variables.',
-        description: "include a minimum number of variables",
-        response: {
+        name: "include a minimum number of variables",
+        expectations: {
             minVariables: 10
         }
     }, {
         text: 'Your response must include no more than 5 variables.',
-        description: "include a maximum number of variables",
-        response: {
+        name: "include a maximum number of variables",
+        expectations: {
             maxVariables: 5
         }
     }, {
         text: 'Your response must include at least 8 feedback loops.',
-        description: "include a minimum number of feedback loops",
-        response: {
+        name: "include a minimum number of feedback loops",
+        expectations: {
             minFeedback: 8
         }
     }, {
         text: 'Your response must include no more than 4 feedback loops.',
-        description: "include a maximum number of feedback loops",
-        response: {
+        name: "include a maximum number of feedback loops",
+        expectations: {
             maxFeedback: 4
         }
     }, {
         text: 'Your response must include no more than 4 feedback loops and no more than 5 variables.',
-        description: "include a maximum number of feedback loops and a maximum number of variables",
-        response: {
+        name: "include a maximum number of feedback loops and a maximum number of variables",
+        expectations: {
             maxFeedback: 4,
             maxVariables: 5
         }
     }, {
         text: 'Your response must include at least 6 feedback loops and at least 8 variables.',
-        description: "include a minimum number of feedback loops and a minimum number of variables",
-        response: {
+        name: "include a minimum number of feedback loops and a minimum number of variables",
+        expectations: {
             minFeedback: 6,
             minVariables: 8
         }
     }, {
         text: 'Your response must include no more than 4 feedback loops and at least 5 variables.',
-        description: "include a maximum number of feedback loops and a minimum number of variables",
-        response: {
+        name: "include a maximum number of feedback loops and a minimum number of variables",
+        expectations: {
             maxFeedback: 4,
             minVariables: 5
         }
     }, {
         text: 'Your response must include at least 6 feedback loops and no more than 15 variables.',
-        description: "include a min number of feedback loops and a maximum number of variables",
-        response: {
+        name: "include a min number of feedback loops and a maximum number of variables",
+        expectations: {
             minFeedback: 6,
             maxVariables: 15
         }
@@ -190,69 +159,100 @@ const genericConformanceElements = [
 ];
 
 const specificConformanceElements = {
-    "Road Rage" : [
-        {
-            text: 'Your response must include the variables "Traffic Congestion", "Driver Stress" and "Accidents".',
-            description: "include requested variables",
-            response: { 
-                variables: [
-                    "Traffic Congestion",
-                    "Driver Stress",
-                    "Accidents"
-                ]
-            }
-        }, 
-    ],
-
-    "American Revolution": [
-        {
-            text: 'Your response must include the variables "Taxation", "Anti-British Sentiment" and "Colonial Identity".',
-            description: "include requested variables",
-            response: { 
-                variables: [
-                    "Taxation",
-                    "Anti-British Sentiment",
-                    "Colonial Identity"
-                ]
-            }
-        }, 
-    ]
+    "Road Rage" : {
+        text: 'Your response must include the variables "Traffic Congestion", "Driver Stress" and "Accidents".',
+        name: "include requested variables",
+        expectations: { 
+            variables: [
+                "Traffic Congestion",
+                "Driver Stress",
+                "Accidents"
+            ]
+        }
+    }, 
+    "American Revolution": {
+        text: 'Your response must include the variables "Taxation", "Anti-British Sentiment" and "Colonial Identity".',
+        name: "include requested variables",
+        expectations: { 
+            variables: [
+                "Taxation",
+                "Anti-British Sentiment",
+                "Colonial Identity"
+            ]
+        }
+    }, 
 }
 
 const generateConformanceTest = function(conformanceElement, specificCase) {
     return {
+        name: conformanceElement.name + " for " + specificCase,
         prompt: cases[specificCase].prompt + " " + conformanceElement.text,
-        problemStatement: cases[specificCase].problemStatement,
-        backgroundKnowledge: cases[specificCase].backgroundKnowledge,
-        description: conformanceElement.description,
-        responseCheck: conformanceElement.response,
-        case: specificCase
+        additionalParameters: {
+            problemStatement: cases[specificCase].problemStatement,
+            backgroundKnowledge: cases[specificCase].backgroundKnowledge,
+        },
+        expectations: conformanceElement.expectations,
     };
 };
 
-let conformanceTests = [];
-for (const specificCase in cases) {
-    conformanceTests = conformanceTests.concat(genericConformanceElements.map((e)=>{
-        return generateConformanceTest(e, specificCase);
-    })).concat(specificConformanceElements[specificCase].map((e)=>{
-        return generateConformanceTest(e, specificCase);
-    }));
-}
 
-let llmsToTest = ['gpt-4o', 'gpt-4o-mini', 'gpt-4.5-preview', 'gemini-2.5-pro-preview', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash', 'o3-mini high', 'o3-mini medium', 'o1'];
+export const evaluate = function(fromAI, requirements) {
+    const fromAIVariables = extractVariables(fromAI);
+    const fromAIFeedbackLoops = countLoops(fromAI);
 
-//For quick tests
-//llmsToTest.splice(1);
-//llmsToTest = [ 'o3-mini high']
+    const failures = [];
 
-for (const llm of llmsToTest) {
-    describe(`${llm} | conformance testing |`, function() {
-        for (const test of conformanceTests) {
-            it("can conform to the instruction " + test.description + "| for the case " + test.case, async() => {
-                const engine = new AdvancedEngine();
-                const response = await engine.generate(test.prompt, {}, {underlyingModel: llm, problemStatement: test.problemStatement, backgroundKnowledge: test.backgroundKnowledge});
-                compareRelationshipLists(response.model.relationships, test.responseCheck);
-            })
+    if ("variables" in requirements) {    
+        for (const requiredVar of requirements.variables) {
+            if (!fromAIVariables.has(requiredVar)) {
+                failures.push({
+                    type: "Missing required variable",
+                    details: "Missing required variables: Variables are: " + Array.from(fromAIVariables).join(', ')
+                })
+            }
         }
-    });
+    }
+
+    if ("minVariables" in requirements) {
+        if (fromAIVariables.size < requirements.minVariables) {
+            failures.push({
+                type: "Too few variables",
+                details: "Too few variables: Variables are: " + Array.from(fromAIVariables).join(', ')
+            });
+        }
+    }
+
+    if ("maxVariables" in requirements) {
+        if (fromAIVariables.size > requirements.maxVariables) {
+            failures.push({
+                type: "Too many variables",
+                details: "Too many variables: Variables are: " + Array.from(fromAIVariables).join(', ')
+            });
+        }
+    }
+    
+    if ("minFeedback" in requirements) {
+        if (fromAIFeedbackLoops < requirements.minFeedback) {
+            failures.push({
+                type: "Too few feedback loops",
+                details: "Too few feedback loops: The number of feedback loops found was " + fromAIFeedbackLoops
+            });
+        }
+    }
+
+    if ("maxFeedback" in requirements) {
+        if (fromAIFeedbackLoops > requirements.maxFeedback) {
+            failures.push({
+                type: "Too many feedback loops",
+                details: "Too many feedback loops: The number of feedback loops found was " + fromAIFeedbackLoops
+            });
+        }
+    }
+
+    return failures 
+};
+
+export const groups = {
+    "genericConformance": genericConformanceElements.map(g => Object.keys(cases).map(c => generateConformanceTest(g, c))).flat(1),
+    "specificConformance": Object.keys(cases).map(c => generateConformanceTest(specificConformanceElements[c], c))
 }
