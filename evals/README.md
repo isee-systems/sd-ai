@@ -36,45 +36,26 @@ CLI (command line interface) app that runs within sd-ai project to measure outpu
 
 # Managing Rate Limits 
 - lots of engines run via 3rd-party llm providers who are agressive about rate limiting
-- running each model carefully with the number of tokens response to get a sense of max tokens
-- then just check the teiring limits for everything else
-- defualt values intended to be safe for google and openai non-reasoning models
-"tokensPerMinute (TPM)": engineTests[0].engineConfig.limits.tokensPerMinute + 
-    (engineTests[0].engineConfig.limits.tokensPerMinute != TOKENS_PER_MINUTE ? "*" : ""),
-"requestsPerMinute (RPM)": engineTests[0].engineConfig.limits.requestsPerMinute + 
-    (engineTests[0].engineConfig.limits.requestsPerMinute != REQUESTS_PER_MINUTE ? "*" : ""),
-"baselineTokenUsage": engineTests[0].engineConfig.limits.baselineTokenUsage + 
-    (engineTests[0].engineConfig.limits.baselineTokenUsage != BASELINE_TOKEN_USAGE ? "*" : ""),
+- so we allow 3 parameters in `limits` for slowing the execution of evals for a given engine config:
+    - `tokensPerMinute` total number of tokens (input + output + reasoning) across all requests to an engine config in a 1 minute period
+    - `requestsPerMinute` number of times your engine's `generate` will be called in a 1 minute period
+    - `baselineTokenUsage` a fixed constant to be added to the total number of tokens in the (prompt + current model + additional parameters)
+        - this is used to account for the fact that we can't reliably determine at test time how many
+            - additional input tokens are gonna be used by a specific engine
+            - how many output tokens will come back
+            - how many reasoning tokens the llm will wanna use
+- default values should be safe for openai, teir 1, non-reasoning models anything else and you should consider "Configuration Recommendations" below
 
-## Tips
-- default limits in `leaderboard.json` experiment should be pretty safe, **unless you're using a reasoning model**
-    - especially on "high reasoning" mode 
-- https://platform.openai.com/settings/organization/limits
-- print the expected tokens
-    - console.log("Our calculation for additional tokens beyond max: ", additionalTestParametersTokenCount);
-- responses from the llm will tell you definitively how many tokens are used
-    - `console.log(originalCompletion, underlyingModel);`
-- you can patch in a warning when you get close to or exceed the rate limit
-``` 
-    fetch: async (url, init) => {
-        // we need to clone this because we're gonna read the json response and once you do that 
-        // you can't reread the response body again later for processing
-        const originalResponse = await fetch(url, init);
-        const response = originalResponse.clone();
-
-        if (parseInt(response.headers.get('x-ratelimit-remaining-requests', '11')) < 100000 || 
-            parseInt(response.headers.get('x-ratelimit-remaining-tokens', '4100')) < 5000) {
-            console.log("getting scary close to rate limit");
-            for (const [key, value] of response.headers) {
-                if (key.startsWith('x-ratelimit')) {
-                    console.log(`${key}: ${value}`);
-                }
-            }
-            const j = await response.json()
-            console.log("usage: ", j.usage);
-            console.log("error: ", j.error);
-        }
-        return originalResponse;
-    },
-```
-- when you have multiple engine configs leaning on the same underling model, usually makes sense to split tokens and requests per minute over all f them
+## Configuration Recommendations 
+- limits specified in `leaderboard.json` experiment should be a good starting place to see what you might need to add for a given llm provider
+- `tokensPerMinute` and `requestsPerMinute` are easy to find from
+    - https://platform.openai.com/settings/organization/limits
+    - https://ai.google.dev/gemini-api/docs/rate-limits
+- `baselineTokenUsage` requires some science though
+    - we recommend adding a line to your engine that prints the total number of tokens used and then enabling `verbose: true` and comparing the "Starting test:" token count to the ultimate number of tokens charged
+ 
+## Pitfalls
+- limits are implemented at engine config level not the `underlyingModel` level
+    - adding 3 engine configs with the same `underlyingModel` could mean you're pushing 3x more requests to a specific llm endpoint than expected
+- limits aren't maintained between evals runs. so you can accidenilty get into trouble by stoping and starting evals a bunch within a minute
+- limits don't manage requests or tokens per day which is another common rate limiting strategy implemented by llm vendors
