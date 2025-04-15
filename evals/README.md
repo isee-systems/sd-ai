@@ -19,7 +19,7 @@ CLI (command line interface) app that runs within sd-ai project to measure outpu
     - `careful.json`, is an example of using evals for testing and development
         - `verbose: true`: removes the progress bar in favor of detailed output
         - `sequential: true`: runs only a single test at a time
-        - `categoryName: [ "specificGroupsOnly" ] specifies specific groups rather than run all tests in a category
+        - `categoryName: [ "specificGroupsOnly" ]` specifies specific groups rather than run all tests in a category
 
 # Evals Structure
 - all tests are located in the `categories/` folder and have 3 layers:
