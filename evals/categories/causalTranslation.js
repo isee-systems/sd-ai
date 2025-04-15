@@ -199,7 +199,8 @@ export const evaluate = function(fromAI, groundTruth) {
         let aiRelationship = cleanedSortedAI.find(relationshipEqualityComparatorGenerator(groundTruthRelationship));
         if (aiRelationship && aiRelationship.polarity !== groundTruthRelationship.polarity) {
             failures.push({
-                type: "Incorrect polarity discovered"
+                type: "Incorrect polarity discovered",
+                details: "Incorrect polarity discovered. Expected " + aiRelationship.polarity + " to be " + groundTruthRelationship.polarity
             });
         }
     }
