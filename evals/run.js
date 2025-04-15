@@ -249,11 +249,6 @@ const runSingleTest = async (
 ) => {
   const name = test.testParams["name"];
 
-  if (experiment.verbose)
-    console.log(chalk.blue(`Starting test: ${name}, awaiting rate limit`));
-
-  await requestLimiter.removeTokens(1);
-
   const additionalTestParametersTokenCount =
     enc.encode(test.testParams["prompt"]).length +
     Object.entries(test.testParams.additionalParameters)
@@ -265,6 +260,11 @@ const runSingleTest = async (
   const totalTokens =
     additionalTestParametersTokenCount +
     test.engineConfig.limits.baselineTokenUsage;
+
+  if (experiment.verbose)
+    console.log(chalk.blue(`Starting test: ${name}. Awaiting rate limit. Requested additional ${additionalTestParametersTokenCount} tokens beyond the baselineTokenUsage (${test.engineConfig.limits.baselineTokenUsage})`));
+
+  await requestLimiter.removeTokens(1);
   await tokenLimiter.removeTokens(totalTokens);
 
   const engine = await import(
@@ -274,7 +274,7 @@ const runSingleTest = async (
 
   if (experiment.verbose)
     console.log(
-      chalk.blue(`Rate limit passed: ${name}, awaiting engine response`)
+      chalk.blue(`Rate limit passed ${name}, awaiting engine response`)
     );
 
   inProgress.add(name);
