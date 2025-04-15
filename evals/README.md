@@ -8,12 +8,13 @@ CLI (command line interface) app that runs within sd-ai project to measure outpu
 - provide summary outputs that are useful in a variety of contexts (e.g. industry papers, leaderboards, regression tests, etc)
 
 # Getting Started
-- execute evals with `npm run evals -- -e evals/experiments/leaderboard.json`, this will do 2 things:
+- execute evals with `npm run evals -- -e evals/experiments/careful.json`, this will do 2 things:
     - allow you to first review the engines, tests and configuration that evals intends to run
     - execute the tests, creating several results files in top-level project directory 
 - everything is configured in the required (`-e`) experiment json file
 - by default two experiments are included by you're welcome to add your own
     - `evals/experiments/leaderboard.json` runs every engine against every test
+        - **warning** this can be quite expensive, $50+ for a single execution
     - `evals/experiments/careful.json`, is an example of using evals for testing and development
         - `verbose: true`: removes the progress bar in favor of detailed output
         - `sequential: true`: runs only a single test at a time
