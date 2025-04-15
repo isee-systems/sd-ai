@@ -52,10 +52,15 @@ CLI (command line interface) app that runs within sd-ai project to measure outpu
     - https://platform.openai.com/settings/organization/limits
     - https://ai.google.dev/gemini-api/docs/rate-limits
 - `baselineTokenUsage` requires some science though
-    - we recommend adding a line to your engine that prints the total number of tokens used and then enabling `verbose: true` and comparing the "Starting test:" token count to the ultimate number of tokens charged
+    - we recommend adding a line to your engine's generate function that prints the total number of tokens used and comparing that to
+    - the "Starting test:" token count printed in `verbose: true` mode
  
 ## Pitfalls
 - limits are implemented at engine config level not the `underlyingModel` level
-    - adding 3 engine configs with the same `underlyingModel` could mean you're pushing 3x more requests to a specific llm endpoint than expected
+    - 3 engine configs pointing to same `underlyingModel` is 3x more requests to a specific llm endpoint than expected
 - limits aren't maintained between evals runs. so you can accidenilty get into trouble by stoping and starting evals a bunch within a minute
 - limits don't manage requests or tokens per day which is another common rate limiting strategy implemented by llm vendors
+- limits don't currently implement
+    - ability have an engine make multiple llm calls per generate safely
+    - a way to specify prompt and background are used included more once in calls made to llm provider
+    - inclusion of currentModel
