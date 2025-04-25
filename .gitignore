@@ -1,8 +1,8 @@
 **/.DS_Store
 
-# ignore the eval results
-*_summary.csv
-*_results.json
+# ignore the eval results in the home folder
+/*_summary.csv
+/*_results.json
 
 # Node.js dependencies
 node_modules/
@@ -37,3 +37,4 @@ build/
 
 #vscode stuff
 .vscode/
+.aider*

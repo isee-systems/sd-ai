@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>SD-AI Leaderboard</title>
+  <script src="https://cdn.plot.ly/plotly-3.0.1.min.js" charset="utf-8"></script>
+  <style>
+    body {
+      display: flex;
+      justify-content: center;
+      margin: 20px;
+    }
+    #container {
+      width: 650px;
+    }
+    h1, h2 {
+      text-align: center;
+    }
+    #themes {
+      margin-bottom: 20px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 30px;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 4px 8px;
+      text-align: left;
+    }
+    #scatterplot {
+      width: 100%;
+      height: 400px;
+    }
+  </style>
+</head>
+<body>
+  <div id="container">
+    <h1>SD-AI Leaderboard</h1>
+    <section id="themes">
+      <h2>Methodology</h2>
+      <p>
+        <a href="https://github.com/UB-IAD/sd-ai" target="_blank">full README</a>.
+      </p>
+    </section>
+    <section id="leaderboard-section">
+      <h2>Engine Ranking</h2>
+      <table id="leaderboard-table">
+        <thead>
+          <tr>
+            <th>Engine Config Name</th>
+            <th>Score</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+    <section id="plot-section">
+      <h2>Performance vs Speed</h2>
+      <div id="scatterplot"></div>
+    </section>
+  </div>
+
+  <script>
+    fetch('full_results.json')
+      .then(response => response.json())
+      .then(data => {
+        const engineStats = {};
+
+        data.results.forEach(test => {
+          const engineName = test.engineConfigName;
+          if (!engineStats[engineName]) {
+            engineStats[engineName] = {
+              passes: 0,
+              test_count: 0,
+              speeds: []
+            };
+          }
+          engineStats[engineName].passes += test.pass ? 1 : 0;
+          engineStats[engineName].test_count += 1;
+          engineStats[engineName].speeds.push(test.duration);
+        });
+
+        // Compute average score and median speed
+        const engineArray = Object.entries(engineStats).map(([name, stats]) => {
+          const score = stats.passes / stats.test_count;
+          const speed = stats.speeds.reduce((partialSum, a) => partialSum + a, 0) / 1000
+          return {
+            name,
+            speed,
+            score
+          };
+        });
+
+        // Sort engines by average score descending
+        engineArray.sort((a, b) => b.score - a.score);
+
+        // Populate leaderboard table
+        const tbody = document.querySelector('#leaderboard-table tbody');
+        engineArray.forEach(engine => {
+          const row = document.createElement('tr');
+          row.innerHTML = `
+            <td>${engine.name}</td>
+            <td>${engine.score.toFixed(3)}</td>
+          `;
+          tbody.appendChild(row);
+        });
+
+        // Prepare scatterplot data
+        const trace = {
+          x: engineArray.map(e => e.score),
+          y: engineArray.map(e => e.speed),
+          text: engineArray.map(e => e.name),
+          mode: 'markers+text',
+          type: 'scatter',
+          textposition: 'top center',
+          marker: { size: 12 },
+        };
+
+        const layout = {
+          xaxis: { title: { text: 'Score (% correct)' } },
+          yaxis: { title: { text: 'Speed (total seconds)' } },
+          margin: { t: 20 }
+        };
+
+        Plotly.newPlot('scatterplot', [trace], layout, {displayModeBar: false});
+      })
+      .catch(error => {
+        document.getElementById('leaderboard-section').innerHTML = '<p>Error loading data.</p>';
+        console.error('Error loading full_results.json:', error);
+      });
+  </script>
+</body>
+</html>
