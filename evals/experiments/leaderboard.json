@@ -15,15 +15,34 @@
                 "tokensPerMinute": 90000 
             }
         },
-        "advanced-o1": {
+        "advanced-gpt-4.1-nano": {
             "engine": "advanced",
             "additionalParameters": {
-                "underlyingModel": "o1"
+                "underlyingModel": "gpt-4.1-nano"
             },
             "limits": {
-                "baselineTokenUsage": 10000 
+                "requestsPerMinute": 10
             }
         },
+        "advanced-gpt-4.1-mini": {
+            "engine": "advanced",
+            "additionalParameters": {
+                "underlyingModel": "gpt-4.1-mini"
+            },
+            "limits": {
+                "requestsPerMinute": 10
+            }
+        },
+        "advanced-gpt-4.1": {
+            "engine": "advanced",
+            "additionalParameters": {
+                "underlyingModel": "gpt-4.1"
+            },
+            "limits": {
+                "requestsPerMinute": 10
+            }
+        },
+
         "advanced-gpt-4.5-preview": {
             "engine": "advanced",
             "additionalParameters": {
@@ -33,34 +52,25 @@
                 "tokensPerMinute": 100000 
             }
         },
-        "advanced-o3-mini-low": {
+
+        "advanced-gemini-2.5-flash-preview-04-17": {
             "engine": "advanced",
             "additionalParameters": {
-                "underlyingModel": "o3-mini low"
+                "underlyingModel": "gemini-2.5-flash-preview-04-17"
             },
             "limits": {
-                "baselineTokenUsage": 5000,
-                "tokensPerMinute": 60000
+                "tokensPerMinute": 90000,
+                "requestsPerMinute": 10
             }
         },
-        "advanced-o3-mini-medium": {
+        "advanced-gemini-2.5-pro-preview-03-25": {
             "engine": "advanced",
             "additionalParameters": {
-                "underlyingModel": "o3-mini medium"
+                "underlyingModel": "gemini-2.5-pro-preview-03-25"
             },
             "limits": {
-                "baselineTokenUsage": 10000,
-                "tokensPerMinute": 60000
-            }
-        },
-        "advanced-o3-mini-high": {
-            "engine": "advanced",
-            "additionalParameters": {
-                "underlyingModel": "o3-mini high"
-            },
-            "limits": {
-                "baselineTokenUsage": 18000,
-                "tokensPerMinute": 60000
+                "tokensPerMinute": 90000,
+                "requestsPerMinute": 10
             }
         },
         "advanced-gemini-2.0-flash": {
@@ -91,6 +101,56 @@
             "limits": {
                 "tokensPerMinute": 90000,
                 "requestsPerMinute": 10
+            }
+        },
+
+        "advanced-o1": {
+            "engine": "advanced",
+            "additionalParameters": {
+                "underlyingModel": "o1"
+            },
+            "limits": {
+                "baselineTokenUsage": 10000 
+            }
+        },
+
+        "advanced-o3-mini-low": {
+            "engine": "advanced",
+            "additionalParameters": {
+                "underlyingModel": "o3-mini low"
+            },
+            "limits": {
+                "baselineTokenUsage": 5000,
+                "tokensPerMinute": 60000
+            }
+        },
+        "advanced-o3-mini-medium": {
+            "engine": "advanced",
+            "additionalParameters": {
+                "underlyingModel": "o3-mini medium"
+            },
+            "limits": {
+                "baselineTokenUsage": 10000,
+                "tokensPerMinute": 60000
+            }
+        },
+        "advanced-o3-mini-high": {
+            "engine": "advanced",
+            "additionalParameters": {
+                "underlyingModel": "o3-mini high"
+            },
+            "limits": {
+                "baselineTokenUsage": 18000,
+                "tokensPerMinute": 60000
+            }
+        },
+        "advanced-o4-mini": {
+            "engine": "advanced",
+            "additionalParameters": {
+                "underlyingModel": "o4-mini"
+            },
+            "limits": {
+                "baselineTokenUsage": 10000 
             }
         }
     },
