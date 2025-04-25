@@ -19,7 +19,7 @@
       margin: 20px;
     }
     #container {
-      width: 650px;
+      width: 90vw;
     }
     h1, h2 {
       text-align: center;
@@ -39,7 +39,7 @@
     }
     #scatterplot {
       width: 100%;
-      height: 400px;
+      height: 80vh;
     }
   </style>
 </head>
@@ -162,7 +162,8 @@
 
         let table = new DataTable('#leaderboard-table', {
           paging: false,
-          searching: false
+          searching: false,
+          order: [[1, 'desc']]
         });
 
       })
