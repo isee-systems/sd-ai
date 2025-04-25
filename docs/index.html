@@ -1,8 +1,16 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <meta name="viewport" content="width=device-width">
   <meta charset="UTF-8" />
   <title>SD-AI Leaderboard</title>
+  <script
+  src="https://code.jquery.com/jquery-3.7.1.min.js"
+  integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo="
+  crossorigin="anonymous"></script>
+  <script src="https://cdn.datatables.net/2.2.2/js/dataTables.min.js" charset="utf-8"></script>
+  <link rel="stylesheet" href="https://cdn.datatables.net/2.2.2/css/dataTables.dataTables.min.css">
+
   <script src="https://cdn.plot.ly/plotly-3.0.1.min.js" charset="utf-8"></script>
   <style>
     body {
@@ -40,9 +48,10 @@
     <h1>SD-AI Leaderboard</h1>
     <section id="themes">
       <h2>Methodology</h2>
-      <p>
-        <a href="https://github.com/UB-IAD/sd-ai" target="_blank">full README</a>.
-      </p>
+      <ul>
+        <li><a rel="noopener" href="https://github.com/UB-IAD/sd-ai" target="_blank">Full README</a></li>
+        <li><a rel="noopener" href="https://arxiv.org/abs/2503.15580" target="_blank">Paper Describing Tests</a></li>
+      </ul>
     </section>
     <section id="leaderboard-section">
       <h2>Engine Ranking</h2>
@@ -50,7 +59,10 @@
         <thead>
           <tr>
             <th>Engine Config Name</th>
-            <th>Score</th>
+            <th>Overall Score</th>
+            <th>Causal Translation Score</th>
+            <th>Conformance Score</th>
+            <th>Speed (Total Seconds)</th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -72,24 +84,43 @@
           const engineName = test.engineConfigName;
           if (!engineStats[engineName]) {
             engineStats[engineName] = {
-              passes: 0,
-              test_count: 0,
+              conformancePasses: 0,
+              conformanceCount:0,
+              translationPasses: 0,
+              translationCount: 0,
               speeds: []
             };
           }
-          engineStats[engineName].passes += test.pass ? 1 : 0;
-          engineStats[engineName].test_count += 1;
+
+          switch (test.category) {
+            case 'causalTranslation':
+              engineStats[engineName].translationPasses += test.pass ? 1 : 0;
+              engineStats[engineName].translationCount += 1;
+              break;
+
+            case 'conformance':
+              engineStats[engineName].conformancePasses += test.pass ? 1 : 0;
+              engineStats[engineName].conformanceCount += 1;
+              break;
+          }
+
+         
           engineStats[engineName].speeds.push(test.duration);
         });
 
         // Compute average score and median speed
         const engineArray = Object.entries(engineStats).map(([name, stats]) => {
-          const score = stats.passes / stats.test_count;
+          const translationScore = (stats.translationPasses / stats.translationCount);
+          const conformanceScore = (stats.conformancePasses / stats.conformanceCount);
+          const score = (stats.conformancePasses + stats.translationPasses)  /  (stats.conformanceCount + stats.translationCount);
+
           const speed = stats.speeds.reduce((partialSum, a) => partialSum + a, 0) / 1000
           return {
             name,
             speed,
-            score
+            score,
+            translationScore,
+            conformanceScore
           };
         });
 
@@ -103,6 +134,9 @@
           row.innerHTML = `
             <td>${engine.name}</td>
             <td>${engine.score.toFixed(3)}</td>
+            <td>${engine.translationScore.toFixed(3)}</td>
+            <td>${engine.conformanceScore.toFixed(3)}</td>
+            <td>${Math.round(engine.speed)}</td>
           `;
           tbody.appendChild(row);
         });
@@ -125,6 +159,12 @@
         };
 
         Plotly.newPlot('scatterplot', [trace], layout, {displayModeBar: false});
+
+        let table = new DataTable('#leaderboard-table', {
+          paging: false,
+          searching: false
+        });
+
       })
       .catch(error => {
         document.getElementById('leaderboard-section').innerHTML = '<p>Error loading data.</p>';
