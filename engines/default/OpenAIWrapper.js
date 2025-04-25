@@ -318,6 +318,10 @@ You will conduct a multistep process:
             const parts = underlyingModel.split(' ');
             underlyingModel = 'o3-mini';
             reasoningEffort = parts[1].trim();
+        } else if (underlyingModel.startsWith('o3 ')) {
+            const parts = underlyingModel.split(' ');
+            underlyingModel = 'o3';
+            reasoningEffort = parts[1].trim();
         }
 
 
