@@ -376,7 +376,7 @@ const experimentResultsName = `${experimentName}_${experimentId}`;
 // write the full results to json file
 fs.writeFileSync(
   `${experimentResultsName}_full_results.json`,
-  JSON.stringify(responses, null, 2)
+  JSON.stringify({ results: responses }, null, 2)
 );
 
 const engineFailureTypes = [];
