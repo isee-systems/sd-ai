@@ -1,4 +1,4 @@
-import OpenAIWrapper from './../default/OpenAIWrapper.js'
+import AdvancedEngineBrain from '../default/AdvancedEngineBrain.js'
 import Engine from './../default/engine.js'
 
 class AdvancedEngine extends Engine {
@@ -64,7 +64,7 @@ It ensures the AI’s responses align with the intended user experience, such as
             },{
                 name: "underlyingModel",
                 type: "string",
-                defaultValue: OpenAIWrapper.DEFAULT_MODEL,
+                defaultValue: AdvancedEngineBrain.DEFAULT_MODEL,
                 required: false,
                 options: models,
                 uiElement: "combobox",
@@ -74,7 +74,7 @@ It ensures the AI’s responses align with the intended user experience, such as
             },{
                 name: "systemPrompt",
                 type: "string",
-                defaultValue: OpenAIWrapper.DEFAULT_SYSTEM_PROPMT,
+                defaultValue: AdvancedEngineBrain.DEFAULT_SYSTEM_PROPMT,
                 required: false,
                 uiElement: "textarea",
                 saveForUser: "global",
@@ -84,7 +84,7 @@ It ensures the AI’s responses align with the intended user experience, such as
             },{
                 name: "backgroundPrompt",
                 type: "string",
-                defaultValue: OpenAIWrapper.DEFAULT_BACKGROUND_PROMPT,
+                defaultValue: AdvancedEngineBrain.DEFAULT_BACKGROUND_PROMPT,
                 required: false,
                 uiElement: "textarea",
                 saveForUser: "global",
@@ -94,7 +94,7 @@ It ensures the AI’s responses align with the intended user experience, such as
             },{
                 name: "problemStatementPrompt",
                 type: "string",
-                defaultValue: OpenAIWrapper.DEFAULT_PROBLEM_STATEMENT_PROMPT,
+                defaultValue: AdvancedEngineBrain.DEFAULT_PROBLEM_STATEMENT_PROMPT,
                 required: false,
                 uiElement: "textarea",
                 saveForUser: "global",
@@ -104,7 +104,7 @@ It ensures the AI’s responses align with the intended user experience, such as
             },{
                 name: "assistantPrompt",
                 type: "string",
-                defaultValue: OpenAIWrapper.DEFAULT_ASSISTANT_PROMPT,
+                defaultValue: AdvancedEngineBrain.DEFAULT_ASSISTANT_PROMPT,
                 required: false,
                 uiElement: "textarea",
                 saveForUser: "global",
@@ -114,7 +114,7 @@ It ensures the AI’s responses align with the intended user experience, such as
             },{
                 name: "feedbackPrompt",
                 type: "string",
-                defaultValue: OpenAIWrapper.DEFAULT_FEEDBACK_PROMPT,
+                defaultValue: AdvancedEngineBrain.DEFAULT_FEEDBACK_PROMPT,
                 required: false,
                 uiElement: "textarea",
                 saveForUser: "global",

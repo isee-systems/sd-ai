@@ -1,3 +1,5 @@
+import OpenAI from "openai";
+
 let utils = {};
 
 //this will let us deny old clients in the future
@@ -21,7 +23,7 @@ utils.xmileName = function(name) {
 }
 
 utils.caseFold = function(name) {
-  let xname = utils.xmileName(variableName);
+  let xname = utils.xmileName(name);
   return xname.toLowerCase();
 }
 
@@ -94,3 +96,92 @@ utils.convertToXMILE = function(sdJSON) {
 };
 
 export default utils; 
+
+export const ModelType = Object.freeze({
+  GEMINI:   Symbol("Gemini"),
+  OPEN_AI:  Symbol("OpenAI"),
+  LLAMA: Symbol("Llama"),
+  DEEPSEEK: Symbol("Deepseek")
+});
+
+
+export class ModelCapabilities {
+  hasStructuredOutput= true;
+  hasSystemMode = true;
+  hasTemperature = true;
+  systemModeUser = 'system';
+
+  name = 'model';
+
+  constructor(modelName) {
+      this.name = modelName;
+
+      this.hasStructuredOutput = modelName !== 'o1-mini';
+      this.hasSystemMode = modelName !== 'o1-mini';
+      this.hasTemperature = !modelName.startsWith('o');
+      if (modelName.includes('gemini') || modelName.includes('llama')) {
+          this.systemModeUser = 'system';
+      } else {
+          this.systemModeUser = 'developer';
+      }
+  }
+
+  get kind() {
+      if (this.name.includes('gemini')) {
+          return ModelType.GEMINI;
+      } else if (this.name.includes('llama')) {
+          return ModelType.LLAMA;
+      } else if (this.name.includes('deepseek')) {
+          return ModelType.DEEPSEEK;
+      } else {
+          return ModelType.OPEN_AI;
+      }
+  }
+};
+
+export class LLMWrapper {
+  #openAIKey;
+  #googleKey;
+  
+  model = new ModelCapabilities('gpt4o');
+  openAIAPI = null;
+
+  constructor(parameters) {
+    if (!parameters.openAIKey) {
+        this.#openAIKey = process.env.OPENAI_API_KEY
+    } else {
+      this.#openAIKey = parameters.openAIKey;
+    }
+
+    if (!parameters.googleKey) {
+        this.#googleKey = process.env.GOOGLE_API_KEY
+    } else {
+      this.#googleKey = parameters.googleKey;
+    }
+
+    if (parameters.underlyingModel)
+      this.model = new ModelCapabilities(parameters.underlyingModel);
+
+    switch (this.model.kind) {
+        case ModelType.GEMINI:
+            this.openAIAPI = new OpenAI({
+                apiKey: this.#googleKey,
+                baseURL: "https://generativelanguage.googleapis.com/v1beta/openai"
+            });
+            break;
+        case ModelType.OPEN_AI:
+            this.openAIAPI = new OpenAI({
+                apiKey: this.#openAIKey,
+            });
+            break;
+        case ModelType.DEEPSEEK:
+        case ModelType.LLAMA:
+            this.openAIAPI = new OpenAI({
+                apiKey: 'junk', // required but unused
+                baseURL: 'http://localhost:11434/v1',
+            });
+            break;
+    }
+  }
+};
+

@@ -1,9 +1,6 @@
-import OpenAI from "openai";
 import { z } from "zod";
 import { zodResponseFormat } from "openai/helpers/zod";
-import projectUtils from './../../utils.js'
-import config from './../../config.js'
-import crypto from 'crypto'
+import projectUtils, { LLMAPI } from '../../utils.js'
 
 class ResponseFormatError extends Error {
     constructor(message) {
@@ -12,49 +9,7 @@ class ResponseFormatError extends Error {
     }
 }
 
-const ModelType = Object.freeze({
-    GEMINI:   Symbol("Gemini"),
-    OPEN_AI:  Symbol("OpenAI"),
-    LLAMA: Symbol("Llama"),
-    DEEPSEEK: Symbol("Deepseek")
-});
-
-
-class ModelCapabilities {
-    hasStructuredOutput= true;
-    hasSystemMode = true;
-    hasTemperature = true;
-    systemModeUser = 'system';
-
-    name = 'model';
-
-    constructor(modelName) {
-        this.name = modelName;
-
-        this.hasStructuredOutput = modelName !== 'o1-mini';
-        this.hasSystemMode = modelName !== 'o1-mini';
-        this.hasTemperature = !modelName.startsWith('o');
-        if (modelName.includes('gemini') || modelName.includes('llama')) {
-            this.systemModeUser = 'system';
-        } else {
-            this.systemModeUser = 'developer';
-        }
-    }
-
-    get kind() {
-        if (this.name.includes('gemini')) {
-            return ModelType.GEMINI;
-        } else if (this.name.includes('llama')) {
-            return ModelType.LLAMA;
-        } else if (this.name.includes('deepseek')) {
-            return ModelType.DEEPSEEK;
-        } else {
-            return ModelType.OPEN_AI;
-        }
-    }
-}
-
-class OpenAIWrapper {
+class AdvancedEngineBrain {
     
     static NON_STRUCTURED_OUTPUT_SYSTEM_PROMPT_ADDITION =
 `
@@ -181,17 +136,15 @@ You will conduct a multistep process:
         problemStatement: null,
         openAIKey: null,
         googleKey: null,
-        underlyingModel: OpenAIWrapper.DEFAULT_MODEL,
-        systemPrompt: OpenAIWrapper.DEFAULT_SYSTEM_PROPMT,
-        assistantPrompt: OpenAIWrapper.DEFAULT_ASSISTANT_PROMPT,
-        feedbackPrompt: OpenAIWrapper.DEFAULT_FEEDBACK_PROMPT,
-        backgroundPrompt: OpenAIWrapper.DEFAULT_BACKGROUND_PROMPT,
-        problemStatementPrompt: OpenAIWrapper.DEFAULT_PROBLEM_STATEMENT_PROMPT
+        underlyingModel: AdvancedEngineBrain.DEFAULT_MODEL,
+        systemPrompt: AdvancedEngineBrain.DEFAULT_SYSTEM_PROPMT,
+        assistantPrompt: AdvancedEngineBrain.DEFAULT_ASSISTANT_PROMPT,
+        feedbackPrompt: AdvancedEngineBrain.DEFAULT_FEEDBACK_PROMPT,
+        backgroundPrompt: AdvancedEngineBrain.DEFAULT_BACKGROUND_PROMPT,
+        problemStatementPrompt: AdvancedEngineBrain.DEFAULT_PROBLEM_STATEMENT_PROMPT
     };
 
-    #model = new ModelCapabilities('model');
-
-    #openAIAPI;
+    #llmWrapper;
 
     constructor(params) {
         Object.assign(this.#data, params);
@@ -204,36 +157,8 @@ You will conduct a multistep process:
             this.#data.backgroundPrompt = this.#data.backgroundPrompt.trim() + "\n\n{backgroundKnowledge}";
         }
 
-        if (!this.#data.openAIKey) {
-            this.#data.openAIKey = process.env.OPENAI_API_KEY
-        }
-
-        if (!this.#data.googleKey) {
-            this.#data.googleKey = process.env.GOOGLE_API_KEY
-        }
-
-        this.#model = new ModelCapabilities(this.#data.underlyingModel);
-
-        switch (this.#model.kind) {
-            case ModelType.GEMINI:
-                this.#openAIAPI = new OpenAI({
-                    apiKey: this.#data.googleKey,
-                    baseURL: "https://generativelanguage.googleapis.com/v1beta/openai"
-                });
-                break;
-            case ModelType.OPEN_AI:
-                this.#openAIAPI = new OpenAI({
-                    apiKey: this.#data.openAIKey,
-                });
-                break;
-            case ModelType.DEEPSEEK:
-            case ModelType.LLAMA:
-                this.#openAIAPI = new OpenAI({
-                    apiKey: 'junk', // required but unused
-                    baseURL: 'http://localhost:11434/v1',
-                });
-                break;
-        }
+        this.#llmWrapper = new LLMWrapper(params);
+       
     }
     
     #sameVars(a,b) {
@@ -281,20 +206,20 @@ You will conduct a multistep process:
     }
 
     #generateResponseSchema() {
-        const PolarityEnum = z.enum(["+", "-"]).describe(OpenAIWrapper.SCHEMA_STRINGS.polarity);
+        const PolarityEnum = z.enum(["+", "-"]).describe(AdvancedEngineBrain.SCHEMA_STRINGS.polarity);
 
         const Relationship = z.object({
-            from: z.string().describe(OpenAIWrapper.SCHEMA_STRINGS.from),
-            to: z.string().describe(OpenAIWrapper.SCHEMA_STRINGS.to),
+            from: z.string().describe(AdvancedEngineBrain.SCHEMA_STRINGS.from),
+            to: z.string().describe(AdvancedEngineBrain.SCHEMA_STRINGS.to),
             polarity: PolarityEnum,
-            reasoning: z.string().describe(OpenAIWrapper.SCHEMA_STRINGS.reasoning),
-            polarityReasoning: z.string().describe(OpenAIWrapper.SCHEMA_STRINGS.polarityReasoning)
-        }).describe(OpenAIWrapper.SCHEMA_STRINGS.relationship);
+            reasoning: z.string().describe(AdvancedEngineBrain.SCHEMA_STRINGS.reasoning),
+            polarityReasoning: z.string().describe(AdvancedEngineBrain.SCHEMA_STRINGS.polarityReasoning)
+        }).describe(AdvancedEngineBrain.SCHEMA_STRINGS.relationship);
             
         const Relationships = z.object({
-            explanation: z.string().describe(OpenAIWrapper.SCHEMA_STRINGS.explanation),
-            title: z.string().describe(OpenAIWrapper.SCHEMA_STRINGS.title),
-            relationships: z.array(Relationship).describe(OpenAIWrapper.SCHEMA_STRINGS.relationships)
+            explanation: z.string().describe(AdvancedEngineBrain.SCHEMA_STRINGS.explanation),
+            title: z.string().describe(AdvancedEngineBrain.SCHEMA_STRINGS.title),
+            relationships: z.array(Relationship).describe(AdvancedEngineBrain.SCHEMA_STRINGS.relationships)
         });
 
         return zodResponseFormat(Relationships, "relationships_response");
@@ -303,7 +228,7 @@ You will conduct a multistep process:
     async generateDiagram(userPrompt, lastModel) {        
         //start with the system prompt
         let underlyingModel = this.#data.underlyingModel;
-        let systemRole = this.#model.systemModeUser;
+        let systemRole = this.#llmWrapper.model.systemModeUser;
         let systemPrompt = this.#data.systemPrompt;
         let responseFormat = this.#generateResponseSchema();
         let temperature = 0;
@@ -319,18 +244,17 @@ You will conduct a multistep process:
             reasoningEffort = parts[1].trim();
         }
 
-
-        if (!this.#model.hasStructuredOutput) {
-            systemPrompt += "\n" + OpenAIWrapper.NON_STRUCTURED_OUTPUT_SYSTEM_PROMPT_ADDITION;
+        if (!this.#llmWrapper.model.hasStructuredOutput) {
+            systemPrompt += "\n" + AdvancedEngineBrain.NON_STRUCTURED_OUTPUT_SYSTEM_PROMPT_ADDITION;
             responseFormat = undefined;
         }
 
-        if (!this.#model.hasSystemMode) {
+        if (!this.#llmWrapper.model.hasSystemMode) {
             systemRole = "user";
             temperature = 1;
         }
 
-        if (!this.#model.hasTemperature) {
+        if (!this.#llmWrapper.model.hasTemperature) {
             temperature = undefined;
         }
 
@@ -364,7 +288,7 @@ You will conduct a multistep process:
         messages.push({ role: "user", content: this.#data.feedbackPrompt }); //then have it try to close feedback
         
         //get what it thinks the relationships are with this information
-        const originalCompletion = await this.#openAIAPI.chat.completions.create({
+        const originalCompletion = await this.#llmWrapper.openAIAPI.chat.completions.create({
             messages: messages,
             model: underlyingModel,
             response_format: responseFormat,
@@ -389,4 +313,4 @@ You will conduct a multistep process:
     }
 }
 
-export default OpenAIWrapper;
+export default AdvancedEngineBrain;
