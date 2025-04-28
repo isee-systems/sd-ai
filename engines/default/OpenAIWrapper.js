@@ -235,14 +235,9 @@ You will conduct a multistep process:
                 break;
         }
     }
-
-    #caseFold(variableName) {
-        let xname = projectUtils.xmileName(variableName);
-        return xname.toLowerCase();
-    }
-
+    
     #sameVars(a,b) {
-        return this.#caseFold(a) === this.#caseFold(b);
+        return projectUtils.caseFold(a) === projectUtils.caseFold(b);
     }
 
     #processResponse(originalResponse) {

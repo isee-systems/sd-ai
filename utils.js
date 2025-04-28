@@ -20,6 +20,11 @@ utils.xmileName = function(name) {
   return splits.join("_");
 }
 
+utils.caseFold = function(name) {
+  let xname = utils.xmileName(variableName);
+  return xname.toLowerCase();
+}
+
 utils.convertToXMILE = function(sdJSON) {
 
   const relationships = sdJSON.relationships;
