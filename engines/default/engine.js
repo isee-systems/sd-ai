@@ -1,4 +1,4 @@
-import OpenAIWrapper from './OpenAIWrapper.js'
+import AdvancedEngineBrain from './AdvancedEngineBrain.js'
 
 class Engine {
     constructor() {
@@ -39,8 +39,8 @@ class Engine {
 
     async generate(prompt, currentModel, parameters) {
         try {
-            let wrapper = new OpenAIWrapper(parameters);
-            const response = await wrapper.generateDiagram(prompt, currentModel);
+            let brain = new AdvancedEngineBrain(parameters);
+            const response = await brain.generateDiagram(prompt, currentModel);
             const variables =  [...new Set([...response.relationships.map( e => e.from),...response.relationships.map( e => e.to )])];
             return {
                 supportingInfo: {

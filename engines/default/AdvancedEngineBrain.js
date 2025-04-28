@@ -1,9 +1,4 @@
-import OpenAI from "openai";
-import { z } from "zod";
-import { zodResponseFormat } from "openai/helpers/zod";
-import projectUtils from './../../utils.js'
-import config from './../../config.js'
-import crypto from 'crypto'
+import projectUtils, { LLMWrapper } from '../../utils.js'
 
 class ResponseFormatError extends Error {
     constructor(message) {
@@ -12,49 +7,7 @@ class ResponseFormatError extends Error {
     }
 }
 
-const ModelType = Object.freeze({
-    GEMINI:   Symbol("Gemini"),
-    OPEN_AI:  Symbol("OpenAI"),
-    LLAMA: Symbol("Llama"),
-    DEEPSEEK: Symbol("Deepseek")
-});
-
-
-class ModelCapabilities {
-    hasStructuredOutput= true;
-    hasSystemMode = true;
-    hasTemperature = true;
-    systemModeUser = 'system';
-
-    name = 'model';
-
-    constructor(modelName) {
-        this.name = modelName;
-
-        this.hasStructuredOutput = modelName !== 'o1-mini';
-        this.hasSystemMode = modelName !== 'o1-mini';
-        this.hasTemperature = !modelName.startsWith('o');
-        if (modelName.includes('gemini') || modelName.includes('llama')) {
-            this.systemModeUser = 'system';
-        } else {
-            this.systemModeUser = 'developer';
-        }
-    }
-
-    get kind() {
-        if (this.name.includes('gemini')) {
-            return ModelType.GEMINI;
-        } else if (this.name.includes('llama')) {
-            return ModelType.LLAMA;
-        } else if (this.name.includes('deepseek')) {
-            return ModelType.DEEPSEEK;
-        } else {
-            return ModelType.OPEN_AI;
-        }
-    }
-}
-
-class OpenAIWrapper {
+class AdvancedEngineBrain {
     
     static NON_STRUCTURED_OUTPUT_SYSTEM_PROMPT_ADDITION =
 `
@@ -129,19 +82,6 @@ Example 6 of a user input:
 
 Corresponding JSON response:
 {}`
-    static SCHEMA_STRINGS = {
-        "from": "This is a variable which causes the to variable in this relationship that is between two variables, from and to.  The from variable is the equivalent of a cause.  The to variable is the equivalent of an effect",
-        "to": "This is a variable which is impacted by the from variable in this relationship that is between two variables, from and to.  The from variable is the equivalent of a cause.  The to variable is the equivalent of an effect",
-        "reasoning": "This is an explanation for why this relationship exists",
-        "polarity": "There are two possible kinds of relationships.  The first are relationships with positive polarity that are represented with a + symbol.  In relationships with positive polarity (+) a change in the from variable causes a change in the same direction in the to variable.  For example, in a relationship with postive polarity (+), a decrease in the from variable, would lead to a decrease in the to variable.  The second kind of relationship are those with negative polarity that are represented with a - symbol.  In relationships with negative polarity (-) a change in the from variable causes a change in the opposite direction in the to variable.  For example, in a relationship with negative polarity (-) an increase in the from variable, would lead to a decrease in the to variable.",
-        "polarityReasoning": "This is the reason for why the polarity for this relationship was choosen",
-        "relationship": "This is a relationship between two variables, from and to (from is the cause, to is the effect).  The relationship also contains a polarity which describes how a change in the from variable impacts the to variable",
-        "relationships": "The list of relationships you think are appropriate to satisfy my request based on all of the information I have given you",
-        "explanation": "Concisely explain your reasoning for each change you made to the old CLD to create the new CLD. Speak in plain English, don't reference json specifically. Don't reiterate the request or any of these instructions.",
-        "title": "A highly descriptive 7 word max title describing your explanation."
-    };
-    
-    static DEFAULT_MODEL = 'gpt-4o';
 
     static DEFAULT_SYSTEM_PROPMT = 
 `You are a System Dynamics Professional Modeler. Users will give you text, and it is your job to generate causal relationships from that text.
@@ -181,17 +121,15 @@ You will conduct a multistep process:
         problemStatement: null,
         openAIKey: null,
         googleKey: null,
-        underlyingModel: OpenAIWrapper.DEFAULT_MODEL,
-        systemPrompt: OpenAIWrapper.DEFAULT_SYSTEM_PROPMT,
-        assistantPrompt: OpenAIWrapper.DEFAULT_ASSISTANT_PROMPT,
-        feedbackPrompt: OpenAIWrapper.DEFAULT_FEEDBACK_PROMPT,
-        backgroundPrompt: OpenAIWrapper.DEFAULT_BACKGROUND_PROMPT,
-        problemStatementPrompt: OpenAIWrapper.DEFAULT_PROBLEM_STATEMENT_PROMPT
+        underlyingModel: LLMWrapper.DEFAULT_MODEL,
+        systemPrompt: AdvancedEngineBrain.DEFAULT_SYSTEM_PROPMT,
+        assistantPrompt: AdvancedEngineBrain.DEFAULT_ASSISTANT_PROMPT,
+        feedbackPrompt: AdvancedEngineBrain.DEFAULT_FEEDBACK_PROMPT,
+        backgroundPrompt: AdvancedEngineBrain.DEFAULT_BACKGROUND_PROMPT,
+        problemStatementPrompt: AdvancedEngineBrain.DEFAULT_PROBLEM_STATEMENT_PROMPT
     };
 
-    #model = new ModelCapabilities('model');
-
-    #openAIAPI;
+    #llmWrapper;
 
     constructor(params) {
         Object.assign(this.#data, params);
@@ -204,45 +142,12 @@ You will conduct a multistep process:
             this.#data.backgroundPrompt = this.#data.backgroundPrompt.trim() + "\n\n{backgroundKnowledge}";
         }
 
-        if (!this.#data.openAIKey) {
-            this.#data.openAIKey = process.env.OPENAI_API_KEY
-        }
-
-        if (!this.#data.googleKey) {
-            this.#data.googleKey = process.env.GOOGLE_API_KEY
-        }
-
-        this.#model = new ModelCapabilities(this.#data.underlyingModel);
-
-        switch (this.#model.kind) {
-            case ModelType.GEMINI:
-                this.#openAIAPI = new OpenAI({
-                    apiKey: this.#data.googleKey,
-                    baseURL: "https://generativelanguage.googleapis.com/v1beta/openai"
-                });
-                break;
-            case ModelType.OPEN_AI:
-                this.#openAIAPI = new OpenAI({
-                    apiKey: this.#data.openAIKey,
-                });
-                break;
-            case ModelType.DEEPSEEK:
-            case ModelType.LLAMA:
-                this.#openAIAPI = new OpenAI({
-                    apiKey: 'junk', // required but unused
-                    baseURL: 'http://localhost:11434/v1',
-                });
-                break;
-        }
+        this.#llmWrapper = new LLMWrapper(params);
+       
     }
-
-    #caseFold(variableName) {
-        let xname = projectUtils.xmileName(variableName);
-        return xname.toLowerCase();
-    }
-
+    
     #sameVars(a,b) {
-        return this.#caseFold(a) === this.#caseFold(b);
+        return projectUtils.caseFold(a) === projectUtils.caseFold(b);
     }
 
     #processResponse(originalResponse) {
@@ -285,32 +190,12 @@ You will conduct a multistep process:
         return originalResponse;
     }
 
-    #generateResponseSchema() {
-        const PolarityEnum = z.enum(["+", "-"]).describe(OpenAIWrapper.SCHEMA_STRINGS.polarity);
-
-        const Relationship = z.object({
-            from: z.string().describe(OpenAIWrapper.SCHEMA_STRINGS.from),
-            to: z.string().describe(OpenAIWrapper.SCHEMA_STRINGS.to),
-            polarity: PolarityEnum,
-            reasoning: z.string().describe(OpenAIWrapper.SCHEMA_STRINGS.reasoning),
-            polarityReasoning: z.string().describe(OpenAIWrapper.SCHEMA_STRINGS.polarityReasoning)
-        }).describe(OpenAIWrapper.SCHEMA_STRINGS.relationship);
-            
-        const Relationships = z.object({
-            explanation: z.string().describe(OpenAIWrapper.SCHEMA_STRINGS.explanation),
-            title: z.string().describe(OpenAIWrapper.SCHEMA_STRINGS.title),
-            relationships: z.array(Relationship).describe(OpenAIWrapper.SCHEMA_STRINGS.relationships)
-        });
-
-        return zodResponseFormat(Relationships, "relationships_response");
-    }
-
     async generateDiagram(userPrompt, lastModel) {        
         //start with the system prompt
         let underlyingModel = this.#data.underlyingModel;
-        let systemRole = this.#model.systemModeUser;
+        let systemRole = this.#llmWrapper.model.systemModeUser;
         let systemPrompt = this.#data.systemPrompt;
-        let responseFormat = this.#generateResponseSchema();
+        let responseFormat = this.#llmWrapper.generateSDJSONResponseSchema();
         let temperature = 0;
         let reasoningEffort = undefined;
 
@@ -324,18 +209,17 @@ You will conduct a multistep process:
             reasoningEffort = parts[1].trim();
         }
 
-
-        if (!this.#model.hasStructuredOutput) {
-            systemPrompt += "\n" + OpenAIWrapper.NON_STRUCTURED_OUTPUT_SYSTEM_PROMPT_ADDITION;
+        if (!this.#llmWrapper.model.hasStructuredOutput) {
+            systemPrompt += "\n" + AdvancedEngineBrain.NON_STRUCTURED_OUTPUT_SYSTEM_PROMPT_ADDITION;
             responseFormat = undefined;
         }
 
-        if (!this.#model.hasSystemMode) {
+        if (!this.#llmWrapper.model.hasSystemMode) {
             systemRole = "user";
             temperature = 1;
         }
 
-        if (!this.#model.hasTemperature) {
+        if (!this.#llmWrapper.model.hasTemperature) {
             temperature = undefined;
         }
 
@@ -369,7 +253,7 @@ You will conduct a multistep process:
         messages.push({ role: "user", content: this.#data.feedbackPrompt }); //then have it try to close feedback
         
         //get what it thinks the relationships are with this information
-        const originalCompletion = await this.#openAIAPI.chat.completions.create({
+        const originalCompletion = await this.#llmWrapper.openAIAPI.chat.completions.create({
             messages: messages,
             model: underlyingModel,
             response_format: responseFormat,
@@ -394,4 +278,4 @@ You will conduct a multistep process:
     }
 }
 
-export default OpenAIWrapper;
+export default AdvancedEngineBrain;

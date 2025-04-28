@@ -1,4 +1,5 @@
-import OpenAIWrapper from './../default/OpenAIWrapper.js'
+import { LLMWrapper } from '../../utils.js';
+import AdvancedEngineBrain from '../default/AdvancedEngineBrain.js'
 import Engine from './../default/engine.js'
 
 class AdvancedEngine extends Engine {
@@ -26,55 +27,12 @@ It ensures the AI’s responses align with the intended user experience, such as
     }
 
     additionalParameters()  {
-        const models = [ 
-            {label: "GPT-4o", value: 'gpt-4o'}, 
-            {label: "GPT-4o-mini", value: 'gpt-4o-mini'}, 
-            {label: "GPT-4.5-preview", value: 'gpt-4.5-preview'}, 
-            {label: "GPT-4.1", value: 'gpt-4.1'}, 
-            {label: "GPT-4.1-mini", value: 'gpt-4.1-mini'}, 
-            {label: "GPT-4.1-nano", value: 'gpt-4.1-nano'}, 
-            {label: "Gemini 2.5-flash", value: 'gemini-2.5-flash-preview-04-17'},
-            {label: "Gemini 2.5-pro", value: 'gemini-2.5-pro-preview-03-25'},
-            {label: "Gemini 2.0", value: 'gemini-2.0-flash'},
-            {label: "Gemini 2.0-Lite", value: 'gemini-2.0-flash-lite'},
-            {label: "Gemini 1.5", value: 'gemini-1.5-flash'},
-            {label: "o1", value: 'o1'}, 
-            {label: "o3-mini low", value: 'o3-mini low'}, 
-            {label: "o3-mini medium", value: 'o3-mini medium'}, 
-            {label: "o3-mini high", value: 'o3-mini high'},
-            {label: "o4-mini", value: 'o4-mini'}
-        ];
+        let parameters = LLMWrapper.additionalParameters();
 
-        return [{
-                name: "openAIKey",
-                type: "string",
-                required: true,
-                uiElement: "password",
-                saveForUser: "global",
-                label: "Open AI API Key",
-                description: "Leave blank for the default, or your Open AI key - skprojectXXXXX"
-            },{
-                name: "googleKey",
-                type: "string",
-                required: true,
-                uiElement: "password",
-                saveForUser: "global",
-                label: "Google API Key",
-                description: "Leave blank for the default, or your Google API key - XXXXXX"
-            },{
-                name: "underlyingModel",
-                type: "string",
-                defaultValue: OpenAIWrapper.DEFAULT_MODEL,
-                required: false,
-                options: models,
-                uiElement: "combobox",
-                saveForUser: "local",
-                label: "LLM Model",
-                description: "The LLM model that you want to use to process your queries."
-            },{
+        return parameters.concat([{
                 name: "systemPrompt",
                 type: "string",
-                defaultValue: OpenAIWrapper.DEFAULT_SYSTEM_PROPMT,
+                defaultValue: AdvancedEngineBrain.DEFAULT_SYSTEM_PROPMT,
                 required: false,
                 uiElement: "textarea",
                 saveForUser: "global",
@@ -84,7 +42,7 @@ It ensures the AI’s responses align with the intended user experience, such as
             },{
                 name: "backgroundPrompt",
                 type: "string",
-                defaultValue: OpenAIWrapper.DEFAULT_BACKGROUND_PROMPT,
+                defaultValue: AdvancedEngineBrain.DEFAULT_BACKGROUND_PROMPT,
                 required: false,
                 uiElement: "textarea",
                 saveForUser: "global",
@@ -94,7 +52,7 @@ It ensures the AI’s responses align with the intended user experience, such as
             },{
                 name: "problemStatementPrompt",
                 type: "string",
-                defaultValue: OpenAIWrapper.DEFAULT_PROBLEM_STATEMENT_PROMPT,
+                defaultValue: AdvancedEngineBrain.DEFAULT_PROBLEM_STATEMENT_PROMPT,
                 required: false,
                 uiElement: "textarea",
                 saveForUser: "global",
@@ -104,7 +62,7 @@ It ensures the AI’s responses align with the intended user experience, such as
             },{
                 name: "assistantPrompt",
                 type: "string",
-                defaultValue: OpenAIWrapper.DEFAULT_ASSISTANT_PROMPT,
+                defaultValue: AdvancedEngineBrain.DEFAULT_ASSISTANT_PROMPT,
                 required: false,
                 uiElement: "textarea",
                 saveForUser: "global",
@@ -114,7 +72,7 @@ It ensures the AI’s responses align with the intended user experience, such as
             },{
                 name: "feedbackPrompt",
                 type: "string",
-                defaultValue: OpenAIWrapper.DEFAULT_FEEDBACK_PROMPT,
+                defaultValue: AdvancedEngineBrain.DEFAULT_FEEDBACK_PROMPT,
                 required: false,
                 uiElement: "textarea",
                 saveForUser: "global",
@@ -141,7 +99,7 @@ It ensures the AI’s responses align with the intended user experience, such as
                 description: "Background information you want the OpenAI model to consider when generating a diagram for you",
                 minHeight: 100
             }
-        ];
+        ]);
     }
 }
 
