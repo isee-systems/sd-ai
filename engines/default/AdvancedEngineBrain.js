@@ -1,5 +1,3 @@
-import { z } from "zod";
-import { zodResponseFormat } from "openai/helpers/zod";
 import projectUtils, { LLMWrapper } from '../../utils.js'
 
 class ResponseFormatError extends Error {
@@ -84,19 +82,6 @@ Example 6 of a user input:
 
 Corresponding JSON response:
 {}`
-    static SCHEMA_STRINGS = {
-        "from": "This is a variable which causes the to variable in this relationship that is between two variables, from and to.  The from variable is the equivalent of a cause.  The to variable is the equivalent of an effect",
-        "to": "This is a variable which is impacted by the from variable in this relationship that is between two variables, from and to.  The from variable is the equivalent of a cause.  The to variable is the equivalent of an effect",
-        "reasoning": "This is an explanation for why this relationship exists",
-        "polarity": "There are two possible kinds of relationships.  The first are relationships with positive polarity that are represented with a + symbol.  In relationships with positive polarity (+) a change in the from variable causes a change in the same direction in the to variable.  For example, in a relationship with postive polarity (+), a decrease in the from variable, would lead to a decrease in the to variable.  The second kind of relationship are those with negative polarity that are represented with a - symbol.  In relationships with negative polarity (-) a change in the from variable causes a change in the opposite direction in the to variable.  For example, in a relationship with negative polarity (-) an increase in the from variable, would lead to a decrease in the to variable.",
-        "polarityReasoning": "This is the reason for why the polarity for this relationship was choosen",
-        "relationship": "This is a relationship between two variables, from and to (from is the cause, to is the effect).  The relationship also contains a polarity which describes how a change in the from variable impacts the to variable",
-        "relationships": "The list of relationships you think are appropriate to satisfy my request based on all of the information I have given you",
-        "explanation": "Concisely explain your reasoning for each change you made to the old CLD to create the new CLD. Speak in plain English, don't reference json specifically. Don't reiterate the request or any of these instructions.",
-        "title": "A highly descriptive 7 word max title describing your explanation."
-    };
-    
-    static DEFAULT_MODEL = 'gpt-4o';
 
     static DEFAULT_SYSTEM_PROPMT = 
 `You are a System Dynamics Professional Modeler. Users will give you text, and it is your job to generate causal relationships from that text.
@@ -136,7 +121,7 @@ You will conduct a multistep process:
         problemStatement: null,
         openAIKey: null,
         googleKey: null,
-        underlyingModel: AdvancedEngineBrain.DEFAULT_MODEL,
+        underlyingModel: LLMWrapper.DEFAULT_MODEL,
         systemPrompt: AdvancedEngineBrain.DEFAULT_SYSTEM_PROPMT,
         assistantPrompt: AdvancedEngineBrain.DEFAULT_ASSISTANT_PROMPT,
         feedbackPrompt: AdvancedEngineBrain.DEFAULT_FEEDBACK_PROMPT,
@@ -205,32 +190,12 @@ You will conduct a multistep process:
         return originalResponse;
     }
 
-    #generateResponseSchema() {
-        const PolarityEnum = z.enum(["+", "-"]).describe(AdvancedEngineBrain.SCHEMA_STRINGS.polarity);
-
-        const Relationship = z.object({
-            from: z.string().describe(AdvancedEngineBrain.SCHEMA_STRINGS.from),
-            to: z.string().describe(AdvancedEngineBrain.SCHEMA_STRINGS.to),
-            polarity: PolarityEnum,
-            reasoning: z.string().describe(AdvancedEngineBrain.SCHEMA_STRINGS.reasoning),
-            polarityReasoning: z.string().describe(AdvancedEngineBrain.SCHEMA_STRINGS.polarityReasoning)
-        }).describe(AdvancedEngineBrain.SCHEMA_STRINGS.relationship);
-            
-        const Relationships = z.object({
-            explanation: z.string().describe(AdvancedEngineBrain.SCHEMA_STRINGS.explanation),
-            title: z.string().describe(AdvancedEngineBrain.SCHEMA_STRINGS.title),
-            relationships: z.array(Relationship).describe(AdvancedEngineBrain.SCHEMA_STRINGS.relationships)
-        });
-
-        return zodResponseFormat(Relationships, "relationships_response");
-    }
-
     async generateDiagram(userPrompt, lastModel) {        
         //start with the system prompt
         let underlyingModel = this.#data.underlyingModel;
         let systemRole = this.#llmWrapper.model.systemModeUser;
         let systemPrompt = this.#data.systemPrompt;
-        let responseFormat = this.#generateResponseSchema();
+        let responseFormat = this.#llmWrapper.generateResponseSchema();
         let temperature = 0;
         let reasoningEffort = undefined;
 
