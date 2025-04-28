@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { zodResponseFormat } from "openai/helpers/zod";
-import projectUtils, { LLMAPI } from '../../utils.js'
+import projectUtils, { LLMWrapper } from '../../utils.js'
 
 class ResponseFormatError extends Error {
     constructor(message) {
