@@ -195,7 +195,7 @@ You will conduct a multistep process:
         let underlyingModel = this.#data.underlyingModel;
         let systemRole = this.#llmWrapper.model.systemModeUser;
         let systemPrompt = this.#data.systemPrompt;
-        let responseFormat = this.#llmWrapper.generateResponseSchema();
+        let responseFormat = this.#llmWrapper.generateSDJSONResponseSchema();
         let temperature = 0;
         let reasoningEffort = undefined;
 

@@ -200,7 +200,7 @@ export class LLMWrapper {
 
   static DEFAULT_MODEL = 'gpt-4o';
 
-  generateResponseSchema() {
+  generateSDJSONResponseSchema() {
       const PolarityEnum = z.enum(["+", "-"]).describe(LLMWrapper.SCHEMA_STRINGS.polarity);
 
       const Relationship = z.object({
