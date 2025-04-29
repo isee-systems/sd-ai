@@ -31,7 +31,7 @@ class Engine {
             uiElement: "textarea",
             saveForUser: "local",
             label: "Background Knowledge",
-            description: "Background information you want the OpenAI model to consider when generating a diagram for you",
+            description: "Background information you want the LLM model to consider when generating a diagram for you",
             minHeight: 100
         }];
     }
