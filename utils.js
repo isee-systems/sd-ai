@@ -198,7 +198,7 @@ export class LLMWrapper {
     "title": "A highly descriptive 7 word max title describing your explanation."
 };
 
-  static DEFAULT_MODEL = 'gpt-4o';
+  static DEFAULT_MODEL = 'gemini-2.5-flash-preview-04-17';
 
   generateSDJSONResponseSchema() {
       const PolarityEnum = z.enum(["+", "-"]).describe(LLMWrapper.SCHEMA_STRINGS.polarity);
