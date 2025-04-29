@@ -7,34 +7,33 @@ class Engine {
 
     additionalParameters()  {
         return [{
-                name: "openAIKey",
-                type: "string",
-                required: true,
-                uiElement: "password",
-                saveForUser: "global",
-                label: "Open AI API Key",
-                description: "Leave blank for the default, or your Open AI key - skprojectXXXXX"
-            },{
-                name: "problemStatement",
-                type: "string",
-                required: false,
-                uiElement: "textarea",
-                saveForUser: "local",
-                label: "Problem Statement",
-                description: "Description of a dynamic issue within the system you are studying that highlights an undesirable behavior over time.",
-                minHeight: 50,
-                maxHeight: 100
-            },{
-                name: "backgroundKnowledge",
-                type: "string",
-                required: false,
-                uiElement: "textarea",
-                saveForUser: "local",
-                label: "Background Knowledge",
-                description: "Background information you want the OpenAI model to consider when generating a diagram for you",
-                minHeight: 100
-            }
-        ];
+            name: "googleKey",
+            type: "string",
+            required: true,
+            uiElement: "password",
+            saveForUser: "global",
+            label: "Google API Key",
+            description: "Leave blank for the default, or your Google API key - XXXXXX"
+        },{
+            name: "problemStatement",
+            type: "string",
+            required: false,
+            uiElement: "textarea",
+            saveForUser: "local",
+            label: "Problem Statement",
+            description: "Description of a dynamic issue within the system you are studying that highlights an undesirable behavior over time.",
+            minHeight: 50,
+            maxHeight: 100
+        },{
+            name: "backgroundKnowledge",
+            type: "string",
+            required: false,
+            uiElement: "textarea",
+            saveForUser: "local",
+            label: "Background Knowledge",
+            description: "Background information you want the OpenAI model to consider when generating a diagram for you",
+            minHeight: 100
+        }];
     }
 
     async generate(prompt, currentModel, parameters) {
