@@ -8,11 +8,11 @@ class RecursiveCausalEngine extends Engine {
       {
         name: "mainTopics",
         type: "string",
-        required: true,
+        required: false,
         uiElement: "textarea",
         saveForUser: "local",
         label: "Main Topics",
-        description: "Comma-separated list of main variables or topics to explore",
+        description: "Comma-separated list of main variables or topics to explore. Leave empty to auto-infer.",
         minHeight: 50,
       },
       {
@@ -29,10 +29,27 @@ class RecursiveCausalEngine extends Engine {
 
   async generate(prompt, currentModel, parameters) {
     try {
-      const mainTopics = parameters.mainTopics
+      let mainTopics = (parameters.mainTopics || "")
         .split(',')
         .map(x => x.trim().toLowerCase())
         .filter(x => x.length > 0);
+
+      if (mainTopics.length === 0 || mainTopics.includes("infer topic")) {
+        const topicBrain = new AdvancedEngineBrain({
+          ...parameters,
+          systemPrompt: "You are a system dynamics assistant. Identify the main variable or topic discussed in the prompt below.",
+          problemStatement: prompt,
+        });
+
+        const inferencePrompt = `Given the following background information:\n"""\n${prompt}\n"""\nIdentify the single most central concept or variable that all other ideas revolve around. Return only a comma-separated list of 1–3 key topics.`;
+
+        const result = await topicBrain.generateDiagram(inferencePrompt, { relationships: [] });
+        if (Array.isArray(result.relationships) && result.relationships.length > 0) {
+          mainTopics = result.relationships.map(r => r.from.toLowerCase());
+        } else {
+          throw new Error("Failed to infer main topics.");
+        }
+      }
 
       const maxDepth = parameters.depth;
       const explored = new Set();
@@ -74,7 +91,6 @@ class RecursiveCausalEngine extends Engine {
 
       const cleaned = await this.cleanRelationships(allRelationships, prompt, parameters);
       const polished = await this.adjustPolarities(cleaned, prompt, parameters);
-
       const variables = [...new Set(polished.flatMap(r => [r.from, r.to]))];
 
       return {
