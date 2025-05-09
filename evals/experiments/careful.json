@@ -2,10 +2,10 @@
     "sequential": true,
     "verbose": true,
     "engineConfigs": {
-        "advanced-gemini-2.0-flash": {
-            "engine": "advanced",
+        "gpt-4o": {
+            "engine": "recursivecausal",
             "additionalParameters": {
-                "underlyingModel": "gemini-2.0-flash"
+                "underlyingModel": "gpt-4o"
             },
             "limits": {
                 "tokensPerMinute": 90000,

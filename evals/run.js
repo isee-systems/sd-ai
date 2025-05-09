@@ -152,7 +152,14 @@ printTable(
 console.log();
 
 console.log("Press enter to run this experiment...");
-spawnSync("read _ ", { shell: true, stdio: [0, 1, 2] });
+// spawnSync("read _ ", { shell: true, stdio: [0, 1, 2] });
+
+if (process.platform === "win32") {
+  spawnSync("pause", { shell: true, stdio: [0, 1, 2] });
+} else {
+  spawnSync("read _", { shell: true, stdio: [0, 1, 2] });
+}
+
 
 const progress = new cliProgress.MultiBar(
   {
@@ -161,8 +168,9 @@ const progress = new cliProgress.MultiBar(
     format:
       "{bar} | ETA: {eta}s | {earlyResults} = {value} of {total} | {engineConfigName} | {inProgress}",
     stream: experiment.verbose
-      ? fs.createWriteStream("/dev/null")
-      : process.stderr,
+    ? fs.createWriteStream(process.platform === "win32" ? "NUL" : "/dev/null")
+    : process.stderr,
+
   },
   cliProgress.Presets.rect
 );
@@ -253,7 +261,7 @@ const runSingleTest = async (
     enc.encode(test.testParams["prompt"]).length +
     Object.entries(test.testParams.additionalParameters)
       .map(([_, v]) => {
-        return enc.encode(v).length;
+        return enc.encode(String(v)).length; 
       })
       .reduce((a, b) => a + b, 0);
 
