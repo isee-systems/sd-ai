@@ -5,6 +5,7 @@
 
 const config = {
     "port": 3000,
+    "externalEngineDir" : "./external"
 };
 
 export default config
