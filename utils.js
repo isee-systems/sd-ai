@@ -29,23 +29,37 @@ utils.caseFold = function(name) {
   return xname.toLowerCase();
 }
 
-utils.convertToXMILE = function(sdJSON) {
+utils.prettyifyName = function(variable) {
+  return variable.replaceAll("\n", "\\\n").replaceAll("\r", "\\\r");
+}
 
+utils.sameVars = function(a,b) {
+    return utils.caseFold(a) === utils.caseFold(b);
+}
+
+utils.convertToXMILE = function(sdJSON) {
+  const variables = sdJSON.variables;
   const relationships = sdJSON.relationships;
+
+  const sdJSONHasVariableDefinition = (variable) => {
+      return sdJSON.variables.findIndex((v) => {
+          return utils.sameVars(v.name, variable) && v.equation && v.equation.length > 0;
+      }) >= 0;
+  };
 
   let xmileConnectors = "";
   let xmileEqns = "";
 
-  let variablesObj = {}; //variable to causers
-  relationships.forEach(function(relationship) {
-    if (!variablesObj[relationship.end]) {
-      variablesObj[relationship.end] = [];
+  let qualitativeVariablesObj = {}; //variable to causers
+  relationships.forEach((relationship) => {
+    if (!qualitativeVariablesObj[relationship.end]) {
+      qualitativeVariablesObj[relationship.end] = [];
     }
 
     let arr = variablesObj[relationship.end];
     if (!arr.includes(relationship.start)) {
       arr.push(relationship.start);
-      variablesObj[relationship.end] = arr;
+      qualitativeVariablesObj[relationship.end] = arr;
 
       let polarity = "";
       if (relationship.polarity !== "?")
@@ -58,8 +72,36 @@ utils.convertToXMILE = function(sdJSON) {
     }
   });
 
-  for (const [variable, causers] of Object.entries(variablesObj)) {
-    let prettyName = variable.replaceAll("\n", "\\\n").replaceAll("\r", "\\\r");
+  variables.forEach((variable)=> {
+    if (!(variable.equation && variable.equation.length >= 0))
+      return;
+
+    const prettyName = utils.prettyifyName(variable);
+    let type = variable.type;
+    if (type === "variable") {
+      type = "aux";
+    }
+
+    xmileEqns += "<" + type + " name=\"" + prettyName + "\">";
+    xmileEqns += "<eqn>" + variable.equation + "</eqn>";
+    if (type === "stock") {
+      variable.inflows.forEach((inflow) => {
+        xmileEqns += "<inflow>" + inflow + "</inflow>";
+      });
+      variable.outflows.forEach((inflow) => {
+        xmileEqns += "<outflow>" + inflow + "</outflow>";
+      });
+    } else if (type === "flow") {
+      xmileEqns += "<non_negative/>"
+    }
+    xmileEqns += "</" + type + ">";
+  });
+
+  for (const [variable, causers] of Object.entries(qualitativeVariablesObj)) {
+    if (sdJSONHasVariableDefinition(variable))
+      continue;
+
+    const prettyName = utils.prettyifyName(variable);
     xmileEqns += "<aux name=\"" + prettyName + "\">";
     xmileEqns += "<eqn>NAN(";
     causers.forEach(function(cause, index) {
@@ -195,12 +237,20 @@ export class LLMWrapper {
     "relationship": "This is a relationship between two variables, from and to (from is the cause, to is the effect).  The relationship also contains a polarity which describes how a change in the from variable impacts the to variable",
     "relationships": "The list of relationships you think are appropriate to satisfy my request based on all of the information I have given you",
     "explanation": "Concisely explain your reasoning for each change you made to the old CLD to create the new CLD. Speak in plain English, don't reference json specifically. Don't reiterate the request or any of these instructions.",
-    "title": "A highly descriptive 7 word max title describing your explanation."
-};
+    "title": "A highly descriptive 7 word max title describing your explanation.",
+
+    "type": "There are three types of variables, stock, flow, and variable. A stock is an accumulation of its flows, it is an integral.  A stock can only change because of its flows. A flow is the derivative of a stock.  A plain variable is used for algebraic expressions.",
+    "name": "The name of a variable",
+    "equation": "The XMILE equation for this variable.  This equation can be a number, or an algebraic expression of other variables.  If the type for this variable is a stock, then the equation is its initial value, do not use INTEG for the equation of a stock, only its initial value. Make sure that whenever you include a variable name with spaces that you replace those spaces with underscores",
+    "inflows": "Only used on variables that are of type stock.  It is an array of variable names representing flows that add to this stock.",
+    "outflows": "Only used on variables that are of type stock.  It is an array of variable names representing flows that subtract from this stock.",
+    "documentation": "Documentation for the variable including the reason why it was chosen, what it represents, and a simple explanation why it is calculated this way",
+    "units": "The units of measure for this variable"
+  };
 
   static DEFAULT_MODEL = 'gemini-2.5-flash-preview-04-17';
 
-  generateSDJSONResponseSchema() {
+  generateQualitativeSDJSONResponseSchema() {
       const PolarityEnum = z.enum(["+", "-"]).describe(LLMWrapper.SCHEMA_STRINGS.polarity);
 
       const Relationship = z.object({
@@ -218,6 +268,42 @@ export class LLMWrapper {
       });
 
       return zodResponseFormat(Relationships, "relationships_response");
+  }
+
+  generateQuantitativeSDJSONResponseSchema() {
+      const TypeEnum = z.enum(["stock", "flow", "variable"]).describe(LLMWrapper.SCHEMA_STRINGS.type);
+      const PolarityEnum = z.enum(["+", "-"]).describe(LLMWrapper.SCHEMA_STRINGS.polarity);
+
+      const Relationship = z.object({
+          from: z.string().describe(LLMWrapper.SCHEMA_STRINGS.from),
+          to: z.string().describe(LLMWrapper.SCHEMA_STRINGS.to),
+          polarity: PolarityEnum,
+          reasoning: z.string().describe(LLMWrapper.SCHEMA_STRINGS.reasoning),
+          polarityReasoning: z.string().describe(LLMWrapper.SCHEMA_STRINGS.polarityReasoning)
+      }).describe(LLMWrapper.SCHEMA_STRINGS.relationship);
+      
+      const Relationships = z.array(Relationship).describe(LLMWrapper.SCHEMA_STRINGS.relationships);
+
+      const Variable = z.object({
+        name: z.string().describe(LLMWrapper.SCHEMA_STRINGS.name),
+        equation: z.string().describe(LLMWrapper.SCHEMA_STRINGS.equation),
+        inflows: z.array(z.string()).optional().describe(LLMWrapper.SCHEMA_STRINGS.inflows),
+        outflows: z.array(z.string()).optional().describe(LLMWrapper.SCHEMA_STRINGS.outflows),
+        type: TypeEnum,
+        documentation: z.string().describe(LLMWrapper.SCHEMA_STRINGS.documentation),
+        units: z.string().describe(LLMWrapper.SCHEMA_STRINGS.units)
+      })
+      
+      const Variables = z.array(Variable).describe(LLMWrapper.SCHEMA_STRINGS.variables);
+
+      const Model = z.object({
+        variables: Variables,
+        relationships: Relationships,
+        explanation: z.string().describe(LLMWrapper.SCHEMA_STRINGS.explanation),
+        title: z.string().describe(LLMWrapper.SCHEMA_STRINGS.title),
+      });
+
+      return zodResponseFormat(Model, "model_response");
   }
 
   static additionalParameters() {

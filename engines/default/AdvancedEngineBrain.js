@@ -145,10 +145,6 @@ You will conduct a multistep process:
         this.#llmWrapper = new LLMWrapper(params);
        
     }
-    
-    #sameVars(a,b) {
-        return projectUtils.caseFold(a) === projectUtils.caseFold(b);
-    }
 
     #processResponse(originalResponse) {
         let origRelationships = originalResponse.relationships || [];
@@ -157,7 +153,7 @@ You will conduct a multistep process:
             let ret = Object.assign({}, relationship);
             ret.from = relationship.from.trim();
             ret.to = relationship.to.trim();
-            ret.valid = !this.#sameVars(ret.from, ret.to);
+            ret.valid = !projectUtils.sameVars(ret.from, ret.to);
             return ret;
         });
             
@@ -171,7 +167,7 @@ You will conduct a multistep process:
                 if (!relI.valid || !relJ.valid)
                     continue;
 
-                if (this.#sameVars(relJ.from, relI.from) && this.#sameVars(relJ.to, relI.to)) {
+                if (projectUtils.sameVars(relJ.from, relI.from) && projectUtils.sameVars(relJ.to, relI.to)) {
                     relI.valid = false;
                 }
             }

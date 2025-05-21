@@ -2,6 +2,7 @@ import express from 'express'
 import fs from 'fs'
 
 const router = express.Router()
+const quantitativeEngines = ['quantitative'];
 
 router.get("/", async (req, res) => {
     const path = "engines"
@@ -12,7 +13,7 @@ router.get("/", async (req, res) => {
         engines: folders.map((folder) => {
             return {
                 name: folder,
-                supports:["cld"] //in the future this may include sfd or equations
+                supports: quantitativeEngines.includes(folder) ? ["sfd"] : ["cld"] 
             }
         }) 
     });
