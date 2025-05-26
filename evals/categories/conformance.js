@@ -15,7 +15,8 @@ The French and Indian War
 The British wanted the colonies to repay them for their defense during the French and Indian War (1754–63).
 Colonial identity
 The colonists developed a stronger sense of American identity`,
-    mainTopics: "American Revolution"
+    mainTopics: "American Revolution",
+    depth: 1
   },
   "Road Rage": {
     prompt: "Using your knowledge of how road rage happens and the additional information I have given you, please give me a feedback-based explanation for how road rage incidents might change in the future.",
@@ -44,7 +45,8 @@ Other Factors:
 Learned Behavior: Observing aggressive driving behavior from others can normalize it and increase the likelihood of engaging in road rage. 
 Lack of Sleep: Fatigue can impair judgment and make drivers more susceptible to anger. 
 Distracted Driving: Using a phone, texting, or eating while driving can increase the risk of accidents and provoke anger.`,
-    mainTopics: "Road Rage"
+    mainTopics: "Road Rage",
+    depth: 1
   }
 };
 
@@ -138,14 +140,14 @@ const specificConformanceElements = {
     text: 'Your response must include the variables "Traffic Congestion", "Driver Stress" and "Accidents".',
     name: "include requested variables",
     expectations: {
-      variables: ["Traffic Congestion", "Driver Stress", "Accidents"]
+      variables: ["traffic congestion", "driver stress", "accidents"]
     }
   },
   "American Revolution": {
     text: 'Your response must include the variables "Taxation", "Anti-British Sentiment" and "Colonial Identity".',
     name: "include requested variables",
     expectations: {
-      variables: ["Taxation", "Anti-British Sentiment", "Colonial Identity"]
+      variables: ["taxation", "anti-british sentiment", "colonial cdentity"]
     }
   }
 };
@@ -159,7 +161,7 @@ const generateConformanceTest = function(conformanceElement, specificCase) {
       problemStatement: c.problemStatement,
       backgroundKnowledge: c.backgroundKnowledge,
       mainTopics: c.mainTopics,
-      depth: 2
+      depth: c.depth
     },
     expectations: conformanceElement.expectations,
   };

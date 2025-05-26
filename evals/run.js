@@ -168,7 +168,7 @@ const progress = new cliProgress.MultiBar(
     format:
       "{bar} | ETA: {eta}s | {earlyResults} = {value} of {total} | {engineConfigName} | {inProgress}",
     stream: experiment.verbose
-    ? fs.createWriteStream(process.platform === "win32" ? "NUL" : "/dev/null")
+    ? fs.createWriteStream(process.platform === "win32" ? "NULL" : "/dev/null")
     : process.stderr,
 
   },

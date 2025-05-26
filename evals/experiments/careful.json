@@ -2,10 +2,11 @@
     "sequential": true,
     "verbose": true,
     "engineConfigs": {
-        "gpt-4o": {
-            "engine": "recursivecausal",
+        "recursivecausal-4o": {
+            "engine": "advanced",
             "additionalParameters": {
-                "underlyingModel": "gpt-4o"
+                "underlyingModel": "gpt-4o",
+                "depth": 1
             },
             "limits": {
                 "tokensPerMinute": 90000,
@@ -14,7 +15,7 @@
         }
     },
     "categories": {
-        "causalTranslation": ["singleFeedbackLoop"],
-        "conformance": ["genericConformance"] 
+        "causalTranslation": true,
+        "conformance": true 
     }
 }
