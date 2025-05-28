@@ -181,7 +181,7 @@ func (r *Relationship) Key() string {
 type RelationshipEntry struct {
 	Variable          string `json:"variable"`
 	Polarity          string `json:"polarity"` // "+", or "-"
-	PolarityReasoning string `json:"polarityReasoning"`
+	PolarityReasoning string `json:"polarity_reasoning"`
 }
 
 type Chain struct {
@@ -223,6 +223,8 @@ func (m *Map) Compat() SdJson {
 				To:                to,
 				Polarity:          r.Polarity,
 				PolarityReasoning: r.PolarityReasoning,
+				// use the overall reasoning for the chain for this relationship
+				Reasoning: chain.Reasoning,
 			}
 			rk := relationship.Key()
 			if seenRelationships.Contains(rk) {
