@@ -1,5 +1,11 @@
 {
     "engineConfigs": {
+        "causal-chains-o4-mini": {
+            "engine": "causal-chains",
+            "additionalParameters": {
+                "underlyingModel": "o4-mini"
+            }
+        },
         "advanced-gpt-4o": {
             "engine": "advanced",
             "additionalParameters": {
@@ -12,7 +18,7 @@
                 "underlyingModel": "gpt-4o-mini"
             },
             "limits": {
-                "tokensPerMinute": 90000 
+                "tokensPerMinute": 90000
             }
         },
         "advanced-gpt-4.1-nano": {
@@ -49,7 +55,7 @@
                 "underlyingModel": "gpt-4.5-preview"
             },
             "limits": {
-                "tokensPerMinute": 100000 
+                "tokensPerMinute": 100000
             }
         },
 
@@ -110,7 +116,7 @@
                 "underlyingModel": "o1"
             },
             "limits": {
-                "baselineTokenUsage": 10000 
+                "baselineTokenUsage": 10000
             }
         },
 
@@ -150,7 +156,7 @@
                 "underlyingModel": "o4-mini"
             },
             "limits": {
-                "baselineTokenUsage": 10000 
+                "baselineTokenUsage": 10000
             }
         }
     },

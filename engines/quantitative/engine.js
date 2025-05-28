@@ -5,6 +5,10 @@ class Engine {
 
     }
 
+    static supportedModes() {
+        return ["sfd"];
+    }
+
     additionalParameters()  {
         return [{
             name: "googleKey",

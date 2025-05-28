@@ -41,9 +41,9 @@ const experiment = JSON.parse(fs.readFileSync(argv.experiment, "utf8"));
 // goal of tests is to create a pretty flat denormaized structure
 // but all keyed on engine name so that we can easily rate limit by engine
 const tests = Object.fromEntries(
-  await Promise.all(
-    Object.entries(experiment.engineConfigs).map(
-      async ([engineConfigName, engineConfig]) => {
+    (await Promise.all(
+    Object.entries(experiment.engineConfigs)
+      .map(async ([engineConfigName, engineConfig]) => {
         // return all the map of all tests in a group if filter is true
         // return only the tests in the groups specified by filter if list is provided
         // return nothing if criteria isn't mentioned
@@ -74,6 +74,12 @@ const tests = Object.fromEntries(
           )
         );
 
+        const engine = await import(`./../engines/${engineConfig.engine}/engine.js`);
+        const supportedModes = engine.default.supportedModes();
+        if (!supportedModes || !supportedModes.includes("cld")) {
+          return [undefined, undefined];
+        }
+
         // jam the details of the engine and the category and group into the test itself
         const fullTests = Object.entries(allTests).map(([category, groups]) => {
           return Object.entries(groups).map(([groupName, tests]) => {
@@ -94,7 +100,10 @@ const tests = Object.fromEntries(
         return [engineConfigName, fullTests.flat(2)];
       }
     )
-  )
+  ))
+  .filter(entry => {
+    return entry[0] !== undefined;
+  })
 );
 
 console.log(chalk.blue("Experiment Configuration:"));
@@ -294,8 +303,7 @@ const runSingleTest = async (
 
   const testWithResult = structuredClone(test);
   testWithResult["duration"] = Date.now() - startTime;
-  testWithResult["generatedRelationships"] =
-    generateResponse.model.relationships;
+  testWithResult["generatedRelationships"] = generateResponse.model?.relationships || {};
 
   if (experiment.verbose) {
     console.log(
