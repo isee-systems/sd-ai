@@ -3,7 +3,9 @@
     {
       "from": "frimbulators",
       "to": "whatajigs",
-      "polarity": "+"
+      "polarity": "+",
+      "reasoning": "A decrease in frimbulators leads to a decrease in whatajigs—this is a direct causal relationship.",
+      "polarityReasoning": "Fewer frimbulators causes fewer whatajigs, and more frimbulators causes more whatajigs, indicating a positive relationship."
     }
   ],
   "variables": [
