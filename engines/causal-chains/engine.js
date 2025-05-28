@@ -4,12 +4,16 @@ import path from 'path';
 import {tmpdir} from 'os';
 import {fileURLToPath} from 'url';
 
+import {LLMWrapper} from "../../utils.js";
+
 const __filename = fileURLToPath(import.meta.url); // get the resolved path to the file
 const __dirname = path.dirname(__filename); // get the name of the directory
 
 class Engine {
     constructor() {
     }
+
+    static DEFAULT_MODEL = 'o4-mini';
 
     static supportedModes() {
         // check that the ./causal-chains Go binary exists
@@ -29,6 +33,11 @@ class Engine {
     }
 
     additionalParameters() {
+        const models = LLMWrapper.MODELS.filter(item => {
+            // true if the value starts with "gpt" or "o[0-9]"
+            return /^(gpt|o\d)/.test(item.value);
+        });
+
         return [
             {
                 name: "apiKey",
@@ -42,11 +51,13 @@ class Engine {
             {
                 name: "underlyingModel",
                 type: "string",
+                defaultValue: Engine.DEFAULT_MODEL,
                 required: true,
-                uiElement: "lineedit",
-                saveForUser: "global",
-                label: "Model Name",
-                description: "Leave blank for the default, or specify a specific a specific model to use like 'o4-mini'.",
+                options: models,
+                uiElement: "combobox",
+                saveForUser: "local",
+                label: "LLM Model",
+                description: "The LLM model that you want to use to process your queries.",
             },
             {
                 name: "problemStatement",
@@ -95,9 +106,9 @@ class Engine {
                 err: err.stderr.toString(),
             };
         } finally {
-            // if (tempDir) {
-            //     fs.rmSync(tempDir, {recursive: true, force: true});
-            //
+            if (tempDir) {
+                fs.rmSync(tempDir, {recursive: true, force: true});
+            }
         }
     }
 }

@@ -198,7 +198,26 @@ export class LLMWrapper {
     "title": "A highly descriptive 7 word max title describing your explanation."
 };
 
-  static DEFAULT_MODEL = 'gpt-4o';
+  static MODELS = [
+        {label: "GPT-4o", value: 'gpt-4o'},
+        {label: "GPT-4o-mini", value: 'gpt-4o-mini'},
+        {label: "GPT-4.5-preview", value: 'gpt-4.5-preview'},
+        {label: "GPT-4.1", value: 'gpt-4.1'},
+        {label: "GPT-4.1-mini", value: 'gpt-4.1-mini'},
+        {label: "GPT-4.1-nano", value: 'gpt-4.1-nano'},
+        {label: "Gemini 2.5-flash", value: 'gemini-2.5-flash-preview-04-17'},
+        {label: "Gemini 2.5-pro", value: 'gemini-2.5-pro-preview-03-25'},
+        {label: "Gemini 2.0", value: 'gemini-2.0-flash'},
+        {label: "Gemini 2.0-Lite", value: 'gemini-2.0-flash-lite'},
+        {label: "Gemini 1.5", value: 'gemini-1.5-flash'},
+        {label: "o1", value: 'o1'},
+        {label: "o3-mini low", value: 'o3-mini low'},
+        {label: "o3-mini medium", value: 'o3-mini medium'},
+        {label: "o3-mini high", value: 'o3-mini high'},
+        {label: "o4-mini", value: 'o4-mini'}
+    ];
+
+    static DEFAULT_MODEL = 'gpt-4o';
 
   generateSDJSONResponseSchema() {
       const PolarityEnum = z.enum(["+", "-"]).describe(LLMWrapper.SCHEMA_STRINGS.polarity);
@@ -221,25 +240,6 @@ export class LLMWrapper {
   }
 
   static additionalParameters() {
-    const models = [ 
-        {label: "GPT-4o", value: 'gpt-4o'}, 
-        {label: "GPT-4o-mini", value: 'gpt-4o-mini'}, 
-        {label: "GPT-4.5-preview", value: 'gpt-4.5-preview'}, 
-        {label: "GPT-4.1", value: 'gpt-4.1'}, 
-        {label: "GPT-4.1-mini", value: 'gpt-4.1-mini'}, 
-        {label: "GPT-4.1-nano", value: 'gpt-4.1-nano'}, 
-        {label: "Gemini 2.5-flash", value: 'gemini-2.5-flash-preview-04-17'},
-        {label: "Gemini 2.5-pro", value: 'gemini-2.5-pro-preview-03-25'},
-        {label: "Gemini 2.0", value: 'gemini-2.0-flash'},
-        {label: "Gemini 2.0-Lite", value: 'gemini-2.0-flash-lite'},
-        {label: "Gemini 1.5", value: 'gemini-1.5-flash'},
-        {label: "o1", value: 'o1'}, 
-        {label: "o3-mini low", value: 'o3-mini low'}, 
-        {label: "o3-mini medium", value: 'o3-mini medium'}, 
-        {label: "o3-mini high", value: 'o3-mini high'},
-        {label: "o4-mini", value: 'o4-mini'}
-    ];
-
     return [{
             name: "openAIKey",
             type: "string",
@@ -261,7 +261,7 @@ export class LLMWrapper {
             type: "string",
             defaultValue: LLMWrapper.DEFAULT_MODEL,
             required: false,
-            options: models,
+            options: LLMWrapper.MODELS,
             uiElement: "combobox",
             saveForUser: "local",
             label: "LLM Model",
