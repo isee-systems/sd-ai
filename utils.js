@@ -239,13 +239,21 @@ export class LLMWrapper {
     "explanation": "Concisely explain your reasoning for each change you made to the old CLD to create the new CLD. Speak in plain English, don't reference json specifically. Don't reiterate the request or any of these instructions.",
     "title": "A highly descriptive 7 word max title describing your explanation.",
 
+    "equation": "The XMILE equation for this variable.  This equation can be a number, or an algebraic expression of other variables. Make sure that whenever you include a variable name with spaces that you replace those spaces with underscores. If the type for this variable is a stock, then the equation is its initial value, do not use INTEG for the equation of a stock, only its initial value. If this variable is a table function, lookup function or graphical function, the equation should be ONLY the input to the graphical function (typically a single variable) and NOTHING else!",
+
     "type": "There are three types of variables, stock, flow, and variable. A stock is an accumulation of its flows, it is an integral.  A stock can only change because of its flows. A flow is the derivative of a stock.  A plain variable is used for algebraic expressions.",
     "name": "The name of a variable",
-    "equation": "The XMILE equation for this variable.  This equation can be a number, or an algebraic expression of other variables.  If the type for this variable is a stock, then the equation is its initial value, do not use INTEG for the equation of a stock, only its initial value. Make sure that whenever you include a variable name with spaces that you replace those spaces with underscores.  Please try to avoid using table functions, graphical functions, or LOOKUP functions.  If the equation is a table function or graphical function, or LOOKUP, please provide the equation using Vensim's LOOKUP format.",
+ 
     "inflows": "Only used on variables that are of type stock.  It is an array of variable names representing flows that add to this stock.",
     "outflows": "Only used on variables that are of type stock.  It is an array of variable names representing flows that subtract from this stock.",
     "documentation": "Documentation for the variable including the reason why it was chosen, what it represents, and a simple explanation why it is calculated this way",
-    "units": "The units of measure for this variable"
+    "units": "The units of measure for this variable",
+    "gfEquation": "Only used on variables which contain a table function, lookup function, or graphical function.",
+
+    "gf": "This object represents a table function, lookup function or graphical function.  It is a list of value pairs or points.  The value computed by the equation is looked up in this list of points using the \"x\" value, and the \"y\" value is returned.",
+    "gfPoint": "This object represens a single value pair used in a table function, lookup function, or graphical function.",
+    "gfPointX": "This is the \"x\" value in the x,y value pair, or graphical function point. This is the value used for the lookup.",
+    "gfPointY": "This is the \"y\" value in the x,y value pair, or graphical function point. This is the value returned by the lookup."
   };
 
   static DEFAULT_MODEL = 'gemini-2.5-flash-preview-04-17';
@@ -273,6 +281,15 @@ export class LLMWrapper {
   generateQuantitativeSDJSONResponseSchema() {
       const TypeEnum = z.enum(["stock", "flow", "variable"]).describe(LLMWrapper.SCHEMA_STRINGS.type);
       const PolarityEnum = z.enum(["+", "-"]).describe(LLMWrapper.SCHEMA_STRINGS.polarity);
+      
+      const GFPoint = z.object({
+        x: z.number().describe(LLMWrapper.SCHEMA_STRINGS.gfPointX),
+        y: z.number().describe(LLMWrapper.SCHEMA_STRINGS.gfPointY)
+      }).describe(LLMWrapper.SCHEMA_STRINGS.gfPoint);
+
+      const GF = z.object({
+        points: z.array(GFPoint)
+      }).describe(LLMWrapper.SCHEMA_STRINGS.gf);
 
       const Relationship = z.object({
           from: z.string().describe(LLMWrapper.SCHEMA_STRINGS.from),
@@ -289,6 +306,7 @@ export class LLMWrapper {
         equation: z.string().describe(LLMWrapper.SCHEMA_STRINGS.equation),
         inflows: z.array(z.string()).optional().describe(LLMWrapper.SCHEMA_STRINGS.inflows),
         outflows: z.array(z.string()).optional().describe(LLMWrapper.SCHEMA_STRINGS.outflows),
+        graphicalFunction: GF.optional().describe(LLMWrapper.SCHEMA_STRINGS.gfEquation),
         type: TypeEnum,
         documentation: z.string().describe(LLMWrapper.SCHEMA_STRINGS.documentation),
         units: z.string().describe(LLMWrapper.SCHEMA_STRINGS.units)
