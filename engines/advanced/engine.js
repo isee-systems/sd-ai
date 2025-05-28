@@ -26,6 +26,10 @@ It ensures the AI’s responses align with the intended user experience, such as
         super();
     }
 
+    static supportedModes() {
+        return ["cld"];
+    }
+
     additionalParameters()  {
         let parameters = LLMWrapper.additionalParameters();
 

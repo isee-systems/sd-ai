@@ -38,3 +38,11 @@ build/
 #vscode stuff
 .vscode/
 .aider*
+
+#emacs temporary files
+*~
+
+# IntelliJ state
+.idea/
+
+/engines/causal-chains/causal-chains

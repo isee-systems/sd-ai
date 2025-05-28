@@ -5,6 +5,10 @@ class Engine {
 
     }
 
+    static supportedModes() {
+        return ["cld"];
+    }
+
     additionalParameters()  {
         return [{
                 name: "openAIKey",

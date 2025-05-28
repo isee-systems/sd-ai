@@ -2,7 +2,11 @@ class Engine {
     constructor() {
 
     }
-    
+
+    static supportedModes() {
+        return ["cld"];
+    }
+
     additionalParameters () {
         return []
     } 
