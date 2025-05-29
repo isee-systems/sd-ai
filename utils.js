@@ -274,7 +274,13 @@ export class LLMWrapper {
     "gf": "This object represents a table function, lookup function or graphical function.  It is a list of value pairs or points.  The value computed by the equation is looked up in this list of points using the \"x\" value, and the \"y\" value is returned.",
     "gfPoint": "This object represens a single value pair used in a table function, lookup function, or graphical function.",
     "gfPointX": "This is the \"x\" value in the x,y value pair, or graphical function point. This is the value used for the lookup.",
-    "gfPointY": "This is the \"y\" value in the x,y value pair, or graphical function point. This is the value returned by the lookup."
+    "gfPointY": "This is the \"y\" value in the x,y value pair, or graphical function point. This is the value returned by the lookup.",
+
+    "simSpecs": "This object describes settings for the model and how its run.",
+    "startTime": "The time at which this model starts calculating.  It is measured in the units of \"timeUnit\".",
+    "stopTime": "The time at which this model stops calculating.  It is measured in the units of \"timeUnit\".",
+    "dt": "The time step for the model, how often is it calculated.  The most common dt is 0.25. It is measured in the units of \"timeUnit\".",
+    "timeUnits": "The unit of time for this model.  This should match with the equations that you generate."
   };
 
   static DEFAULT_MODEL = 'gemini-2.5-flash-preview-04-17';
@@ -331,15 +337,23 @@ export class LLMWrapper {
         type: TypeEnum,
         documentation: z.string().describe(LLMWrapper.SCHEMA_STRINGS.documentation),
         units: z.string().describe(LLMWrapper.SCHEMA_STRINGS.units)
-      })
+      });
       
       const Variables = z.array(Variable).describe(LLMWrapper.SCHEMA_STRINGS.variables);
+
+      const SimSpecs = z.object({
+        startTime: z.number().describe(LLMWrapper.SCHEMA_STRINGS.startTime),
+        stopTime: z.number().describe(LLMWrapper.SCHEMA_STRINGS.stopTime),
+        dt: z.number().describe(LLMWrapper.SCHEMA_STRINGS.dt),
+        timeUnits: z.string().describe(LLMWrapper.SCHEMA_STRINGS.timeUnits)
+      }).describe(LLMWrapper.SCHEMA_STRINGS.simSpecs);
 
       const Model = z.object({
         variables: Variables,
         relationships: Relationships,
         explanation: z.string().describe(LLMWrapper.SCHEMA_STRINGS.explanation),
         title: z.string().describe(LLMWrapper.SCHEMA_STRINGS.title),
+        specs: SimSpecs
       });
 
       return zodResponseFormat(Model, "model_response");

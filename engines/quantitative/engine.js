@@ -44,7 +44,7 @@ class Engine {
         try {
             let brain = new QuantitativeEngineBrain(parameters);
             const response = await brain.generateModel(prompt, currentModel);
-            return {
+            let returnValue = {
                 supportingInfo: {
                     explanation: response.explanation,
                     title: response.title
@@ -54,6 +54,9 @@ class Engine {
                     variables: response.variables
                 }
             };
+            if (response.specs)
+                returnValue.model.specs = response.specs;
+            return returnValue;
         } catch(err) {
             console.error(err);
             return { 

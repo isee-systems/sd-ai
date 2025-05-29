@@ -85,8 +85,8 @@ We welcome Github Issues and Pull Requests from everyone! Here are some ideas fo
 {
     success: <bool>,
     format: <string>,
-    model: {variables: [], relationships: []},
-    supportingInfo: {} # only provided if supported by engine
+    model: {variables: [], relationships: [], specs?: {} },
+    supportingInfo?: {} # only provided if supported by engine
 }
 ```
 
@@ -96,12 +96,12 @@ We welcome Github Issues and Pull Requests from everyone! Here are some ideas fo
     variables: [{
         name: <string>,
         type: <string - stock|flow|variable>,
-        equation: <string>,
-        documentation: <string>,
-        units: <string>,
-        inflows: Array<string>,
-        outflows: Array<string>,
-        graphicalFunction: {
+        equation?: <string>,
+        documentation?: <string>,
+        units?: <string>,
+        inflows?: Array<string>,
+        outflows?: Array<string>,
+        graphicalFunction?: {
             points: [
                 {x: <number>, y: <number>}
                 ...
@@ -109,14 +109,21 @@ We welcome Github Issues and Pull Requests from everyone! Here are some ideas fo
         }
     }], 
     relationships: [{
-        "reasoning": <string, explanation for why this relationship is here> 
+        "reasoning?": <string, explanation for why this relationship is here> 
         "from": <string, the variable the connection starts wtih>,
         "to": <string, the variable the connection ends with>,  
         "polarity": <string "+" or "-" or "" >, 
-        "polarityReasoning": <string explanation for why this polarity was chosen> 
-    }]
+        "polarityReasoning?": <string explanation for why this polarity was chosen> 
+    }],
+    specs?: {
+        startTime: <number>,
+        stopTime: <number>,
+        dt?: <number>,
+        timeUnits?: <string>
+    }
 }
 ```  
+? denotes an optional attribute
 
 # Setup
 1. fork this repo and git clone your fork locally 
