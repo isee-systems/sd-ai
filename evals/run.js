@@ -379,7 +379,7 @@ const responses = output.flat(1);
 const results = new dataForge.DataFrame({ values: responses });
 
 const experimentName = path.basename(path.resolve(argv.experiment)).split(".")[0];
-const experimentResultsName = `${experimentName}_${experimentId}`;
+const experimentResultsName = `${experimentId}_${experimentName}`;
 
 // write the full results to json file
 fs.writeFileSync(
