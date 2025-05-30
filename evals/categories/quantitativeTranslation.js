@@ -1,251 +1,216 @@
-const cases = {
-    "American Revolution": {
-        prompt: "Using your knowledge of how the american revolution started and the additional information I have given you, please give me a feedback based explanation for how the american revolution came about.",
-        problemStatement: "I am trying to understand how the american revolution started.  I'd like to know what caused hostilities to break out.",
-        backgroundKnowledge:
-`The American Revolution was caused by a number of factors, including:
-Taxation
-The British imposed new taxes on the colonies to raise money, such as the Stamp Act of 1765, which taxed legal documents, newspapers, and playing cards. The colonists were angry because they had no representatives in Parliament. 
-The Boston Massacre
-In 1770, British soldiers fired on a crowd of colonists in Boston, killing five people. The massacre intensified anti-British sentiment and became a propaganda tool for the colonists. 
-The Boston Tea Party
-The Boston Tea Party was a major act of defiance against British rule. It showed that Americans would not tolerate tyranny and taxation. 
-The Intolerable Acts
-The British government passed harsh laws that the colonists called the Intolerable Acts. One of the acts closed the port of Boston until the colonists paid for the tea they had ruined. 
-The French and Indian War
-The British wanted the colonies to repay them for their defense during the French and Indian War (1754–63). 
-Colonial identity
-The colonists developed a stronger sense of American identity`
-    }, 
-    "Road Rage": {
-        prompt: "Using your knowledge of how road rage happens and the additional information I have given you, please give me a feedback based explanation for how road rage incidents might change in the future.",
-        problemStatement: "I am trying to understand how road rage happens.  I'd like to know what causes road rage in society.",
-        backgroundKnowledge: 
-`Road rage, defined as aggressive driving behavior caused by anger and frustration, can be triggered by various factors: 
-Psychological Factors: 
-Stress and Anxiety:
-High stress levels can make drivers more irritable and prone to aggressive reactions. 
-Personality Traits:
-Individuals with impulsive, hostile, or competitive personalities may be more likely to engage in road rage. 
-Frustration:
-Feeling frustrated or blocked by other drivers can lead to anger and aggression. 
-Situational Factors: 
-Traffic Congestion:
-Heavy traffic, delays, and stop-and-go conditions can increase stress and impatience. 
-Perceived Provocations:
-Being cut off, tailgated, or honked at can provoke anger and retaliatory behavior. 
-Impatience:
-Drivers who are running late or have a low tolerance for delays may become aggressive. 
-Environmental Factors: 
-Road Design:
-Poor road design, such as narrow lanes or confusing intersections, can contribute to traffic congestion and frustration. 
-Weather Conditions:
-Adverse weather conditions, such as heavy rain or snow, can increase stress and make driving more challenging. 
-Other Factors: 
-Learned Behavior: Observing aggressive driving behavior from others can normalize it and increase the likelihood of engaging in road rage. 
-Lack of Sleep: Fatigue can impair judgment and make drivers more susceptible to anger. 
-Distracted Driving: Using a phone, texting, or eating while driving can increase the risk of accidents and provoke anger.`
-    }
-};
+import pluralize from 'pluralize';
+import numberToWords from 'number-to-words';
 
-const extractVariables = function(relationshipList) {
-    let set = new Set();
-    for (const relationship of relationshipList) {
-        set.add(relationship.from);
-        set.add(relationship.to);
-    }
-    return set;
-};
+//generic prompt and problem statement used for all tests
+const prompt = "Please give me a model which includes all causal relationships in the background information.";
+const problemStatement = "I'm trying to do causal discovery, and extract every cause and effect relationship from the information I give you.";
 
-const countLoops = function(relationshipList) {
-    let graph = {};
+//random variable names to pick from
+const nouns = [ "frimbulator",  "whatajig", "balack", "whoziewhat", "funkado", "maxabizer", "marticatene", "reflupper", "exeminte", "oc", "proptimatire", "priary", "houtal", "poval", "auspong", "dominitoxing", "outrance", "illigent", "yelb", "traze", "pablanksill", "posistorather", "crypteral", "oclate", "reveforly", "yoffa", "buwheal", "geyflorrin", "ih", "aferraron", "paffling", "pershipfulty", "copyring", "dickstonyx", "bellignorance", "hashtockle", "succupserva", "relity", "hazmick", "ku", "obvia", "unliescatice", "gissorm", "phildiscals", "loopnova", "hoza", "arinterpord", "burgination", "perstablintome", "memostorer", "baxtoy", "hensologic", "estintant", "perfecton", "raez", "younjuring"];
 
-    for (const relationship of relationshipList) {
-        if (relationship.from in graph)
-            graph[relationship.from].push(relationship.to);
-        else
-            graph[relationship.from] = [relationship.to];
-    }
+const generateTest = function(name, timeUnit, stocks) {
+    let english = "";
+    stocks.forEach((stock) => {
+        let stockEnglish = "I start with " + numberToWords.toWords(stock.initialValue) + " " + pluralize(stock.name) + ".";
 
-    let count = 0;
-    const numNodes = Object.keys(graph).length;
-    const visited = new Array(numNodes).fill(false);
-    const recursionStack = new Array(numNodes).fill(false);
+        if (stock.inflows) {
+            stock.inflows.forEach((f)=> {
+                let flowEnglish = "Each " + timeUnit + " ";
+                if ("fixed" in f) {
+                    flowEnglish += numberToWords.toWords(f.fixed) + " " + pluralize(stock.name) + " are added to my collection of " + pluralize(stock.name) + ".";
+                } else {
+                    flowEnglish += "my collection of " + pluralize(stock.name) + " increases by " + (f.rate * 100) + "%";
 
-    function dfs(node) {
-        visited[node] = true;
-        recursionStack[node] = true;
+                    if (f.of !== stock.name)
+                        flowEnglish += " of how ever many " + f.of + " I currently have";
 
-        for (const neighbor of graph[node] || []) {
-            if (!visited[neighbor]) {
-                if (dfs(neighbor)) {
-                    return true;
+                    flowEnglish += ".";
                 }
-            } else if (recursionStack[neighbor]) {
-                count++; // Cycle detected
-                return true;
-            }
+
+                stockEnglish += " " + flowEnglish;
+            });
         }
 
-        recursionStack[node] = false;
-        return false;
-    }
+        if (stock.outflows) {
+            stock.outflows.forEach((f)=> {
+                let flowEnglish = "Each " + timeUnit + " ";
+                if ("fixed" in f) {
+                    flowEnglish += numberToWords.toWords(f.fixed) + " " + pluralize(stock.name) + " are removed from my collection of " + pluralize(stock.name) + ".";
+                } else {
+                    flowEnglish += "my collection of " + pluralize(stock.name) + " decreases by " + (f.rate * 100) + "%";
 
-    for (const node of Object.keys(graph)) {
-        if (!visited[node]) {
-            dfs(node);
-        }
-    }
+                    if (f.of !== stock.name)
+                        flowEnglish += " of how ever many " + f.of + " I currently have";
 
-    return count;
-};
+                    flowEnglish += ".";
+                }
 
+                stockEnglish += " " + flowEnglish;
+            });
+        }
 
-//elements by which we measure conformance.  these are specific instructions to append to the prompt
-const genericConformanceElements = [
-    {
-        text: 'Your response must include at least 10 variables.',
-        name: "include a minimum number of variables",
-        expectations: {
-            minVariables: 10
-        }
-    }, {
-        text: 'Your response must include no more than 5 variables.',
-        name: "include a maximum number of variables",
-        expectations: {
-            maxVariables: 5
-        }
-    }, {
-        text: 'Your response must include at least 8 feedback loops.',
-        name: "include a minimum number of feedback loops",
-        expectations: {
-            minFeedback: 8
-        }
-    }, {
-        text: 'Your response must include no more than 4 feedback loops.',
-        name: "include a maximum number of feedback loops",
-        expectations: {
-            maxFeedback: 4
-        }
-    }, {
-        text: 'Your response must include no more than 4 feedback loops and no more than 5 variables.',
-        name: "include a maximum number of feedback loops and a maximum number of variables",
-        expectations: {
-            maxFeedback: 4,
-            maxVariables: 5
-        }
-    }, {
-        text: 'Your response must include at least 6 feedback loops and at least 8 variables.',
-        name: "include a minimum number of feedback loops and a minimum number of variables",
-        expectations: {
-            minFeedback: 6,
-            minVariables: 8
-        }
-    }, {
-        text: 'Your response must include no more than 4 feedback loops and at least 5 variables.',
-        name: "include a maximum number of feedback loops and a minimum number of variables",
-        expectations: {
-            maxFeedback: 4,
-            minVariables: 5
-        }
-    }, {
-        text: 'Your response must include at least 6 feedback loops and no more than 15 variables.',
-        name: "include a min number of feedback loops and a maximum number of variables",
-        expectations: {
-            minFeedback: 6,
-            maxVariables: 15
-        }
-    }
-];
+        english += " " + stockEnglish;
+    });
 
-const specificConformanceElements = {
-    "Road Rage" : {
-        text: 'Your response must include the variables "Traffic Congestion", "Driver Stress" and "Accidents".',
-        name: "include requested variables",
-        expectations: { 
-            variables: [
-                "Traffic Congestion",
-                "Driver Stress",
-                "Accidents"
-            ]
-        }
-    }, 
-    "American Revolution": {
-        text: 'Your response must include the variables "Taxation", "Anti-British Sentiment" and "Colonial Identity".',
-        name: "include requested variables",
-        expectations: { 
-            variables: [
-                "Taxation",
-                "Anti-British Sentiment",
-                "Colonial Identity"
-            ]
-        }
-    }, 
-}
-
-const generateConformanceTest = function(conformanceElement, specificCase) {
     return {
-        name: conformanceElement.name + " for " + specificCase,
-        prompt: cases[specificCase].prompt + " " + conformanceElement.text,
+        name: name,
+        prompt: prompt,
         additionalParameters: {
-            problemStatement: cases[specificCase].problemStatement,
-            backgroundKnowledge: cases[specificCase].backgroundKnowledge,
+            problemStatement: problemStatement,
+            backgroundKnowledge: english.trim(),
         },
-        expectations: conformanceElement.expectations,
+        expectations: {
+            timeUnit: timeUnit,
+            stocks: stocks
+        }
     };
 };
 
+const extractStocks = function(generatedModel) {
+    return (generatedModel.variables || []).filter((variable) => {
+        return variable.type === 'stock';
+    });
+};
 
-export const evaluate = function(fromAI, requirements) {
-    const fromAIVariables = extractVariables(fromAI);
-    const fromAIFeedbackLoops = countLoops(fromAI);
+const extractFlow = function(flowSpec, possibleNames,  generataedModel) {
+    return (generatedModel.variables || []).find((variable) => {
+        if (variable.type !== 'flow')
+            return false;
 
-    const failures = [];
-
-    if ("variables" in requirements) {    
-        for (const requiredVar of requirements.variables) {
-            if (!fromAIVariables.has(requiredVar)) {
-                failures.push({
-                    type: "Missing required variable",
-                    details: "Missing required variables: Variables are: " + Array.from(fromAIVariables).join(', ')
-                })
+        let foundName = false;
+        for (const possibleName of possibleNames) {
+            if (possibleName.toLowerCase() === variable.name.toLowerCase()) {
+                foundName = true;
+                break;
             }
         }
+
+        if (!foundName)
+            return false;
+        
+        //if we are looking for a rate... 
+        if (flowSpec.rate) {
+            return variable.equation.includes("*"); //look for something with a * in its equation
+        } else { //then its fixed!
+            return variable.equation.includes(flowSpec.fixed); //otherwise look for the number in the equation
+        }
+    })
+};
+
+const compareNames = function(aiName, groundTruthName) {
+    const value =  aiName.toLowerCase().includes(groundTruthName.toLowerCase());
+    //console.log("Comparing names... " + aiName + " " + groundTruthName + " " + value);
+    return value;
+};
+
+export const evaluate = function(generatedResponse, groundTruth) {
+    const generatedModel = generatedResponse?.model || {};
+    const groundTruthStocks = groundTruth.stocks;
+
+    const comparator = function(a, b) {
+        if ( a.name < b.name ){
+            return -1;
+        }
+        if ( a.name > b.name ){
+            return 1;
+        }
+        return 0;
+    };
+
+    const stockEqualityGTComparatorGenerator = function(groundTruth) {
+        return (ai) => {
+            return compareNames(ai.name, groundTruth.name);
+        };
+    };
+
+    const stockEqualityAIComparatorGenerator = function(ai) {
+        return (groundTruth) => {
+            return compareNames(ai.name, groundTruth.name);
+        };
+    };
+
+    const failures = []; //type, details
+    const stocks = extractStocks(generatedModel); //get all the stocks
+
+    const sortedAIStocks = stocks.sort(comparator); //sort for comparison purposes by name
+    const sortedTruthStocks = groundTruthStocks.sort(comparator);
+
+    const removed = sortedTruthStocks.filter((element) => { return !sortedAIStocks.some(stockEqualityGTComparatorGenerator(element))});
+    const added = sortedAIStocks.filter((element) => { return !sortedTruthStocks.some(stockEqualityAIComparatorGenerator(element))});
+
+    const addedStr = added.map((r)=>{return r.name}).join(", ");
+    const removedStr = removed.map((r)=>{return r.name}).join(", ");
+    const groundTruthStr = sortedTruthStocks.map((r)=>{return r.name}).join(", ");
+
+    if (!compareNames(generatedModel.specs.timeUnits, groundTruth.timeUnit)) {
+        failures.push({
+            type: "Incorrect time unit discovered",
+            details: "Incorrect time unit discovered. Expected " + generatedModel.specs.timeUnits + " to be " + groundTruth.timeUnit
+        });
     }
 
-    if ("minVariables" in requirements) {
-        if (fromAIVariables.size < requirements.minVariables) {
-            failures.push({
-                type: "Too few variables",
-                details: "Too few variables: Variables are: " + Array.from(fromAIVariables).join(', ')
-            });
-        }
-    }
-
-    if ("maxVariables" in requirements) {
-        if (fromAIVariables.size > requirements.maxVariables) {
-            failures.push({
-                type: "Too many variables",
-                details: "Too many variables: Variables are: " + Array.from(fromAIVariables).join(', ')
-            });
-        }
+    if (added.length > 0) {
+        failures.push({
+            type: "Fake stock found",
+            details: "Fake stock found\n" + addedStr + "\nGround Truth Stocks Are\n" + groundTruthStr
+        });
     }
     
-    if ("minFeedback" in requirements) {
-        if (fromAIFeedbackLoops < requirements.minFeedback) {
-            failures.push({
-                type: "Too few feedback loops",
-                details: "Too few feedback loops: The number of feedback loops found was " + fromAIFeedbackLoops
-            });
-        }
+    if (removed.length > 0) {
+        failures.push({
+            type: "Real stocks not found",
+            details: "Real stocks not found\n" + removedStr + "\nGround Truth Stocks Are\n" + groundTruthStr
+        });
     }
 
-    if ("maxFeedback" in requirements) {
-        if (fromAIFeedbackLoops > requirements.maxFeedback) {
+    for (const groundTruthStock of sortedTruthStocks) {
+        let aiStock = sortedAIStocks.find(stockEqualityGTComparatorGenerator(groundTruthStock));
+        if (!aiStock)
+            continue; //some error in the test itself
+
+        if (aiStock.equation !== groundTruthStock.initialValue.toString()) {
             failures.push({
-                type: "Too many feedback loops",
-                details: "Too many feedback loops: The number of feedback loops found was " + fromAIFeedbackLoops
+                type: "Incorrect initial value discovered",
+                details: "Incorrect initial value discovered. Expected " + aiStock.equation + " to be " + groundTruthStock.initialValue.toString()
             });
+        }
+
+        if (groundTruth.inflows) {
+            if (aiStock.inflows.length != groundTruthStock.inflows.length) {
+                failures.push({
+                    type: "Incorrect number of inflows discovered",
+                    details: "Incorrect number of inflows discovered. Expected " + aiStock.inflows.length + " to be " + groundTruthStock.inflows.length
+                });
+            } else {
+                groundTruth.inflows.forEach((f) => {
+                    const foundFlow = extractFlow(f, aiStock.inflows, generatedModel);
+                    if (!foundFlow) {
+                        failures.push({
+                            type: "Failed to find flow matching specification",
+                            details: "Failed to find flow matching specification. Expected to find a flow with specification " + JSON.stringify(f)
+                        });
+                    }
+                });
+            }
+        }
+
+        if (groundTruth.outflows) {
+            if (aiStock.outflows.length != groundTruthStock.outflows.length) {
+                failures.push({
+                    type: "Incorrect number of outflows discovered",
+                    details: "Incorrect number of outflows discovered. Expected " + aiStock.outflows.length + " to be " + groundTruthStock.outflows.length
+                });
+            } else {
+                groundTruth.outflows.forEach((f) => {
+                    const foundFlow = extractFlow(f, aiStock.outflows, generatedModel);
+                    if (!foundFlow) {
+                        failures.push({
+                            type: "Failed to find flow matching specification",
+                            details: "Failed to find flow matching specification. Expected to find a flow with specification " + JSON.stringify(f)
+                        });
+                    }
+                });
+            }
         }
     }
 
@@ -253,6 +218,50 @@ export const evaluate = function(fromAI, requirements) {
 };
 
 export const groups = {
-    "genericConformance": genericConformanceElements.map(g => Object.keys(cases).map(c => generateConformanceTest(g, c))).flat(1),
-    "specificConformance": Object.keys(cases).map(c => generateConformanceTest(specificConformanceElements[c], c))
-}
+    "singleStock": [
+        generateTest("Extract a single stock with one flow", "day", [
+            { 
+                name: nouns[0], 
+                initialValue: 20,
+                inflows: [
+                    { rate: 0.02, of: nouns[0] }
+                ]
+            }
+        ]),
+        generateTest("Extract a single stock with two flows", "week", [
+            { 
+                name: nouns[0], 
+                initialValue: 100,
+                inflows: [
+                    { rate: 0.05, of: nouns[0] }
+                ], 
+                outflows: [
+                    { fixed: 5 }
+                ]
+            }
+        ])
+    ], 
+    "twoStock": [
+        generateTest("Extract a two stock system", "year", [
+            { 
+                name: nouns[1], 
+                initialValue: 100,
+                inflows: [
+                    { rate: 0.05, of: nouns[1] }
+                ], 
+                outflows: [
+                    { rate: 3, of: nouns[2] }
+                ]
+            }, { 
+                name: nouns[2], 
+                initialValue: 200,
+                inflows: [
+                    { rate: 0.05, of: nouns[1] }
+                ], 
+                outflows: [
+                    { fixed: 0.03, of: nouns[2] }
+                ]
+            }
+        ])
+    ]
+};
