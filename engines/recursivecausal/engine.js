@@ -1,4 +1,3 @@
-import Engine from '../default/engine.js';
 import AdvancedEngineBrain from '../default/AdvancedEngineBrain.js';
 import { LLMWrapper } from '../../utils.js';
 
@@ -17,9 +16,31 @@ You must keep in mind the following:
 6. Try as hard as you can to close feedback loops between the variables you find. It is very important that your answer includes feedback.  A feedback loop happens when there is a closed causal chain of relationships.  An example would be “Variable1” causes “Variable2” to increase, which causes “Variable3” to decrease which causes “Variable1” to again increase.  Try to find as many of the feedback loops as you can.`
 
 
-class RecursiveCausalEngine extends Engine {
+class RecursiveCausalEngine {
   additionalParameters() {
-    return super.additionalParameters().concat([
+    let parameters = LLMWrapper.additionalParameters();
+    return parameters.concat([
+      {
+        name: "problemStatement",
+        type: "string",
+        required: false,
+        uiElement: "textarea",
+        saveForUser: "local",
+        label: "Problem Statement",
+        description: "Description of a dynamic issue within the system you are studying that highlights an undesirable behavior over time.",
+        minHeight: 50,
+        maxHeight: 100
+      },
+      {
+        name: "backgroundKnowledge",
+        type: "string",
+        required: false,
+        uiElement: "textarea",
+        saveForUser: "local",
+        label: "Background Knowledge",
+        description: "Background information you want the OpenAI model to consider when generating a diagram for you",
+        minHeight: 100
+      },
       {
         name: "mainTopics",
         type: "string",
@@ -34,11 +55,11 @@ class RecursiveCausalEngine extends Engine {
         name: "depth",
         type: "number",
         required: true,
-        uiElement: "number",
+        uiElement: "lineedit",
         saveForUser: "local",
         label: "Depth",
         description: "How many layers of cause/effect to explore",
-      },
+      }
     ]);
   }
 
@@ -91,7 +112,7 @@ class RecursiveCausalEngine extends Engine {
         const topicPrompt = `Given the following user-provided text:"""\n${prompt}\n"""\nIdentify causes (drivers) and effects (impacts) of the topic: "${topic}" present in the text.`;
 
         const result = await recursiveBrain.generateDiagram(topicPrompt, { relationships: [] });
-        result = result.toLowerCase();
+
         if (!result.relationships || result.relationships.length === 0) return;
 
         allRelationships.push(...result.relationships);
