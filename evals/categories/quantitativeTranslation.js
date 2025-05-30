@@ -259,7 +259,57 @@ export const groups = {
                     { rate: 0.05, of: nouns[1] }
                 ], 
                 outflows: [
-                    { fixed: 0.03, of: nouns[2] }
+                    { rate: 0.03, of: nouns[2] }
+                ]
+            }
+        ])
+    ], 
+     "fiveStock": [
+        generateTest("Extract a five stock system", "year", [
+            { 
+                name: nouns[1], 
+                initialValue: 100,
+                inflows: [
+                    { rate: 0.05, of: nouns[1] }
+                ], 
+                outflows: [
+                    { fixed: 3 }
+                ]
+            }, { 
+                name: nouns[2], 
+                initialValue: 200,
+                inflows: [
+                    { rate: 0.05, of: nouns[1] }
+                ], 
+                outflows: [
+                    { rate: 0.03, of: nouns[2] }
+                ]
+            }, { 
+                name: nouns[3], 
+                initialValue: 200,
+                inflows: [
+                    { rate: 0.05, of: nouns[2] }
+                ], 
+                outflows: [
+                    { rate: 0.03, of: nouns[3] }
+                ]
+            }, { 
+                name: nouns[4], 
+                initialValue: 12,
+                inflows: [
+                    { rate: 0.05, of: nouns[3] }
+                ], 
+                outflows: [
+                    { rate: 0.03, of: nouns[5] }
+                ]
+            }, { 
+                name: nouns[5], 
+                initialValue: 88,
+                inflows: [
+                    { rate: 0.05, of: nouns[4] }
+                ], 
+                outflows: [
+                    { rate: 0.03, of: nouns[3] }
                 ]
             }
         ])
