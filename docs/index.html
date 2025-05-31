@@ -13,19 +13,40 @@
 
   <script src="https://cdn.plot.ly/plotly-3.0.1.min.js" charset="utf-8"></script>
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100..900;1,100..900&display=swap');
     body {
-      display: flex;
-      justify-content: center;
-      margin: 20px;
+      font-family: "Roboto", sans-serif;
     }
-    #container {
-      width: 90vw;
+    h1 {
+      font-size: 48px;
     }
-    h1, h2 {
+    header {
       text-align: center;
+      margin: 80px;
     }
-    #themes {
-      margin-bottom: 20px;
+    header a {
+      border: 1px solid black;
+      color: black;
+      border-radius: 18px;
+      padding: 8px;
+      text-decoration: none;
+    }
+    header a:hover {
+      border-width: 2px;
+      padding: 7px;
+    }
+    header a img {
+      position: relative;
+      top: 3px;
+      width: 20px; 
+    }
+    .tabcontent {
+      margin:auto;
+      max-width: 1300px;
+      margin-top: 80px;
+    }
+    .tabcontent h2 {
+      margin-top: 80px;
     }
     table {
       width: 100%;
@@ -37,95 +58,119 @@
       padding: 4px 8px;
       text-align: left;
     }
-    #scatterplot {
-      width: 100%;
-      height: 80vh;
+    .plot .plotly .svg-container {
+      margin:auto;
+    }
+    #tablist {
+      text-align: center; width: 100%;
+      border-bottom: 1px dashed black;
+    }
+    #tablist button {
+      padding: 15px;
+      margin: 0 10px;
+      background: transparent;
+      border: none;
+      font-size: 20px;
+      cursor: pointer;
+      position: relative;
+      top: 2px;
+      color:#555;
+    }
+    #tablist button:hover {
+      color: black;
+    }
+    #tablist button.selected {
+      color: black;
+      border-bottom: 3px solid black;
+      font-weight: bold;
     }
   </style>
 </head>
 <body>
   <div id="container">
-    <h1>SD-AI Leaderboard</h1>
-    <section id="themes">
-      <h2>Methodology</h2>
-      <ul>
-        <li><a rel="noopener" href="https://github.com/UB-IAD/sd-ai" target="_blank">Full README</a></li>
-        <li><a rel="noopener" href="https://arxiv.org/abs/2503.15580" target="_blank">Paper Describing Tests</a></li>
-      </ul>
-    </section>
-    <section id="leaderboard-section">
-      <h2>Engine Ranking</h2>
-      <table id="leaderboard-table">
-        <thead>
-          <tr>
-            <th>Engine Config Name</th>
-            <th>Overall Score</th>
-            <th>Causal Translation Score</th>
-            <th>Conformance Score</th>
-            <th>Speed (Total Seconds)</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </section>
-    <section id="plot-section">
-      <h2>Performance vs Speed</h2>
-      <div id="scatterplot"></div>
-    </section>
+    <header>
+      <h1>SD-AI Leaderboard</h1>
+      <a rel="noopener" href="https://github.com/UB-IAD/sd-ai" target="_blank">
+        <img src="https://github.githubassets.com/assets/GitHub-Mark-ea2971cee799.png"/>Github</a>
+      <a rel="noopener" href="https://arxiv.org/abs/2503.15580" target="_blank">Paper</a>
+    </header>
+    <section id="tablist"></section>
   </div>
 
   <script>
-    const leaderboards = {
-      "Casual Loop Diagram": "leaderboardCLD_full_results.json",
-      "Stock and Flow Diagram": "leaderboardSFD_full_results.json",
+    function camelCaseToWords(s) {
+      const result = s.replace(/([A-Z])/g, ' $1');
+      return result.charAt(0).toUpperCase() + result.slice(1);
     }
-    // rewrite this to create one full leaderboard tab for each leaderboard above
-    fetch('full_results.json')
-      .then(response => response.json())
-      .then(data => {
+
+    const leaderboardFiles = [
+      { 
+        name: "Casual Loop Diagrams",
+        file: "leaderboardCLD_full_results.json"
+      },
+      {
+        name: "Stock and Flow Diagrams",
+        file: "leaderboardSFD_full_results.json"
+      }
+    ]
+
+    const leaderboardsHTML = document.querySelector('#container');
+    const tabListHTML = document.querySelector('#tablist');
+    let firstTab = true;
+
+    var promises = leaderboardFiles.map(async o => {
+        const r = y = await fetch(o.file);
+        o.data = await r.json();
+        return o
+      }
+    );
+    Promise.all(promises).then(results => {
+      results.forEach(leaderboardObject => {
+        const leaderboardName = leaderboardObject.name;
+        const leaderboardFile = leaderboardObject.file;
+        const data = leaderboardObject.data;
         const engineStats = {};
+        const categories = new Set();
 
         data.results.forEach(test => {
           const engineName = test.engineConfigName;
           if (!engineStats[engineName]) {
             engineStats[engineName] = {
-              conformancePasses: 0,
-              conformanceCount:0,
-              translationPasses: 0,
-              translationCount: 0,
               speeds: []
             };
           }
 
-          switch (test.category) {
-            case 'causalTranslation':
-              engineStats[engineName].translationPasses += test.pass ? 1 : 0;
-              engineStats[engineName].translationCount += 1;
-              break;
-
-            case 'conformance':
-              engineStats[engineName].conformancePasses += test.pass ? 1 : 0;
-              engineStats[engineName].conformanceCount += 1;
-              break;
+          if (!(test.category in engineStats[engineName])) {
+            categories.add(test.category);
+            engineStats[engineName][test.category] = {
+              passes: 0,
+              count: 0
+            }
           }
 
-         
+          engineStats[engineName][test.category].passes += test.pass ? 1 : 0;
+          engineStats[engineName][test.category].count += 1;
           engineStats[engineName].speeds.push(test.duration);
         });
 
         // Compute average score and median speed
         const engineArray = Object.entries(engineStats).map(([name, stats]) => {
-          const translationScore = (stats.translationPasses / stats.translationCount);
-          const conformanceScore = (stats.conformancePasses / stats.conformanceCount);
-          const score = (stats.conformancePasses + stats.translationPasses)  /  (stats.conformanceCount + stats.translationCount);
+          let totalPasses = 0;
+          let totalCount = 0;
+          const scores = Object.fromEntries(Object.keys(stats).filter(e => e != "speeds").map(category => {
+            totalPasses += stats[category].passes;
+            totalCount += stats[category].count;
+            return [category, stats[category].passes / stats[category].count ]
+          }))
+
+          const score = totalPasses / totalCount; 
 
           const speed = stats.speeds.reduce((partialSum, a) => partialSum + a, 0) / 1000
           return {
             name,
             speed,
             score,
-            translationScore,
-            conformanceScore
+            ...scores,
           };
         });
 
@@ -133,19 +178,46 @@
         engineArray.sort((a, b) => b.score - a.score);
 
         // Populate leaderboard table
-        const tbody = document.querySelector('#leaderboard-table tbody');
-        engineArray.forEach(engine => {
+        const leaderboardHTML = document.createElement('div');
+        leaderboardHTML.className = "tabcontent"
+        leaderboardHTML.id = leaderboardFile
+        const leaderboardTable = document.createElement('table');
+        const thead = document.createElement('thead');
+        const tbody = document.createElement('tbody');
+
+
+        const categoryHeaders = Array.from(categories).map(c => {
+            return `<th>${camelCaseToWords(c)}</th>`
+        }).join("\n");
+        thead.innerHTML = `<tr>
+            <th>Rank</th>
+            <th>Engine Config Name</th>
+            <th>Overall Score</th>
+            ${categoryHeaders}
+            <th>Speed (Total Seconds)</th>
+          </tr>`;
+        leaderboardTable.appendChild(thead)
+
+        engineArray.map((engine, index) => {
           const row = document.createElement('tr');
+          const categoryScores = Array.from(categories).map(c => {
+              return `<td>${engine[c].toFixed(3)}</td>`
+          }).join("\n");
           row.innerHTML = `
+            <td>${index + 1}</td>
             <td>${engine.name}</td>
             <td>${engine.score.toFixed(3)}</td>
-            <td>${engine.translationScore.toFixed(3)}</td>
-            <td>${engine.conformanceScore.toFixed(3)}</td>
+            ${categoryScores}
             <td>${Math.round(engine.speed)}</td>
           `;
-          tbody.appendChild(row);
+          tbody.appendChild(row) 
         });
+        leaderboardTable.appendChild(tbody)
 
+
+
+        const plot = document.createElement('div')
+        plot.className = "plot"
         // Prepare scatterplot data
         const trace = {
           x: engineArray.map(e => e.score),
@@ -158,24 +230,59 @@
         };
 
         const layout = {
-          xaxis: { title: { text: 'Score (% correct)' } },
+          width: 1200,
+          height: 750,
+          xaxis: { title: { text: 'Score (% correct)' }, range: [0, 1.13] },
           yaxis: { title: { text: 'Speed (total seconds)' } },
-          margin: { t: 20 }
+          margin: { t: 20 },
+          font: {
+            family: "Roboto, sans-serif"
+          }
         };
 
-        Plotly.newPlot('scatterplot', [trace], layout, {displayModeBar: false});
+        leaderboardHTML.appendChild(leaderboardTable)
 
-        let table = new DataTable('#leaderboard-table', {
-          paging: false,
-          searching: false,
-          order: [[1, 'desc']]
-        });
+        const plotTitle = document.createElement("h2")
+        plotTitle.innerHTML = "Performance vs. Speed Curve"
+        leaderboardHTML.appendChild(plotTitle)
+        leaderboardHTML.appendChild(plot)
+
+        // give the html a sec to render then add the plot, so the correct starting width of the plot can be established from the parent
+        // 2nd answer seems to work well: https://stackoverflow.com/questions/15875128/is-there-element-rendered-event
+        setTimeout(() => {
+          Plotly.newPlot(plot, [trace], layout, {displayModeBar: false});
+          let table = new DataTable(leaderboardTable, {
+            paging: false,
+            searching: false,
+            order: [[0, 'asc']]
+          });
+        }, 0)
+    
+        const tabButton = document.createElement("button") 
+        tabButton.innerHTML = leaderboardName
+        tabButton.onclick = function(e) {
+          const allLeaderboards = document.querySelectorAll(".tabcontent")
+          allLeaderboards.forEach( e => e.style.display = "none" )
+          const allButtons = document.querySelectorAll("#tablist button")
+          allButtons.forEach( e => e.className = "")
+
+          leaderboardHTML.style.display = "block"
+          e.target.className = "selected"
+        }
+
+        if (firstTab) {
+          tabButton.className = "selected"
+        } else {
+          leaderboardHTML.style.display = "none"
+        }
+        firstTab = false 
+    
+        leaderboardsHTML.appendChild(leaderboardHTML)
+        tabListHTML.appendChild(tabButton)
 
       })
-      .catch(error => {
-        document.getElementById('leaderboard-section').innerHTML = '<p>Error loading data.</p>';
-        console.error('Error loading full_results.json:', error);
-      });
+    });
+
   </script>
 </body>
 </html>
