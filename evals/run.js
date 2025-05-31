@@ -11,6 +11,7 @@ const enc = new Tiktoken(o200k_base);
 
 import cliProgress from "cli-progress";
 import chalk from "chalk";
+import prompts from "prompts";
 
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
@@ -28,15 +29,53 @@ const argv = yargs(hideBin(process.argv))
   })
   .help().argv;
 
+const experiment = JSON.parse(fs.readFileSync(argv.experiment, "utf8"));
+const experimentName = path.basename(path.resolve(argv.experiment)).split(".")[0];
+
+const files = fs.readdirSync('.');
+const inProgressFileSuffix = "_in_progress.jsonl"
+const matchingFiles = files.filter(file => file.includes(`${experimentName}${inProgressFileSuffix}`));
+
+let previousResults = []
+let isContinuing = false;
+let experimentResultsName;
+
+if (matchingFiles.length > 0) {
+    const response = await prompts({
+        type: 'toggle',
+        name: 'resume',
+        message: 'Do you want to resume previous evaluation run?',
+        initial: true,
+        active: 'yes',
+        inactive: 'no'
+      });
+    if (response.resume === true && matchingFiles.length > 1) {
+      console.log(chalk.red(chalk.bold("Found multiple in progress experiment runs. Please delete all files you don't wish to resume from.")));
+      matchingFiles.forEach(f => {
+        console.log("- " + f)
+      })
+      process.exit(1)
+    }
+    isContinuing = response.resume;
+    console.log()
+}
+
+if (isContinuing) {
+  const previousFileName = matchingFiles[0];
+  previousResults = fs.readFileSync(previousFileName, 'utf-8').split('\n').filter(Boolean).map(l => JSON.parse(l))
+  experimentResultsName = previousFileName.replace(inProgressFileSuffix,"")
+} else {
+  const experimentId = uniqueFileId();
+  experimentResultsName = `${experimentId}_${experimentName}`;
+}
+
+
 // See commentary in readme about rate limiting
 // 3k was max total tokens used by causual translation on a standard non-reasoning openai model at teir 1
 const BASELINE_TOKEN_USAGE = 3000;
 const TOKENS_PER_MINUTE = 30_000;
 // openai typically allows 500 requests per minute, so 400 is safe bet
 const REQUESTS_PER_MINUTE = 400;
-
-const experimentId = uniqueFileId();
-const experiment = JSON.parse(fs.readFileSync(argv.experiment, "utf8"));
 
 // goal of tests is to create a pretty flat denormaized structure
 // but all keyed on engine name so that we can easily rate limit by engine
@@ -103,9 +142,12 @@ const tests = Object.fromEntries(
 );
 
 console.log(chalk.blue("Experiment Configuration:"));
+console.log("Experiment Name: " + experimentResultsName);
+if (isContinuing) {
+  console.log(`  will attempt to use ${previousResults.length} previously saved test results`); 
+}
 console.log("Sequential: " + (experiment.sequential || "false"));
 console.log("Verbose: " + (experiment.verbose || "false"));
-console.log("Experiment Id: " + experimentId);
 console.log();
 
 console.log(chalk.blue("Engine Configurations:"));
@@ -253,99 +295,118 @@ const runSingleTest = async (
   engineBar
 ) => {
   const name = test.testParams["name"];
+  const cachedResult = previousResults.find(r => {
+    return (
+      r.engineConfigName = test.engineConfigName && 
+      r.category == test.category && 
+      r.group == test.group &&
+      r.testParams.name == test.testParams.name
+    )
+  })
 
-  const additionalTestParametersTokenCount =
-    enc.encode(test.testParams["prompt"]).length +
-    Object.entries(test.testParams.additionalParameters)
-      .map(([_, v]) => {
-        return enc.encode(v).length;
-      })
-      .reduce((a, b) => a + b, 0);
+  let testWithResult;
+  if (cachedResult) {
+    if (experiment.verbose)
+      console.log(chalk.blue(`No need to run "${name}" test, we already have results from previous experiment run.`));
 
-  const totalTokens =
-    additionalTestParametersTokenCount +
-    test.engineConfig.limits.baselineTokenUsage;
+    testWithResult = cachedResult;
 
-  if (experiment.verbose)
-    console.log(chalk.blue(`Starting test: ${name}. Awaiting rate limit. Requested additional ${additionalTestParametersTokenCount} tokens beyond the baselineTokenUsage (${test.engineConfig.limits.baselineTokenUsage})`));
+  } else {
+    const additionalTestParametersTokenCount =
+      enc.encode(test.testParams["prompt"]).length +
+      Object.entries(test.testParams.additionalParameters)
+        .map(([_, v]) => {
+          return enc.encode(v).length;
+        })
+        .reduce((a, b) => a + b, 0);
 
-  await requestLimiter.removeTokens(1);
-  await tokenLimiter.removeTokens(totalTokens);
+    const totalTokens =
+      additionalTestParametersTokenCount +
+      test.engineConfig.limits.baselineTokenUsage;
 
-  const engine = await import(
-    `../engines/${test["engineConfig"]["engine"]}/engine.js`
-  );
-  const instance = new engine.default();
+    if (experiment.verbose)
+      console.log(chalk.blue(`Starting test: ${name}. Awaiting rate limit. Requested additional ${additionalTestParametersTokenCount} tokens beyond the baselineTokenUsage (${test.engineConfig.limits.baselineTokenUsage})`));
 
-  if (experiment.verbose)
-    console.log(
-      chalk.blue(`Rate limit passed ${name}, awaiting engine response`)
+    await requestLimiter.removeTokens(1);
+    await tokenLimiter.removeTokens(totalTokens);
+
+    const engine = await import(
+      `../engines/${test["engineConfig"]["engine"]}/engine.js`
+    );
+    const instance = new engine.default();
+
+    if (experiment.verbose)
+      console.log(
+        chalk.blue(`Rate limit passed ${name}, awaiting engine response`)
+      );
+
+    inProgress.add(name);
+    engineBar.update({ inProgress: printProgress(inProgress) });
+
+    const additionalParameters = {
+      ...test.engineConfig.additionalParameters,
+      ...test.testParams.additionalParameters,
+    };
+
+    const startTime = Date.now();
+    let generateResponse = await instance.generate(
+      test.testParams["prompt"],
+      test.testParams["currentModel"],
+      additionalParameters
     );
 
-  inProgress.add(name);
-  engineBar.update({ inProgress: printProgress(inProgress) });
+    testWithResult = structuredClone(test);
+    testWithResult["duration"] = Date.now() - startTime;
+    testWithResult["generatedResponse"] = generateResponse || {};
 
-  const additionalParameters = {
-    ...test.engineConfig.additionalParameters,
-    ...test.testParams.additionalParameters,
-  };
+    if (experiment.verbose) {
+      console.log(
+        chalk.blue(
+          `Response returned: ${name}, awaiting evaluation of the generated response:`
+        )
+      );
+      console.log(
+        JSON.stringify(generateResponse)
+      );
+      console.log();
+      // pretty json print the expectations
+      console.log(chalk.blue("Against these expectations:"));
+      console.log(JSON.stringify(test.testParams["expectations"], null, 2));
+    }
 
-  const startTime = Date.now();
-  let generateResponse = await instance.generate(
-    test.testParams["prompt"],
-    test.testParams["currentModel"],
-    additionalParameters
-  );
-
-  const testWithResult = structuredClone(test);
-  testWithResult["duration"] = Date.now() - startTime;
-  testWithResult["generatedResponse"] = generateResponse || {};
-
-  if (experiment.verbose) {
-    console.log(
-      chalk.blue(
-        `Response returned: ${name}, awaiting evaluation of the generated response:`
-      )
+    const { evaluate } = await import(`./categories/${test.category}.js`);
+    testWithResult["failures"] = evaluate(
+      testWithResult["generatedResponse"],
+      test.testParams["expectations"]
     );
-    console.log(
-      JSON.stringify(generateResponse)
+    // return count of each failure type
+    testWithResult["failureSummary"] = testWithResult["failures"].reduce(
+      (acc, failure) => {
+        acc[failure.type] = (acc[failure.type] || 0) + 1;
+        return acc;
+      },
+      {}
     );
-    console.log();
-    // pretty json print the expectations
-    console.log(chalk.blue("Against these expectations:"));
-    console.log(JSON.stringify(test.testParams["expectations"], null, 2));
-  }
+    testWithResult["pass"] = testWithResult["failures"].length == 0;
 
-  const { evaluate } = await import(`./categories/${test.category}.js`);
-  testWithResult["failures"] = evaluate(
-    testWithResult["generatedResponse"],
-    test.testParams["expectations"]
-  );
-  // return count of each failure type
-  testWithResult["failureSummary"] = testWithResult["failures"].reduce(
-    (acc, failure) => {
-      acc[failure.type] = (acc[failure.type] || 0) + 1;
-      return acc;
-    },
-    {}
-  );
-  testWithResult["pass"] = testWithResult["failures"].length == 0;
-
-  if (experiment.verbose) {
-    console.log(
-      chalk.blue(
-        `Finished evaluation in ${Math.round(
-          testWithResult["duration"] / 1000
-        )}s: ${name}`
-      )
-    );
-    console.log(
-      "  ",
-      chalk.bold(
-        testWithResult["pass"] ? chalk.green("Passed") : chalk.red("Failed")
-      )
-    );
-    console.log();
+    if (experiment.verbose) {
+      console.log(
+        chalk.blue(
+          `Finished evaluation in ${Math.round(
+            testWithResult["duration"] / 1000
+          )}s: ${name}`
+        )
+      );
+      console.log(
+        "  ",
+        chalk.bold(
+          testWithResult["pass"] ? chalk.green("Passed") : chalk.red("Failed")
+        )
+      );
+      console.log();
+    }
+    testWithResult["name"] = name;
+    fs.appendFileSync(`${experimentResultsName}${inProgressFileSuffix}`, JSON.stringify(testWithResult) + "\n");
   }
 
   inProgress.delete(name);
@@ -353,7 +414,6 @@ const runSingleTest = async (
   engineBar.increment(1, { inProgress: printProgress(inProgress) });
   engineBar.update({ earlyResults: printEarlyResults(earlyResults) });
 
-  testWithResult["name"] = name;
   return testWithResult;
 };
 
@@ -370,14 +430,13 @@ progress.stop();
 const responses = output.flat(1);
 const results = new dataForge.DataFrame({ values: responses });
 
-const experimentName = path.basename(path.resolve(argv.experiment)).split(".")[0];
-const experimentResultsName = `${experimentId}_${experimentName}`;
 
 // write the full results to json file
 fs.writeFileSync(
   `${experimentResultsName}_full_results.json`,
   JSON.stringify({ results: responses }, null, 2)
 );
+fs.unlinkSync(`${experimentResultsName}${inProgressFileSuffix}`);
 
 const engineFailureTypes = [];
 results.forEach((result) => {
