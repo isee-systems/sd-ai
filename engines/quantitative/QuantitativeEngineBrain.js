@@ -115,6 +115,28 @@ You will conduct a multistep process:
         });
         
         originalResponse.relationships = relationships;
+
+        originalResponse.variables.forEach((v)=>{
+            //sometimes graphical function variables (named name_of_graphical) have equations that end up as name_of_graphical_GF(input) the equation in that case should be just input!
+            if (v.graphicalFunction && v.graphicalFunction.points && v.graphicalFunction.points.length > 0) {
+                const lowerCaseEquation = v.equation.toLowerCase();
+                const nameWithUnderscores = v.name.toLowerCase().trim().replaceAll(" ", "_");
+                const startTokens = [
+                    nameWithUnderscores + "(",
+                    nameWithUnderscores + "_GF(",
+                    nameWithUnderscores + "_GRAPH(",
+                    nameWithUnderscores + "_TABLE(",
+                    nameWithUnderscores + "_LOOKUP("
+                ];
+                for (const startToken of startTokens) {
+                    if (lowerCaseEquation.startsWith(startToken) && lowerCaseEquation.endsWith(")")) {
+                        v.equation = v.equation.substring(startToken.length, v.equation.length - 1);
+                        break;
+                    }
+                }
+            }
+        });
+
         return originalResponse;
     }
 
