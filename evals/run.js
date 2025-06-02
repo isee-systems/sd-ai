@@ -61,6 +61,7 @@ const tests = Object.fromEntries(
             Object.entries(experiment.categories).map(async ([c, filter]) => {
               const { groups } = await import(`./categories/${c}.js`);
               if (filter === true) return [c, groups];
+              if (filter === false) return [c, []];
               return [
                 c,
                 Object.fromEntries(
@@ -75,10 +76,6 @@ const tests = Object.fromEntries(
         );
 
         const engine = await import(`./../engines/${engineConfig.engine}/engine.js`);
-        const supportedModes = engine.default.supportedModes();
-        if (!supportedModes || !supportedModes.includes("cld")) {
-          return [undefined, undefined];
-        }
 
         // jam the details of the engine and the category and group into the test itself
         const fullTests = Object.entries(allTests).map(([category, groups]) => {
@@ -161,7 +158,6 @@ printTable(
 console.log();
 
 console.log("Press enter to run this experiment...");
-// spawnSync("read _ ", { shell: true, stdio: [0, 1, 2] });
 
 if (process.platform === "win32") {
   spawnSync("pause", { shell: true, stdio: [0, 1, 2] });
@@ -311,20 +307,16 @@ const runSingleTest = async (
 
   const testWithResult = structuredClone(test);
   testWithResult["duration"] = Date.now() - startTime;
-  testWithResult["generatedRelationships"] = generateResponse.model?.relationships || {};
+  testWithResult["generatedResponse"] = generateResponse || {};
 
   if (experiment.verbose) {
     console.log(
       chalk.blue(
-        `Response returned: ${name}, awaiting evaluation of these generated relationships:`
+        `Response returned: ${name}, awaiting evaluation of the generated response:`
       )
     );
     console.log(
-      generateResponse.model.relationships
-        .map((r) => {
-          return `${r.from} --> (${r.polarity}) ${r.to}`;
-        })
-        .join("\n")
+      JSON.stringify(generateResponse)
     );
     console.log();
     // pretty json print the expectations
@@ -334,7 +326,7 @@ const runSingleTest = async (
 
   const { evaluate } = await import(`./categories/${test.category}.js`);
   testWithResult["failures"] = evaluate(
-    testWithResult["generatedRelationships"],
+    testWithResult["generatedResponse"],
     test.testParams["expectations"]
   );
   // return count of each failure type
@@ -387,7 +379,7 @@ const responses = output.flat(1);
 const results = new dataForge.DataFrame({ values: responses });
 
 const experimentName = path.basename(path.resolve(argv.experiment)).split(".")[0];
-const experimentResultsName = `${experimentName}_${experimentId}`;
+const experimentResultsName = `${experimentId}_${experimentName}`;
 
 // write the full results to json file
 fs.writeFileSync(

@@ -2,20 +2,15 @@
     "sequential": true,
     "verbose": true,
     "engineConfigs": {
-        "recursivecausal-4o": {
+        "advanced-gpt-4o": {
             "engine": "advanced",
             "additionalParameters": {
-                "underlyingModel": "gpt-4o",
-                "depth": 1
-            },
-            "limits": {
-                "tokensPerMinute": 90000,
-                "requestsPerMinute": 10
+                "underlyingModel": "gpt-4o"
             }
         }
     },
     "categories": {
-        "causalTranslation": true,
-        "conformance": true 
+        "conformance": true,
+        "causalTranslation": true 
     }
 }

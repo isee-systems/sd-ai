@@ -6,6 +6,95 @@
                 "underlyingModel": "o4-mini"
             }
         },
+
+        "recursivecausal-gpt-4o": {
+            "engine": "recursivecausal",
+            "additionalParameters": {
+                "underlyingModel": "gpt-4o",
+                "depth": 1
+            }
+        },
+        
+        "recursivecausal-gpt-4.1": {
+            "engine": "recursivecausal",
+            "additionalParameters": {
+                "underlyingModel": "gpt-4.1",
+                "depth": 1
+            },
+            "limits": {
+                "requestsPerMinute": 10
+            }
+        },
+
+        "recursivecausal-gpt-4.5-preview": {
+            "engine": "recursivecausal",
+            "additionalParameters": {
+                "underlyingModel": "gpt-4.5-preview",
+                "depth": 1
+            },
+            "limits": {
+                "tokensPerMinute": 100000
+            }
+        },
+
+        "recursivecausal-gemini-2.5-flash-preview-05-20": {
+            "engine": "recursivecausal",
+            "additionalParameters": {
+                "underlyingModel": "gemini-2.5-flash-preview-05-20",
+                "depth": 1
+            },
+            "limits": {
+                "tokensPerMinute": 90000,
+                "requestsPerMinute": 10
+            }
+        },
+
+        "recursivecausal-gemini-2.5-pro-preview-05-06": {
+            "engine": "recursivecausal",
+            "additionalParameters": {
+                "underlyingModel": "gemini-2.5-pro-preview-05-06",
+                "depth": 1
+            },
+            "limits": {
+                "tokensPerMinute": 90000,
+                "requestsPerMinute": 10
+            }
+        },
+
+        "recursivecausal-o1": {
+            "engine": "recursivecausal",
+            "additionalParameters": {
+                "underlyingModel": "o1",
+                "depth": 1
+            },
+            "limits": {
+                "baselineTokenUsage": 10000
+            }
+        },
+
+        "recursivecausal-o3-mini-high": {
+            "engine": "recursivecausal",
+            "additionalParameters": {
+                "underlyingModel": "o3-mini high",
+                "depth": 1
+            },
+            "limits": {
+                "baselineTokenUsage": 18000,
+                "tokensPerMinute": 60000
+            }
+        },
+
+        "recursivecausal-o4-mini": {
+            "engine": "recursivecausal",
+            "additionalParameters": {
+                "underlyingModel": "o4-mini",
+                "depth": 1
+            },
+            "limits": {
+                "baselineTokenUsage": 10000
+            }
+        },
+
         "advanced-gpt-4o": {
             "engine": "advanced",
             "additionalParameters": {
@@ -59,20 +148,20 @@
             }
         },
 
-        "advanced-gemini-2.5-flash-preview-04-17": {
+        "advanced-gemini-2.5-flash-preview-05-20": {
             "engine": "advanced",
             "additionalParameters": {
-                "underlyingModel": "gemini-2.5-flash-preview-04-17"
+                "underlyingModel": "gemini-2.5-flash-preview-05-20"
             },
             "limits": {
                 "tokensPerMinute": 90000,
                 "requestsPerMinute": 10
             }
         },
-        "advanced-gemini-2.5-pro-preview-03-25": {
+        "advanced-gemini-2.5-pro-preview-05-06": {
             "engine": "advanced",
             "additionalParameters": {
-                "underlyingModel": "gemini-2.5-pro-preview-03-25"
+                "underlyingModel": "gemini-2.5-pro-preview-05-06"
             },
             "limits": {
                 "tokensPerMinute": 90000,
