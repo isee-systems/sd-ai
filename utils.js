@@ -257,8 +257,10 @@ export class LLMWrapper {
     "polarityReasoning": "This is the reason for why the polarity for this relationship was choosen",
     "relationship": "This is a relationship between two variables, from and to (from is the cause, to is the effect).  The relationship also contains a polarity which describes how a change in the from variable impacts the to variable",
     "relationships": "The list of relationships you think are appropriate to satisfy my request based on all of the information I have given you",
-    "explanation": "Concisely explain your reasoning for each change you made to the old CLD to create the new CLD. Speak in plain English, don't reference json specifically. Don't reiterate the request or any of these instructions.",
+    "explanation": "Concisely explain your reasoning for each change you made to the old model to create the new model. Speak in plain English, refer to system archetypes, don't reference json specifically. Don't reiterate the request or any of these instructions.",
     "title": "A highly descriptive 7 word max title describing your explanation.",
+
+    "quantExplanation": "Concisely explain your reasoning for each change you made to the old model to create the new model. Speak in plain English, refer to system archetypes, don't reference json specifically. Don't reiterate the request or any of these instructions.",
 
     "equation": "The XMILE equation for this variable.  This equation can be a number, or an algebraic expression of other variables. Make sure that whenever you include a variable name with spaces that you replace those spaces with underscores. If the type for this variable is a stock, then the equation is its initial value, do not use INTEG for the equation of a stock, only its initial value. NEVER use IF THEN ELSE or conditional functions inside of equations.  If you want to check for division by zero use the operator //. If this variable is a table function, lookup function or graphical function, the equation should be an algebraic expression containing only the inputs to the function!  If a variable is making use of a graphical function only the name of the variable with the graphical function should appear in the equation.",
 
@@ -349,7 +351,7 @@ export class LLMWrapper {
       const Model = z.object({
         variables: Variables,
         relationships: Relationships,
-        explanation: z.string().describe(LLMWrapper.SCHEMA_STRINGS.explanation),
+        explanation: z.string().describe(LLMWrapper.SCHEMA_STRINGS.quantExplanation),
         title: z.string().describe(LLMWrapper.SCHEMA_STRINGS.title),
         specs: SimSpecs
       });
