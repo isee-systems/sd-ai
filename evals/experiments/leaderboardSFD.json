@@ -6,33 +6,7 @@
                 "underlyingModel": "gpt-4o"
             }
         },
-        "quantitative-gpt-4o-mini": {
-            "engine": "quantitative",
-            "additionalParameters": {
-                "underlyingModel": "gpt-4o-mini"
-            },
-            "limits": {
-                "tokensPerMinute": 90000
-            }
-        },
-        "quantitative-gpt-4.1-nano": {
-            "engine": "quantitative",
-            "additionalParameters": {
-                "underlyingModel": "gpt-4.1-nano"
-            },
-            "limits": {
-                "requestsPerMinute": 10
-            }
-        },
-        "quantitative-gpt-4.1-mini": {
-            "engine": "quantitative",
-            "additionalParameters": {
-                "underlyingModel": "gpt-4.1-mini"
-            },
-            "limits": {
-                "requestsPerMinute": 10
-            }
-        },
+        
         "quantitative-gpt-4.1": {
             "engine": "quantitative",
             "additionalParameters": {
@@ -53,50 +27,10 @@
             }
         },
 
-        "quantitative-gemini-2.5-flash-preview-04-17": {
+        "quantitative-gemini-2.5-flash-preview-05-20": {
             "engine": "quantitative",
             "additionalParameters": {
-                "underlyingModel": "gemini-2.5-flash-preview-04-17"
-            },
-            "limits": {
-                "tokensPerMinute": 90000,
-                "requestsPerMinute": 10
-            }
-        },
-        "quantitative-gemini-2.5-pro-preview-03-25": {
-            "engine": "quantitative",
-            "additionalParameters": {
-                "underlyingModel": "gemini-2.5-pro-preview-03-25"
-            },
-            "limits": {
-                "tokensPerMinute": 90000,
-                "requestsPerMinute": 10
-            }
-        },
-        "quantitative-gemini-2.0-flash": {
-            "engine": "quantitative",
-            "additionalParameters": {
-                "underlyingModel": "gemini-2.0-flash"
-            },
-            "limits": {
-                "tokensPerMinute": 90000,
-                "requestsPerMinute": 10
-            }
-        },
-        "quantitative-gemini-2.0-flash-lite": {
-            "engine": "quantitative",
-            "additionalParameters": {
-                "underlyingModel": "gemini-2.0-flash-lite"
-            },
-            "limits": {
-                "tokensPerMinute": 90000,
-                "requestsPerMinute": 10
-            }
-        },
-        "quantitative-gemini-1.5-flash": {
-            "engine": "quantitative",
-            "additionalParameters": {
-                "underlyingModel": "gemini-1.5-flash"
+                "underlyingModel": "gemini-2.5-flash-preview-05-20"
             },
             "limits": {
                 "tokensPerMinute": 90000,
@@ -114,26 +48,6 @@
             }
         },
 
-        "quantitative-o3-mini-low": {
-            "engine": "quantitative",
-            "additionalParameters": {
-                "underlyingModel": "o3-mini low"
-            },
-            "limits": {
-                "baselineTokenUsage": 5000,
-                "tokensPerMinute": 60000
-            }
-        },
-        "quantitative-o3-mini-medium": {
-            "engine": "quantitative",
-            "additionalParameters": {
-                "underlyingModel": "o3-mini medium"
-            },
-            "limits": {
-                "baselineTokenUsage": 10000,
-                "tokensPerMinute": 60000
-            }
-        },
         "quantitative-o3-mini-high": {
             "engine": "quantitative",
             "additionalParameters": {
@@ -144,6 +58,7 @@
                 "tokensPerMinute": 60000
             }
         },
+
         "quantitative-o4-mini": {
             "engine": "quantitative",
             "additionalParameters": {

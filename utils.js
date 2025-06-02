@@ -235,8 +235,8 @@ export class LLMWrapper {
       {label: "GPT-4.1", value: 'gpt-4.1'},
       {label: "GPT-4.1-mini", value: 'gpt-4.1-mini'},
       {label: "GPT-4.1-nano", value: 'gpt-4.1-nano'},
-      {label: "Gemini 2.5-flash", value: 'gemini-2.5-flash-preview-04-17'},
-      {label: "Gemini 2.5-pro", value: 'gemini-2.5-pro-preview-03-25'},
+      {label: "Gemini 2.5-flash", value: 'gemini-2.5-flash-preview-05-20'},
+      {label: "Gemini 2.5-pro", value: 'gemini-2.5-pro-preview-05-06'},
       {label: "Gemini 2.0", value: 'gemini-2.0-flash'},
       {label: "Gemini 2.0-Lite", value: 'gemini-2.0-flash-lite'},
       {label: "Gemini 1.5", value: 'gemini-1.5-flash'},
@@ -247,7 +247,7 @@ export class LLMWrapper {
       {label: "o4-mini", value: 'o4-mini'}
   ];
 
-  static DEFAULT_MODEL = 'gpt-4o';
+  static DEFAULT_MODEL = 'gemini-2.5-flash-preview-05-20';
 
   static SCHEMA_STRINGS = {
     "from": "This is a variable which causes the to variable in this relationship that is between two variables, from and to.  The from variable is the equivalent of a cause.  The to variable is the equivalent of an effect",
