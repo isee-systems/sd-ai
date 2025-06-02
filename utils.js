@@ -283,8 +283,6 @@ export class LLMWrapper {
     "timeUnits": "The unit of time for this model.  This should match with the equations that you generate."
   };
 
-  static DEFAULT_MODEL = 'gemini-2.5-flash-preview-04-17';
-
   generateQualitativeSDJSONResponseSchema() {
       const PolarityEnum = z.enum(["+", "-"]).describe(LLMWrapper.SCHEMA_STRINGS.polarity);
 
