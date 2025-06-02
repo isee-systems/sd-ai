@@ -117,20 +117,22 @@ You will conduct a multistep process:
         originalResponse.relationships = relationships;
 
         originalResponse.variables.forEach((v)=>{
-            //sometimes graphical function variables (named name_of_graphical) have equations that end up as name_of_graphical_GF(input) the equation in that case should be just input!
+            //sometimes graphical function variables have equations that aren't just the inputs to the graphical
             if (v.graphicalFunction && v.graphicalFunction.points && v.graphicalFunction.points.length > 0) {
                 const lowerCaseEquation = v.equation.toLowerCase();
-                const nameWithUnderscores = v.name.toLowerCase().trim().replaceAll(" ", "_");
-                const startTokens = [
-                    nameWithUnderscores + "(",
-                    nameWithUnderscores + "_GF(",
-                    nameWithUnderscores + "_GRAPH(",
-                    nameWithUnderscores + "_TABLE(",
-                    nameWithUnderscores + "_LOOKUP("
+
+                const regexps = [
+                    /\b\w+_GF\b/i,
+                    /\b\w+_GRAPH\b/i,
+                    /\b\w+_TABLE\b/i,
+                    /\b\w+_LOOKUP\b/i,
+                    new RegExp(v.name.replaceAll(" ", "_"), "i") //this must go last b/c generally the word before the _GF is the variable name, but sometimes its not!
                 ];
-                for (const startToken of startTokens) {
-                    if (lowerCaseEquation.startsWith(startToken) && lowerCaseEquation.endsWith(")")) {
-                        v.equation = v.equation.substring(startToken.length, v.equation.length - 1);
+
+                for (const regexp of regexps) {
+                    let newEquation = v.equation.replace(regexp, "");
+                    if (newEquation != v.equation) {
+                        v.equation = newEquation;
                         break;
                     }
                 }
