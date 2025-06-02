@@ -95,7 +95,8 @@ class RecursiveCausalEngine {
         if (Array.isArray(result.relationships) && result.relationships.length > 0) {
           mainTopics = result.relationships.map(r => r.from.toLowerCase());
         } else {
-          throw new Error("Failed to infer main topics.");
+          console.error("Failed to infer any main topics");
+          return { err: "Failed to infer any main topics" };
         }
       }
 
