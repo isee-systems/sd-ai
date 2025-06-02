@@ -2,19 +2,15 @@
     "sequential": true,
     "verbose": true,
     "engineConfigs": {
-        "advanced-gemini-2.0-flash": {
+        "advanced-gpt-4o": {
             "engine": "advanced",
             "additionalParameters": {
-                "underlyingModel": "gemini-2.0-flash"
-            },
-            "limits": {
-                "tokensPerMinute": 90000,
-                "requestsPerMinute": 10
+                "underlyingModel": "gpt-4o"
             }
         }
     },
     "categories": {
-        "causalTranslation": ["singleFeedbackLoop"],
-        "conformance": ["genericConformance"] 
+        "conformance": true,
+        "causalTranslation": true 
     }
 }
