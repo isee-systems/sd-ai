@@ -208,12 +208,20 @@ export class LLMWrapper {
 
     switch (this.model.kind) {
         case ModelType.GEMINI:
+            if (!this.#googleKey) {
+              throw new Error("To access this service you need to send a Google key");
+            }
+            
             this.openAIAPI = new OpenAI({
                 apiKey: this.#googleKey,
                 baseURL: "https://generativelanguage.googleapis.com/v1beta/openai"
             });
             break;
         case ModelType.OPEN_AI:
+            if (!this.#openAIKey) {
+              throw new Error("To access this service you need to send an OpenAI key");
+            }
+
             this.openAIAPI = new OpenAI({
                 apiKey: this.#openAIKey,
             });

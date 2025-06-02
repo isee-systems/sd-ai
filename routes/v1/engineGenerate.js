@@ -1,11 +1,20 @@
 import express from 'express'
-import utils from './../../utils.js'
+import utils, { ModelCapabilities, ModelType } from './../../utils.js'
 
 const router = express.Router()
 
 router.post("/:engine/generate", async (req, res) => {
     const authenticationKey = process.env.AUTHENTICATION_KEY;
-    if (!req.body.openAIKey && authenticationKey) {
+    const capabilities = new ModelCapabilities(req.body.underlyingModel);
+
+    let hasApiKey = false;
+    if (req.body.openAIKey && capabilities.kind === ModelType.OPEN_AI) {
+      hasApiKey = true;
+    } else if (req.body.googleKey && capabilities.kind === ModelType.GEMINI) {
+      hasApiKey = true;
+    }
+
+    if (!hasApiKey && authenticationKey) {
         if (!req.header('Authentication') || req.header('Authentication') !== authenticationKey) {
           return res.status(403).send({ "success": false, err: 'Unauthorized, please pass valid Authentication header.' });
         }
