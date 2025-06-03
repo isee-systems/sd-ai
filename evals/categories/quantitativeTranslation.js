@@ -72,7 +72,7 @@ const extractStocks = function(generatedModel) {
     });
 };
 
-const extractFlow = function(flowSpec, possibleNames,  generataedModel) {
+const extractFlow = function(flowSpec, possibleNames,  generatedModel) {
     return (generatedModel.variables || []).find((variable) => {
         if (variable.type !== 'flow')
             return false;
