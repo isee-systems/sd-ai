@@ -145,7 +145,8 @@ export const ModelType = Object.freeze({
   GEMINI:   Symbol("Gemini"),
   OPEN_AI:  Symbol("OpenAI"),
   LLAMA: Symbol("Llama"),
-  DEEPSEEK: Symbol("Deepseek")
+  DEEPSEEK: Symbol("Deepseek"),
+  CLAUDE: Symbol("Claude")
 });
 
 
@@ -177,6 +178,8 @@ export class ModelCapabilities {
           return ModelType.LLAMA;
       } else if (this.name.includes('deepseek')) {
           return ModelType.DEEPSEEK;
+      } else if (this.name.includes('claude')) {
+          return ModelType.CLAUDE;
       } else {
           return ModelType.OPEN_AI;
       }
@@ -186,6 +189,7 @@ export class ModelCapabilities {
 export class LLMWrapper {
   #openAIKey;
   #googleKey;
+  #anthropicKey;
   
   model = new ModelCapabilities(LLMWrapper.DEFAULT_MODEL);
   openAIAPI = null;
@@ -201,6 +205,12 @@ export class LLMWrapper {
         this.#googleKey = process.env.GOOGLE_API_KEY
     } else {
       this.#googleKey = parameters.googleKey;
+    }
+
+    if (!parameters.anthropicKey) {
+        this.#anthropicKey = process.env.ANTHROPIC_API_KEY
+    } else {
+      this.#anthropicKey = parameters.anthropicKey;
     }
 
     if (parameters.underlyingModel)
@@ -226,6 +236,17 @@ export class LLMWrapper {
                 apiKey: this.#openAIKey,
             });
             break;
+
+        case ModelType.CLAUDE:
+          if (!this.#anthropicKey) {
+            throw new Error("To access this service you need to send an Anthropic key");
+          }
+          this.openAIAPI = new OpenAI({
+                apiKey: this.#anthropicKey,
+                baseURL: "https://api.anthropic.com/v1"
+            });
+            break;
+
         case ModelType.DEEPSEEK:
         case ModelType.LLAMA:
             this.openAIAPI = new OpenAI({
@@ -237,6 +258,11 @@ export class LLMWrapper {
   }
 
   static MODELS = [
+      {label: "Claude Opus 4.0", value: 'claude-opus-4-0'},
+      {label: "Claude Sonnet 4.0", value: 'claude-sonnet-4-0'},
+      {label: "Claude Sonnet 3.7", value: 'claude-3-7-sonnet-latest'},
+      {label: "Claude Sonnet 3.5", value: 'claude-3-5-sonnet-latest'},
+      {label: "Claude Haiku 3.5", value: 'claude-3-5-haiku-latest'},
       {label: "GPT-4o", value: 'gpt-4o'},
       {label: "GPT-4o-mini", value: 'gpt-4o-mini'},
       {label: "GPT-4.5-preview", value: 'gpt-4.5-preview'},
@@ -384,6 +410,14 @@ export class LLMWrapper {
             saveForUser: "global",
             label: "Google API Key",
             description: "Leave blank for the default, or your Google API key - XXXXXX"
+        },{
+            name: "anthropicKey",
+            type: "string",
+            required: true,
+            uiElement: "password",
+            saveForUser: "global",
+            label: "Anthropic API Key",
+            description: "Leave blank for the default, or your Anthropic API key - sk-ant-XXXXXX"
         },{
             name: "underlyingModel",
             type: "string",
