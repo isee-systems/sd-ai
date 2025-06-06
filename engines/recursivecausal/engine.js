@@ -141,7 +141,12 @@ class RecursiveCausalEngine {
 
       const cleaned = await this.cleanRelationships(allRelationships, prompt, parameters);
       const polished = await this.adjustPolarities(cleaned, prompt, parameters);
-      const variables = [...new Set(polished.flatMap(r => [r.from, r.to]))];
+      const variables = [...new Set(polished.flatMap(r => [r.from, r.to]))].map((v)=> {
+          return {
+              name: v,
+              type: "variable"
+          };
+      });
 
       return {
         supportingInfo: {
