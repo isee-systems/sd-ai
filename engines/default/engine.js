@@ -44,7 +44,12 @@ class Engine {
         try {
             let brain = new AdvancedEngineBrain(parameters);
             const response = await brain.generateDiagram(prompt, currentModel);
-            const variables =  [...new Set([...response.relationships.map( e => e.from),...response.relationships.map( e => e.to )])];
+            const variables =  [...new Set([...response.relationships.map( e => e.from),...response.relationships.map( e => e.to )])].map((v)=> {
+                return {
+                    name: v,
+                    type: "variable"
+                };
+            });
             return {
                 supportingInfo: {
                     explanation: response.explanation,
