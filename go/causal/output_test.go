@@ -8,6 +8,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/UB-IAD/sd-ai/go/sdjson"
 )
 
 func TestCanonicalize(t *testing.T) {
@@ -107,7 +109,7 @@ func TestCompatTransformation(t *testing.T) {
 	require.NoError(t, err)
 
 	actual := in.Compat()
-	var expected SdJson
+	var expected sdjson.Model
 	err = json.Unmarshal([]byte(compatOut1), &expected)
 	require.NoError(t, err)
 

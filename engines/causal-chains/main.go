@@ -12,6 +12,7 @@ import (
 	"github.com/UB-IAD/sd-ai/go/causal"
 	"github.com/UB-IAD/sd-ai/go/chat"
 	"github.com/UB-IAD/sd-ai/go/llm/openai"
+	"github.com/UB-IAD/sd-ai/go/sdjson"
 )
 
 type parameters struct {
@@ -34,7 +35,7 @@ type supportingInfo struct {
 
 type output struct {
 	SupportingInfo supportingInfo `json:"supportingInfo"`
-	Model          causal.SdJson  `json:"model"`
+	Model          sdjson.Model   `json:"model"`
 }
 
 // isOpenAIModel returns true if the given model is an OpenAI model.

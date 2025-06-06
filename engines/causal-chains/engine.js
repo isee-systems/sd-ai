@@ -99,14 +99,7 @@ class Engine {
             fs.writeFileSync(inputPath, JSON.stringify(input));
             const result = execSync(`${__dirname}/causal-chains ${inputPath}`, {cwd: tempDir});
 
-            let response = JSON.parse(result.toString());
-            response.model.variables = response.model.variables.map((v) => {
-                return {
-                    type: "variable",
-                    name: v
-                };
-            });
-            return response;
+            return JSON.parse(result.toString());
         } catch (err) {
             console.log(`causal-chains returned non-zero exit code: ${err.status}`);
             return {
