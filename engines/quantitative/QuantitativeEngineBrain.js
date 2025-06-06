@@ -27,7 +27,7 @@ You will conduct a multistep process:
 6. Try as hard as you can to close feedback loops between the variables you find. It is very important that your answer includes feedback.  A feedback loop happens when there is a closed causal chain of relationships.  An example would be "Variable1" causes "Variable2" to increase, which causes "Variable3" to decrease which causes "Variable1" to again increase.  Try to find as many of the feedback loops as you can.`
 
     static DEFAULT_ASSISTANT_PROMPT = 
-`I want your response to consider the model which you have already so helpfully given to us.  Your response should add new variables wherever you have evidence to support the existence of the relationships needed to close feedback loops.  Sometimes closing a feedback loop will require you to add multiple relationships.`
+`I want your response to consider the model which you have already so helpfully given to us. You should never change the name of any variable you've already given us. Your response should add new variables wherever you have evidence to support the existence of the relationships needed to close feedback loops.  Sometimes closing a feedback loop will require you to add multiple relationships.`
 
     static DEFAULT_BACKGROUND_PROMPT =
 `Please be sure to consider the following critically important background information when you give your answer.
@@ -87,6 +87,7 @@ You will conduct a multistep process:
     }
 
     #processResponse(originalResponse) {
+        //console.log(JSON.stringify(originalResponse));
         //console.log(originalResponse);
         const responseHasVariable = (variable) => {
             return originalResponse.variables.findIndex((v) => {
