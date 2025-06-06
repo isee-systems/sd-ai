@@ -1,11 +1,12 @@
 import express from 'express'
-import utils, { ModelCapabilities, ModelType } from './../../utils.js'
+import utils, { ModelCapabilities, ModelType, LLMWrapper } from './../../utils.js'
 
 const router = express.Router()
 
 router.post("/:engine/generate", async (req, res) => {
     const authenticationKey = process.env.AUTHENTICATION_KEY;
-    const capabilities = new ModelCapabilities(req.body.underlyingModel);
+    const underlyingModel = req.body.underlyingModel || LLMWrapper.DEFAULT_MODEL;
+    const capabilities = new ModelCapabilities(underlyingModel);
 
     let hasApiKey = false;
     if (req.body.openAIKey && capabilities.kind === ModelType.OPEN_AI) {
