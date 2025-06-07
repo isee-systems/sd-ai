@@ -13,58 +13,11 @@ import (
 	"strings"
 
 	"github.com/UB-IAD/sd-ai/go/schema"
+	"github.com/UB-IAD/sd-ai/go/sdjson"
 )
 
 //go:embed response_schema.json
 var responseSchemaJson string
-
-type Polarity int
-
-func (p Polarity) MarshalJSON() ([]byte, error) {
-	return []byte("\"" + p.Symbol() + "\""), nil
-}
-
-func (p *Polarity) UnmarshalJSON(b []byte) error {
-	switch string(b) {
-	case `"+"`:
-		*p = PositivePolarity
-	case `"-"`:
-		*p = NegativePolarity
-	default:
-		return fmt.Errorf("unknown polarity: %q", string(b))
-	}
-	return nil
-}
-
-var _ json.Unmarshaler = (*Polarity)(nil)
-
-const (
-	NegativePolarity Polarity = iota
-	PositivePolarity
-)
-
-func (p Polarity) IsPositive() bool {
-	return p == PositivePolarity
-}
-
-func (p Polarity) IsNegative() bool {
-	return !p.IsPositive()
-}
-
-func (p Polarity) Symbol() string {
-	switch p {
-	case PositivePolarity:
-		return "+"
-	default:
-		return "-"
-	}
-}
-
-func (p Polarity) String() string {
-	return p.Symbol()
-}
-
-var _ json.Marshaler = Polarity(0)
 
 type Set[T cmp.Ordered] map[T]struct{}
 
@@ -165,19 +118,6 @@ func Canonicalize(name string) string {
 
 var _ json.Unmarshaler = (*Variable)(nil)
 
-type Relationship struct {
-	From              string `json:"from"`
-	To                string `json:"to"`
-	Polarity          string `json:"polarity"` // "+", or "-"
-	Reasoning         string `json:"reasoning"`
-	PolarityReasoning string `json:"polarityReasoning"`
-}
-
-func (r *Relationship) Key() string {
-	// ignore polarity: we don't want duplicate relationships with opposite polarity
-	return fmt.Sprintf("%q->%q", r.From, r.To)
-}
-
 type RelationshipEntry struct {
 	Variable          string `json:"variable"`
 	Polarity          string `json:"polarity"` // "+", or "-"
@@ -196,15 +136,19 @@ type Map struct {
 	CausalChains []Chain `json:"causal_chains"`
 }
 
-// SdJson is for compatability with the JavaScript sd-ai machinery.
-type SdJson struct {
-	Relationships []Relationship `json:"relationships"`
-	Variables     []string       `json:"variables"`
-}
+func (m *Map) Compat() sdjson.Model {
+	vars := m.Variables()
+	mdl := sdjson.Model{
+		Variables: make([]sdjson.Variable, 0, len(vars)),
+	}
 
-func (m *Map) Compat() SdJson {
-	sdJson := SdJson{
-		Variables: m.Variables().Slice(),
+	for _, name := range m.Variables().Slice() {
+		mdl.Variables = append(mdl.Variables,
+			sdjson.Variable{
+				Name: name,
+				Type: sdjson.VariableTypeAux,
+			},
+		)
 	}
 
 	seenRelationships := NewSet[string]()
@@ -218,7 +162,7 @@ func (m *Map) Compat() SdJson {
 				from = chain.Relationships[i-1].Variable
 			}
 			to := r.Variable
-			relationship := Relationship{
+			relationship := sdjson.Relationship{
 				From:              from,
 				To:                to,
 				Polarity:          r.Polarity,
@@ -232,11 +176,11 @@ func (m *Map) Compat() SdJson {
 			}
 
 			seenRelationships.Add(rk)
-			sdJson.Relationships = append(sdJson.Relationships, relationship)
+			mdl.Relationships = append(mdl.Relationships, relationship)
 		}
 	}
 
-	return sdJson
+	return mdl
 }
 
 func (m *Map) Variables() (vars Set[string]) {
@@ -378,7 +322,8 @@ func (m *Map) VisualSVG() ([]byte, error) {
 	return svg, nil
 }
 
-func NewMap(relationships []Relationship) *Map {
+// NewMap builds a causal map from a list of relationships.
+func NewMap(relationships []sdjson.Relationship) *Map {
 	m := &Map{}
 
 	for _, r := range relationships {
