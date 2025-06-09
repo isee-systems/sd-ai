@@ -76,9 +76,9 @@ You will conduct a multistep process:
         return response.variables.findIndex((v)=> {
             if (v.type === "stock") {
                 return v.inflows.findIndex((f) => {
-                    return v.name === f;
+                    return flow.name === f;
                 }) >= 0 || v.outflows.findIndex((f) => {
-                    return v.name === f;
+                    return flow.name === f;
                 }) >= 0;
             }
 
