@@ -139,32 +139,6 @@ You will conduct a multistep process:
                 //console.log("Changing type from flow to variable for... " + v.name);
                 //console.log(v);
             }
-
-            //sometimes graphical function variables have equations that aren't just the inputs to the graphical
-            if (v.graphicalFunction && v.graphicalFunction.points && v.graphicalFunction.points.length > 0) {
-                const lowerCaseEquation = v.equation.toLowerCase();
-
-                const regexps = [
-                    /\b\w+_GF\b/i,
-                    /\b\w+_GRAPH\b/i,
-                    /\b\w+_TABLE\b/i,
-                    /\b\w+_LOOKUP\b/i,
-                    /\b\w+_FUNCTION\b/i,
-                    /\b\w+_EFFECT\b/i,
-                    /\b\w+_MULTIPLIER\b/i,
-                    /\b\w+_IMPACT\b/i,
-                    new RegExp(v.name.replaceAll(" ", "_"), "i") //this must go last b/c generally the word before the _GF is the variable name, but sometimes its not!
-                ];
-
-                for (const regexp of regexps) {
-                    let newEquation = v.equation.replace(regexp, "");
-                    if (newEquation != v.equation) {
-                        //console.log("Changing graphical equation from " + v.equation + " to " + newEquation);
-                        v.equation = newEquation;
-                        break;
-                    }
-                }
-            }
         });
 
         return originalResponse;
