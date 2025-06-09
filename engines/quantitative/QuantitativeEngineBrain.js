@@ -83,7 +83,7 @@ You will conduct a multistep process:
             }
 
             return false;
-        })
+        }) >= 0;
     }
 
     #processResponse(originalResponse) {
