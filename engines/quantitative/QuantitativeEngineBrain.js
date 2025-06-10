@@ -131,8 +131,10 @@ You will conduct a multistep process:
         });
         
         originalResponse.relationships = relationships;
-
+        
         originalResponse.variables.forEach((v)=>{
+            v.equation = this.#llmWrapper.generateXMILEEquation(v);
+
             //go through all the flows -- make sure they appear in an inflows or outflows, and if they don't change them to type variable
             if (v.type === "flow" && !this.#isFlowUsed(v, originalResponse)) {
                 v.type = "variable";

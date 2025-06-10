@@ -274,7 +274,7 @@ export class LLMWrapper {
 
     "equation": "The XMILE equation for this variable.  This equation can be a number, or an algebraic expression of other variables. Make sure that whenever you include a variable name with spaces that you replace those spaces with underscores. If the type for this variable is a stock, then the equation is its initial value, do not use INTEG for the equation of a stock, only its initial value. NEVER use IF THEN ELSE or conditional functions inside of equations.  If you want to check for division by zero use the operator //. If this variable is a table function, lookup function or graphical function, the equation should be an algebraic expression containing only the inputs to the function!  If a variable is making use of a graphical function only the name of the variable with the graphical function should appear in the equation.",
 
-    "type": "There are three types of variables, stock, flow, and variable. A stock is an accumulation of its flows, it is an integral.  A stock can only change because of its flows. A flow is the derivative of a stock.  A plain variable is used for algebraic expressions.",
+    "variableType": "There are three types of variables, stock, flow, and variable. A stock is an accumulation of its flows, it is an integral.  A stock can only change because of its flows. A flow is the derivative of a stock.  A plain variable is used for algebraic expressions.",
     "name": "The name of a variable",
  
     "inflows": "Only used on variables that are of type stock.  It is an array of variable names representing flows that add to this stock.",
@@ -315,10 +315,120 @@ export class LLMWrapper {
       return zodResponseFormat(Relationships, "relationships_response");
   }
 
+  #stringifyExpression(expr, variable) {
+    let equation = "";
+    switch (expr.type) {
+        case "number":
+          equation = expr.value.toString();
+          break;
+
+        case "variable":
+          equation = expr.ident.replace(/\s/g, "_");
+          break;
+
+        case "functionCall":
+          const isGraphical = variable.graphicalFunction && variable.graphicalFunction.points && variable.graphicalFunction.points.length > 0;
+          if (!isGraphical || expr.args.length != 1) {
+            equation = expr.function + "("
+          }
+          
+          equation += expr.args.map((expr) => {
+            return this.#stringifyExpression(expr, variable);
+          }).join(", ");
+
+          if (!isGraphical || expr.args.length != 1) {
+            equation += ")"
+          }
+          break;
+
+        case "unaryOperator":
+          equation = expr.operator;
+          if (expr.expression.type === 'binaryOperator')
+            equation += "(";
+
+          equation += this.#stringifyExpression(expr.expression, variable);
+
+          if (expr.expression.type === 'binaryOperator')
+            equation += ")";
+          break;
+
+        case "binaryOperator":
+          if (expr.lhs.type === 'binaryOperator') {
+            equation += "(";
+            equation += this.#stringifyExpression(expr.lhs, variable);
+            equation += ")"
+          } else {
+            equation += this.#stringifyExpression(expr.lhs, variable);
+          }
+
+          equation += " " + expr.operator + " ";
+
+          if (expr.rhs.type === 'binaryOperator') {
+            equation += "(";
+            equation += this.#stringifyExpression(expr.rhs, variable);
+            equation += ")"
+          } else {
+            equation += this.#stringifyExpression(expr.rhs, variable);
+          }
+          break;
+
+        default:
+          debugger;
+          break;
+      }
+      return equation;
+  }
+
+  generateXMILEEquation(variable) {
+    return variable.equation.map((expr) => {
+      return this.#stringifyExpression(expr, variable);
+    }).join(" ");;
+  }
+
   generateQuantitativeSDJSONResponseSchema() {
-      const TypeEnum = z.enum(["stock", "flow", "variable"]).describe(LLMWrapper.SCHEMA_STRINGS.type);
+      const VariableTypeEnum = z.enum(["stock", "flow", "variable"]).describe(LLMWrapper.SCHEMA_STRINGS.variableType);
       const PolarityEnum = z.enum(["+", "-"]).describe(LLMWrapper.SCHEMA_STRINGS.polarity);
-      
+
+      const ConstExpr = z.object({
+        type: z.literal("number").describe("The type of this expression"),
+        value: z.number().describe("A constant literal to include in this equation")
+      }).describe('A type of expression object that describes a number within an equation');
+
+      const VarExpr = z.object({
+        type: z.literal("variable").describe("The type of this expression"),
+        ident: z.string().describe("A variable to include in this equation.")
+      }).describe('A type of expression object that describes a variable within an equation');
+
+      const CallExpr = z.object({
+        type: z.literal("functionCall").describe("The type of this expression"),
+        function: z.string().describe("The name of the function to call"),
+        get args() {
+          return ExpressionList.describe("The arguments for this function");
+        }
+      }).describe('A type of expression object that represents a function call within an expression');
+
+      const UnaryOpExpr = z.object({
+        type: z.literal("unaryOperator").describe("The type of this expression"),
+        operator: z.enum(["+", "-"]).describe("The operator this object represents either + for addition or - for subtraction"),
+        get expression() {
+          return Expr.describe('The expression to apply the operation to');
+        }
+      }).describe('A type of expression that represents a unary operator within an expression.  An operator that works with a single expression');
+
+      const BinaryOpExpr = z.object({
+        type: z.literal("binaryOperator").describe("The type of this expression"),
+        operator: z.enum(["+", "-", "*", "/", "//"]).describe("The operator this object represents either + for addition or - for subtraction or * for multiplication or / for division, or // for safe division"),
+        get lhs() {
+          return Expr.describe('The left hand side of the expression to apply the operation to');
+        },
+        get rhs() {
+          return Expr.describe('The right hand side of the expression to apply the operation to');
+        } 
+      }).describe('A type of expression that represents a binary operator within an expression. An operator that works with two expression');
+
+      const Expr = z.discriminatedUnion("type", [ConstExpr, VarExpr, CallExpr, UnaryOpExpr, BinaryOpExpr]);
+      const ExpressionList = z.array(Expr);
+
       const GFPoint = z.object({
         x: z.number().describe(LLMWrapper.SCHEMA_STRINGS.gfPointX),
         y: z.number().describe(LLMWrapper.SCHEMA_STRINGS.gfPointY)
@@ -340,11 +450,12 @@ export class LLMWrapper {
 
       const Variable = z.object({
         name: z.string().describe(LLMWrapper.SCHEMA_STRINGS.name),
-        equation: z.string().describe(LLMWrapper.SCHEMA_STRINGS.equation),
+        equation: ExpressionList.describe("This is an equation represented as an abstract syntax tree (AST).  Make sure to double check that the string this AST represents is a valid equation. " + LLMWrapper.SCHEMA_STRINGS.equation),
+        //equation: z.string().describe(LLMWrapper.SCHEMA_STRINGS.equation),
         inflows: z.array(z.string()).optional().describe(LLMWrapper.SCHEMA_STRINGS.inflows),
         outflows: z.array(z.string()).optional().describe(LLMWrapper.SCHEMA_STRINGS.outflows),
         graphicalFunction: GF.optional().describe(LLMWrapper.SCHEMA_STRINGS.gfEquation),
-        type: TypeEnum,
+        type: VariableTypeEnum,
         documentation: z.string().describe(LLMWrapper.SCHEMA_STRINGS.documentation),
         units: z.string().describe(LLMWrapper.SCHEMA_STRINGS.units)
       });
