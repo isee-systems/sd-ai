@@ -371,7 +371,7 @@ export class LLMWrapper {
     return [{
             name: "openAIKey",
             type: "string",
-            required: true,
+            required: false,
             uiElement: "password",
             saveForUser: "global",
             label: "Open AI API Key",
@@ -379,7 +379,7 @@ export class LLMWrapper {
         },{
             name: "googleKey",
             type: "string",
-            required: true,
+            required: false,
             uiElement: "password",
             saveForUser: "global",
             label: "Google API Key",

@@ -42,7 +42,7 @@ class Engine {
             {
                 name: "apiKey",
                 type: "string",
-                required: true,
+                required: false,
                 uiElement: "password",
                 saveForUser: "global",
                 label: "API Key",
