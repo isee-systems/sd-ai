@@ -63,7 +63,7 @@ router.post("/:engine/generate", async (req, res) => {
     if (generateResponse.err) {
       return res.send({
         success: false,
-        message: "Failed to generate a diagram: " + generateResponse.err
+        message: "Request failed: " + generateResponse.err
       })
     }
   
