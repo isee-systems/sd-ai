@@ -33,7 +33,7 @@ As the world's best System Dynamics Modeler, you will consider and apply the Sys
  
  {behaviorContent}`
 
-  static DEFAULT_FEEDBACK_PROMPT = `I want your response to consider all of the feedback loops in the model which you have already so helpfully given to us. 
+  static DEFAULT_FEEDBACK_PROMPT = `I want your response to consider all of the feedback loops in the model which you have already so helpfully given to us. Remember, a dominant feedback loop or set of feedback loops is when one or more feedback loops together of the same polarity add up to explain more then 50% of the model's behavior.  When determining which feedback loops are dominant you're trying to find the smallest number of feedback loops that add up to at least 50% with the same polarity.
  
  {feedbackContent}`
 
