@@ -124,7 +124,7 @@ As the world's best System Dynamics Modeler, you will consider and apply the Sys
             });
         }
 
-        if (lastModel) {
+        if (lastModel && lastModel.variables && lastModel.variables.length > 0) {
             messages.push({ role: "assistant", content: JSON.stringify(lastModel, null, 2) });
 
             if (this.#data.structurePrompt)
@@ -135,6 +135,11 @@ As the world's best System Dynamics Modeler, you will consider and apply the Sys
 
             if (this.#data.feedbackPrompt && this.#data.feedbackContent)
                 messages.push({ role: "user", content: this.#data.feedbackPrompt.replaceAll("{feedbackContent}", JSON.stringify(this.#data.feedbackContent, null, 2)) });
+        } else {
+
+            if (this.#data.behaviorPrompt && this.#data.behaviorContent)
+                messages.push({ role: "user", content: this.#data.behaviorPrompt.replaceAll("{behaviorContent}", this.#data.behaviorContent) });
+
         }
 
         //give it the user prompt
