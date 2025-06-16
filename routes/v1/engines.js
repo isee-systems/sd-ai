@@ -23,6 +23,12 @@ router.get("/", async (req, res) => {
     return res.send({
         success: true, 
         engines: engines,
+        recommendedDefaults: {
+            "sfd": "quantitative",
+            "cld": "default",
+            "sfd-discuss": "seldon",
+            "cld-discuss": "seldon"
+        }
     });
 })
 
