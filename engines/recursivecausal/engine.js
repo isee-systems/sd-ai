@@ -1,4 +1,4 @@
-import AdvancedEngineBrain from '../default/AdvancedEngineBrain.js';
+import QualitativeEngineBrain from '../qualitative/QualitativeEngineBrain.js';
 import { LLMWrapper } from '../../utils.js';
 
 const RECURSIVE_SYSTEM_PROMPT = `You are a System Dynamics Assistant. Users will give you a topic, text and optionally some extra information to take into consideration. It is your job to generate causal relationships from that text while following other user specifications.
@@ -75,7 +75,7 @@ class RecursiveCausalEngine {
         .filter(x => x.length > 0);
 
       if (mainTopics.length === 0 || mainTopics.includes("infer topic")) {
-        const topicBrain = new AdvancedEngineBrain({
+        const topicBrain = new QualitativeEngineBrain({
           ...parameters,
           systemPrompt: `You are a system dynamics assistant. Identify the main variables or topics you think are being discussed in the user-provided text below. Return only a comma-separated list of key topics.
           
@@ -104,7 +104,7 @@ class RecursiveCausalEngine {
       const explored = new Set();
       let allRelationships = [];
 
-      const recursiveBrain = new AdvancedEngineBrain({
+      const recursiveBrain = new QualitativeEngineBrain({
         ...parameters,
         systemPrompt: RECURSIVE_SYSTEM_PROMPT,
         problemStatement: prompt,
@@ -167,7 +167,7 @@ class RecursiveCausalEngine {
   async cleanRelationships(relationships, prompt, parameters) {
     if (!relationships || relationships.length === 0) return relationships;
 
-    const cleaningBrain = new AdvancedEngineBrain({
+    const cleaningBrain = new QualitativeEngineBrain({
       ...parameters,
       systemPrompt: "You are a system dynamics assistant who improves variable naming and eliminates redundant links.",
       problemStatement: prompt
@@ -182,7 +182,7 @@ class RecursiveCausalEngine {
   async adjustPolarities(relationships, prompt, parameters) {
     if (!relationships || relationships.length === 0) return relationships;
 
-    const polarityBrain = new AdvancedEngineBrain({
+    const polarityBrain = new QualitativeEngineBrain({
       ...parameters,
       systemPrompt: "You are a system dynamics expert that double-checks polarity logic between cause and effect variables.",
       problemStatement: prompt

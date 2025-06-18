@@ -20,12 +20,22 @@ router.get("/", async (req, res) => {
         }
     }
     
+    //sort them so that qualitative comes first for old stella clients!
+    const qualIndex = engines.findIndex((engine) => {
+        return engine.name === 'qualitative';
+    });
+
+    if (qualIndex >= 0) {
+        let qualEngine = engines.splice(qualIndex, 1)[0];
+        engines.unshift(qualEngine);
+    }
+    
     return res.send({
         success: true, 
         engines: engines,
         recommendedDefaults: {
             "sfd": "quantitative",
-            "cld": "default",
+            "cld": "qualitative",
             "sfd-discuss": "seldon",
             "cld-discuss": "seldon"
         }

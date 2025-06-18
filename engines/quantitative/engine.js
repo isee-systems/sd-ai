@@ -11,8 +11,15 @@ class Engine {
     }
 
     additionalParameters()  {
-        const additionalParameters = LLMWrapper.additionalParameters();
-        return additionalParameters.concat([{
+        return [{
+            name: "googleKey",
+            type: "string",
+            required: true,
+            uiElement: "password",
+            saveForUser: "global",
+            label: "Google API Key",
+            description: "Leave blank for the default, or your Google API key - XXXXXX"
+        },{
             name: "problemStatement",
             type: "string",
             required: false,
@@ -29,9 +36,9 @@ class Engine {
             uiElement: "textarea",
             saveForUser: "local",
             label: "Background Knowledge",
-            description: "Background information you want the LLM model to consider when generating a model for you",
+            description: "Background information you want the LLM model to consider when generating a diagram for you",
             minHeight: 100
-        }]);
+        }];
     }
 
     async generate(prompt, currentModel, parameters) {

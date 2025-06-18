@@ -26,17 +26,6 @@
             }
         },
 
-        "recursivecausal-gpt-4.5-preview": {
-            "engine": "recursivecausal",
-            "additionalParameters": {
-                "underlyingModel": "gpt-4.5-preview",
-                "depth": 1
-            },
-            "limits": {
-                "tokensPerMinute": 100000
-            }
-        },
-
         "recursivecausal-gemini-2.5-flash-preview-05-20": {
             "engine": "recursivecausal",
             "additionalParameters": {
@@ -95,14 +84,14 @@
             }
         },
 
-        "advanced-gpt-4o": {
-            "engine": "advanced",
+        "qualitative-gpt-4o": {
+            "engine": "qualitative",
             "additionalParameters": {
                 "underlyingModel": "gpt-4o"
             }
         },
-        "advanced-gpt-4o-mini": {
-            "engine": "advanced",
+        "qualitative-gpt-4o-mini": {
+            "engine": "qualitative",
             "additionalParameters": {
                 "underlyingModel": "gpt-4o-mini"
             },
@@ -110,8 +99,8 @@
                 "tokensPerMinute": 90000
             }
         },
-        "advanced-gpt-4.1-nano": {
-            "engine": "advanced",
+        "qualitative-gpt-4.1-nano": {
+            "engine": "qualitative",
             "additionalParameters": {
                 "underlyingModel": "gpt-4.1-nano"
             },
@@ -119,8 +108,8 @@
                 "requestsPerMinute": 10
             }
         },
-        "advanced-gpt-4.1-mini": {
-            "engine": "advanced",
+        "qualitative-gpt-4.1-mini": {
+            "engine": "qualitative",
             "additionalParameters": {
                 "underlyingModel": "gpt-4.1-mini"
             },
@@ -128,8 +117,8 @@
                 "requestsPerMinute": 10
             }
         },
-        "advanced-gpt-4.1": {
-            "engine": "advanced",
+        "qualitative-gpt-4.1": {
+            "engine": "qualitative",
             "additionalParameters": {
                 "underlyingModel": "gpt-4.1"
             },
@@ -138,8 +127,8 @@
             }
         },
 
-        "advanced-gpt-4.5-preview": {
-            "engine": "advanced",
+        "qualitative-gpt-4.5-preview": {
+            "engine": "qualitative",
             "additionalParameters": {
                 "underlyingModel": "gpt-4.5-preview"
             },
@@ -148,8 +137,8 @@
             }
         },
 
-        "advanced-gemini-2.5-flash-preview-05-20": {
-            "engine": "advanced",
+        "qualitative-gemini-2.5-flash-preview-05-20": {
+            "engine": "qualitative",
             "additionalParameters": {
                 "underlyingModel": "gemini-2.5-flash-preview-05-20"
             },
@@ -158,8 +147,8 @@
                 "requestsPerMinute": 10
             }
         },
-        "advanced-gemini-2.5-pro-preview-05-06": {
-            "engine": "advanced",
+        "qualitative-gemini-2.5-pro-preview-05-06": {
+            "engine": "qualitative",
             "additionalParameters": {
                 "underlyingModel": "gemini-2.5-pro-preview-05-06"
             },
@@ -168,8 +157,8 @@
                 "requestsPerMinute": 10
             }
         },
-        "advanced-gemini-2.0-flash": {
-            "engine": "advanced",
+        "qualitative-gemini-2.0-flash": {
+            "engine": "qualitative",
             "additionalParameters": {
                 "underlyingModel": "gemini-2.0-flash"
             },
@@ -178,8 +167,8 @@
                 "requestsPerMinute": 10
             }
         },
-        "advanced-gemini-2.0-flash-lite": {
-            "engine": "advanced",
+        "qualitative-gemini-2.0-flash-lite": {
+            "engine": "qualitative",
             "additionalParameters": {
                 "underlyingModel": "gemini-2.0-flash-lite"
             },
@@ -188,8 +177,8 @@
                 "requestsPerMinute": 10
             }
         },
-        "advanced-gemini-1.5-flash": {
-            "engine": "advanced",
+        "qualitative-gemini-1.5-flash": {
+            "engine": "qualitative",
             "additionalParameters": {
                 "underlyingModel": "gemini-1.5-flash"
             },
@@ -199,8 +188,8 @@
             }
         },
 
-        "advanced-o1": {
-            "engine": "advanced",
+        "qualitative-o1": {
+            "engine": "qualitative",
             "additionalParameters": {
                 "underlyingModel": "o1"
             },
@@ -209,8 +198,8 @@
             }
         },
 
-        "advanced-o3-mini-low": {
-            "engine": "advanced",
+        "qualitative-o3-mini-low": {
+            "engine": "qualitative",
             "additionalParameters": {
                 "underlyingModel": "o3-mini low"
             },
@@ -219,8 +208,8 @@
                 "tokensPerMinute": 60000
             }
         },
-        "advanced-o3-mini-medium": {
-            "engine": "advanced",
+        "qualitative-o3-mini-medium": {
+            "engine": "qualitative",
             "additionalParameters": {
                 "underlyingModel": "o3-mini medium"
             },
@@ -229,8 +218,8 @@
                 "tokensPerMinute": 60000
             }
         },
-        "advanced-o3-mini-high": {
-            "engine": "advanced",
+        "qualitative-o3-mini-high": {
+            "engine": "qualitative",
             "additionalParameters": {
                 "underlyingModel": "o3-mini high"
             },
@@ -239,8 +228,8 @@
                 "tokensPerMinute": 60000
             }
         },
-        "advanced-o4-mini": {
-            "engine": "advanced",
+        "qualitative-o4-mini": {
+            "engine": "qualitative",
             "additionalParameters": {
                 "underlyingModel": "o4-mini"
             },

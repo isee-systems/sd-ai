@@ -7,7 +7,7 @@ class ResponseFormatError extends Error {
     }
 }
 
-class AdvancedEngineBrain {
+class QualitativeEngineBrain {
     
     static NON_STRUCTURED_OUTPUT_SYSTEM_PROMPT_ADDITION =
 `
@@ -122,11 +122,11 @@ You will conduct a multistep process:
         openAIKey: null,
         googleKey: null,
         underlyingModel: LLMWrapper.DEFAULT_MODEL,
-        systemPrompt: AdvancedEngineBrain.DEFAULT_SYSTEM_PROMPT,
-        assistantPrompt: AdvancedEngineBrain.DEFAULT_ASSISTANT_PROMPT,
-        feedbackPrompt: AdvancedEngineBrain.DEFAULT_FEEDBACK_PROMPT,
-        backgroundPrompt: AdvancedEngineBrain.DEFAULT_BACKGROUND_PROMPT,
-        problemStatementPrompt: AdvancedEngineBrain.DEFAULT_PROBLEM_STATEMENT_PROMPT
+        systemPrompt: QualitativeEngineBrain.DEFAULT_SYSTEM_PROMPT,
+        assistantPrompt: QualitativeEngineBrain.DEFAULT_ASSISTANT_PROMPT,
+        feedbackPrompt: QualitativeEngineBrain.DEFAULT_FEEDBACK_PROMPT,
+        backgroundPrompt: QualitativeEngineBrain.DEFAULT_BACKGROUND_PROMPT,
+        problemStatementPrompt: QualitativeEngineBrain.DEFAULT_PROBLEM_STATEMENT_PROMPT
     };
 
     #llmWrapper;
@@ -206,7 +206,7 @@ You will conduct a multistep process:
         }
 
         if (!this.#llmWrapper.model.hasStructuredOutput) {
-            systemPrompt += "\n" + AdvancedEngineBrain.NON_STRUCTURED_OUTPUT_SYSTEM_PROMPT_ADDITION;
+            systemPrompt += "\n" + QualitativeEngineBrain.NON_STRUCTURED_OUTPUT_SYSTEM_PROMPT_ADDITION;
             responseFormat = undefined;
         }
 
@@ -274,4 +274,4 @@ You will conduct a multistep process:
     }
 }
 
-export default AdvancedEngineBrain;
+export default QualitativeEngineBrain;

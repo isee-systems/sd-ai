@@ -1,4 +1,4 @@
-import AdvancedEngineBrain from './AdvancedEngineBrain.js'
+import QualitativeEngineBrain from './QualitativeEngineBrain.js'
 
 class Engine {
     constructor() {
@@ -42,7 +42,7 @@ class Engine {
 
     async generate(prompt, currentModel, parameters) {
         try {
-            let brain = new AdvancedEngineBrain(parameters);
+            let brain = new QualitativeEngineBrain(parameters);
             const response = await brain.generateDiagram(prompt, currentModel);
             const variables =  [...new Set([...response.relationships.map( e => e.from),...response.relationships.map( e => e.to )])].map((v)=> {
                 return {
