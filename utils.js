@@ -262,14 +262,19 @@ export class LLMWrapper {
     "from": "This is a variable which causes the to variable in this relationship that is between two variables, from and to.  The from variable is the equivalent of a cause.  The to variable is the equivalent of an effect",
     "to": "This is a variable which is impacted by the from variable in this relationship that is between two variables, from and to.  The from variable is the equivalent of a cause.  The to variable is the equivalent of an effect",
     "reasoning": "This is an explanation for why this relationship exists",
-    "polarity": "There are two possible kinds of relationships.  The first are relationships with positive polarity that are represented with a + symbol.  In relationships with positive polarity (+) a change in the from variable causes a change in the same direction in the to variable.  For example, in a relationship with postive polarity (+), a decrease in the from variable, would lead to a decrease in the to variable.  The second kind of relationship are those with negative polarity that are represented with a - symbol.  In relationships with negative polarity (-) a change in the from variable causes a change in the opposite direction in the to variable.  For example, in a relationship with negative polarity (-) an increase in the from variable, would lead to a decrease in the to variable.",
-    "polarityReasoning": "This is the reason for why the polarity for this relationship was choosen",
+    "polarity": "There are two possible kinds of relationships.  The first are relationships with positive polarity that are represented with a + symbol.  In relationships with positive polarity (+) a change in the from variable causes a change in the same direction in the to variable.  For example, in a relationship with positive polarity (+), a decrease in the from variable, would lead to a decrease in the to variable.  The second kind of relationship are those with negative polarity that are represented with a - symbol.  In relationships with negative polarity (-) a change in the from variable causes a change in the opposite direction in the to variable.  For example, in a relationship with negative polarity (-) an increase in the from variable, would lead to a decrease in the to variable.",
+    "polarityReasoning": "This is the reason for why the polarity for this relationship was chosen",
     "relationship": "This is a relationship between two variables, from and to (from is the cause, to is the effect).  The relationship also contains a polarity which describes how a change in the from variable impacts the to variable",
+
     "relationships": "The list of relationships you think are appropriate to satisfy my request based on all of the information I have given you",
+    
     "explanation": "Concisely explain your reasoning for each change you made to the old model to create the new model. Speak in plain English, refer to system archetypes, don't reference json specifically. Don't reiterate the request or any of these instructions.",
+    
     "title": "A highly descriptive 7 word max title describing your explanation.",
 
     "quantExplanation": "Concisely explain your reasoning for each change you made to the old model to create the new model. Speak in plain English, refer to system archetypes, don't reference json specifically. Don't reiterate the request or any of these instructions.",
+
+    "variables": "The list of variables you think are appropriate to satisfy my request based on all of the information I have given you",
 
     "equation": "The XMILE equation for this variable.  This equation can be a number, or an algebraic expression of other variables. Make sure that whenever you include a variable name with spaces that you replace those spaces with underscores. If the type for this variable is a stock, then the equation is its initial value, do not use INTEG for the equation of a stock, only its initial value. NEVER use IF THEN ELSE or conditional functions inside of equations.  If you want to check for division by zero use the operator //. If this variable is a table function, lookup function or graphical function, the equation should be an algebraic expression containing only the inputs to the function!  If a variable is making use of a graphical function only the name of the variable with the graphical function should appear in the equation.",
 
@@ -283,14 +288,14 @@ export class LLMWrapper {
     "gfEquation": "Only used on variables which contain a table function, lookup function, or graphical function.",
 
     "gf": "This object represents a table function, lookup function or graphical function.  It is a list of value pairs or points.  The value computed by the equation is looked up in this list of points using the \"x\" value, and the \"y\" value is returned.",
-    "gfPoint": "This object represens a single value pair used in a table function, lookup function, or graphical function.",
+    "gfPoint": "This object represents a single value pair used in a table function, lookup function, or graphical function.",
     "gfPointX": "This is the \"x\" value in the x,y value pair, or graphical function point. This is the value used for the lookup.",
     "gfPointY": "This is the \"y\" value in the x,y value pair, or graphical function point. This is the value returned by the lookup.",
 
-    "simSpecs": "This object describes settings for the model and how its run.",
-    "startTime": "The time at which this model starts calculating.  It is measured in the units of \"timeUnit\".",
-    "stopTime": "The time at which this model stops calculating.  It is measured in the units of \"timeUnit\".",
-    "dt": "The time step for the model, how often is it calculated.  The most common dt is 0.25. It is measured in the units of \"timeUnit\".",
+    "simSpecs": "This object describes settings for the model and how it runs.",
+    "startTime": "The time at which this model starts calculating.  It is measured in the units of \"timeUnits\".",
+    "stopTime": "The time at which this model stops calculating.  It is measured in the units of \"timeUnits\".",
+    "dt": "The time step for the model, how often is it calculated.  The most common dt is 0.25. It is measured in the units of \"timeUnits\".",
     "timeUnits": "The unit of time for this model.  This should match with the equations that you generate."
   };
 
