@@ -15,8 +15,15 @@ class Engine {
     }
 
     additionalParameters()  {
-        const additionalParameters = LLMWrapper.additionalParameters();
-        return additionalParameters.concat([{
+         return [{
+            name: "googleKey",
+            type: "string",
+            required: true,
+            uiElement: "password",
+            saveForUser: "global",
+            label: "Google API Key",
+            description: "Leave blank for the default, or your Google API key - XXXXXX"
+        },{
             name: "problemStatement",
             type: "string",
             required: false,
@@ -51,7 +58,7 @@ class Engine {
             uiElement: "hidden",
             label: "JSON Description of feedback loops",
             description: "A JSON array of feedback loops in the model"
-        }]);
+        }];
     }
 
     async generate(prompt, currentModel, parameters) {
