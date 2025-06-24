@@ -1,4 +1,5 @@
-import projectUtils, { LLMWrapper } from '../../utils.js'
+import { LLMWrapper } from '../../utils.js'
+import { marked } from 'marked';
 
 class ResponseFormatError extends Error {
     constructor(message) {
@@ -79,6 +80,22 @@ As the world's best System Dynamics Modeler, you will consider and apply the Sys
         this.#llmWrapper = new LLMWrapper(params);
     }
 
+    #containsHtmlTags(str) {
+        // This regex looks for patterns like <tag>, </tag>, or <tag attribute="value">
+        const htmlTagRegex = /<[a-z/][^>]*>/i; 
+        return htmlTagRegex.test(str);
+    }
+
+
+    async #processResponse(originalResponse) {
+        //if the string is html just returned
+        if (this.#containsHtmlTags(originalResponse))
+            return originalResponse;
+
+        const result = await marked.parse(originalResponse);
+        return result;
+    }
+
     async converse(userPrompt, lastModel) {        
         //start with the system prompt
         let underlyingModel = this.#data.underlyingModel;
@@ -117,6 +134,7 @@ As the world's best System Dynamics Modeler, you will consider and apply the Sys
                 content:  this.#data.backgroundPrompt.replaceAll("{backgroundKnowledge}", this.#data.backgroundKnowledge),
             });
         }
+
         if (this.#data.problemStatement) {
             messages.push({
                 role: systemRole,
@@ -158,7 +176,7 @@ As the world's best System Dynamics Modeler, you will consider and apply the Sys
             throw new ResponseFormatError(originalResponse.refusal);
         }
 
-        return originalResponse.content;
+        return await this.#processResponse(originalResponse.content);
     }
 }
 
