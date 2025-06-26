@@ -34,3 +34,33 @@ func TestIsOpenAIModel(t *testing.T) {
 		})
 	}
 }
+
+func TestIsGeminiModel(t *testing.T) {
+	for _, name := range []string{
+		"gemini-2.5-flash",
+		"gemini-2.5-flash-lite-preview-06-17",
+		"gemini-2.5-pro",
+		"gemini-2.0-flash",
+		"gemini-2.0-flash-lite",
+		"gemini-1.5-flash",
+		"GEMINI-1.5-PRO",
+		"Gemini-Pro",
+	} {
+		t.Run(name, func(t *testing.T) {
+			assert.True(t, isGeminiModel(name))
+		})
+	}
+
+	for _, name := range []string{
+		"gpt-4o",
+		"llama4:scout",
+		"qwen3:32b",
+		"gemma3:12b",
+		"phi4",
+		"o3-mini",
+	} {
+		t.Run(name, func(t *testing.T) {
+			assert.False(t, isGeminiModel(name))
+		})
+	}
+}

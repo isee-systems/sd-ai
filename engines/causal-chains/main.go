@@ -17,6 +17,7 @@ import (
 
 type parameters struct {
 	ApiKey              string `json:"apiKey"`
+	GoogleKey           string `json:"googleKey"`
 	UnderlyingModel     string `json:"underlyingModel"`
 	ProblemStatement    string `json:"problemStatement"`
 	BackgroundKnowledge string `json:"backgroundKnowledge"`
@@ -53,6 +54,12 @@ func isOpenAIModel(model string) bool {
 	return false
 }
 
+// isGeminiModel returns true if the given model is a Google Gemini model.
+func isGeminiModel(model string) bool {
+	model = strings.ToLower(model)
+	return strings.Contains(model, "gemini")
+}
+
 func main() {
 	argv := os.Args
 	if len(argv) < 2 {
@@ -72,15 +79,34 @@ func main() {
 	if input.Parameters.ApiKey == "" {
 		input.Parameters.ApiKey = os.Getenv("OPENAI_API_KEY")
 	}
+	if input.Parameters.GoogleKey == "" {
+		input.Parameters.GoogleKey = os.Getenv("GOOGLE_API_KEY")
+	}
 
-	url := openai.OpenAIURL
-	if !isOpenAIModel(input.Parameters.UnderlyingModel) {
+	var url string
+	var apiKey string
+
+	if isGeminiModel(input.Parameters.UnderlyingModel) {
+		url = openai.GeminiURL
+		apiKey = input.Parameters.GoogleKey
+		if apiKey == "" {
+			log.Fatalf("Google API key is required for Gemini models")
+		}
+	} else if isOpenAIModel(input.Parameters.UnderlyingModel) {
+		url = openai.OpenAIURL
+		apiKey = input.Parameters.ApiKey
+		if apiKey == "" {
+			log.Fatalf("OpenAI API key is required for OpenAI models")
+		}
+	} else {
+		// Default to Ollama for local models
 		url = openai.OllamaURL
+		apiKey = "" // Ollama doesn't need an API key
 	}
 
 	c, err := openai.NewClient(url,
 		openai.WithModel(input.Parameters.UnderlyingModel),
-		openai.WithAPIKey(input.Parameters.ApiKey),
+		openai.WithAPIKey(apiKey),
 	)
 	if err != nil {
 		log.Fatalf("openai.NewClient: %s", err)
