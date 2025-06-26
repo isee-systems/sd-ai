@@ -20,6 +20,7 @@ import (
 const (
 	OpenAIURL = "https://api.openai.com/v1"
 	OllamaURL = "http://localhost:11434/v1"
+	GeminiURL = "https://generativelanguage.googleapis.com/v1beta/openai"
 )
 
 type client struct {
