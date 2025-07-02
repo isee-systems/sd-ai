@@ -1,11 +1,21 @@
 import express from 'express'
-import utils from './../../utils.js'
+import utils, { ModelCapabilities, ModelType, LLMWrapper } from './../../utils.js'
 
 const router = express.Router()
 
 router.post("/:engine/generate", async (req, res) => {
     const authenticationKey = process.env.AUTHENTICATION_KEY;
-    if (!req.body.openAIKey && authenticationKey) {
+    const underlyingModel = req.body.underlyingModel || LLMWrapper.DEFAULT_MODEL;
+    const capabilities = new ModelCapabilities(underlyingModel);
+
+    let hasApiKey = false;
+    if (req.body.openAIKey && capabilities.kind === ModelType.OPEN_AI) {
+      hasApiKey = true;
+    } else if (req.body.googleKey && capabilities.kind === ModelType.GEMINI) {
+      hasApiKey = true;
+    }
+
+    if (!hasApiKey && authenticationKey) {
         if (!req.header('Authentication') || req.header('Authentication') !== authenticationKey) {
           return res.status(403).send({ "success": false, err: 'Unauthorized, please pass valid Authentication header.' });
         }
@@ -21,6 +31,28 @@ router.post("/:engine/generate", async (req, res) => {
        return ["prompt", "currentModel", "format"].indexOf(k) == -1
     }));
 
+    instance.additionalParameters().forEach((param) => {
+      let uncastedValue = engineSpecificParameters[param.name];
+      let castedValue = uncastedValue;
+      if (uncastedValue) { //if the uncasted value is not defined skip it... only cast defined values to the proper type
+        switch (param.type) {
+          case "number":
+            castedValue = Number(uncastedValue);
+            break;
+
+          case "boolean":
+            castedValue = Boolean(uncastedValue);
+            break;
+
+          case "string":
+            castedValue = uncastedValue.toString();
+            break;
+        }
+
+        engineSpecificParameters[param.name] = castedValue;
+      }
+    });
+
     let currentModel = {variables: [], relationships: []};
     if ('currentModel' in req.body) {
       currentModel = req.body.currentModel
@@ -31,21 +63,28 @@ router.post("/:engine/generate", async (req, res) => {
     if (generateResponse.err) {
       return res.send({
         success: false,
-        message: "Failed to generate a diagram: " + generateResponse.err
+        message: "Request failed: " + generateResponse.err
       })
     }
   
-    let model = generateResponse.model
-    if (format == "xmile") {
-      model = utils.convertToXMILE(model)
-    } else {
-      format = "sd-json";
+    let response = {
+      success: true
+    };
+
+    if ('model' in generateResponse) {
+      let model = generateResponse.model
+      if (format == "xmile") {
+        model = utils.convertToXMILE(model)
+      } else {
+        format = "sd-json";
+      }
+
+      response.format = format;
+      response.model = model;
     }
     
-    let response = {
-      success: true,
-      format: format,
-      model: model,
+    if ('output' in generateResponse) {
+      response.output = generateResponse.output;
     }
 
     if ('supportingInfo' in generateResponse) {

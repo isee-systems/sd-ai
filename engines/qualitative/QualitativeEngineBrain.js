@@ -7,7 +7,7 @@ class ResponseFormatError extends Error {
     }
 }
 
-class AdvancedEngineBrain {
+class QualitativeEngineBrain {
     
     static NON_STRUCTURED_OUTPUT_SYSTEM_PROMPT_ADDITION =
 `
@@ -90,7 +90,7 @@ You will conduct a multistep process:
 
 1. You will identify all the entities that have a cause-and-effect relationships between. These entities are variables. Name these variables in a concise manner. A variable name should not be more than 5 words. Make sure that you minimize the number of variables used. Variable names should be neutral, i.e., there shouldn't be positive or negative meaning in variable names.
 
-2. For each variable, represent its causal relationships with other variables. There are two different kinds of polarities for causal relationships: positive polarity represented with a + symbol and negative represented with a - symbol. A positive polarity (+) relationship exits when variables are positively correlated.  Here are two examples of positive polarity (+) relationships. If a decline in the causing variable (the from variable) leads to a decline in the effect variable (the to variable), then the relationship has a positive polarity (+).  A relationship also has a positive polarity (+) if an increase in the causing variable (the from variable) leads to an increase in the effect variable (the to variable).  A negative polarity (-) is when variables are anticorrelated.  Here are two examples of negative polarity (-) relationships.  If a decline in the causing variable (the from variable) leads to an increase in the effect variable (the to variable), then the relationship has a negative polarity (-). A relationship also has a negative polarity (-) if an increase in the causing variable (the from variable) causes a decrease in the effect variable (the to variable). 
+2. For each variable, represent its causal relationships with other variables. There are two different kinds of polarities for causal relationships: positive polarity represented with a + symbol and negative represented with a - symbol. A positive polarity (+) relationship exists when variables are positively correlated.  Here are two examples of positive polarity (+) relationships. If a decline in the causing variable (the from variable) leads to a decline in the effect variable (the to variable), then the relationship has a positive polarity (+).  A relationship also has a positive polarity (+) if an increase in the causing variable (the from variable) leads to an increase in the effect variable (the to variable).  A negative polarity (-) is when variables are anticorrelated.  Here are two examples of negative polarity (-) relationships.  If a decline in the causing variable (the from variable) leads to an increase in the effect variable (the to variable), then the relationship has a negative polarity (-). A relationship also has a negative polarity (-) if an increase in the causing variable (the from variable) causes a decrease in the effect variable (the to variable). 
 
 3. Not all variables will have relationships with all other variables.
 
@@ -101,7 +101,7 @@ You will conduct a multistep process:
 6. Try as hard as you can to close feedback loops between the variables you find. It is very important that your answer includes feedback.  A feedback loop happens when there is a closed causal chain of relationships.  An example would be "Variable1" causes "Variable2" to increase, which causes "Variable3" to decrease which causes "Variable1" to again increase.  Try to find as many of the feedback loops as you can.`
 
     static DEFAULT_ASSISTANT_PROMPT = 
-`I want your response to consider all of the above relationships which you have already so helpfully given to us.  Your response should add new relationships and close feedback loops wherever you have evidence to support the existence of the relationships needed to close the feedback loop.  Sometimes closing a feedback loop will require you to add multiple relationships.`
+`I want your response to consider the model which you have already so helpfully given to us. You should never change the name of any variable you've already given us.  Your response should add new relationships and close feedback loops wherever you have evidence to support the existence of the relationships needed to close the feedback loop.  Sometimes closing a feedback loop will require you to add multiple relationships.`
 
     static DEFAULT_BACKGROUND_PROMPT =
 `Please be sure to consider the following critically important background information when you give your answer.
@@ -122,11 +122,11 @@ You will conduct a multistep process:
         openAIKey: null,
         googleKey: null,
         underlyingModel: LLMWrapper.DEFAULT_MODEL,
-        systemPrompt: AdvancedEngineBrain.DEFAULT_SYSTEM_PROMPT,
-        assistantPrompt: AdvancedEngineBrain.DEFAULT_ASSISTANT_PROMPT,
-        feedbackPrompt: AdvancedEngineBrain.DEFAULT_FEEDBACK_PROMPT,
-        backgroundPrompt: AdvancedEngineBrain.DEFAULT_BACKGROUND_PROMPT,
-        problemStatementPrompt: AdvancedEngineBrain.DEFAULT_PROBLEM_STATEMENT_PROMPT
+        systemPrompt: QualitativeEngineBrain.DEFAULT_SYSTEM_PROMPT,
+        assistantPrompt: QualitativeEngineBrain.DEFAULT_ASSISTANT_PROMPT,
+        feedbackPrompt: QualitativeEngineBrain.DEFAULT_FEEDBACK_PROMPT,
+        backgroundPrompt: QualitativeEngineBrain.DEFAULT_BACKGROUND_PROMPT,
+        problemStatementPrompt: QualitativeEngineBrain.DEFAULT_PROBLEM_STATEMENT_PROMPT
     };
 
     #llmWrapper;
@@ -206,7 +206,7 @@ You will conduct a multistep process:
         }
 
         if (!this.#llmWrapper.model.hasStructuredOutput) {
-            systemPrompt += "\n" + AdvancedEngineBrain.NON_STRUCTURED_OUTPUT_SYSTEM_PROMPT_ADDITION;
+            systemPrompt += "\n" + QualitativeEngineBrain.NON_STRUCTURED_OUTPUT_SYSTEM_PROMPT_ADDITION;
             responseFormat = undefined;
         }
 
@@ -274,4 +274,4 @@ You will conduct a multistep process:
     }
 }
 
-export default AdvancedEngineBrain;
+export default QualitativeEngineBrain;

@@ -9,7 +9,13 @@
     }
   ],
   "variables": [
-    "frimbulators",
-    "whatajigs"
+    {
+      "name": "frimbulators",
+      "type": "variable"
+    },
+    {
+      "name": "whatajigs",
+      "type": "variable"
+    }
   ]
 }

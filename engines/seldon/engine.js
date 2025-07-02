@@ -1,16 +1,21 @@
-import AdvancedEngineBrain from './AdvancedEngineBrain.js'
+import { LLMWrapper } from '../../utils.js';
+import SeldonBrain from './SeldonBrain.js'
 
 class Engine {
     constructor() {
 
     }
 
+    static role() {
+        return "discuss";
+    }
+
     static supportedModes() {
-        return ["cld"];
+        return ["sfd-discuss", "cld-discuss"];
     }
 
     additionalParameters()  {
-        return [{
+         return [{
             name: "googleKey",
             type: "string",
             required: true,
@@ -35,24 +40,34 @@ class Engine {
             uiElement: "textarea",
             saveForUser: "local",
             label: "Background Knowledge",
-            description: "Background information you want the LLM model to consider when generating a diagram for you",
+            description: "Background information you want the LLM model to consider when generating a model for you",
             minHeight: 100
+        },{
+            name: "behaviorContent",
+            type: "string",
+            required: false,
+            uiElement: "textarea",
+            label: "Behavioral Description",
+            description: "Copy and paste the contents of a table from your model with the variables you want the AI to help you to understand the behavior of. Or give it a text description of your reference mode or any other behavioral elements related to your model",
+            minHeight: 100,
+            maxHeight: 100
+        },{
+            name: "feedbackContent",
+            type: "feedbackJSON",
+            required: false,
+            uiElement: "hidden",
+            label: "JSON Description of feedback loops",
+            description: "A JSON array of feedback loops in the model"
         }];
     }
 
     async generate(prompt, currentModel, parameters) {
         try {
-            let brain = new AdvancedEngineBrain(parameters);
-            const response = await brain.generateDiagram(prompt, currentModel);
-            const variables =  [...new Set([...response.relationships.map( e => e.from),...response.relationships.map( e => e.to )])];
+            let brain = new SeldonBrain(parameters);
+            const response = await brain.converse(prompt, currentModel);
             return {
-                supportingInfo: {
-                    explanation: response.explanation,
-                    title: response.title
-                },
-                model: {
-                    relationships: response.relationships,
-                    variables: variables
+                output: {
+                    textContent: response
                 }
             };
         } catch(err) {

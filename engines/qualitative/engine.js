@@ -1,5 +1,4 @@
-import { LLMWrapper } from '../../utils.js';
-import QuantitativeEngineBrain from './QuantitativeEngineBrain.js'
+import QualitativeEngineBrain from './QualitativeEngineBrain.js'
 
 class Engine {
     constructor() {
@@ -7,7 +6,7 @@ class Engine {
     }
 
     static supportedModes() {
-        return ["sfd"];
+        return ["cld"];
     }
 
     additionalParameters()  {
@@ -43,21 +42,24 @@ class Engine {
 
     async generate(prompt, currentModel, parameters) {
         try {
-            let brain = new QuantitativeEngineBrain(parameters);
-            const response = await brain.generateModel(prompt, currentModel);
-            let returnValue = {
+            let brain = new QualitativeEngineBrain(parameters);
+            const response = await brain.generateDiagram(prompt, currentModel);
+            const variables =  [...new Set([...response.relationships.map( e => e.from),...response.relationships.map( e => e.to )])].map((v)=> {
+                return {
+                    name: v,
+                    type: "variable"
+                };
+            });
+            return {
                 supportingInfo: {
                     explanation: response.explanation,
                     title: response.title
                 },
                 model: {
                     relationships: response.relationships,
-                    variables: response.variables
+                    variables: variables
                 }
             };
-            if (response.specs)
-                returnValue.model.specs = response.specs;
-            return returnValue;
         } catch(err) {
             console.error(err);
             return { 

@@ -1,8 +1,8 @@
 import { LLMWrapper } from '../../utils.js';
-import AdvancedEngineBrain from '../default/AdvancedEngineBrain.js'
-import Engine from './../default/engine.js'
+import QuantitativeEngineBrain from '../quantitative/QuantitativeEngineBrain.js'
+import Engine from './../quantitative/engine.js'
 
-class AdvancedEngine extends Engine {
+class QuantativeExperimental extends Engine {
     static SYSTEM_PROMPT_DESC = 
 `
 An system prompt is a predefined instruction or set of instructions provided to guide the behavior, style, or functionality of a language model during a conversation. This prompt sets the tone, context, and boundaries for how the AI should interact with the user.
@@ -27,7 +27,7 @@ It ensures the AI’s responses align with the intended user experience, such as
     }
 
     static supportedModes() {
-        return ["cld"];
+        return ["sfd"];
     }
 
     additionalParameters()  {
@@ -36,17 +36,17 @@ It ensures the AI’s responses align with the intended user experience, such as
         return parameters.concat([{
                 name: "systemPrompt",
                 type: "string",
-                defaultValue: AdvancedEngineBrain.DEFAULT_SYSTEM_PROMPT,
+                defaultValue: QuantitativeEngineBrain.DEFAULT_SYSTEM_PROMPT,
                 required: false,
                 uiElement: "textarea",
                 saveForUser: "global",
                 label: "System Prompt",
-                description: AdvancedEngine.SYSTEM_PROMPT_DESC,
+                description: QuantativeExperimental.SYSTEM_PROMPT_DESC,
                 minHeight: 100
             },{
                 name: "backgroundPrompt",
                 type: "string",
-                defaultValue: AdvancedEngineBrain.DEFAULT_BACKGROUND_PROMPT,
+                defaultValue: QuantitativeEngineBrain.DEFAULT_BACKGROUND_PROMPT,
                 required: false,
                 uiElement: "textarea",
                 saveForUser: "global",
@@ -56,7 +56,7 @@ It ensures the AI’s responses align with the intended user experience, such as
             },{
                 name: "problemStatementPrompt",
                 type: "string",
-                defaultValue: AdvancedEngineBrain.DEFAULT_PROBLEM_STATEMENT_PROMPT,
+                defaultValue: QuantitativeEngineBrain.DEFAULT_PROBLEM_STATEMENT_PROMPT,
                 required: false,
                 uiElement: "textarea",
                 saveForUser: "global",
@@ -66,7 +66,7 @@ It ensures the AI’s responses align with the intended user experience, such as
             },{
                 name: "assistantPrompt",
                 type: "string",
-                defaultValue: AdvancedEngineBrain.DEFAULT_ASSISTANT_PROMPT,
+                defaultValue: QuantitativeEngineBrain.DEFAULT_ASSISTANT_PROMPT,
                 required: false,
                 uiElement: "textarea",
                 saveForUser: "global",
@@ -76,7 +76,7 @@ It ensures the AI’s responses align with the intended user experience, such as
             },{
                 name: "feedbackPrompt",
                 type: "string",
-                defaultValue: AdvancedEngineBrain.DEFAULT_FEEDBACK_PROMPT,
+                defaultValue: QuantitativeEngineBrain.DEFAULT_FEEDBACK_PROMPT,
                 required: false,
                 uiElement: "textarea",
                 saveForUser: "global",
@@ -107,4 +107,4 @@ It ensures the AI’s responses align with the intended user experience, such as
     }
 }
 
-export default AdvancedEngine;
+export default QuantativeExperimental;

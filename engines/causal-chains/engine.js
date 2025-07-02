@@ -34,19 +34,28 @@ class Engine {
 
     additionalParameters() {
         const models = LLMWrapper.MODELS.filter(item => {
-            // true if the value starts with "gpt" or "o[0-9]"
-            return /^(gpt|o\d)/.test(item.value);
+            // true if the value starts with "gpt", "o[0-9]", or contains "gemini"
+            return /^(gpt|o\d)/.test(item.value) || item.value.includes('gemini');
         });
 
         return [
             {
                 name: "apiKey",
                 type: "string",
-                required: true,
+                required: false,
                 uiElement: "password",
                 saveForUser: "global",
-                label: "API Key",
-                description: "Leave blank for the default, or your Open AI key, e.g. sk-proj-XXXXX",
+                label: "OpenAI API Key",
+                description: "Leave blank for the default, or your OpenAI API key, e.g. sk-proj-XXXXX",
+            },
+            {
+                name: "googleKey",
+                type: "string",
+                required: false,
+                uiElement: "password",
+                saveForUser: "global",
+                label: "Google API Key",
+                description: "Leave blank for the default, or your Google API key (required for Gemini models)",
             },
             {
                 name: "underlyingModel",

@@ -49,7 +49,7 @@ We welcome Github Issues and Pull Requests from everyone! Here are some ideas fo
     success: <bool>, 
     parameters:[{
         name: <string, unique name for the parmater that is passed to generate call>,
-        type: <string, currently this service only supports 'string' for this attribute>,
+        type: <string, string|number|boolean>,
         required: <boolean, whether or not this parameter must be passed to the generate call>,
         uiElement: <string, type of UI element the client should use so that the user can enter this value.  Valid values are textarea|lineedit|password|combobox|hidden|checkbox>,
         label: <string, name to put next to the UI element in the client>,
@@ -124,6 +124,15 @@ We welcome Github Issues and Pull Requests from everyone! Here are some ideas fo
 }
 ```  
 ? denotes an optional attribute
+
+## Discussion Engine JSON response
+```
+{
+    output: {
+        textContent: <string, the response to the query from the user>
+    }
+}
+```  
 
 # Setup
 1. fork this repo and git clone your fork locally 

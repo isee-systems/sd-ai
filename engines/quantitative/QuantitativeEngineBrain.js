@@ -14,20 +14,20 @@ class QuantitativeEngineBrain {
 
 You will conduct a multistep process:
 
-1. You will identify all the entities that have a cause-and-effect relationships between. These entities are variables. Name these variables in a concise manner. A variable name should not be more than 5 words. Make sure that you minimize the number of variables used. Variable names should be neutral, i.e., there shouldn't be positive or negative meaning in variable names. Make sure when you name variables you use only letters and spaces, no symbols, dashes or punctuation should ever appear in a variable name.
+1. You will identify all the entities that have a cause-and-effect relationship between them. These entities are variables. Name these variables in a concise manner. A variable name should not be more than 5 words. Make sure that you minimize the number of variables used. Variable names should be neutral, i.e., there shouldn't be positive or negative meaning in variable names. Make sure when you name variables you use only letters and spaces, no symbols, dashes or punctuation should ever appear in a variable name.
 
-2. For each variable, represent its causal relationships with other variables. There are two different kinds of polarities for causal relationships: positive polarity represented with a + symbol and negative represented with a - symbol. A positive polarity (+) relationship exits when variables are positively correlated.  Here are two examples of positive polarity (+) relationships. If a decline in the causing variable (the from variable) leads to a decline in the effect variable (the to variable), then the relationship has a positive polarity (+).  A relationship also has a positive polarity (+) if an increase in the causing variable (the from variable) leads to an increase in the effect variable (the to variable).  A negative polarity (-) is when variables are anticorrelated.  Here are two examples of negative polarity (-) relationships.  If a decline in the causing variable (the from variable) leads to an increase in the effect variable (the to variable), then the relationship has a negative polarity (-). A relationship also has a negative polarity (-) if an increase in the causing variable (the from variable) causes a decrease in the effect variable (the to variable). 
+2. For each variable, represent its causal relationships with other variables. There are two different kinds of polarities for causal relationships: positive polarity represented with a + symbol and negative represented with a - symbol. A positive polarity (+) relationship exists when variables are positively correlated.  Here are two examples of positive polarity (+) relationships. If a decline in the causing variable (the from variable) leads to a decline in the effect variable (the to variable), then the relationship has a positive polarity (+).  A relationship also has a positive polarity (+) if an increase in the causing variable (the from variable) leads to an increase in the effect variable (the to variable).  A negative polarity (-) is when variables are anticorrelated.  Here are two examples of negative polarity (-) relationships.  If a decline in the causing variable (the from variable) leads to an increase in the effect variable (the to variable), then the relationship has a negative polarity (-). A relationship also has a negative polarity (-) if an increase in the causing variable (the from variable) causes a decrease in the effect variable (the to variable). 
 
 3. For each variable you will determine its type.  There are three types of variables, stock, flow, and variable. A stock is an accumulation of its flows.  A stock can only change because of its flows. A flow is the derivative of a stock.  A plain variable is used for algebraic expressions.
 
-4. If there are no causal relationships at all in the provided text, return an empty JSON array.  Do not create relationships which do not exist in reality.
+4. If there are no causal relationships at all in the provided text, return an empty JSON structure.  Do not create relationships which do not exist in reality.
 
-5. For each variable you will provide its equation.  It's equation will specify how to calculate that variable in terms of the other variables you represent.  The equations must be written in XMILE format.  Any variable referenced in an equation must itself have an equation, a type, and appear somewhere in the list of relationships.
+5. For each variable you will provide its equation.  Its equation will specify how to calculate that variable in terms of the other variables you represent.  The equations must be written in XMILE format.  Any variable referenced in an equation must itself have an equation, a type, and appear somewhere in the list of relationships.
 
 6. Try as hard as you can to close feedback loops between the variables you find. It is very important that your answer includes feedback.  A feedback loop happens when there is a closed causal chain of relationships.  An example would be "Variable1" causes "Variable2" to increase, which causes "Variable3" to decrease which causes "Variable1" to again increase.  Try to find as many of the feedback loops as you can.`
 
     static DEFAULT_ASSISTANT_PROMPT = 
-`I want your response to consider the model which you have already so helpfully given to us.  Your response should add new variables wherever you have evidence to support the existence of the relationships needed to close feedback loops.  Sometimes closing a feedback loop will require you to add multiple relationships.`
+`I want your response to consider the model which you have already so helpfully given to us. You should never change the name of any variable you've already given us. Your response should add new variables wherever you have evidence to support the existence of the relationships needed to close feedback loops.  Sometimes closing a feedback loop will require you to add multiple relationships.`
 
     static DEFAULT_BACKGROUND_PROMPT =
 `Please be sure to consider the following critically important background information when you give your answer.
@@ -72,7 +72,23 @@ You will conduct a multistep process:
        
     }
 
+    #isFlowUsed(flow, response) {
+        return response.variables.findIndex((v)=> {
+            if (v.type === "stock") {
+                return v.inflows.findIndex((f) => {
+                    return flow.name === f;
+                }) >= 0 || v.outflows.findIndex((f) => {
+                    return flow.name === f;
+                }) >= 0;
+            }
+
+            return false;
+        }) >= 0;
+    }
+
     #processResponse(originalResponse) {
+        //console.log(JSON.stringify(originalResponse));
+        //console.log(originalResponse);
         const responseHasVariable = (variable) => {
             return originalResponse.variables.findIndex((v) => {
                 return projectUtils.sameVars(v.name, variable);
@@ -115,6 +131,16 @@ You will conduct a multistep process:
         });
         
         originalResponse.relationships = relationships;
+
+        originalResponse.variables.forEach((v)=>{
+            //go through all the flows -- make sure they appear in an inflows or outflows, and if they don't change them to type variable
+            if (v.type === "flow" && !this.#isFlowUsed(v, originalResponse)) {
+                v.type = "variable";
+                //console.log("Changing type from flow to variable for... " + v.name);
+                //console.log(v);
+            }
+        });
+
         return originalResponse;
     }
 

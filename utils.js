@@ -208,12 +208,20 @@ export class LLMWrapper {
 
     switch (this.model.kind) {
         case ModelType.GEMINI:
+            if (!this.#googleKey) {
+              throw new Error("To access this service you need to send a Google key");
+            }
+            
             this.openAIAPI = new OpenAI({
                 apiKey: this.#googleKey,
                 baseURL: "https://generativelanguage.googleapis.com/v1beta/openai"
             });
             break;
         case ModelType.OPEN_AI:
+            if (!this.#openAIKey) {
+              throw new Error("To access this service you need to send an OpenAI key");
+            }
+
             this.openAIAPI = new OpenAI({
                 apiKey: this.#openAIKey,
             });
@@ -231,12 +239,13 @@ export class LLMWrapper {
   static MODELS = [
       {label: "GPT-4o", value: 'gpt-4o'},
       {label: "GPT-4o-mini", value: 'gpt-4o-mini'},
-      {label: "GPT-4.5-preview", value: 'gpt-4.5-preview'},
+      //{label: "GPT-4.5-preview", value: 'gpt-4.5-preview'},
       {label: "GPT-4.1", value: 'gpt-4.1'},
       {label: "GPT-4.1-mini", value: 'gpt-4.1-mini'},
       {label: "GPT-4.1-nano", value: 'gpt-4.1-nano'},
-      {label: "Gemini 2.5-flash", value: 'gemini-2.5-flash-preview-04-17'},
-      {label: "Gemini 2.5-pro", value: 'gemini-2.5-pro-preview-03-25'},
+      {label: "Gemini 2.5-flash", value: 'gemini-2.5-flash'},
+      {label: "Gemini 2.5-flash-lite", value: 'gemini-2.5-flash-lite-preview-06-17'},
+      {label: "Gemini 2.5-pro", value: 'gemini-2.5-pro'},
       {label: "Gemini 2.0", value: 'gemini-2.0-flash'},
       {label: "Gemini 2.0-Lite", value: 'gemini-2.0-flash-lite'},
       {label: "Gemini 1.5", value: 'gemini-1.5-flash'},
@@ -244,23 +253,31 @@ export class LLMWrapper {
       {label: "o3-mini low", value: 'o3-mini low'},
       {label: "o3-mini medium", value: 'o3-mini medium'},
       {label: "o3-mini high", value: 'o3-mini high'},
+      {label: "o3", value: 'o3-mini'},
       {label: "o4-mini", value: 'o4-mini'}
   ];
 
-  static DEFAULT_MODEL = 'gpt-4o';
+  static DEFAULT_MODEL = 'gemini-2.5-flash-preview-05-20';
 
   static SCHEMA_STRINGS = {
     "from": "This is a variable which causes the to variable in this relationship that is between two variables, from and to.  The from variable is the equivalent of a cause.  The to variable is the equivalent of an effect",
     "to": "This is a variable which is impacted by the from variable in this relationship that is between two variables, from and to.  The from variable is the equivalent of a cause.  The to variable is the equivalent of an effect",
     "reasoning": "This is an explanation for why this relationship exists",
-    "polarity": "There are two possible kinds of relationships.  The first are relationships with positive polarity that are represented with a + symbol.  In relationships with positive polarity (+) a change in the from variable causes a change in the same direction in the to variable.  For example, in a relationship with postive polarity (+), a decrease in the from variable, would lead to a decrease in the to variable.  The second kind of relationship are those with negative polarity that are represented with a - symbol.  In relationships with negative polarity (-) a change in the from variable causes a change in the opposite direction in the to variable.  For example, in a relationship with negative polarity (-) an increase in the from variable, would lead to a decrease in the to variable.",
-    "polarityReasoning": "This is the reason for why the polarity for this relationship was choosen",
+    "polarity": "There are two possible kinds of relationships.  The first are relationships with positive polarity that are represented with a + symbol.  In relationships with positive polarity (+) a change in the from variable causes a change in the same direction in the to variable.  For example, in a relationship with positive polarity (+), a decrease in the from variable, would lead to a decrease in the to variable.  The second kind of relationship are those with negative polarity that are represented with a - symbol.  In relationships with negative polarity (-) a change in the from variable causes a change in the opposite direction in the to variable.  For example, in a relationship with negative polarity (-) an increase in the from variable, would lead to a decrease in the to variable.",
+    "polarityReasoning": "This is the reason for why the polarity for this relationship was chosen",
     "relationship": "This is a relationship between two variables, from and to (from is the cause, to is the effect).  The relationship also contains a polarity which describes how a change in the from variable impacts the to variable",
+
     "relationships": "The list of relationships you think are appropriate to satisfy my request based on all of the information I have given you",
-    "explanation": "Concisely explain your reasoning for each change you made to the old CLD to create the new CLD. Speak in plain English, don't reference json specifically. Don't reiterate the request or any of these instructions.",
+    
+    "explanation": "Concisely explain your reasoning for each change you made to the old model to create the new model. Speak in plain English, refer to system archetypes, don't reference json specifically. Don't reiterate the request or any of these instructions.",
+    
     "title": "A highly descriptive 7 word max title describing your explanation.",
 
-    "equation": "The XMILE equation for this variable.  This equation can be a number, or an algebraic expression of other variables. Make sure that whenever you include a variable name with spaces that you replace those spaces with underscores. If the type for this variable is a stock, then the equation is its initial value, do not use INTEG for the equation of a stock, only its initial value. Do not ever use IF THEN ELSE or conditional functions inside of equations. If this variable is a table function, lookup function or graphical function, the equation should be an algebraic expression containing only the inputs to the function, it cannot contain the name of the graphical function itself!  If a variable is making use of a graphical function only the name of the variable with the graphical function should appear in the equation.  Never write an equation that uses parentheses after a variable name without a mathematical operator between the variable name and the parenthesis. When you are writing an equation, do not include the name of the variable in its own equation ever.",
+    "quantExplanation": "Concisely explain your reasoning for each change you made to the old model to create the new model. Speak in plain English, refer to system archetypes, don't reference json specifically. Don't reiterate the request or any of these instructions.",
+
+    "variables": "The list of variables you think are appropriate to satisfy my request based on all of the information I have given you",
+
+    "equation": "The XMILE equation for this variable.  This equation can be a number, or an algebraic expression of other variables. Make sure that whenever you include a variable name with spaces that you replace those spaces with underscores. If the type for this variable is a stock, then the equation is its initial value, do not use INTEG for the equation of a stock, only its initial value. NEVER use IF THEN ELSE or conditional functions inside of equations.  If you want to check for division by zero use the operator //. If this variable is a table function, lookup function or graphical function, the equation should be an algebraic expression containing only the inputs to the function!  If a variable is making use of a graphical function only the name of the variable with the graphical function should appear in the equation.",
 
     "type": "There are three types of variables, stock, flow, and variable. A stock is an accumulation of its flows, it is an integral.  A stock can only change because of its flows. A flow is the derivative of a stock.  A plain variable is used for algebraic expressions.",
     "name": "The name of a variable",
@@ -272,18 +289,16 @@ export class LLMWrapper {
     "gfEquation": "Only used on variables which contain a table function, lookup function, or graphical function.",
 
     "gf": "This object represents a table function, lookup function or graphical function.  It is a list of value pairs or points.  The value computed by the equation is looked up in this list of points using the \"x\" value, and the \"y\" value is returned.",
-    "gfPoint": "This object represens a single value pair used in a table function, lookup function, or graphical function.",
+    "gfPoint": "This object represents a single value pair used in a table function, lookup function, or graphical function.",
     "gfPointX": "This is the \"x\" value in the x,y value pair, or graphical function point. This is the value used for the lookup.",
     "gfPointY": "This is the \"y\" value in the x,y value pair, or graphical function point. This is the value returned by the lookup.",
 
-    "simSpecs": "This object describes settings for the model and how its run.",
-    "startTime": "The time at which this model starts calculating.  It is measured in the units of \"timeUnit\".",
-    "stopTime": "The time at which this model stops calculating.  It is measured in the units of \"timeUnit\".",
-    "dt": "The time step for the model, how often is it calculated.  The most common dt is 0.25. It is measured in the units of \"timeUnit\".",
+    "simSpecs": "This object describes settings for the model and how it runs.",
+    "startTime": "The time at which this model starts calculating.  It is measured in the units of \"timeUnits\".",
+    "stopTime": "The time at which this model stops calculating.  It is measured in the units of \"timeUnits\".",
+    "dt": "The time step for the model, how often is it calculated.  The most common dt is 0.25. It is measured in the units of \"timeUnits\".",
     "timeUnits": "The unit of time for this model.  This should match with the equations that you generate."
   };
-
-  static DEFAULT_MODEL = 'gemini-2.5-flash-preview-04-17';
 
   generateQualitativeSDJSONResponseSchema() {
       const PolarityEnum = z.enum(["+", "-"]).describe(LLMWrapper.SCHEMA_STRINGS.polarity);
@@ -351,7 +366,7 @@ export class LLMWrapper {
       const Model = z.object({
         variables: Variables,
         relationships: Relationships,
-        explanation: z.string().describe(LLMWrapper.SCHEMA_STRINGS.explanation),
+        explanation: z.string().describe(LLMWrapper.SCHEMA_STRINGS.quantExplanation),
         title: z.string().describe(LLMWrapper.SCHEMA_STRINGS.title),
         specs: SimSpecs
       });
@@ -363,7 +378,7 @@ export class LLMWrapper {
     return [{
             name: "openAIKey",
             type: "string",
-            required: true,
+            required: false,
             uiElement: "password",
             saveForUser: "global",
             label: "Open AI API Key",
@@ -371,7 +386,7 @@ export class LLMWrapper {
         },{
             name: "googleKey",
             type: "string",
-            required: true,
+            required: false,
             uiElement: "password",
             saveForUser: "global",
             label: "Google API Key",
