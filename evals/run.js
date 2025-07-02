@@ -356,6 +356,10 @@ const runSingleTest = async (
       ...test.testParams.additionalParameters,
     };
 
+    if (experiment.verbose) {
+      console.log(additionalParameters)
+    }
+
     const startTime = Date.now();
     let generateResponse = await instance.generate(
       test.testParams["prompt"],
@@ -374,7 +378,7 @@ const runSingleTest = async (
         )
       );
       console.log(
-        JSON.stringify(generateResponse)
+        JSON.stringify(generateResponse, null, 2)
       );
       console.log();
       // pretty json print the expectations
@@ -397,22 +401,24 @@ const runSingleTest = async (
     );
     testWithResult["pass"] = testWithResult["failures"].length == 0;
 
-    if (experiment.verbose) {
-      console.log(
-        chalk.blue(
-          `Finished evaluation in ${Math.round(
-            testWithResult["duration"] / 1000
-          )}s: ${name}`
-        )
-      );
-      console.log(
-        "  ",
-        chalk.bold(
-          testWithResult["pass"] ? chalk.green("Passed") : chalk.red("Failed")
-        )
-      );
-      console.log();
+  if (experiment.verbose) {
+    console.log(
+      chalk.blue(
+        `Finished evaluation in ${Math.round(
+          testWithResult["duration"] / 1000
+        )}s: ${name}`
+      )
+    );
+    if (testWithResult["pass"]) {
+      console.log(chalk.bold(chalk.green("Passed")));
+    } else {
+      console.log(chalk.bold(chalk.red("Failed")));
+      testWithResult["failures"].forEach((failure) => {
+        console.log(failure.details);
+        console.log()
+      });
     }
+    console.log();
     testWithResult["name"] = name;
     fs.appendFileSync(`${experimentResultsName}${inProgressFileSuffix}`, JSON.stringify(testWithResult) + "\n");
   }
