@@ -305,7 +305,7 @@ const runSingleTest = async (
   const name = test.testParams["name"];
   const cachedResult = previousResults.find(r => {
     return (
-      r.engineConfigName = test.engineConfigName && 
+      r.engineConfigName == test.engineConfigName && 
       r.category == test.category && 
       r.group == test.group &&
       r.testParams.name == test.testParams.name
@@ -401,24 +401,25 @@ const runSingleTest = async (
     );
     testWithResult["pass"] = testWithResult["failures"].length == 0;
 
-  if (experiment.verbose) {
-    console.log(
-      chalk.blue(
-        `Finished evaluation in ${Math.round(
-          testWithResult["duration"] / 1000
-        )}s: ${name}`
-      )
-    );
-    if (testWithResult["pass"]) {
-      console.log(chalk.bold(chalk.green("Passed")));
-    } else {
-      console.log(chalk.bold(chalk.red("Failed")));
-      testWithResult["failures"].forEach((failure) => {
-        console.log(failure.details);
-        console.log()
-      });
+    if (experiment.verbose) {
+      console.log(
+        chalk.blue(
+          `Finished evaluation in ${Math.round(
+            testWithResult["duration"] / 1000
+          )}s: ${name}`
+        )
+      );
+      if (testWithResult["pass"]) {
+        console.log(chalk.bold(chalk.green("Passed")));
+      } else {
+        console.log(chalk.bold(chalk.red("Failed")));
+        testWithResult["failures"].forEach((failure) => {
+          console.log(failure.details);
+          console.log()
+        });
+      }
+      console.log();
     }
-    console.log();
     testWithResult["name"] = name;
     fs.appendFileSync(`${experimentResultsName}${inProgressFileSuffix}`, JSON.stringify(testWithResult) + "\n");
   }
