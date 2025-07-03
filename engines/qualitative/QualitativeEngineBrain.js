@@ -246,7 +246,8 @@ You will conduct a multistep process:
 
         //give it the user prompt
         messages.push({ role: "user", content: userPrompt });
-        messages.push({ role: "user", content: this.#data.feedbackPrompt }); //then have it try to close feedback
+        if (this.#data.feedbackPrompt)
+            messages.push({ role: "user", content: this.#data.feedbackPrompt }); //then have it try to close feedback
         
         //get what it thinks the relationships are with this information
         const originalCompletion = await this.#llmWrapper.openAIAPI.chat.completions.create({
