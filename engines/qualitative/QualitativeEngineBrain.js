@@ -122,6 +122,7 @@ You will conduct a multistep process:
         openAIKey: null,
         googleKey: null,
         underlyingModel: LLMWrapper.DEFAULT_MODEL,
+        descriptionlessStructuredOutput: false,
         systemPrompt: QualitativeEngineBrain.DEFAULT_SYSTEM_PROMPT,
         assistantPrompt: QualitativeEngineBrain.DEFAULT_ASSISTANT_PROMPT,
         feedbackPrompt: QualitativeEngineBrain.DEFAULT_FEEDBACK_PROMPT,
@@ -191,7 +192,7 @@ You will conduct a multistep process:
         let underlyingModel = this.#data.underlyingModel;
         let systemRole = this.#llmWrapper.model.systemModeUser;
         let systemPrompt = this.#data.systemPrompt;
-        let responseFormat = this.#llmWrapper.generateQualitativeSDJSONResponseSchema();
+        let responseFormat = this.#llmWrapper.generateQualitativeSDJSONResponseSchema(this.#data.descriptionlessStructuredOutput);
         let temperature = 0;
         let reasoningEffort = undefined;
 
@@ -246,7 +247,8 @@ You will conduct a multistep process:
 
         //give it the user prompt
         messages.push({ role: "user", content: userPrompt });
-        messages.push({ role: "user", content: this.#data.feedbackPrompt }); //then have it try to close feedback
+        if (this.#data.feedbackPrompt)
+            messages.push({ role: "user", content: this.#data.feedbackPrompt }); //then have it try to close feedback
         
         //get what it thinks the relationships are with this information
         const originalCompletion = await this.#llmWrapper.openAIAPI.chat.completions.create({

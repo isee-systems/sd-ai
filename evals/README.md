@@ -14,7 +14,7 @@ CLI (command line interface) app that runs within sd-ai project to measure outpu
 - everything is configured in the required (`-e`) experiment json file defined in `evals/experiments/`
 - an `experiment.json` runs all specified test categories against all specified engine configurations
 - by default two experiments are included but feel free to add your own too
-    - `leaderboard.json` runs every engine against every test
+    - `leaderboardCLD.json` and `leaderboardSFD.json` run every applicable engine (often with several underlying LLMs) against every test
         - **warning** this can be quite expensive, $50+ for a single execution
     - `careful.json` is an example of using evals for testing and development
         - `verbose: true` removes the progress bar in favor of detailed output
@@ -34,6 +34,23 @@ CLI (command line interface) app that runs within sd-ai project to measure outpu
     - `additionalParameters` can be specified if, for example, you have a `problemStatement` you wish to provide to the engine's generate function
     - `expectations` is an object you can put anything in we just hold on to it then pass it back to your `evaluate` function later
 
+# Caching Engine Responses
+- evals can get expensive, run slowly, and crash unexpectedly, so we cache each test result to prevent data loss if you `ctrl+c` or encounter an error
+- the cache is a simple local `_in_progress.jsonl` file
+    - JSONL is a format where each line is a JSON object, unlike traditional JSON where the entire file must be a valid JSON object or list
+
+## Reusing Full Results in New Experiment Runs
+- the main trick is to convert the `full_results.json` into an `in_progress.jsonl`
+- this allows you to reuse already completed tests from experiments and create new combinations without fully rerunning the tests. Examples include:
+    - appending to previous results, such as adding a new test category to a leaderboard without rerunning old tests
+    - merging several methodically generated `careful` results into a larger result set
+    - filtering down an experiment that ran many parameter combinations or LLMs to just the best or most interesting results
+- the easiest method is with the CLI JSON processing tool [JQ](https://jqlang.org/):
+    - `jq -c '.results[]' docs/leaderboardCLD_full_results.json > 123_careful_in_progress.jsonl`
+        - Replace `careful` with the name of the experiment you plan to run.
+        - Replace `123` with any 3-character experiment ID of your choice.
+
+
 # Managing Rate Limits 
 - many engines run via 3rd-party LLM providers who are aggressive about rate limiting
 - we allow 3 parameters in `limits` for slowing the execution of evals for a given engine config:
@@ -47,7 +64,7 @@ CLI (command line interface) app that runs within sd-ai project to measure outpu
 - default values should be safe for default/advanced engine using OpenAI Tier 1 non-reasoning models. For anything else, consider "Configuration Recommendations" below.
 
 ## Configuration Recommendations 
-- limits specified in `leaderboard.json` experiment should be a good starting place to see what you might need to add for a given LLM provider
+- limits specified in `leaderboardCLD.json` experiment should be a good starting place to see what you might need to add for a given LLM provider
 - `tokensPerMinute` and `requestsPerMinute` are easy to find from:
     - https://platform.openai.com/settings/organization/limits
     - https://ai.google.dev/gemini-api/docs/rate-limits

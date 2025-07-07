@@ -1,74 +1,5 @@
 {
     "engineConfigs": {
-        "quantitative-gpt-4o": {
-            "engine": "quantitative",
-            "additionalParameters": {
-                "underlyingModel": "gpt-4o"
-            }
-        },
-        
-        "quantitative-gpt-4.1": {
-            "engine": "quantitative",
-            "additionalParameters": {
-                "underlyingModel": "gpt-4.1"
-            },
-            "limits": {
-                "requestsPerMinute": 10
-            }
-        },
-
-        "quantitative-gpt-4.5-preview": {
-            "engine": "quantitative",
-            "additionalParameters": {
-                "underlyingModel": "gpt-4.5-preview"
-            },
-            "limits": {
-                "tokensPerMinute": 100000
-            }
-        },
-
-        "quantitative-gemini-2.5-flash-preview-05-20": {
-            "engine": "quantitative",
-            "additionalParameters": {
-                "underlyingModel": "gemini-2.5-flash-preview-05-20"
-            },
-            "limits": {
-                "tokensPerMinute": 90000,
-                "requestsPerMinute": 10
-            }
-        },
-
-        "quantitative-gemini-2.5-pro-preview-05-06": {
-            "engine": "quantitative",
-            "additionalParameters": {
-                "underlyingModel": "gemini-2.5-pro-preview-05-06"
-            },
-            "limits": {
-                "tokensPerMinute": 90000,
-                "requestsPerMinute": 10
-            }
-        },
-
-        "quantitative-o1": {
-            "engine": "quantitative",
-            "additionalParameters": {
-                "underlyingModel": "o1"
-            },
-            "limits": {
-                "baselineTokenUsage": 10000
-            }
-        },
-
-        "quantitative-o3-mini-high": {
-            "engine": "quantitative",
-            "additionalParameters": {
-                "underlyingModel": "o3-mini high"
-            },
-            "limits": {
-                "baselineTokenUsage": 18000,
-                "tokensPerMinute": 60000
-            }
-        },
 
         "quantitative-o4-mini": {
             "engine": "quantitative",
@@ -77,6 +8,28 @@
             },
             "limits": {
                 "baselineTokenUsage": 10000
+            }
+        },
+
+        "quantitative-gpt-4.1": {
+            "engine": "quantitative",
+            "additionalParameters": {
+                "underlyingModel": "gpt-4.1"
+            },
+            "limits": {
+                "baselineTokenUsage": 10000
+            }
+        },
+
+
+        "quantitative-gemini-2.5-flash": {
+            "engine": "quantitative",
+            "additionalParameters": {
+                "underlyingModel": "gemini-2.5-flash"
+            },
+            "limits": {
+                "tokensPerMinute": 90000,
+                "requestsPerMinute": 10
             }
         }
     },
