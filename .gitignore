@@ -3,6 +3,7 @@
 # ignore the eval results in the home folder
 /*_summary.csv
 /*_results.json
+/*_in_progress.jsonl
 
 # Node.js dependencies
 node_modules/
