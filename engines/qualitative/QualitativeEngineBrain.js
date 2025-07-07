@@ -122,6 +122,7 @@ You will conduct a multistep process:
         openAIKey: null,
         googleKey: null,
         underlyingModel: LLMWrapper.DEFAULT_MODEL,
+        descriptionlessStructuredOutput: false,
         systemPrompt: QualitativeEngineBrain.DEFAULT_SYSTEM_PROMPT,
         assistantPrompt: QualitativeEngineBrain.DEFAULT_ASSISTANT_PROMPT,
         feedbackPrompt: QualitativeEngineBrain.DEFAULT_FEEDBACK_PROMPT,
@@ -191,7 +192,7 @@ You will conduct a multistep process:
         let underlyingModel = this.#data.underlyingModel;
         let systemRole = this.#llmWrapper.model.systemModeUser;
         let systemPrompt = this.#data.systemPrompt;
-        let responseFormat = this.#llmWrapper.generateQualitativeSDJSONResponseSchema();
+        let responseFormat = this.#llmWrapper.generateQualitativeSDJSONResponseSchema(this.#data.descriptionlessStructuredOutput);
         let temperature = 0;
         let reasoningEffort = undefined;
 
@@ -257,6 +258,10 @@ You will conduct a multistep process:
             temperature: temperature,
             reasoning_effort: reasoningEffort
         });
+
+        console.log("messages:", messages);
+        console.log("outer:", responseFormat.json_schema.schema);
+        console.log("inner:", responseFormat.json_schema.schema.properties.relationships.items);
 
         const originalResponse = originalCompletion.choices[0].message;
         if (originalResponse.refusal) {

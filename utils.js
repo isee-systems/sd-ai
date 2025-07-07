@@ -300,21 +300,27 @@ export class LLMWrapper {
     "timeUnits": "The unit of time for this model.  This should match with the equations that you generate."
   };
 
-  generateQualitativeSDJSONResponseSchema() {
-      const PolarityEnum = z.enum(["+", "-"]).describe(LLMWrapper.SCHEMA_STRINGS.polarity);
+  generateQualitativeSDJSONResponseSchema(remove_description = false) {
+      // Conditionally adds a description to a Zod schema object.
+      // If remove_description is true, it returns the schema without the description.
+      const withDescription = (schema, description) => {
+          return remove_description ? schema : schema.describe(description);
+      };
 
-      const Relationship = z.object({
-          from: z.string().describe(LLMWrapper.SCHEMA_STRINGS.from),
-          to: z.string().describe(LLMWrapper.SCHEMA_STRINGS.to),
+      const PolarityEnum = withDescription(z.enum(["+", "-"]), LLMWrapper.SCHEMA_STRINGS.polarity);
+
+      const Relationship = withDescription(z.object({
+          from: withDescription(z.string(), LLMWrapper.SCHEMA_STRINGS.from),
+          to: withDescription(z.string(), LLMWrapper.SCHEMA_STRINGS.to),
           polarity: PolarityEnum,
-          reasoning: z.string().describe(LLMWrapper.SCHEMA_STRINGS.reasoning),
-          polarityReasoning: z.string().describe(LLMWrapper.SCHEMA_STRINGS.polarityReasoning)
-      }).describe(LLMWrapper.SCHEMA_STRINGS.relationship);
+          reasoning: withDescription(z.string(), LLMWrapper.SCHEMA_STRINGS.reasoning),
+          polarityReasoning: withDescription(z.string(), LLMWrapper.SCHEMA_STRINGS.polarityReasoning)
+      }), LLMWrapper.SCHEMA_STRINGS.relationship);
           
       const Relationships = z.object({
-          explanation: z.string().describe(LLMWrapper.SCHEMA_STRINGS.explanation),
-          title: z.string().describe(LLMWrapper.SCHEMA_STRINGS.title),
-          relationships: z.array(Relationship).describe(LLMWrapper.SCHEMA_STRINGS.relationships)
+          explanation: withDescription(z.string(), LLMWrapper.SCHEMA_STRINGS.explanation),
+          title: withDescription(z.string(), LLMWrapper.SCHEMA_STRINGS.title),
+          relationships: withDescription(z.array(Relationship), LLMWrapper.SCHEMA_STRINGS.relationships)
       });
 
       return zodResponseFormat(Relationships, "relationships_response");

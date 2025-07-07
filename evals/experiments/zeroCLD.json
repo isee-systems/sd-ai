@@ -1,10 +1,13 @@
 {
+    "sequential": true,
+    "verbose": true,
     "engineConfigs": {
         "qualitative-zero-gemini-2.0-flash": {
             "engine": "qualitative",
             "additionalParameters": {
                 "underlyingModel": "gemini-2.0-flash",
                 "systemPrompt": "You are a System Dynamics Professional Modeler. Users will give you text, and it is your job to generate causal relationships from that text.",
+                "descriptionlessStructuredOutput": true,
                 "feedbackPrompt": ""
             },
             "limits": {
@@ -17,6 +20,7 @@
             "additionalParameters": {
                 "underlyingModel": "gpt-4o-mini",
                 "systemPrompt": "You are a System Dynamics Professional Modeler. Users will give you text, and it is your job to generate causal relationships from that text.",
+                "descriptionlessStructuredOutput": true,
                 "feedbackPrompt": ""
             }
         },
@@ -25,6 +29,7 @@
             "additionalParameters": {
                 "underlyingModel": "o4-mini",
                 "systemPrompt": "You are a System Dynamics Professional Modeler. Users will give you text, and it is your job to generate causal relationships from that text.",
+                "descriptionlessStructuredOutput": true,
                 "feedbackPrompt": ""
             },
             "limits": {
