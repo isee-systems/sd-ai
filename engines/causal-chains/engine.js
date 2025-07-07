@@ -1,8 +1,11 @@
-import * as fs from 'fs';
-import {execSync} from "child_process"
-import path from 'path';
-import {tmpdir} from 'os';
+import { promises as fs } from 'node:fs';
+import {exec} from "child_process"
+import path from 'node:path';
+import {tmpdir} from 'node:os';
 import {fileURLToPath} from 'url';
+import util from 'node:util';
+
+const promiseExec = util.promisify(exec);
 
 import {LLMWrapper} from "../../utils.js";
 
@@ -101,22 +104,27 @@ class Engine {
 
         let tempDir;
         try {
-            tempDir = fs.mkdtempSync(path.join(tmpdir(), 'sd-ai-causal-chains-'));
+            tempDir = await fs.mkdtemp(path.join(tmpdir(), 'sd-ai-causal-chains-'));
             // get the absolute path to this temp file
             const inputPath = path.resolve(path.join(tempDir, 'data.json'));
             // console.log(`input path is ${inputPath}`);
-            fs.writeFileSync(inputPath, JSON.stringify(input));
-            const result = execSync(`${__dirname}/causal-chains ${inputPath}`, {cwd: tempDir});
-
-            return JSON.parse(result.toString());
+            await fs.writeFile(inputPath, JSON.stringify(input));
+            const { stdout, stderr } = await promiseExec(`${__dirname}/causal-chains ${inputPath}`, {cwd: tempDir});
+            return JSON.parse(stdout.toString());
         } catch (err) {
             console.log(`causal-chains returned non-zero exit code: ${err.status}`);
-            return {
-                err: err.stderr.toString(),
-            };
+            if (err.stderr) {
+                return {
+                 err: err.stderr.toString(),
+                };
+            } else {
+                return {
+                    err: err.toString()
+                };
+            }
         } finally {
             if (tempDir) {
-                fs.rmSync(tempDir, {recursive: true, force: true});
+                await fs.rm(tempDir, {recursive: true, force: true});
             }
         }
     }
