@@ -4,75 +4,33 @@
             "engine": "causal-chains",
             "additionalParameters": {
                 "underlyingModel": "o4-mini"
-            }
-        },
-
-        "recursivecausal-gpt-4o": {
-            "engine": "recursivecausal",
-            "additionalParameters": {
-                "underlyingModel": "gpt-4o",
-                "depth": 1
-            }
-        },
-        
-        "recursivecausal-gpt-4.1": {
-            "engine": "recursivecausal",
-            "additionalParameters": {
-                "underlyingModel": "gpt-4.1",
-                "depth": 1
-            },
-            "limits": {
-                "requestsPerMinute": 10
-            }
-        },
-
-        "recursivecausal-gemini-2.5-flash-preview-05-20": {
-            "engine": "recursivecausal",
-            "additionalParameters": {
-                "underlyingModel": "gemini-2.5-flash-preview-05-20",
-                "depth": 1
-            },
-            "limits": {
-                "tokensPerMinute": 90000,
-                "requestsPerMinute": 10
-            }
-        },
-
-        "recursivecausal-gemini-2.5-pro-preview-05-06": {
-            "engine": "recursivecausal",
-            "additionalParameters": {
-                "underlyingModel": "gemini-2.5-pro-preview-05-06",
-                "depth": 1
-            },
-            "limits": {
-                "tokensPerMinute": 90000,
-                "requestsPerMinute": 10
-            }
-        },
-
-        "recursivecausal-o1": {
-            "engine": "recursivecausal",
-            "additionalParameters": {
-                "underlyingModel": "o1",
-                "depth": 1
             },
             "limits": {
                 "baselineTokenUsage": 10000
             }
         },
 
-        "recursivecausal-o3-mini-high": {
-            "engine": "recursivecausal",
+         "causal-chains-gpt-4.1": {
+            "engine": "causal-chains",
             "additionalParameters": {
-                "underlyingModel": "o3-mini high",
-                "depth": 1
+                "underlyingModel": "gpt-4.1"
             },
             "limits": {
-                "baselineTokenUsage": 18000,
-                "tokensPerMinute": 60000
+                "baselineTokenUsage": 10000
             }
         },
 
+         "causal-chains-gemini-2.5-flash": {
+            "engine": "causal-chains",
+            "additionalParameters": {
+                "underlyingModel": "gemini-2.5-flash"
+            },
+            "limits": {
+                "tokensPerMinute": 90000,
+                "requestsPerMinute": 10
+            }
+        },
+        
         "recursivecausal-o4-mini": {
             "engine": "recursivecausal",
             "additionalParameters": {
@@ -80,154 +38,35 @@
                 "depth": 1
             },
             "limits": {
-                "baselineTokenUsage": 10000
+                "baselineTokenUsage": 10000,
+                "requestsPerMinute": 1
             }
         },
 
-        "qualitative-gpt-4o": {
-            "engine": "qualitative",
+        "recursivecausal-gpt-4.1": {
+            "engine": "recursivecausal",
             "additionalParameters": {
-                "underlyingModel": "gpt-4o"
-            }
-        },
-        "qualitative-gpt-4o-mini": {
-            "engine": "qualitative",
-            "additionalParameters": {
-                "underlyingModel": "gpt-4o-mini"
-            },
-            "limits": {
-                "tokensPerMinute": 90000
-            }
-        },
-        "qualitative-gpt-4.1-nano": {
-            "engine": "qualitative",
-            "additionalParameters": {
-                "underlyingModel": "gpt-4.1-nano"
-            },
-            "limits": {
-                "requestsPerMinute": 10
-            }
-        },
-        "qualitative-gpt-4.1-mini": {
-            "engine": "qualitative",
-            "additionalParameters": {
-                "underlyingModel": "gpt-4.1-mini"
-            },
-            "limits": {
-                "requestsPerMinute": 10
-            }
-        },
-        "qualitative-gpt-4.1": {
-            "engine": "qualitative",
-            "additionalParameters": {
-                "underlyingModel": "gpt-4.1"
-            },
-            "limits": {
-                "requestsPerMinute": 10
-            }
-        },
-
-        "qualitative-gpt-4.5-preview": {
-            "engine": "qualitative",
-            "additionalParameters": {
-                "underlyingModel": "gpt-4.5-preview"
-            },
-            "limits": {
-                "tokensPerMinute": 100000
-            }
-        },
-
-        "qualitative-gemini-2.5-flash-preview-05-20": {
-            "engine": "qualitative",
-            "additionalParameters": {
-                "underlyingModel": "gemini-2.5-flash-preview-05-20"
-            },
-            "limits": {
-                "tokensPerMinute": 90000,
-                "requestsPerMinute": 10
-            }
-        },
-        "qualitative-gemini-2.5-pro-preview-05-06": {
-            "engine": "qualitative",
-            "additionalParameters": {
-                "underlyingModel": "gemini-2.5-pro-preview-05-06"
-            },
-            "limits": {
-                "tokensPerMinute": 90000,
-                "requestsPerMinute": 10
-            }
-        },
-        "qualitative-gemini-2.0-flash": {
-            "engine": "qualitative",
-            "additionalParameters": {
-                "underlyingModel": "gemini-2.0-flash"
-            },
-            "limits": {
-                "tokensPerMinute": 90000,
-                "requestsPerMinute": 10
-            }
-        },
-        "qualitative-gemini-2.0-flash-lite": {
-            "engine": "qualitative",
-            "additionalParameters": {
-                "underlyingModel": "gemini-2.0-flash-lite"
-            },
-            "limits": {
-                "tokensPerMinute": 90000,
-                "requestsPerMinute": 10
-            }
-        },
-        "qualitative-gemini-1.5-flash": {
-            "engine": "qualitative",
-            "additionalParameters": {
-                "underlyingModel": "gemini-1.5-flash"
-            },
-            "limits": {
-                "tokensPerMinute": 90000,
-                "requestsPerMinute": 10
-            }
-        },
-
-        "qualitative-o1": {
-            "engine": "qualitative",
-            "additionalParameters": {
-                "underlyingModel": "o1"
-            },
-            "limits": {
-                "baselineTokenUsage": 10000
-            }
-        },
-
-        "qualitative-o3-mini-low": {
-            "engine": "qualitative",
-            "additionalParameters": {
-                "underlyingModel": "o3-mini low"
-            },
-            "limits": {
-                "baselineTokenUsage": 5000,
-                "tokensPerMinute": 60000
-            }
-        },
-        "qualitative-o3-mini-medium": {
-            "engine": "qualitative",
-            "additionalParameters": {
-                "underlyingModel": "o3-mini medium"
+                "underlyingModel": "gpt-4.1",
+                "depth": 1
             },
             "limits": {
                 "baselineTokenUsage": 10000,
-                "tokensPerMinute": 60000
+                "requestsPerMinute": 1
             }
         },
-        "qualitative-o3-mini-high": {
-            "engine": "qualitative",
+
+        "recursivecausal-gemini-2.5-flash": {
+            "engine": "recursivecausal",
             "additionalParameters": {
-                "underlyingModel": "o3-mini high"
+                "underlyingModel": "gemini-2.5-flash",
+                "depth": 1
             },
             "limits": {
-                "baselineTokenUsage": 18000,
-                "tokensPerMinute": 60000
+                "tokensPerMinute": 90000,
+                "requestsPerMinute": 1
             }
         },
+
         "qualitative-o4-mini": {
             "engine": "qualitative",
             "additionalParameters": {
@@ -235,6 +74,27 @@
             },
             "limits": {
                 "baselineTokenUsage": 10000
+            }
+        },
+
+        "qualitative-gpt-4.1": {
+            "engine": "qualitative",
+            "additionalParameters": {
+                "underlyingModel": "gpt-4.1"
+            },
+            "limits": {
+                "baselineTokenUsage": 10000
+            }
+        },
+
+        "qualitative-gemini-2.5-flash": {
+            "engine": "qualitative",
+            "additionalParameters": {
+                "underlyingModel": "gemini-2.5-flash"
+            },
+            "limits": {
+                "tokensPerMinute": 90000,
+                "requestsPerMinute": 10
             }
         }
     },
