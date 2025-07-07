@@ -42,21 +42,26 @@ let experimentResultsName;
 
 if (matchingFiles.length > 0) {
     const response = await prompts({
-        type: 'toggle',
-        name: 'resume',
-        message: 'Do you want to resume previous evaluation run?',
-        initial: true,
-        active: 'yes',
-        inactive: 'no'
-      });
-    if (response.resume === true && matchingFiles.length > 1) {
+      type: 'toggle',
+      name: 'resume',
+      message: 'Do you want to resume previous evaluation run? Selecting no will discard previous in progress results.',
+      initial: true,
+      active: 'yes',
+      inactive: 'no'
+    });
+    isContinuing = response.resume;
+    if (isContinuing && matchingFiles.length > 1) {
       console.log(chalk.red(chalk.bold("Found multiple in progress experiment runs. Please delete all files you don't wish to resume from.")));
       matchingFiles.forEach(f => {
         console.log("- " + f)
       })
       process.exit(1)
     }
-    isContinuing = response.resume;
+    if (!isContinuing) {
+      matchingFiles.forEach(f => {
+        fs.unlinkSync(f);
+      });
+    }
     console.log()
 }
 
