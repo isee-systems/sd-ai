@@ -96,6 +96,43 @@
                 "tokensPerMinute": 90000,
                 "requestsPerMinute": 10
             }
+        },
+
+        "qualitative-zero-o4-mini": {
+            "engine": "qualitative",
+            "additionalParameters": {
+                "underlyingModel": "o4-mini",
+                "systemPrompt": "You are a System Dynamics Professional Modeler. Users will give you text, and it is your job to generate causal relationships from that text.",
+                "descriptionlessStructuredOutput": true,
+                "feedbackPrompt": ""
+            },
+            "limits": {
+                "baselineTokenUsage": 10000
+            }
+        },
+
+        "qualitative-zero-gpt-4.1": {
+            "engine": "qualitative",
+            "additionalParameters": {
+                "underlyingModel": "gpt-4.1",
+                "systemPrompt": "You are a System Dynamics Professional Modeler. Users will give you text, and it is your job to generate causal relationships from that text.",
+                "descriptionlessStructuredOutput": true,
+                "feedbackPrompt": ""
+            }
+        },
+
+        "qualitative-zero-gemini-2.5-flash": {
+            "engine": "qualitative",
+            "additionalParameters": {
+                "underlyingModel": "gemini-2.5-flash",
+                "systemPrompt": "You are a System Dynamics Professional Modeler. Users will give you text, and it is your job to generate causal relationships from that text.",
+                "descriptionlessStructuredOutput": true,
+                "feedbackPrompt": ""
+            },
+            "limits": {
+                "tokensPerMinute": 90000,
+                "requestsPerMinute": 10
+            }
         }
     },
     "categories": {

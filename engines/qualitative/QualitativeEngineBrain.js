@@ -259,10 +259,6 @@ You will conduct a multistep process:
             reasoning_effort: reasoningEffort
         });
 
-        console.log("messages:", messages);
-        console.log("outer:", responseFormat.json_schema.schema);
-        console.log("inner:", responseFormat.json_schema.schema.properties.relationships.items);
-
         const originalResponse = originalCompletion.choices[0].message;
         if (originalResponse.refusal) {
             throw new ResponseFormatError(originalResponse.refusal);
