@@ -3,7 +3,7 @@ CLI (command line interface) app that runs within sd-ai project to measure outpu
 
 # Goals
 - provide a single executable source of truth that answers the question: how good is this sd-ai engine?
-- translate benchmarks outlined by [BEAMS](https://www.buffalo.edu/ai-data-science/research/projects.host.html/content/shared/www/ai-data-science/research-projects/BEAMS-Initiative.detail.html) into executable code
+- translate benchmarks outlined by [BEAMS](https://www.buffalo.edu/ai-data-science/research/beams.html) into executable code
 - allow engine creators to rapidly retest with detailed feedback (see `careful.json`)
 - provide summary outputs that are useful in a variety of contexts (e.g. industry papers, leaderboards, regression tests, etc)
 
