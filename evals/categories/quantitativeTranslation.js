@@ -1,3 +1,17 @@
+/**
+ * Returns the description for this category
+ * @returns {string} The description describing this category
+ */
+export const description = () => {
+    return `This is the quantitative translation test
+
+This test evaluates the ability of LLMs to translate quantitative stock-and-flow descriptions into causal loop diagrams. Using artificially generated scenarios with gibberish variable names, we test the LLM's capability to extract causal relationships from quantitative data without relying on contextual clues from its training data.
+
+The test generates scenarios involving stocks (accumulating quantities) and flows (rates of change) using random gibberish nouns as variable names. Each scenario describes initial values, inflows (additions to stocks), and outflows (subtractions from stocks) over time units. The LLM must identify the underlying causal relationships between these variables and represent them as a causal loop diagram.
+
+Test scenarios include various configurations of stocks and flows with different types of relationships: fixed rates, proportional rates, and interdependent flows where one variable's rate depends on another variable's current value. This tests the LLM's ability to understand quantitative causation and translate it into qualitative causal representations.`;
+};
+
 import pluralize from 'pluralize';
 import numberToWords from 'number-to-words';
 

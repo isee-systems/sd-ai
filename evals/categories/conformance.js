@@ -27,6 +27,38 @@
  * @module categories/conformance
  */
 
+/**
+ * Returns the description for this category
+ * @returns {string} The description describing this category
+ */
+export const description = () => {
+    return `This is the conformance test
+
+We measure conformance to end-user instruction on three primary attributes: 1) ability to include requested variables; 2) ability to adhere to instructions about the number of variables to include in the generated model; and 3) ability to adhere to instructions about the number of feedback loops to include in the generated model. To accurately capture the ability of current LLMs to follow directions of this sort, we must work with open-ended "real-world" contexts where there are multiple valid solutions that exist at different levels of complexity, each containing different variable names and different numbers of feedback loops for a given, fixed, problem statement and set of background knowledge. Context is necessary because conformance tests assess the ability of the LLM to create different representations at varying levels of complexity for the same underlying system. If we were to give the LLM an alternate universe as the known ground truth featuring a tightly defined set of variables and relationships (as in causal translation), we couldn't adequately test its ability to simplify or elaborate answers because the artificially generated universe lacks the representational flexibility found in real-world systems. By definition, our alternate universe generated causal descriptions that have only one causal representation, so asking the LLM to simplify it or elaborate on it would be asking it to do something incorrect.
+
+Therefore, to test each of these conformance attributes, we take two base prompts: the first that asks the LLMs to create a feedback-based explanation for the American Revolutionary War, and a second that asks the LLMs to create a feedback-based explanation for road rage. We then append to that base each of the specific conformance commands:
+
+1. Your response must include the variables   
+   - (Revolution case) "Taxation", "Anti-British Sentiment" and "Colonial Identity"
+   - (Road rage case) "Traffic Congestion", "Driver Stress", and "Accidents" 
+
+2. Your response must include [at least|no more than] X variables. 
+   - {at least 10 variables}
+   - {no more than five variables}
+
+3. Your response must include [at least|no more than] X feedback loops. 
+   - {at least eight feedback loops}
+   - {no more than four feedback loops}
+
+4. Your response must include [at least|no more than] X feedback loops and [at least|no more than] Y variables. 
+   - {at least six feedback loops; at least eight variables} 
+   - {at least six feedback loops; no more than 15 variables} 
+   - {no more than four feedback loops; no more than five variables} 
+   - {no more than four feedback loops; at least five variables}
+
+These instructions produce nine tests for each case, so there are 18 total conformance tests. Values for X and Y are set to sufficiently challenge the LLMs over a range of specified conditions.`;
+};
+
 /** The javascript object containing the two cases for the American Revolution and Road Rage that we want to use to test conformance with  */
 const cases = {
   "American Revolution": {
