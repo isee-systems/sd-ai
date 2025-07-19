@@ -15,24 +15,24 @@ function Layout({ children }) {
   return (
     <div className="layout">
       {/* Navigation Header */}
-      <header className="bg-slate-700 px-5 border-b-4 border-slate-600">
+      <header className="bg-gray-900 px-5 border-b border-gray-700">
         <nav className="flex items-center justify-between max-w-6xl mx-auto h-16">
           {/* Logo/Brand */}
           <Link 
             to="/" 
-            className="text-white no-underline text-2xl font-bold flex items-center"
+            className="text-white no-underline text-2xl font-bold flex items-center hover:text-blue-300 transition-colors"
           >
             SD-AI
           </Link>
 
           {/* Desktop Navigation Links */}
-          <div className="hidden md:flex gap-8">
+          <div className="hidden md:flex gap-1">
             <Link
               to="/"
-              className={`no-underline px-4 py-2 rounded transition-all duration-200 ${
+              className={`no-underline px-4 py-2 rounded-md transition-all duration-200 font-medium ${
                 isActive('/') 
-                  ? 'text-blue-400 font-bold bg-blue-900 bg-opacity-20' 
-                  : 'text-white font-normal hover:bg-white hover:bg-opacity-10'
+                  ? 'text-white bg-gray-700' 
+                  : 'text-gray-300 hover:text-white hover:bg-gray-700'
               }`}
             >
               Home
@@ -40,10 +40,10 @@ function Layout({ children }) {
             
             <Link
               to="/engines"
-              className={`no-underline px-4 py-2 rounded transition-all duration-200 ${
+              className={`no-underline px-4 py-2 rounded-md transition-all duration-200 font-medium ${
                 isActive('/engines') 
-                  ? 'text-blue-400 font-bold bg-blue-900 bg-opacity-20' 
-                  : 'text-white font-normal hover:bg-white hover:bg-opacity-10'
+                  ? 'text-white bg-gray-700' 
+                  : 'text-gray-300 hover:text-white hover:bg-gray-700'
               }`}
             >
               Engines
@@ -51,10 +51,10 @@ function Layout({ children }) {
             
             <Link
               to="/evals"
-              className={`no-underline px-4 py-2 rounded transition-all duration-200 ${
+              className={`no-underline px-4 py-2 rounded-md transition-all duration-200 font-medium ${
                 isActive('/evals') 
-                  ? 'text-blue-400 font-bold bg-blue-900 bg-opacity-20' 
-                  : 'text-white font-normal hover:bg-white hover:bg-opacity-10'
+                  ? 'text-white bg-gray-700' 
+                  : 'text-gray-300 hover:text-white hover:bg-gray-700'
               }`}
             >
               Evaluations
@@ -63,28 +63,28 @@ function Layout({ children }) {
 
           {/* Mobile Menu Button */}
           <button
-            className="md:hidden text-white p-2 rounded hover:bg-white hover:bg-opacity-10 transition-colors"
+            className="md:hidden text-gray-300 p-2 rounded-md hover:text-white hover:bg-gray-700 transition-colors"
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             aria-label="Toggle mobile menu"
           >
             <div className="w-6 h-6 flex flex-col justify-around">
-              <span className={`block h-0.5 w-6 bg-white transition-all duration-300 ${isMobileMenuOpen ? 'rotate-45 translate-y-2' : ''}`}></span>
-              <span className={`block h-0.5 w-6 bg-white transition-all duration-300 ${isMobileMenuOpen ? 'opacity-0' : ''}`}></span>
-              <span className={`block h-0.5 w-6 bg-white transition-all duration-300 ${isMobileMenuOpen ? '-rotate-45 -translate-y-2' : ''}`}></span>
+              <span className={`block h-0.5 w-6 bg-current transition-all duration-300 ${isMobileMenuOpen ? 'rotate-45 translate-y-2' : ''}`}></span>
+              <span className={`block h-0.5 w-6 bg-current transition-all duration-300 ${isMobileMenuOpen ? 'opacity-0' : ''}`}></span>
+              <span className={`block h-0.5 w-6 bg-current transition-all duration-300 ${isMobileMenuOpen ? '-rotate-45 -translate-y-2' : ''}`}></span>
             </div>
           </button>
         </nav>
 
         {/* Mobile Menu */}
         <div className={`md:hidden overflow-hidden transition-all duration-300 ${isMobileMenuOpen ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}>
-          <nav className="bg-slate-700 border-t border-slate-600 px-5 py-4">
-            <div className="flex flex-col gap-2">
+          <nav className="bg-gray-800 border-t border-gray-700 px-5 py-4">
+            <div className="flex flex-col gap-1">
               <Link
                 to="/"
-                className={`no-underline px-4 py-3 rounded transition-all duration-200 ${
+                className={`no-underline px-4 py-3 rounded-md transition-all duration-200 font-medium ${
                   isActive('/') 
-                    ? 'text-blue-400 font-bold bg-blue-900 bg-opacity-20' 
-                    : 'text-white font-normal hover:bg-white hover:bg-opacity-10'
+                    ? 'text-white bg-gray-700' 
+                    : 'text-gray-300 hover:text-white hover:bg-gray-700'
                 }`}
                 onClick={() => setIsMobileMenuOpen(false)}
               >
@@ -93,10 +93,10 @@ function Layout({ children }) {
               
               <Link
                 to="/engines"
-                className={`no-underline px-4 py-3 rounded transition-all duration-200 ${
+                className={`no-underline px-4 py-3 rounded-md transition-all duration-200 font-medium ${
                   isActive('/engines') 
-                    ? 'text-blue-400 font-bold bg-blue-900 bg-opacity-20' 
-                    : 'text-white font-normal hover:bg-white hover:bg-opacity-10'
+                    ? 'text-white bg-gray-700' 
+                    : 'text-gray-300 hover:text-white hover:bg-gray-700'
                 }`}
                 onClick={() => setIsMobileMenuOpen(false)}
               >
@@ -105,10 +105,10 @@ function Layout({ children }) {
               
               <Link
                 to="/evals"
-                className={`no-underline px-4 py-3 rounded transition-all duration-200 ${
+                className={`no-underline px-4 py-3 rounded-md transition-all duration-200 font-medium ${
                   isActive('/evals') 
-                    ? 'text-blue-400 font-bold bg-blue-900 bg-opacity-20' 
-                    : 'text-white font-normal hover:bg-white hover:bg-opacity-10'
+                    ? 'text-white bg-gray-700' 
+                    : 'text-gray-300 hover:text-white hover:bg-gray-700'
                 }`}
                 onClick={() => setIsMobileMenuOpen(false)}
               >

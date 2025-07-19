@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import Card from '../components/Card';
 import api from '../services/api';
 
 function EvalDetail() {
@@ -10,7 +9,7 @@ function EvalDetail() {
   const [prompt, setPrompt] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [clds, setClds] = useState([]);
+  const [jsonExpectations, setJsonExpectations] = useState('');
   const [navigation, setNavigation] = useState(null);
 
   // Fetch test details when component mounts or params change
@@ -37,17 +36,11 @@ function EvalDetail() {
         setBackgroundKnowledge(test.additionalParameters?.backgroundKnowledge || '');
         setPrompt(test.prompt || '');
         
-        // Create a new CLD with the test expectations
-        if (test.expectations && test.expectations.length > 0) {
-          const newCld = {
-            id: 1,
-            title: `Expected Output`,
-            relationships: test.expectations
-          };
-          
-          setClds([newCld]);
+        // Set the expectations as JSON text
+        if (test.expectations) {
+          setJsonExpectations(JSON.stringify(test.expectations, null, 2));
         } else {
-          setClds([]);
+          setJsonExpectations('');
         }
         
       } catch (err) {
@@ -60,10 +53,6 @@ function EvalDetail() {
 
     fetchTestDetails();
   }, [category, group, testname]);
-
-  const updateCld = (updatedCld) => {
-    setClds(clds.map(cld => (cld.id === updatedCld.id ? updatedCld : cld)));
-  };
 
   const decodedTestName = decodeURIComponent(testname);
   const decodedCategory = decodeURIComponent(category);
@@ -103,7 +92,7 @@ function EvalDetail() {
                   {navigation.previousGroup && (
                     <Link
                       to={navigation.previousGroup.url}
-                      className="inline-flex items-center px-4 py-2 bg-orange-500 text-white rounded-md hover:bg-orange-600 transition-colors duration-200 text-sm font-medium"
+                      className="inline-flex items-center px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors duration-200 text-sm font-medium"
                       title={`Go to group: ${navigation.previousGroup.name || 'Previous Group'}`}
                     >
                       <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -115,7 +104,7 @@ function EvalDetail() {
                   {navigation.previousTest && (
                     <Link
                       to={navigation.previousTest.url}
-                      className="inline-flex items-center px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 transition-colors duration-200 text-sm"
+                      className="inline-flex items-center px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors duration-200 text-sm"
                       title={`Go to test: ${navigation.previousTest.name || 'Previous Test'}`}
                     >
                       <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -153,7 +142,7 @@ function EvalDetail() {
                   {navigation.nextGroup && (
                     <Link
                       to={navigation.nextGroup.url}
-                      className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors duration-200 text-sm font-medium"
+                      className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors duration-200 text-sm font-medium"
                       title={`Go to group: ${navigation.nextGroup.name || 'Next Group'}`}
                     >
                       Next Group
@@ -224,17 +213,15 @@ function EvalDetail() {
               )}
             </div>
 
-            {/* CLD Cards Section */}
-            {clds.length > 0 && (
-              <div className="mb-8">
-                <h2 className="text-2xl font-bold mb-4 text-gray-800">
-                  Expected Relationships
-                </h2>
-                <div className="flex">
-                  {clds.map(cld => (
-                    <Card key={cld.id} cld={cld} updateCld={updateCld} />
-                  ))}
-                </div>
+            {/* Expectations */}
+            {jsonExpectations && jsonExpectations !== '{}' && jsonExpectations !== '[]' && (
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                <h3 className="font-semibold text-gray-900 mb-2">Expectations</h3>
+                <textarea
+                  value={jsonExpectations}
+                  className="w-full h-64 text-gray-800 text-sm font-mono bg-transparent border-none resize-none focus:outline-none"
+                  readOnly
+                />
               </div>
             )}
           </>
