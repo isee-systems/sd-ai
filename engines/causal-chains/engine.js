@@ -18,6 +18,10 @@ class Engine {
 
     static DEFAULT_MODEL = 'o4-mini';
 
+    static description() {
+        return `Currently the highest performing engine for CLD creation. Focuses on prompt engineering techniques to generate causal chains rather than focusing on relationships.` 
+    }
+
     static supportedModes() {
         // check that the ./causal-chains Go binary exists
         try {

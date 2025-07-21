@@ -17,6 +17,10 @@ You must keep in mind the following:
 
 
 class RecursiveCausalEngine {
+  static description() {
+    return `Engine which uses recursive exploration to generate causal relationships. This engine can take a little longer to work since it makes many calls to underlying LLM.`
+  }
+
   static supportedModes() {
     return ["cld"];
   }

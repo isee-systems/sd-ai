@@ -49,16 +49,13 @@ function EnginesList() {
     return recommendedDefaults[supportType] === engineName;
   };
 
+  // Function to check if engine is a discussion model (should not have details page)
+  const isDiscussionModel = (engineName) => {
+    return ['seldon', 'seldon-experimental'].includes(engineName);
+  };
+
   return (
     <div className="engines-page p-5">
-      <h1 className="text-4xl font-bold mb-3 text-gray-800">
-        sd-ai Engines
-      </h1>
-      <p className="text-lg text-gray-600 mb-8 max-w-3xl">
-        Explore and interact with different AI engines for system dynamics modeling. 
-        Each engine specializes in different types of diagram generation and analysis.
-      </p>
-
       {/* Engines Data Section */}
       {loading && (
         <div className="p-5 text-center text-gray-600">
@@ -121,7 +118,7 @@ function EnginesList() {
               // Add CLD section
               if (modeGroups['cld']) {
                 sections.push({
-                  title: 'Causal Loop Diagrams',
+                  title: 'CLD (Causal Loop Diagram) Engines',
                   mode: 'cld',
                   engines: modeGroups['cld'],
                   hasLeaderboard: true
@@ -131,7 +128,7 @@ function EnginesList() {
               // Add SFD section
               if (modeGroups['sfd']) {
                 sections.push({
-                  title: 'Stock & Flow Diagrams',
+                  title: 'SFD (Stock & Flow Diagram) Engines',
                   mode: 'sfd',
                   engines: modeGroups['sfd'],
                   hasLeaderboard: true
@@ -141,7 +138,7 @@ function EnginesList() {
               // Add Discussion section
               if (discussionEngines.length > 0) {
                 sections.push({
-                  title: 'Discussion Modes',
+                  title: 'Model Discussion Engines',
                   mode: 'discussion',
                   engines: discussionEngines,
                   hasLeaderboard: false
@@ -149,17 +146,17 @@ function EnginesList() {
               }
               
               return sections.map(section => (
-                <div key={section.mode} className="mb-8">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-xl font-bold text-gray-800">
+                <div key={section.mode} className="mb-20">
+                  <div className="flex items-center justify-between mb-8">
+                    <h3 className="text-xl font-semibold text-gray-700 uppercase tracking-wide">
                       {section.title}
                     </h3>
                     {section.hasLeaderboard && (
                       <Link
                         to={`/leaderboard/${section.mode}`}
-                        className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded text-sm font-medium no-underline transition-colors"
+                        className="border border-green-500 text-green-600 hover:bg-green-50 px-3 py-1 rounded text-sm font-medium no-underline transition-colors"
                       >
-                        View Leaderboard
+                        Leaderboard
                       </Link>
                     )}
                   </div>
@@ -168,15 +165,37 @@ function EnginesList() {
                     {section.engines.map((engine, index) => (
                       <div key={`${section.mode}-${engine.name}-${index}`} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
                         <div className="flex items-center justify-between mb-3">
-                          <h4 className="text-lg font-semibold text-gray-800 capitalize">
+                          <h4 className="text-lg font-semibold text-gray-800">
                             {engine.name}
                           </h4>
-                          {(section.mode !== 'discussion' && isRecommended(engine.name, section.mode)) && (
-                            <span className="bg-yellow-100 text-yellow-800 text-xs font-semibold px-2 py-1 rounded">
-                              Recommended
-                            </span>
-                          )}
+                          {(() => {
+                            if (section.mode === 'discussion') {
+                              // For discussion mode, check if engine is recommended for any discussion mode
+                              const isRecommendedForDiscussion = engine.discussionModes?.some(mode => 
+                                isRecommended(engine.name, mode)
+                              );
+                              return isRecommendedForDiscussion && (
+                                <span className="bg-yellow-100 text-yellow-800 text-xs font-semibold px-2 py-1 rounded">
+                                  Recommended
+                                </span>
+                              );
+                            } else {
+                              // For non-discussion modes, use existing logic
+                              return isRecommended(engine.name, section.mode) && (
+                                <span className="bg-yellow-100 text-yellow-800 text-xs font-semibold px-2 py-1 rounded">
+                                  Recommended
+                                </span>
+                              );
+                            }
+                          })()}
                         </div>
+                        
+                        {/* Engine Description */}
+                        {engine.description && (
+                          <div className="mb-4 text-sm text-gray-700">
+                            <p className="mb-2 last:mb-0">{engine.description}</p>
+                          </div>
+                        )}
                         
                         {section.mode === 'discussion' ? (
                           <div className="mb-4">
@@ -220,12 +239,38 @@ function EnginesList() {
                         )}
                         
                         <div className="flex justify-between items-center">
-                          <Link
-                            to={`/engines/${engine.name}`}
-                            className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium no-underline transition-colors"
-                          >
-                            View Details
-                          </Link>
+                          <div className="flex gap-2">
+                            {!isDiscussionModel(engine.name) && (
+                              <Link
+                                to={`/engines/${engine.name}`}
+                                className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium no-underline transition-colors"
+                              >
+                                Try it
+                              </Link>
+                            )}
+                            {engine.link && (
+                              <a
+                                href={engine.link}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="bg-gray-100 hover:bg-gray-200 text-gray-700 hover:text-gray-900 px-3 py-2 rounded text-sm font-medium no-underline transition-colors"
+                                title="Read more about this engine"
+                              >
+                                Learn More
+                              </a>
+                            )}
+                            {engine.source && (
+                              <a
+                                href={engine.source}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="bg-gray-100 hover:bg-gray-200 text-gray-700 hover:text-gray-900 px-3 py-2 rounded text-sm font-medium no-underline transition-colors"
+                                title="View source code on GitHub"
+                              >
+                                View Source
+                              </a>
+                            )}
+                          </div>
                         </div>
                       </div>
                     ))}

@@ -9,6 +9,9 @@ function Layout({ children }) {
     if (path === '/engines') {
       return location.pathname === '/engines' || location.pathname.startsWith('/engines/');
     }
+    if (path === '/get-involved') {
+      return location.pathname === '/get-involved';
+    }
     return location.pathname === path;
   };
 
@@ -58,6 +61,17 @@ function Layout({ children }) {
               }`}
             >
               Evaluations
+            </Link>
+            
+            <Link
+              to="/get-involved"
+              className={`no-underline px-4 py-2 rounded-md transition-all duration-200 font-medium bg-gradient-to-r from-purple-600 to-blue-600 shadow-lg ${
+                isActive('/get-involved') 
+                  ? 'text-white shadow-xl' 
+                  : 'text-white hover:shadow-xl hover:from-purple-700 hover:to-blue-700'
+              }`}
+            >
+              Get Involved
             </Link>
           </div>
 
@@ -113,6 +127,18 @@ function Layout({ children }) {
                 onClick={() => setIsMobileMenuOpen(false)}
               >
                 Evaluations
+              </Link>
+              
+              <Link
+                to="/get-involved"
+                className={`no-underline px-4 py-3 rounded-md transition-all duration-200 font-medium bg-gradient-to-r from-purple-600 to-blue-600 shadow-lg ${
+                  isActive('/get-involved') 
+                    ? 'text-white shadow-xl' 
+                    : 'text-white hover:shadow-xl hover:from-purple-700 hover:to-blue-700'
+                }`}
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                Get Involved
               </Link>
             </div>
           </nav>

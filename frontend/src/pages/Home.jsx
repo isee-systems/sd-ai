@@ -105,134 +105,21 @@ function Home() {
         </p>
       </div>
 
-      {/* Get Involved Section */}
-      <div className="mb-20 sm:mb-24">
-        <h2 className="text-2xl sm:text-3xl font-bold text-center mb-6 text-gray-800">
-          Get Involved
-        </h2>
-        <p className="text-base sm:text-lg text-gray-600 mb-10 max-w-2xl mx-auto text-center">
-          We're a diverse community of academics, industry experts, software vendors and individuals interested in guiding the development of the next generation of software for the field. Join us!
-        </p>
-        
-        <div className="bg-gradient-to-r from-blue-50 to-green-50 p-8 sm:p-10 rounded-xl">
-          {/* Introduction Card */}
-          <div className="bg-white p-8 rounded-lg shadow-sm mb-10">
-            <h3 className="text-lg font-bold mb-4 text-gray-800">
-              Start Experimenting!
-            </h3>
-            <p className="text-gray-600 leading-relaxed mb-6">
-              The best way to get involved is to start using AI in your modeling workflow and provide feedback. 
-              We recommend using{' '}
-              <a 
-                href="https://www.iseesystems.com/store/products/stella-architect.aspx" 
-                className="text-blue-600 hover:underline"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Stella
-              </a>
-              {' '}(version 4.0 or above) or{' '}
-              <a 
-                href="https://comodel.io" 
-                className="text-blue-600 hover:underline"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                CoModel
-              </a>
-              , or you can{' '}
-              <Link 
-                to="/engines" 
-                className="text-blue-600 hover:underline"
-              >
-                play with engines
-              </Link>
-              {' '}directly on this website.
-            </p>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 sm:gap-10 mb-10">
-            <div className="space-y-8">
-              <div className="bg-white p-8 rounded-lg shadow-sm">
-                <h3 className="text-lg font-bold mb-4 text-gray-800">
-                  Join the Community 
-                </h3>
-                <ul className="space-y-3 text-gray-600 text-sm">
-                  <li className="flex items-start">
-                    <span className="text-blue-600 mr-2 mt-1">•</span>
-                    <span>
-                      Join the{' '}
-                      <a 
-                        href="https://groups.io/g/sd-ai/" 
-                        className="text-blue-600 hover:underline"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        sd-ai groups.io
-                      </a>
-                      {' '}mailing list to join the discussion on the evolution of this project
-                    </span>
-                  </li>
-                  <li className="flex items-start">
-                    <span className="text-blue-600 mr-2 mt-1">•</span>
-                    <span>We'd love to hear your ideas for new types of engines, engine implementations, or evaluations</span>
-                  </li>
-                  <li className="flex items-start">
-                    <span className="text-blue-600 mr-2 mt-1">•</span>
-                    <span>
-                      Join regular Zoom meetings hosted by{' '}
-                      <a 
-                        href="https://www.buffalo.edu/ai-data-science/research/beams.html" 
-                        className="text-blue-600 hover:underline"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        BEAMS
-                      </a>
-                    </span>
-                  </li>
-                </ul>
-              </div>
-            </div>
-            
-            <div className="space-y-8">
-              <div className="bg-white p-8 rounded-lg shadow-sm">
-                <h3 className="text-lg font-bold mb-4 text-gray-800">
-                  Developers & Product Owners
-                </h3>
-                <ul className="space-y-3 text-gray-600 text-sm">
-                  <li className="flex items-start">
-                    <span className="text-blue-600 mr-2 mt-1">•</span>
-                    <span>
-                      Contribute code on our{' '}
-                      <a 
-                        href="https://github.com/UB-IAD/sd-ai"
-                        className="text-blue-600 hover:underline"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        GitHub repository
-                      </a>
-                    </span>
-                  </li>
-                  <li className="flex items-start">
-                    <span className="text-blue-600 mr-2 mt-1">•</span>
-                    <span>Help refine existing engines or contribute new AI engines</span>
-                  </li>
-                  <li className="flex items-start">
-                    <span className="text-blue-600 mr-2 mt-1">•</span>
-                    <span>
-                      Improve evaluations used to measure model performance
-                    </span>
-                  </li>
-                  <li className="flex items-start">
-                    <span className="text-blue-600 mr-2 mt-1">•</span>
-                    <span>Integrate SD-AI into your application with our simple API</span>
-                  </li>
-                </ul>
-              </div>
-            </div>
-          </div>
+      {/* Get Involved CTA */}
+      <div className="mb-20 sm:mb-24 text-center">
+        <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-8 sm:p-10 rounded-xl border-2 border-blue-100">
+          <h2 className="text-2xl sm:text-3xl font-bold mb-6 text-gray-800">
+            Ready to Get Involved?
+          </h2>
+          <p className="text-base sm:text-lg text-gray-600 mb-8 max-w-2xl mx-auto leading-relaxed">
+            Join our diverse community of academics, industry experts, and software vendors shaping the future of AI-powered system dynamics.
+          </p>
+          <Link 
+            to="/get-involved"
+            className="inline-block px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white no-underline rounded-lg text-lg font-semibold transition-all duration-200 border-none cursor-pointer hover:from-blue-700 hover:to-purple-700 shadow-lg hover:shadow-xl transform hover:-translate-y-1"
+          >
+            Learn How to Contribute
+          </Link>
         </div>
       </div>
       </div>

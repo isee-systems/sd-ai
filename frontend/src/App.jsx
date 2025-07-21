@@ -6,6 +6,7 @@ import EvalDetail from './pages/EvalDetail';
 import EnginesList from './pages/EnginesList';
 import EngineDetail from './pages/EngineDetail';
 import Leaderboard from './pages/Leaderboard';
+import GetInvolved from './pages/GetInvolved';
 
 function App() {
   return (
@@ -18,6 +19,7 @@ function App() {
           <Route path="/engines" element={<EnginesList />} />
           <Route path="/engines/:engineName" element={<EngineDetail />} />
           <Route path="/leaderboard/:mode" element={<Leaderboard />} />
+          <Route path="/get-involved" element={<GetInvolved />} />
         </Routes>
       </Layout>
     </Router>

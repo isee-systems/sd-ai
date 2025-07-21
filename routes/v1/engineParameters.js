@@ -25,7 +25,7 @@ router.get("/:engine/parameters", async (req, res) => {
             name: "currentModel",
             type: "json",
             required: false,
-            defaultValue: "{variables: [], relationships: []}",
+            defaultValue: '{"variables": [], "relationships": []}',
             uiElement: "hidden",
             description: "javascript object in sd-json format representing current model to anchor changes off of"
         }

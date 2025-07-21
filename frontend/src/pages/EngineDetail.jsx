@@ -1,6 +1,34 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import api from '../services/api';
+
+// Auto-resizing textarea component
+function AutoResizeTextarea({ value, onChange, className, placeholder, required, id }) {
+  const textareaRef = useRef(null);
+
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      // Reset height to auto to get the correct scrollHeight
+      textarea.style.height = 'auto';
+      // Set height to scrollHeight to expand to content
+      textarea.style.height = `${textarea.scrollHeight}px`;
+    }
+  }, [value]);
+
+  return (
+    <textarea
+      ref={textareaRef}
+      id={id}
+      value={value}
+      onChange={onChange}
+      className={`${className} resize-none overflow-hidden`}
+      placeholder={placeholder}
+      required={required}
+      style={{ minHeight: '2.5rem' }}
+    />
+  );
+}
 
 function EngineDetail() {
   const { engineName } = useParams();
@@ -96,7 +124,21 @@ function EngineDetail() {
     setResult(null);
 
     try {
-      const response = await api.post(`/engines/${engineName}/generate`, formData);
+      // Process form data to handle JSON fields
+      const processedFormData = { ...formData };
+      
+      parameters.forEach(param => {
+        if (param.type === 'json' && processedFormData[param.name]) {
+          try {
+            // Parse JSON string into object
+            processedFormData[param.name] = JSON.parse(processedFormData[param.name]);
+          } catch (err) {
+            throw new Error(`Invalid JSON in field "${param.label || param.name}": ${err.message}`);
+          }
+        }
+      });
+
+      const response = await api.post(`/engines/${engineName}/generate`, processedFormData);
       setResult(response.data);
     } catch (err) {
       setGenerationError(err.response?.data?.message || err.message || 'Generation failed');
@@ -115,17 +157,12 @@ function EngineDetail() {
     switch (param.uiElement) {
       case 'textarea':
         return (
-          <textarea
+          <AutoResizeTextarea
             id={param.name}
             value={value}
             onChange={(e) => handleInputChange(param.name, e.target.value)}
             className={hiddenClassName}
-            placeholder={param.description}
             required={param.required}
-            style={{
-              minHeight: param.minHeight ? `${param.minHeight}px` : '100px',
-              maxHeight: param.maxHeight ? `${param.maxHeight}px` : 'none'
-            }}
           />
         );
       
@@ -137,7 +174,6 @@ function EngineDetail() {
             value={value}
             onChange={(e) => handleInputChange(param.name, e.target.value)}
             className={hiddenClassName}
-            placeholder={param.description}
             required={param.required}
           />
         );
@@ -174,6 +210,19 @@ function EngineDetail() {
       case 'hidden':
       case 'lineedit':
       default:
+        // Handle JSON type fields with textarea for better editing
+        if (param.type === 'json') {
+          return (
+            <AutoResizeTextarea
+              id={param.name}
+              value={value}
+              onChange={(e) => handleInputChange(param.name, e.target.value)}
+              className={hiddenClassName}
+              required={param.required}
+            />
+          );
+        }
+        
         return (
           <input
             type={param.type === 'number' ? 'number' : 'text'}
@@ -181,7 +230,6 @@ function EngineDetail() {
             value={value}
             onChange={(e) => handleInputChange(param.name, e.target.value)}
             className={hiddenClassName}
-            placeholder={param.description}
             required={param.required}
           />
         );
@@ -248,7 +296,7 @@ function EngineDetail() {
         <div>
           {/* Engine Header */}
           <div className="mb-8">
-            <h1 className="text-4xl font-bold mb-3 text-gray-800 capitalize">
+            <h1 className="text-4xl font-bold mb-3 text-gray-800">
               {engine.name} Engine
             </h1>
             
@@ -261,7 +309,7 @@ function EngineDetail() {
                     className={`inline-block px-3 py-1 text-sm font-semibold rounded ${getBadgeColor(support)}`}
                     title={getSupportDescription(support)}
                   >
-                    {support.toUpperCase()} - {getSupportDescription(support)}
+                    {support} - {getSupportDescription(support)}
                   </span>
                 ))}
               </div>
@@ -281,11 +329,11 @@ function EngineDetail() {
                   <label htmlFor={param.name} className="block text-sm font-medium text-gray-700 mb-1">
                     {param.label || param.name}
                     {param.required && <span className="text-red-500 ml-1">*</span>}
+                    {param.description && (
+                      <span className="text-gray-500 font-normal"> - {param.description}</span>
+                    )}
                   </label>
                   {renderFormInput(param)}
-                  {param.description && (
-                    <p className="text-xs text-gray-500 mt-1">{param.description}</p>
-                  )}
                 </div>
               ))}
 
@@ -317,7 +365,7 @@ function EngineDetail() {
                     <p className="text-green-700 mb-2">
                       <strong>Format:</strong> {result.format}
                     </p>
-                    <div className="bg-white p-3 rounded border max-h-96 overflow-auto">
+                    <div className="bg-white p-3 rounded border">
                       <pre className="text-sm text-gray-800 whitespace-pre-wrap">
                         {JSON.stringify(result.model, null, 2)}
                       </pre>
@@ -325,7 +373,7 @@ function EngineDetail() {
                     {result.supportingInfo && (
                       <div className="mt-3">
                         <h4 className="font-medium text-green-800 mb-1">Supporting Information:</h4>
-                        <div className="bg-white p-3 rounded border max-h-48 overflow-auto">
+                        <div className="bg-white p-3 rounded border">
                           <pre className="text-sm text-gray-800 whitespace-pre-wrap">
                             {JSON.stringify(result.supportingInfo, null, 2)}
                           </pre>

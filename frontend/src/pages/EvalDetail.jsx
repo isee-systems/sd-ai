@@ -217,11 +217,9 @@ function EvalDetail() {
             {jsonExpectations && jsonExpectations !== '{}' && jsonExpectations !== '[]' && (
               <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
                 <h3 className="font-semibold text-gray-900 mb-2">Expectations</h3>
-                <textarea
-                  value={jsonExpectations}
-                  className="w-full h-64 text-gray-800 text-sm font-mono bg-transparent border-none resize-none focus:outline-none"
-                  readOnly
-                />
+                <pre className="w-full text-gray-800 text-sm font-mono bg-transparent whitespace-pre-wrap">
+                  {jsonExpectations}
+                </pre>
               </div>
             )}
           </>

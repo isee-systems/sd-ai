@@ -63,19 +63,13 @@ function EvalsList() {
 
   return (
     <div className="evals-page p-5">
-      <h1 className="text-4xl font-bold mb-3 text-gray-800">
-        sd-ai Evaluations
-      </h1>
-      <p className="text-lg text-gray-600 mb-8 max-w-3xl">
-        Browse and explore evaluations for AI systems using our comprehensive testing framework.
-      </p>
-
+      <div className="mb-8">
+        <h3 className="text-xl font-semibold text-gray-700 uppercase tracking-wide">
+          Evaluation Categories 
+        </h3>
+      </div>
       {/* Evals Data Section */}
       <div className="mb-8">
-        <h2 className="mt-0 mb-6 text-2xl font-bold text-gray-800">
-          Available Evaluations
-        </h2>
-        
         {loading && (
           <div className="p-8 text-center text-gray-600">
             Loading evals data...
@@ -103,8 +97,8 @@ function EvalsList() {
                     {category.name}
                   </h3>
                   {category.description && (
-                    <div className="mb-4">
-                      <p className="text-sm text-gray-700 leading-relaxed">
+                    <div className="mb-4 text-sm text-gray-700">
+                      <p className="mb-2 last:mb-0 leading-relaxed">
                         {expandedDescriptions.has(category.name) 
                           ? category.description 
                           : truncateText(category.description)
@@ -153,6 +147,28 @@ function EvalsList() {
                         </div>
                       );
                     })}
+                  </div>
+                  <div className="mt-4 pt-4 border-t border-gray-200 flex gap-2">
+                    {category.firstTestUrl && (
+                      <Link
+                        to={category.firstTestUrl}
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-sm font-medium no-underline transition-colors inline-block"
+                        title="Browse tests in this category"
+                      >
+                        Browse
+                      </Link>
+                    )}
+                    {category.source && (
+                      <a
+                        href={category.source}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="bg-gray-100 hover:bg-gray-200 text-gray-700 hover:text-gray-900 px-3 py-2 rounded text-sm font-medium no-underline transition-colors inline-block"
+                        title="View source code on GitHub"
+                      >
+                        View Source
+                      </a>
+                    )}
                   </div>
                 </div>
               </div>

@@ -102,10 +102,20 @@ router.get("/", async (req, res) => {
                 }
             })
             
+            // Find the first test in the first group for the browse URL
+            let firstTestUrl = null
+            const firstGroupName = Object.keys(categoryModule.groups)[0]
+            if (firstGroupName && categoryModule.groups[firstGroupName].length > 0) {
+                const firstTestName = categoryModule.groups[firstGroupName][0].name
+                firstTestUrl = `/evals/${encodeURIComponent(categoryName)}/${encodeURIComponent(firstGroupName)}/${encodeURIComponent(firstTestName)}`
+            }
+            
             return {
                 name: categoryName,
                 groups: groups,
-                description: categoryModule.description ? categoryModule.description() : ''
+                description: categoryModule.description ? categoryModule.description() : '',
+                source: `https://github.com/UB-IAD/sd-ai/tree/main/evals/categories/${categoryName}.js`,
+                firstTestUrl: firstTestUrl
             }
         })
     )
