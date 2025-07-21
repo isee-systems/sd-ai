@@ -257,7 +257,7 @@ export class LLMWrapper {
       {label: "o4-mini", value: 'o4-mini'}
   ];
 
-  static DEFAULT_MODEL = 'gemini-2.5-flash-preview-05-20';
+  static DEFAULT_MODEL = 'gemini-2.5-flash';
 
   static SCHEMA_STRINGS = {
     "from": "This is a variable which causes the to variable in this relationship that is between two variables, from and to.  The from variable is the equivalent of a cause.  The to variable is the equivalent of an effect",
