@@ -253,7 +253,7 @@ export class LLMWrapper {
       {label: "o3-mini low", value: 'o3-mini low'},
       {label: "o3-mini medium", value: 'o3-mini medium'},
       {label: "o3-mini high", value: 'o3-mini high'},
-      {label: "o3", value: 'o3-mini'},
+      {label: "o3", value: 'o3'},
       {label: "o4-mini", value: 'o4-mini'}
   ];
 
