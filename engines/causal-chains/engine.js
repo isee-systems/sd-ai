@@ -1,4 +1,4 @@
-import { promises as fs } from 'node:fs';
+import { promises as fs, statSync } from 'node:fs';
 import {exec} from "child_process"
 import path from 'node:path';
 import {tmpdir} from 'node:os';
@@ -21,13 +21,15 @@ class Engine {
     static supportedModes() {
         // check that the ./causal-chains Go binary exists
         try {
-            const stats = fs.statSync(`${__dirname}/causal-chains`);
+            const stats =  statSync(`${__dirname}/causal-chains`);
             const isExecutable = !!(stats.mode & (fs.constants.S_IXUSR | fs.constants.S_IXGRP | fs.constants.S_IXOTH));
 
             if (isExecutable) {
                 return ["cld"];
             }
         } catch (err) {
+            console.log("Error checking supporting modes on causal-chains...");
+            console.log(err);
             // fine to fallthrough to the return below
         }
 
