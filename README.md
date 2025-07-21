@@ -144,11 +144,23 @@ AUTHENTICATION_KEY="my_secret_key" # only needed for securing publically accessi
 ```
 3. npm install 
 4. npm start
-5. (optional) npm run evals -- -e evals/experiments/careful.json 
+5. (optional) npm run evals -- -e evals/experiments/careful.json
+6. (optional) npm test - run unit tests for HTTP API routes 
 
 We recommend VSCode using a launch.json for the Node type applications (you get a debugger, and hot-reloading)
 
 If you wish to run using the causal-chains engine you'll need to install the [Go toolchain](https://go.dev/doc/install) onto your PATH.
+
+## Testing
+### Unit Tests
+Unit tests are provided for all HTTP API routes in the `/routes/v1` folder. Tests cover authentication, parameter validation, response structure, and integration with actual engine implementations.
+
+Run tests with:
+```bash
+npm test
+```
+
+Tests are built using Jest and Supertest, and use the actual engine implementations (no mocking) to ensure real-world functionality.
 
 ## Evals
 - checkout the [Evals README](evals/README.md)
