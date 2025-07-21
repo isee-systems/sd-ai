@@ -70,5 +70,40 @@ describe('Engines Route', () => {
         expect(engine.supports.length).toBeGreaterThan(0);
       });
     });
+
+    it('should include ALL engines from /engines folder', async () => {
+      const response = await request(app)
+        .get('/')
+        .expect(200);
+
+      const expectedEngines = [
+        'causal-chains',
+        'predprey', 
+        'qualitative-experimental',
+        'qualitative',
+        'quantitative-experimental', 
+        'quantitative',
+        'recursivecausal',
+        'seldon-experimental',
+        'seldon'
+      ];
+
+      const returnedEngineNames = response.body.engines.map(engine => engine.name);
+
+      // Every engine from /engines folder MUST be present
+      expectedEngines.forEach(expectedEngine => {
+        expect(returnedEngineNames).toContain(expectedEngine);
+        
+        // Every engine MUST have supported modes (no supported modes is illegal)
+        const engine = response.body.engines.find(e => e.name === expectedEngine);
+        expect(engine).toBeDefined();
+        expect(engine.supports).toBeDefined();
+        expect(Array.isArray(engine.supports)).toBe(true);
+        expect(engine.supports.length).toBeGreaterThan(0);
+      });
+
+      // Should have exactly the expected number of engines (no extra, no missing)
+      expect(returnedEngineNames).toHaveLength(expectedEngines.length);
+    });
   });
 });
