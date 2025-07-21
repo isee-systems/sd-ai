@@ -109,6 +109,8 @@ function EngineDetail() {
   // Render form input based on parameter type
   const renderFormInput = (param) => {
     const value = formData[param.name] || '';
+    const baseClassName = "w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent";
+    const hiddenClassName = param.uiElement === 'hidden' ? `${baseClassName} bg-gray-100` : baseClassName;
     
     switch (param.uiElement) {
       case 'textarea':
@@ -117,7 +119,7 @@ function EngineDetail() {
             id={param.name}
             value={value}
             onChange={(e) => handleInputChange(param.name, e.target.value)}
-            className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className={hiddenClassName}
             placeholder={param.description}
             required={param.required}
             style={{
@@ -134,7 +136,7 @@ function EngineDetail() {
             id={param.name}
             value={value}
             onChange={(e) => handleInputChange(param.name, e.target.value)}
-            className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className={hiddenClassName}
             placeholder={param.description}
             required={param.required}
           />
@@ -146,7 +148,7 @@ function EngineDetail() {
             id={param.name}
             value={value}
             onChange={(e) => handleInputChange(param.name, e.target.value)}
-            className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className={hiddenClassName}
             required={param.required}
           >
             <option value="">Select an option</option>
@@ -170,15 +172,6 @@ function EngineDetail() {
         );
       
       case 'hidden':
-        return (
-          <input
-            type="hidden"
-            id={param.name}
-            value={value}
-            onChange={(e) => handleInputChange(param.name, e.target.value)}
-          />
-        );
-      
       case 'lineedit':
       default:
         return (
@@ -187,7 +180,7 @@ function EngineDetail() {
             id={param.name}
             value={value}
             onChange={(e) => handleInputChange(param.name, e.target.value)}
-            className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className={hiddenClassName}
             placeholder={param.description}
             required={param.required}
           />
@@ -282,61 +275,18 @@ function EngineDetail() {
             </h2>
             
             <form onSubmit={handleGenerate} className="space-y-4">
-              {/* Prompt field */}
-              <div>
-                <label htmlFor="prompt" className="block text-sm font-medium text-gray-700 mb-1">
-                  Prompt <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                  id="prompt"
-                  value={formData.prompt}
-                  onChange={(e) => handleInputChange('prompt', e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Enter your model description or changes you want to make..."
-                  required
-                  rows={3}
-                />
-              </div>
-
-              {/* Format field */}
-              <div>
-                <label htmlFor="format" className="block text-sm font-medium text-gray-700 mb-1">
-                  Output Format
-                </label>
-                <select
-                  id="format"
-                  value={formData.format}
-                  onChange={(e) => handleInputChange('format', e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="sd-json">SD-JSON</option>
-                  <option value="xmile">XMILE</option>
-                </select>
-              </div>
-
-              {/* Dynamic parameter fields */}
-              {parameters.filter(param => !['prompt', 'format', 'currentModel'].includes(param.name)).map((param) => (
-                param.uiElement !== 'hidden' && (
-                  <div key={param.name}>
-                    <label htmlFor={param.name} className="block text-sm font-medium text-gray-700 mb-1">
-                      {param.label || param.name}
-                      {param.required && <span className="text-red-500 ml-1">*</span>}
-                    </label>
-                    {renderFormInput(param)}
-                    {param.description && (
-                      <p className="text-xs text-gray-500 mt-1">{param.description}</p>
-                    )}
-                  </div>
-                )
-              ))}
-
-              {/* Hidden fields */}
-              {parameters.filter(param => !['prompt', 'format', 'currentModel'].includes(param.name)).map((param) => (
-                param.uiElement === 'hidden' && (
-                  <div key={param.name}>
-                    {renderFormInput(param)}
-                  </div>
-                )
+              {/* Render all parameters dynamically */}
+              {parameters.map((param) => (
+                <div key={param.name}>
+                  <label htmlFor={param.name} className="block text-sm font-medium text-gray-700 mb-1">
+                    {param.label || param.name}
+                    {param.required && <span className="text-red-500 ml-1">*</span>}
+                  </label>
+                  {renderFormInput(param)}
+                  {param.description && (
+                    <p className="text-xs text-gray-500 mt-1">{param.description}</p>
+                  )}
+                </div>
               ))}
 
               {/* Submit button */}
