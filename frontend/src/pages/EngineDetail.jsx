@@ -51,20 +51,18 @@ function EngineDetail() {
         setLoading(true);
         setError(null);
         
-        // Fetch list of engines to get basic info
-        const enginesResponse = await api.get('/engines');
-        const engineData = enginesResponse.data.engines?.find(e => e.name === engineName);
+        // Fetch engine parameters directly (this will also validate the engine exists)
+        const parametersResponse = await api.get(`/engines/${engineName}/parameters`);
         
-        if (!engineData) {
-          throw new Error(`Engine "${engineName}" not found`);
+        if (!parametersResponse.data.success) {
+          throw new Error(parametersResponse.data.message || `Engine "${engineName}" not found`);
         }
         
-        setEngine(engineData);
-        
-        // Fetch engine parameters
-        const parametersResponse = await api.get(`/engines/${engineName}/parameters`);
         const params = parametersResponse.data.parameters || [];
         setParameters(params);
+        
+        // Set basic engine info from the name
+        setEngine({ name: engineName });
         
         // Initialize form data with default values
         const initialFormData = {

@@ -12,6 +12,98 @@ function EvalDetail() {
   const [jsonExpectations, setJsonExpectations] = useState('');
   const [navigation, setNavigation] = useState(null);
 
+  // Calculate navigation information for a specific test
+  const calculateNavigation = (categories, currentCategory, currentGroup, currentTestName) => {
+    // Find the current category
+    const category = categories.find(cat => cat.name === currentCategory);
+    if (!category) {
+      return {
+        nextTest: null,
+        nextGroup: null,
+        previousTest: null,
+        previousGroup: null
+      };
+    }
+
+    const groups = category.groups;
+    const groupNames = groups.map(g => g.name);
+    const currentGroupIndex = groupNames.indexOf(currentGroup);
+    const currentGroupData = groups.find(g => g.name === currentGroup);
+    
+    if (!currentGroupData) {
+      return {
+        nextTest: null,
+        nextGroup: null,
+        previousTest: null,
+        previousGroup: null
+      };
+    }
+
+    const currentTestIndex = currentGroupData.tests.findIndex(test => test.name === currentTestName);
+    
+    let nextTest = null;
+    let nextGroup = null;
+    let previousTest = null;
+    let previousGroup = null;
+    
+    // Check if there's a next test in the current group
+    if (currentTestIndex >= 0 && currentTestIndex < currentGroupData.tests.length - 1) {
+      const nextTestData = currentGroupData.tests[currentTestIndex + 1];
+      nextTest = {
+        category: currentCategory,
+        group: currentGroup,
+        testname: nextTestData.name,
+        url: `/evals/${encodeURIComponent(currentCategory)}/${encodeURIComponent(currentGroup)}/${encodeURIComponent(nextTestData.name)}`
+      };
+    }
+    
+    // Check if there's a previous test in the current group
+    if (currentTestIndex > 0) {
+      const previousTestData = currentGroupData.tests[currentTestIndex - 1];
+      previousTest = {
+        category: currentCategory,
+        group: currentGroup,
+        testname: previousTestData.name,
+        url: `/evals/${encodeURIComponent(currentCategory)}/${encodeURIComponent(currentGroup)}/${encodeURIComponent(previousTestData.name)}`
+      };
+    }
+    
+    // Check if there's a next group with tests
+    if (currentGroupIndex >= 0 && currentGroupIndex < groups.length - 1) {
+      const nextGroupData = groups[currentGroupIndex + 1];
+      if (nextGroupData && nextGroupData.tests.length > 0) {
+        const firstTestInNextGroup = nextGroupData.tests[0];
+        nextGroup = {
+          category: currentCategory,
+          group: nextGroupData.name,
+          testname: firstTestInNextGroup.name,
+          url: `/evals/${encodeURIComponent(currentCategory)}/${encodeURIComponent(nextGroupData.name)}/${encodeURIComponent(firstTestInNextGroup.name)}`
+        };
+      }
+    }
+    
+    // Check if there's a previous group with tests
+    if (currentGroupIndex > 0) {
+      const previousGroupData = groups[currentGroupIndex - 1];
+      if (previousGroupData && previousGroupData.tests.length > 0) {
+        const lastTestInPreviousGroup = previousGroupData.tests[previousGroupData.tests.length - 1];
+        previousGroup = {
+          category: currentCategory,
+          group: previousGroupData.name,
+          testname: lastTestInPreviousGroup.name,
+          url: `/evals/${encodeURIComponent(currentCategory)}/${encodeURIComponent(previousGroupData.name)}/${encodeURIComponent(lastTestInPreviousGroup.name)}`
+        };
+      }
+    }
+    
+    return {
+      nextTest: nextTest,
+      nextGroup: nextGroup,
+      previousTest: previousTest,
+      previousGroup: previousGroup
+    };
+  };
+
   // Fetch test details when component mounts or params change
   useEffect(() => {
     const fetchTestDetails = async () => {
@@ -24,12 +116,18 @@ function EvalDetail() {
         const decodedCategory = decodeURIComponent(category);
         const decodedGroup = decodeURIComponent(group);
         
-        const response = await api.get(`/evals/${decodedCategory}/${decodedGroup}/${encodeURIComponent(decodedTestName)}`);
+        // Fetch both test details and evals list for navigation
+        const [testResponse, evalsResponse] = await Promise.all([
+          api.get(`/evals/${decodedCategory}/${decodedGroup}/${encodeURIComponent(decodedTestName)}`),
+          api.get('/evals')
+        ]);
         
-        const test = response.data.test;
+        const test = testResponse.data.test;
+        const evalsList = evalsResponse.data.categories;
         
-        // Set navigation data
-        setNavigation(response.data.navigation);
+        // Calculate navigation using local function
+        const navigationData = calculateNavigation(evalsList, decodedCategory, decodedGroup, decodedTestName);
+        setNavigation(navigationData);
         
         // Load the data into the UI
         setProblemStatement(test.additionalParameters?.problemStatement || '');

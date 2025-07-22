@@ -1,9 +1,21 @@
 import express from 'express'
+import fs from 'fs'
+import path from 'path'
 import utils, { ModelCapabilities, ModelType, LLMWrapper } from './../../utils.js'
 
 const router = express.Router()
 
 router.post("/:engine/generate", async (req, res) => {
+    const enginePath = path.join(process.cwd(), 'engines', req.params.engine, 'engine.js');
+    
+    // Check if engine file exists
+    if (!fs.existsSync(enginePath)) {
+        return res.status(404).send({
+            success: false,
+            message: `Engine "${req.params.engine}" not found`
+        });
+    }
+
     const authenticationKey = process.env.AUTHENTICATION_KEY;
     const underlyingModel = req.body.underlyingModel || LLMWrapper.DEFAULT_MODEL;
     const capabilities = new ModelCapabilities(underlyingModel);
@@ -21,7 +33,7 @@ router.post("/:engine/generate", async (req, res) => {
         }
     }
 
-    const engine = await import(`./../../engines/${req.params.engine}/engine.js`);
+    const engine = await import(enginePath);
     const instance = new engine.default();
 
     const prompt = req.body.prompt;

@@ -1,9 +1,21 @@
 import express from 'express'
+import fs from 'fs'
+import path from 'path'
 
 const router = express.Router()
 
 router.get("/:engine/parameters", async (req, res) => {
-    const engine = await import(`./../../engines/${req.params.engine}/engine.js`);
+    const enginePath = path.join(process.cwd(), 'engines', req.params.engine, 'engine.js');
+    
+    // Check if engine file exists
+    if (!fs.existsSync(enginePath)) {
+        return res.status(404).send({
+            success: false,
+            message: `Engine "${req.params.engine}" not found`
+        });
+    }
+
+    const engine = await import(enginePath);
     const instance = new engine.default();
 
     const baseParameters = [{

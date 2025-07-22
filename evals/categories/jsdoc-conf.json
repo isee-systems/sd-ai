@@ -1,4 +1,0 @@
-{
-	"include": ["./categories/causalTranslation.js", "./categories/conformance.js"],
-    "plugins": ["plugins/markdown"]
-}
