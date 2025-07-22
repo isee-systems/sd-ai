@@ -38,27 +38,51 @@ const generateCausalRelationship = function(fromRaw, toRaw, polarity, polaritySt
     const from = pluralize(fromRaw);
     const to = pluralize(toRaw);
 
-    let mod1,mod2 = "";
-    if (polarity === "+") {
-        if (polarityStart === "up") {
-            mod1 = "more";
-            mod2 = "more";
-        } else if (polarityStart === "down") {
-            mod1 = "less";
-            mod2 = "fewer";
-        }
-    } else if (polarity === "-") {
-        if (polarityStart === "up") {
-            mod1 = "more";
-            mod2 = "fewer";
-        } else if (polarityStart === "down") {
-            mod1 = "less";
-            mod2 = "more";
-        }
-    } 
+    // Natural language variations for describing causal relationships
+    const positiveTemplates = {
+        up: [
+            `As ${from} increase, ${to} tend to increase as well`,
+            `Higher levels of ${from} lead to more ${to}`,
+            `When there are more ${from}, we typically see more ${to}`,
+            `Increasing ${from} results in greater numbers of ${to}`,
+            `${from} growth drives up ${to}`,
+            `More ${from} contribute to higher ${to}`
+        ],
+        down: [
+            `When ${from} decrease, ${to} also tend to decrease`,
+            `Fewer ${from} result in fewer ${to}`,
+            `As ${from} decline, ${to} follow suit`,
+            `Reduced ${from} lead to diminished ${to}`,
+            `Lower levels of ${from} correlate with fewer ${to}`,
+            `Declining ${from} cause ${to} to drop as well`
+        ]
+    };
+
+    const negativeTemplates = {
+        up: [
+            `As ${from} increase, ${to} tend to decrease`,
+            `More ${from} lead to fewer ${to}`,
+            `Higher levels of ${from} reduce the number of ${to}`,
+            `Increasing ${from} suppresses ${to}`,
+            `When ${from} grow, ${to} decline`,
+            `Greater ${from} result in diminished ${to}`
+        ],
+        down: [
+            `When ${from} decrease, ${to} actually increase`,
+            `Fewer ${from} lead to more ${to}`,
+            `As ${from} decline, ${to} tend to rise`,
+            `Reduced ${from} result in higher ${to}`,
+            `Lower levels of ${from} boost ${to}`,
+            `Declining ${from} cause ${to} to grow`
+        ]
+    };
+
+    const templates = polarity === "+" ? positiveTemplates : negativeTemplates;
+    const templateArray = templates[polarityStart];
+    const selectedTemplate = templateArray[Math.floor(Math.random() * templateArray.length)];
 
     return { 
-        english: "The " + mod1 + " " + from + " there are, the " + mod2 + " " + to + " there are.",
+        english: selectedTemplate + ".",
         relationship: {from: from, to: to, polarity: polarity}
     };
 };
@@ -73,6 +97,12 @@ const generateFeedbackLoop = function(variables, polarity) {
     let causalText = '';
     let relationships = [];
 
+    // Natural connecting phrases for multiple relationships
+    const connectors = [
+        "Additionally", "Furthermore", "At the same time", "Meanwhile", "This creates a situation where",
+        "As a result", "Consequently", "In turn", "Building on this", "Subsequently"
+    ];
+
     for (let i=0; i < variables.length; ++i) {
         let relationshipPolarity = "+"
         if (i == 0 && polarity === "-") {
@@ -83,9 +113,15 @@ const generateFeedbackLoop = function(variables, polarity) {
             next = 0;
         const resp = generateCausalRelationship(variables[i], variables[next], relationshipPolarity, i % 2 ? "up" : "down");
         relationships.push(resp.relationship);
-        causalText += " " + resp.english;
+        
+        if (i > 0) {
+            const connector = connectors[Math.floor(Math.random() * connectors.length)];
+            causalText += " " + connector + ", " + resp.english.toLowerCase();
+        } else {
+            causalText += resp.english.toLowerCase();
+        }
     }
-    
+
     return {
         english: causalText.trim(),
         relationships: relationships
