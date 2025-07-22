@@ -19,7 +19,8 @@ class Engine {
     static DEFAULT_MODEL = 'o4-mini';
 
     static description() {
-        return `Currently the highest performing engine for CLD creation. Focuses on prompt engineering techniques to generate causal chains rather than focusing on relationships.` 
+        return `This engine improves conformance to user instructions about feedback complexity by prompting the LLM to 
+focus on chains of relationships, rather then individual links.`
     }
 
     static supportedModes() {

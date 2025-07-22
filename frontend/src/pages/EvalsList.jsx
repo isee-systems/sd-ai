@@ -7,7 +7,6 @@ function EvalsList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [expandedGroups, setExpandedGroups] = useState(new Set());
-  const [expandedDescriptions, setExpandedDescriptions] = useState(new Set());
 
   // Fetch evals data when component mounts
   useEffect(() => {
@@ -42,29 +41,10 @@ function EvalsList() {
     setExpandedGroups(newExpandedGroups);
   };
 
-  // Function to toggle description expansion
-  const toggleDescriptionExpansion = (categoryName) => {
-    const newExpandedDescriptions = new Set(expandedDescriptions);
-    
-    if (newExpandedDescriptions.has(categoryName)) {
-      newExpandedDescriptions.delete(categoryName);
-    } else {
-      newExpandedDescriptions.add(categoryName);
-    }
-    
-    setExpandedDescriptions(newExpandedDescriptions);
-  };
-
-  // Function to truncate text
-  const truncateText = (text, maxLength = 150) => {
-    if (text.length <= maxLength) return text;
-    return text.substring(0, maxLength).trim() + '...';
-  };
-
   return (
     <div className="evals-page p-5">
       <div className="mb-8">
-        <h3 className="text-xl font-semibold text-gray-700 uppercase tracking-wide">
+        <h3 className="text-xl sm:text-2xl text-gray-600 leading-relaxed uppercase mb-12 mt-12">
           Evaluation Categories 
         </h3>
       </div>
@@ -89,29 +69,18 @@ function EvalsList() {
         )}
         
         {!loading && !error && evals.categories && (
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-6 md:grid-cols-2">
             {evals.categories.map((category, categoryIndex) => (
-              <div key={categoryIndex} className="bg-white rounded-lg shadow-md border border-gray-200 hover:shadow-lg transition-shadow duration-200">
-                <div className="p-6">
+              <div key={categoryIndex} className="bg-white rounded-lg shadow-md border border-gray-200 hover:shadow-lg transition-shadow duration-200 flex flex-col">
+                <div className="p-6 flex-1">
                   <h3 className="text-xl font-bold mb-3 text-gray-800">
                     {category.name}
                   </h3>
                   {category.description && (
                     <div className="mb-4 text-sm text-gray-700">
                       <p className="mb-2 last:mb-0 leading-relaxed">
-                        {expandedDescriptions.has(category.name) 
-                          ? category.description 
-                          : truncateText(category.description)
-                        }
+                        {category.description}
                       </p>
-                      {category.description.length > 150 && (
-                        <button
-                          onClick={() => toggleDescriptionExpansion(category.name)}
-                          className="text-blue-600 hover:text-blue-800 text-sm mt-2 transition-colors duration-200"
-                        >
-                          {expandedDescriptions.has(category.name) ? 'Show less' : 'Show more'}
-                        </button>
-                      )}
                     </div>
                   )}
                   <div className="space-y-3">
@@ -120,14 +89,18 @@ function EvalsList() {
                       const isExpanded = expandedGroups.has(groupKey);
                       
                       return (
-                        <div key={groupIndex} className="border-l-2 border-gray-200 pl-4">
+                        <div key={groupIndex}>
                           <h4 
                             onClick={() => toggleGroupExpansion(category.name, group.name)}
-                            className="text-sm font-semibold mb-2 text-gray-700 cursor-pointer flex items-center py-1 rounded transition-colors duration-200 hover:bg-gray-100"
+                            className="text-sm font-semibold mb-2 text-gray-700 cursor-pointer flex items-center"
                           >
-                            <span className={`mr-2 text-xs transition-transform duration-200 ${isExpanded ? 'rotate-90' : 'rotate-0'}`}>
-                              ▶
-                            </span>
+                            <svg 
+                              className={`w-3 h-3 mr-2 ${isExpanded ? 'rotate-90' : ''}`}
+                              fill="currentColor" 
+                              viewBox="0 0 20 20"
+                            >
+                              <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                            </svg>
                             {group.name} ({group.tests.length} tests)
                           </h4>
                           {isExpanded && (
@@ -136,7 +109,7 @@ function EvalsList() {
                                 <li key={testIndex}>
                                   <Link
                                     to={`/evals/${encodeURIComponent(category.name)}/${encodeURIComponent(group.name)}/${encodeURIComponent(test.name)}`}
-                                    className="text-blue-600 underline cursor-pointer text-xs hover:text-blue-800 transition-colors duration-200"
+                                    className="text-blue-600 underline"
                                   >
                                     {test.name}
                                   </Link>
@@ -148,7 +121,9 @@ function EvalsList() {
                       );
                     })}
                   </div>
-                  <div className="mt-4 pt-4 border-t border-gray-200 flex gap-2">
+                </div>
+                <div className="p-6 pt-0">
+                  <div className="flex gap-2">
                     {category.firstTestUrl && (
                       <Link
                         to={category.firstTestUrl}
@@ -157,6 +132,17 @@ function EvalsList() {
                       >
                         Browse
                       </Link>
+                    )}
+                    {category.link && (
+                      <a
+                        href={category.link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="bg-gray-100 hover:bg-gray-200 text-gray-700 hover:text-gray-900 px-3 py-2 rounded text-sm font-medium no-underline transition-colors inline-block"
+                        title="Read more about this evaluation category"
+                      >
+                        Learn More
+                      </a>
                     )}
                     {category.source && (
                       <a

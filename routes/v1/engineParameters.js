@@ -14,14 +14,6 @@ router.get("/:engine/parameters", async (req, res) => {
             label: "Prompt",
             description: "Description of desired model or changes to model."
         }, {
-            name: "format",
-            type: "string",
-            defaultValue: "sd-json",
-            required: true,
-            options: [{value: "sd-json"}, {value: "xmile"}],
-            uiElement: "hidden",
-            description: "How you want the diagram information returned, XMILE or sd-json format"
-        }, {
             name: "currentModel",
             type: "json",
             required: false,

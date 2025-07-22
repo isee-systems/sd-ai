@@ -38,7 +38,6 @@ function EngineDetail() {
   const [error, setError] = useState(null);
   const [formData, setFormData] = useState({
     prompt: '',
-    format: 'sd-json',
     currentModel: null
   });
   const [generating, setGenerating] = useState(false);
@@ -70,7 +69,6 @@ function EngineDetail() {
         // Initialize form data with default values
         const initialFormData = {
           prompt: '',
-          format: 'sd-json',
           currentModel: null
         };
         
@@ -236,38 +234,6 @@ function EngineDetail() {
     }
   };
 
-  // Function to get badge color based on support type
-  const getBadgeColor = (supportType) => {
-    switch (supportType) {
-      case 'cld':
-        return 'bg-blue-100 text-blue-800';
-      case 'sfd':
-        return 'bg-green-100 text-green-800';
-      case 'sfd-discuss':
-        return 'bg-purple-100 text-purple-800';
-      case 'cld-discuss':
-        return 'bg-orange-100 text-orange-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  // Function to get support type description
-  const getSupportDescription = (supportType) => {
-    switch (supportType) {
-      case 'cld':
-        return 'Causal Loop Diagrams';
-      case 'sfd':
-        return 'Stock & Flow Diagrams';
-      case 'sfd-discuss':
-        return 'SFD Discussion Mode';
-      case 'cld-discuss':
-        return 'CLD Discussion Mode';
-      default:
-        return supportType;
-    }
-  };
-
   return (
     <div className="engine-detail-page p-5">
       {/* Breadcrumb */}
@@ -299,21 +265,6 @@ function EngineDetail() {
             <h1 className="text-4xl font-bold mb-3 text-gray-800">
               {engine.name} Engine
             </h1>
-            
-            <div className="mb-4">
-              <p className="text-lg text-gray-600 mb-2">Supported Modes:</p>
-              <div className="flex flex-wrap gap-2">
-                {engine.supports.map((support, index) => (
-                  <span
-                    key={index}
-                    className={`inline-block px-3 py-1 text-sm font-semibold rounded ${getBadgeColor(support)}`}
-                    title={getSupportDescription(support)}
-                  >
-                    {support} - {getSupportDescription(support)}
-                  </span>
-                ))}
-              </div>
-            </div>
           </div>
 
           {/* Model Generation Form */}
@@ -327,7 +278,9 @@ function EngineDetail() {
               {parameters.map((param) => (
                 <div key={param.name}>
                   <label htmlFor={param.name} className="block text-sm font-medium text-gray-700 mb-1">
-                    {param.label || param.name}
+                    <span className={param.required ? "font-bold" : ""}>
+                      {param.label || param.name}
+                    </span>
                     {param.required && <span className="text-red-500 ml-1">*</span>}
                     {param.description && (
                       <span className="text-gray-500 font-normal"> - {param.description}</span>
@@ -344,7 +297,7 @@ function EngineDetail() {
                   disabled={generating}
                   className="bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white px-6 py-3 rounded font-medium transition-colors"
                 >
-                  {generating ? 'Generating...' : 'Generate Model'}
+                  {generating ? 'Generating...' : 'Submit'}
                 </button>
               </div>
             </form>
@@ -362,24 +315,11 @@ function EngineDetail() {
                 <h3 className="font-semibold text-green-800 mb-2">Generation Result:</h3>
                 {result.success ? (
                   <div>
-                    <p className="text-green-700 mb-2">
-                      <strong>Format:</strong> {result.format}
-                    </p>
                     <div className="bg-white p-3 rounded border">
                       <pre className="text-sm text-gray-800 whitespace-pre-wrap">
-                        {JSON.stringify(result.model, null, 2)}
+                        {JSON.stringify(result, null, 2)}
                       </pre>
                     </div>
-                    {result.supportingInfo && (
-                      <div className="mt-3">
-                        <h4 className="font-medium text-green-800 mb-1">Supporting Information:</h4>
-                        <div className="bg-white p-3 rounded border">
-                          <pre className="text-sm text-gray-800 whitespace-pre-wrap">
-                            {JSON.stringify(result.supportingInfo, null, 2)}
-                          </pre>
-                        </div>
-                      </div>
-                    )}
                   </div>
                 ) : (
                   <p className="text-red-700">Generation failed: {result.message || 'Unknown error'}</p>

@@ -18,7 +18,10 @@ You must keep in mind the following:
 
 class RecursiveCausalEngine {
   static description() {
-    return `Engine which uses recursive exploration to generate causal relationships. This engine can take a little longer to work since it makes many calls to underlying LLM.`
+    return `
+    An engine inspired by Philippe Giabbanelli’s paper, Generative AI for Systems Thinking: 
+Can a GPT Question-Answering System Turn Text into the Causal Maps Produced by Human Readers? 
+It uses the "Brain" from the qualitative engine in a recursive fashion making this engine slower.` 
   }
 
   static supportedModes() {

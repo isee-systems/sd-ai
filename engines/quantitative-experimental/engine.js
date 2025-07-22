@@ -30,6 +30,12 @@ It ensures the AI’s responses align with the intended user experience, such as
         return ["sfd"];
     }
 
+    static description() {
+        return `Exactly the same as the Quantitative engine, but with ability to customize all system prompts, 
+select underlying LLM service and bring your own API key. This engine is designed for the tinkerer who wants 
+to experiment with the specific prompts passed to the LLM.`;
+    }
+
     additionalParameters()  {
         let parameters = LLMWrapper.additionalParameters();
 

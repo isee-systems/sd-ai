@@ -25,10 +25,9 @@ router.post("/:engine/generate", async (req, res) => {
     const instance = new engine.default();
 
     const prompt = req.body.prompt;
-    let format = req.body.format;
   
     const engineSpecificParameters = Object.fromEntries(Object.entries(req.body).filter(([k, v]) => {
-       return ["prompt", "currentModel", "format"].indexOf(k) == -1
+       return ["prompt", "currentModel"].indexOf(k) == -1
     }));
 
     instance.additionalParameters().forEach((param) => {
@@ -72,15 +71,7 @@ router.post("/:engine/generate", async (req, res) => {
     };
 
     if ('model' in generateResponse) {
-      let model = generateResponse.model
-      if (format == "xmile") {
-        model = utils.convertToXMILE(model)
-      } else {
-        format = "sd-json";
-      }
-
-      response.format = format;
-      response.model = model;
+      response.model = generateResponse.model;
     }
     
     if ('output' in generateResponse) {

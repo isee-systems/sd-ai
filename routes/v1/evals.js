@@ -109,10 +109,11 @@ router.get("/", async (req, res) => {
                 const firstTestName = categoryModule.groups[firstGroupName][0].name
                 firstTestUrl = `/evals/${encodeURIComponent(categoryName)}/${encodeURIComponent(firstGroupName)}/${encodeURIComponent(firstTestName)}`
             }
-            
+
             return {
                 name: categoryName,
                 groups: groups,
+                link: categoryModule.link ? categoryModule.link() : null,
                 description: categoryModule.description ? categoryModule.description() : '',
                 source: `https://github.com/UB-IAD/sd-ai/tree/main/evals/categories/${categoryName}.js`,
                 firstTestUrl: firstTestUrl

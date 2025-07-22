@@ -28,30 +28,10 @@ function EnginesList() {
     fetchEngines();
   }, []);
 
-  // Function to get support type description
-  const getSupportDescription = (supportType) => {
-    switch (supportType) {
-      case 'cld':
-        return 'Causal Loop Diagrams';
-      case 'sfd':
-        return 'Stock & Flow Diagrams';
-      case 'sfd-discuss':
-        return 'SFD Discussion Mode';
-      case 'cld-discuss':
-        return 'CLD Discussion Mode';
-      default:
-        return supportType;
-    }
-  };
 
   // Function to check if engine is recommended for a mode
   const isRecommended = (engineName, supportType) => {
     return recommendedDefaults[supportType] === engineName;
-  };
-
-  // Function to check if engine is a discussion model (should not have details page)
-  const isDiscussionModel = (engineName) => {
-    return ['seldon', 'seldon-experimental'].includes(engineName);
   };
 
   return (
@@ -148,13 +128,13 @@ function EnginesList() {
               return sections.map(section => (
                 <div key={section.mode} className="mb-20">
                   <div className="flex items-center justify-between mb-8">
-                    <h3 className="text-xl font-semibold text-gray-700 uppercase tracking-wide">
+                    <h3 className="text-xl text-2xl text-gray-600 leading-relaxed uppercase mt-0">
                       {section.title}
                     </h3>
                     {section.hasLeaderboard && (
                       <Link
                         to={`/leaderboard/${section.mode}`}
-                        className="border border-green-500 text-green-600 hover:bg-green-50 px-3 py-1 rounded text-sm font-medium no-underline transition-colors"
+                        className="border border-green-500 text-green-600 hover:bg-green-50 px-3 py-1 rounded text-sm font-medium no-underline transition-colors flex-shrink-0"
                       >
                         Leaderboard
                       </Link>
@@ -197,57 +177,16 @@ function EnginesList() {
                           </div>
                         )}
                         
-                        {section.mode === 'discussion' ? (
-                          <div className="mb-4">
-                            <p className="text-sm text-gray-600 mb-2">Supports:</p>
-                            <div className="flex flex-wrap gap-1">
-                              {engine.discussionModes.map((mode, modeIndex) => (
-                                <span key={modeIndex} className="text-xs text-gray-700">
-                                  {getSupportDescription(mode)}
-                                  {modeIndex < engine.discussionModes.length - 1 && ', '}
-                                </span>
-                              ))}
-                            </div>
-                            {engine.supports.filter(support => !discussionModes.includes(support)).length > 0 && (
-                              <div className="mt-2">
-                                <p className="text-sm text-gray-600 mb-1">Also supports:</p>
-                                <div className="flex flex-wrap gap-1">
-                                  {engine.supports.filter(support => !discussionModes.includes(support)).map((support, supportIndex) => (
-                                    <span key={supportIndex} className="text-xs text-gray-700">
-                                      {getSupportDescription(support)}
-                                      {supportIndex < engine.supports.filter(s => !discussionModes.includes(s)).length - 1 && ', '}
-                                    </span>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          engine.supports.filter(support => support !== section.mode).length > 0 && (
-                            <div className="mb-4">
-                              <p className="text-sm text-gray-600 mb-2">Also supports:</p>
-                              <div className="flex flex-wrap gap-1">
-                                {engine.supports.filter(support => support !== section.mode).map((support, supportIndex) => (
-                                  <span key={supportIndex} className="text-xs text-gray-700">
-                                    {getSupportDescription(support)}
-                                    {supportIndex < engine.supports.filter(s => s !== section.mode).length - 1 && ', '}
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-                          )
-                        )}
+
                         
                         <div className="flex justify-between items-center">
                           <div className="flex gap-2">
-                            {!isDiscussionModel(engine.name) && (
-                              <Link
-                                to={`/engines/${engine.name}`}
-                                className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium no-underline transition-colors"
-                              >
-                                Try it
-                              </Link>
-                            )}
+                            <Link
+                              to={`/engines/${engine.name}`}
+                              className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium no-underline transition-colors"
+                            >
+                              Try it
+                            </Link>
                             {engine.link && (
                               <a
                                 href={engine.link}

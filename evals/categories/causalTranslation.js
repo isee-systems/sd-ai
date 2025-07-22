@@ -280,14 +280,14 @@ export const evaluate = function(generatedResponse, groundTruth) {
  * @returns {string} The description describing this category
  */
 export const description = () => {
-    return `This is the causal translation test
-
-To adequately and objectively measure what we define as causal translation (i.e., turning plain English text into structured data of causal relationships), it is necessary to create "fake alternate universes" in which we specify an objective synthetic ground truth. By shifting context into a gibberish world, we test the LLM's ability to extract causal relationships from provided data without relying on contextual clues from its own training data.
-
-For each causal translation test, we need an algorithm to generate the ground truth in English that is fed to the LLM via the background knowledge prompt, and the corresponding graph network (model) that the written English represents from which to compare the output of the LLM. To build these ground truth networks and plain English descriptions, we created an algorithm to construct them starting with a list of 56 gibberish, non-pluralized nouns. We used those nouns (after a uniform pluralization process) as variable names and the basis for creating "causal sentences" that were strung together to form "causal descriptions" of the ground truth system. Causal sentences were built based on a "from" variable, a "to" variable, a polarity, and a polarity direction. The "from" variable is the cause, and the "to" variable is the effect variable. The polarity is either positive or negative, and the polarity direction is either up or down. A polarity direction of "up" means that the polarity in the causal sentence is described starting with an increase in the "from" variable, while "down" means a decrease in the "from" variable. Causal sentences are composed of the "from" variable, the "to" variable, and two adjectives describing the development of the "from" variable and the "to" variable. The form of causal sentences are "The [more|less] ["from" variable] there are, the [more|fewer] ["to" variable] there are." The "from" and "to" variables in causal sentences are always pluralized.
-
-Our causal translation test suite contains 24 tests organized into three groups. The current test suite is designed to test the most basic form of causal translation (i.e., without the influence of confounders or more complicated potential forms of causal sentences). The first test group we've implemented is single relationship extraction, where there are four tests using a single causal sentence with gibberish words as variables. The full complement of polarity and polarity directions are tested here. The second group of causal translation tests consists of single loop extractions, where we measure the ability of the LLM to extract all of the relationships that compose a single feedback loop generated from causal sentences of gibberish words. Here we have 14 tests – seven for each loop polarity (positive, negative) – where those seven are feedback loops of variable length two to seven inclusive for each polarity, and we alternate polarity directions for each link in each loop. The third group of tests are multiple loop extractions in which we measure the ability of the LLM to extract all of the relationships that compose a set of overlapping feedback loops of various lengths and polarities, where each feedback loop follows the same properties as the single loop extractions. Here we have two tests that assess the ability of the LLM to extract two overlapping loops of lengths three and six variables, two tests containing three overlapping loops each (containing five, two, and four variables, respectively), and the final two tests of five loops each that overlap each other where the loops contain three, five, six, two and six variables respectively.`;
+    return `The causal translation test evaluates an LLM’s ability to convert plain English into structured causal graphs 
+by generating synthetic gibberish-based ground truths with defined causal relationships and testing the model on extracting 
+single links, single loops, and overlapping loops from these systematically constructed descriptions.`
 };
+
+export const link = () => {
+  return "https://arxiv.org/abs/2503.15580";
+}
 
 /**
  * The groups of tests to be evaluated as a part of this category
