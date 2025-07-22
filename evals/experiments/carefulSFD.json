@@ -1,0 +1,20 @@
+{
+    "sequential": false,
+    "verbose": true,
+    "engineConfigs": {
+        "quantitative-gemini-2.5-flash": {
+            "engine": "quantitative",
+            "additionalParameters": {
+                "underlyingModel": "gemini-2.5-flash"
+            },
+            "limits": {
+                "tokensPerMinute": 90000,
+                "requestsPerMinute": 10
+            }
+        }
+    },
+    "categories": {
+        "quantitativeTranslation": false,
+        "quantitativeCausalReasoning": true
+    }
+}
