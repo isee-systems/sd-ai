@@ -96,7 +96,7 @@ As the world's best System Dynamics Modeler, you will consider and apply the Sys
         return result;
     }
 
-    async converse(userPrompt, lastModel) {        
+    setupLLMParameters(userPrompt, lastModel) {
         //start with the system prompt
         let underlyingModel = this.#data.underlyingModel;
         let systemRole = this.#llmWrapper.model.systemModeUser;
@@ -162,14 +162,20 @@ As the world's best System Dynamics Modeler, you will consider and apply the Sys
 
         //give it the user prompt
         messages.push({ role: "user", content: userPrompt });
-        
-        //get its response
-        const originalCompletion = await this.#llmWrapper.openAIAPI.chat.completions.create({
-            messages: messages,
+
+        return {
+            messages,
             model: underlyingModel,
             temperature: temperature,
             reasoning_effort: reasoningEffort
-        });
+        };
+    }
+
+    async converse(userPrompt, lastModel) {
+        const llmParams = this.setupLLMParameters(userPrompt, lastModel);
+        
+        //get its response
+        const originalCompletion = await this.#llmWrapper.openAIAPI.chat.completions.create(llmParams);
 
         const originalResponse = originalCompletion.choices[0].message;
         if (originalResponse.refusal) {

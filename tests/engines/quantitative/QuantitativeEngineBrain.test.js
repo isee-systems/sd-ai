@@ -417,4 +417,236 @@ describe('QuantitativeEngineBrain', () => {
       expect(flowA.type).toBe('variable'); // Should be converted since not used
     });
   });
+
+  describe('setupLLMParameters', () => {
+    it('should setup basic LLM parameters with default model', () => {
+      const userPrompt = 'Test prompt';
+      const result = quantitativeEngine.setupLLMParameters(userPrompt);
+
+      expect(result.model).toBe('gemini-2.5-flash');
+      expect(result.temperature).toBe(0);
+      expect(result.reasoning_effort).toBeUndefined();
+      expect(result.response_format).toBeDefined();
+      expect(result.messages).toBeInstanceOf(Array);
+      expect(result.messages.length).toBeGreaterThan(0);
+      expect(result.messages[result.messages.length - 2].content).toBe(userPrompt);
+    });
+
+    it('should handle o3-mini model with reasoning effort', () => {
+      const engineWithO3Mini = new QuantitativeEngineBrain({
+        openAIKey: 'test-key',
+        googleKey: 'test-google-key',
+        underlyingModel: 'o3-mini low'
+      });
+
+      const result = engineWithO3Mini.setupLLMParameters('Test prompt');
+
+      expect(result.model).toBe('o3-mini');
+      expect(result.reasoning_effort).toBe('low');
+    });
+
+    it('should handle o3 model with reasoning effort', () => {
+      const engineWithO3 = new QuantitativeEngineBrain({
+        openAIKey: 'test-key',
+        googleKey: 'test-google-key',
+        underlyingModel: 'o3 high'
+      });
+
+      const result = engineWithO3.setupLLMParameters('Test prompt');
+
+      expect(result.model).toBe('o3');
+      expect(result.reasoning_effort).toBe('high');
+    });
+
+    it('should throw error when model lacks structured output support', () => {
+      const engineWithoutStructured = new QuantitativeEngineBrain({
+        openAIKey: 'test-key',
+        googleKey: 'test-google-key',
+        underlyingModel: 'o1-mini'
+      });
+
+      expect(() => {
+        engineWithoutStructured.setupLLMParameters('Test prompt');
+      }).toThrow('Unsupported LLM o1-mini it does support structured outputs which are required.');
+    });
+
+    it('should set system role to user and temperature to 1 when model lacks system mode', () => {
+      const engineWithoutSystemMode = new QuantitativeEngineBrain({
+        openAIKey: 'test-key',
+        googleKey: 'test-google-key',
+        underlyingModel: 'llama'
+      });
+
+      const result = engineWithoutSystemMode.setupLLMParameters('Test prompt');
+
+      expect(result.messages[0].role).toBe('system');
+      expect(result.temperature).toBe(0);
+    });
+
+    it('should set temperature to undefined when model lacks temperature support', () => {
+      const engineWithO3 = new QuantitativeEngineBrain({
+        openAIKey: 'test-key',
+        googleKey: 'test-google-key',
+        underlyingModel: 'o3'  // o3 model doesn't support temperature
+      });
+
+      const result = engineWithO3.setupLLMParameters('Test prompt');
+
+      expect(result.temperature).toBeUndefined();
+    });
+
+    it('should include background knowledge in messages when provided', () => {
+      const engineWithBackground = new QuantitativeEngineBrain({
+        openAIKey: 'test-key',
+        googleKey: 'test-google-key',
+        backgroundKnowledge: 'Important context information'
+      });
+
+      const result = engineWithBackground.setupLLMParameters('Test prompt');
+
+      const backgroundMessage = result.messages.find(m => m.content.includes('Important context information'));
+      expect(backgroundMessage).toBeDefined();
+      expect(backgroundMessage.role).toBe('user');
+    });
+
+    it('should include problem statement in messages when provided', () => {
+      const engineWithProblem = new QuantitativeEngineBrain({
+        openAIKey: 'test-key',
+        googleKey: 'test-google-key',
+        problemStatement: 'Create population dynamics model'
+      });
+
+      const result = engineWithProblem.setupLLMParameters('Test prompt');
+
+      const problemMessage = result.messages.find(m => m.content.includes('Create population dynamics model'));
+      expect(problemMessage).toBeDefined();
+    });
+
+    it('should include lastModel and assistant prompt when lastModel is provided', () => {
+      const lastModel = {
+        variables: [
+          { name: 'Population', type: 'stock', equation: '1000' }
+        ],
+        relationships: [
+          { from: 'A', to: 'B', polarity: '+' }
+        ]
+      };
+
+      const result = quantitativeEngine.setupLLMParameters('Test prompt', lastModel);
+
+      const assistantMessage = result.messages.find(m => m.role === 'assistant');
+      expect(assistantMessage).toBeDefined();
+      expect(assistantMessage.content).toContain('Population');
+      
+      const assistantPromptMessage = result.messages.find(m => 
+        m.role === 'user' && m.content.includes('consider the model which you have already')
+      );
+      expect(assistantPromptMessage).toBeDefined();
+    });
+
+    it('should not include assistant prompt when lastModel is not provided', () => {
+      const result = quantitativeEngine.setupLLMParameters('Test prompt');
+
+      const assistantMessage = result.messages.find(m => m.role === 'assistant');
+      expect(assistantMessage).toBeUndefined();
+
+      const assistantPromptMessage = result.messages.find(m => 
+        m.role === 'user' && m.content.includes('consider the model which you have already')
+      );
+      expect(assistantPromptMessage).toBeUndefined();
+    });
+
+    it('should always include feedback prompt in messages', () => {
+      const result = quantitativeEngine.setupLLMParameters('Test prompt');
+
+      const feedbackMessage = result.messages.find(m => 
+        m.content.includes('closed feedback loops')
+      );
+      expect(feedbackMessage).toBeDefined();
+      expect(feedbackMessage.role).toBe('user');
+    });
+
+    it('should handle custom prompts', () => {
+      const engineWithCustomPrompts = new QuantitativeEngineBrain({
+        openAIKey: 'test-key',
+        googleKey: 'test-google-key',
+        systemPrompt: 'Custom quantitative system prompt',
+        assistantPrompt: 'Custom quantitative assistant prompt',
+        feedbackPrompt: 'Custom quantitative feedback prompt'
+      });
+
+      const lastModel = { 
+        variables: [{ name: 'Test', type: 'variable', equation: '10' }],
+        relationships: [{ from: 'X', to: 'Y', polarity: '+' }] 
+      };
+      const result = engineWithCustomPrompts.setupLLMParameters('Test prompt', lastModel);
+
+      const systemMessage = result.messages[0];
+      expect(systemMessage.content).toBe('Custom quantitative system prompt');
+
+      const assistantPromptMessage = result.messages.find(m => 
+        m.content === 'Custom quantitative assistant prompt'
+      );
+      expect(assistantPromptMessage).toBeDefined();
+
+      const feedbackMessage = result.messages.find(m => 
+        m.content === 'Custom quantitative feedback prompt'
+      );
+      expect(feedbackMessage).toBeDefined();
+    });
+
+    it('should properly order messages in the conversation', () => {
+      const engineWithAll = new QuantitativeEngineBrain({
+        openAIKey: 'test-key',
+        googleKey: 'test-google-key',
+        backgroundKnowledge: 'Background info',
+        problemStatement: 'Problem to solve'
+      });
+
+      const lastModel = { 
+        variables: [{ name: 'Test', type: 'variable', equation: '10' }],
+        relationships: [{ from: 'A', to: 'B', polarity: '+' }] 
+      };
+      const result = engineWithAll.setupLLMParameters('User prompt', lastModel);
+
+      expect(result.messages[0].role).toBe('system');
+      expect(result.messages[1].role).toBe('user');
+      expect(result.messages[1].content).toContain('Background info');
+      expect(result.messages[2].role).toBe('system');
+      expect(result.messages[2].content).toContain('Problem to solve');
+      expect(result.messages[3].role).toBe('assistant');
+      expect(result.messages[4].role).toBe('user');
+      expect(result.messages[5].content).toBe('User prompt');
+      expect(result.messages[6].content).toContain('closed feedback loops');
+    });
+
+    it('should handle edge case with null lastModel', () => {
+      const result = quantitativeEngine.setupLLMParameters('Test prompt', null);
+
+      const assistantMessage = result.messages.find(m => m.role === 'assistant');
+      expect(assistantMessage).toBeUndefined();
+      expect(result.messages[result.messages.length - 2].content).toBe('Test prompt');
+    });
+
+    it('should handle edge case with undefined lastModel', () => {
+      const result = quantitativeEngine.setupLLMParameters('Test prompt', undefined);
+
+      const assistantMessage = result.messages.find(m => m.role === 'assistant');
+      expect(assistantMessage).toBeUndefined();
+      expect(result.messages[result.messages.length - 2].content).toBe('Test prompt');
+    });
+
+    it('should return all required parameters for OpenAI API call', () => {
+      const result = quantitativeEngine.setupLLMParameters('Test prompt');
+
+      expect(result).toHaveProperty('messages');
+      expect(result).toHaveProperty('model');
+      expect(result).toHaveProperty('response_format');
+      expect(result).toHaveProperty('temperature');
+      expect(result).toHaveProperty('reasoning_effort');
+
+      expect(Array.isArray(result.messages)).toBe(true);
+      expect(typeof result.model).toBe('string');
+    });
+  });
 });

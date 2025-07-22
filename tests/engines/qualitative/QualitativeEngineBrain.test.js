@@ -230,4 +230,199 @@ describe('QualitativeEngineBrain', () => {
       expect(result.relationships[1].to).toBe('fatigue');
     });
   });
+
+  describe('setupLLMParameters', () => {
+    it('should setup basic LLM parameters with default model', () => {
+      const userPrompt = 'Test prompt';
+      const result = qualitativeEngine.setupLLMParameters(userPrompt);
+
+      expect(result.model).toBe('gemini-2.5-flash');
+      expect(result.temperature).toBe(0);
+      expect(result.reasoning_effort).toBeUndefined();
+      expect(result.response_format).toBeDefined();
+      expect(result.messages).toBeInstanceOf(Array);
+      expect(result.messages.length).toBeGreaterThan(0);
+      expect(result.messages[result.messages.length - 2].content).toBe(userPrompt);
+    });
+
+    it('should handle o3-mini model with reasoning effort', () => {
+      const engineWithO3Mini = new QualitativeEngineBrain({
+        openAIKey: 'test-key',
+        googleKey: 'test-google-key',
+        underlyingModel: 'o3-mini high'
+      });
+
+      const result = engineWithO3Mini.setupLLMParameters('Test prompt');
+
+      expect(result.model).toBe('o3-mini');
+      expect(result.reasoning_effort).toBe('high');
+    });
+
+    it('should handle o3 model with reasoning effort', () => {
+      const engineWithO3 = new QualitativeEngineBrain({
+        openAIKey: 'test-key',
+        googleKey: 'test-google-key',
+        underlyingModel: 'o3 medium'
+      });
+
+      const result = engineWithO3.setupLLMParameters('Test prompt');
+
+      expect(result.model).toBe('o3');
+      expect(result.reasoning_effort).toBe('medium');
+    });
+
+    it('should add non-structured output prompt addition when model lacks structured output', () => {
+      const engineWithoutStructured = new QualitativeEngineBrain({
+        openAIKey: 'test-key',
+        googleKey: 'test-google-key',
+        underlyingModel: 'o1-mini'  // o1-mini doesn't support structured output
+      });
+
+      const result = engineWithoutStructured.setupLLMParameters('Test prompt');
+
+      const systemMessage = result.messages[0];
+      expect(systemMessage.content).toContain('You must respond in a very specific JSON format');
+      expect(result.response_format).toBeUndefined();
+    });
+
+    it('should set system role to user and temperature to 1 when model lacks system mode', () => {
+      const engineWithoutSystemMode = new QualitativeEngineBrain({
+        openAIKey: 'test-key',
+        googleKey: 'test-google-key',
+        underlyingModel: 'llama'
+      });
+
+      const result = engineWithoutSystemMode.setupLLMParameters('Test prompt');
+
+      expect(result.messages[0].role).toBe('system');
+      expect(result.temperature).toBe(0);
+    });
+
+    it('should set temperature to undefined when model lacks temperature support', () => {
+      const engineWithO1 = new QualitativeEngineBrain({
+        openAIKey: 'test-key',
+        googleKey: 'test-google-key',
+        underlyingModel: 'o1-mini'
+      });
+
+      const result = engineWithO1.setupLLMParameters('Test prompt');
+
+      expect(result.temperature).toBeUndefined();
+    });
+
+    it('should include background knowledge in messages when provided', () => {
+      const engineWithBackground = new QualitativeEngineBrain({
+        openAIKey: 'test-key',
+        googleKey: 'test-google-key',
+        backgroundKnowledge: 'Important context information'
+      });
+
+      const result = engineWithBackground.setupLLMParameters('Test prompt');
+
+      const backgroundMessage = result.messages.find(m => m.content.includes('Important context information'));
+      expect(backgroundMessage).toBeDefined();
+      expect(backgroundMessage.role).toBe('user');
+    });
+
+    it('should include problem statement in messages when provided', () => {
+      const engineWithProblem = new QualitativeEngineBrain({
+        openAIKey: 'test-key',
+        googleKey: 'test-google-key',
+        problemStatement: 'Solve world hunger'
+      });
+
+      const result = engineWithProblem.setupLLMParameters('Test prompt');
+
+      const problemMessage = result.messages.find(m => m.content.includes('Solve world hunger'));
+      expect(problemMessage).toBeDefined();
+    });
+
+    it('should include lastModel and assistant prompt when lastModel has relationships', () => {
+      const lastModel = {
+        relationships: [
+          { from: 'A', to: 'B', polarity: '+' }
+        ]
+      };
+
+      const result = qualitativeEngine.setupLLMParameters('Test prompt', lastModel);
+
+      const assistantMessage = result.messages.find(m => m.role === 'assistant');
+      expect(assistantMessage).toBeDefined();
+      expect(assistantMessage.content).toContain('"from": "A"');
+      
+      const assistantPromptMessage = result.messages.find(m => 
+        m.role === 'user' && m.content.includes('consider the model which you have already')
+      );
+      expect(assistantPromptMessage).toBeDefined();
+    });
+
+    it('should not include lastModel when it has no relationships', () => {
+      const lastModel = {
+        relationships: []
+      };
+
+      const result = qualitativeEngine.setupLLMParameters('Test prompt', lastModel);
+
+      const assistantMessage = result.messages.find(m => m.role === 'assistant');
+      expect(assistantMessage).toBeUndefined();
+    });
+
+    it('should include feedback prompt in messages', () => {
+      const result = qualitativeEngine.setupLLMParameters('Test prompt');
+
+      const feedbackMessage = result.messages.find(m => 
+        m.content.includes('closed feedback loops')
+      );
+      expect(feedbackMessage).toBeDefined();
+      expect(feedbackMessage.role).toBe('user');
+    });
+
+    it('should handle custom prompts', () => {
+      const engineWithCustomPrompts = new QualitativeEngineBrain({
+        openAIKey: 'test-key',
+        googleKey: 'test-google-key',
+        systemPrompt: 'Custom system prompt',
+        assistantPrompt: 'Custom assistant prompt',
+        feedbackPrompt: 'Custom feedback prompt'
+      });
+
+      const lastModel = { relationships: [{ from: 'X', to: 'Y', polarity: '+' }] };
+      const result = engineWithCustomPrompts.setupLLMParameters('Test prompt', lastModel);
+
+      const systemMessage = result.messages[0];
+      expect(systemMessage.content).toBe('Custom system prompt');
+
+      const assistantPromptMessage = result.messages.find(m => 
+        m.content === 'Custom assistant prompt'
+      );
+      expect(assistantPromptMessage).toBeDefined();
+
+      const feedbackMessage = result.messages.find(m => 
+        m.content === 'Custom feedback prompt'
+      );
+      expect(feedbackMessage).toBeDefined();
+    });
+
+    it('should properly order messages in the conversation', () => {
+      const engineWithAll = new QualitativeEngineBrain({
+        openAIKey: 'test-key',
+        googleKey: 'test-google-key',
+        backgroundKnowledge: 'Background info',
+        problemStatement: 'Problem to solve'
+      });
+
+      const lastModel = { relationships: [{ from: 'A', to: 'B', polarity: '+' }] };
+      const result = engineWithAll.setupLLMParameters('User prompt', lastModel);
+
+      expect(result.messages[0].role).toBe('system');
+      expect(result.messages[1].role).toBe('user');
+      expect(result.messages[1].content).toContain('Background info');
+      expect(result.messages[2].role).toBe('system');
+      expect(result.messages[2].content).toContain('Problem to solve');
+      expect(result.messages[3].role).toBe('assistant');
+      expect(result.messages[4].role).toBe('user');
+      expect(result.messages[5].content).toBe('User prompt');
+      expect(result.messages[6].content).toContain('closed feedback loops');
+    });
+  });
 });

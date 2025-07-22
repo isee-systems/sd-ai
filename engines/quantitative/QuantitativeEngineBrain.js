@@ -144,7 +144,7 @@ You will conduct a multistep process:
         return originalResponse;
     }
 
-    async generateModel(userPrompt, lastModel) {        
+    setupLLMParameters(userPrompt, lastModel) {
         //start with the system prompt
         let underlyingModel = this.#data.underlyingModel;
         let systemRole = this.#llmWrapper.model.systemModeUser;
@@ -204,15 +204,21 @@ You will conduct a multistep process:
         //give it the user prompt
         messages.push({ role: "user", content: userPrompt });
         messages.push({ role: "user", content: this.#data.feedbackPrompt }); //then have it try to close feedback
-        
-        //get what it thinks the relationships are with this information
-        const originalCompletion = await this.#llmWrapper.openAIAPI.chat.completions.create({
-            messages: messages,
+
+        return {
+            messages,
             model: underlyingModel,
             response_format: responseFormat,
             temperature: temperature,
             reasoning_effort: reasoningEffort
-        });
+        };
+    }
+
+    async generateModel(userPrompt, lastModel) {
+        const llmParams = this.setupLLMParameters(userPrompt, lastModel);
+        
+        //get what it thinks the relationships are with this information
+        const originalCompletion = await this.#llmWrapper.openAIAPI.chat.completions.create(llmParams);
 
         const originalResponse = originalCompletion.choices[0].message;
         if (originalResponse.refusal) {
