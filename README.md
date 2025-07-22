@@ -155,12 +155,24 @@ If you wish to run using the causal-chains engine you'll need to install the [Go
 ## Testing
 ### Unit Tests
 Unit tests are provided for:
-- All HTTP API routes in the `/routes/v1` folder - Tests cover authentication, parameter validation, response structure, and integration with actual engine implementations
-- Evaluation methods in `/evals/categories` - Tests cover causal relationship evaluation, conformance validation, and quantitative model assessment
+- **HTTP API routes** in `/routes/v1` folder:
+  - `engineParameters.test.js` - Validates that all engines return correct parameters
+  - `engineGenerate.test.js` - Tests model generation endpoints with authentication, parameter validation, and response structure
+  - `engines.test.js` - Tests engine listing and metadata endpoints
+- **Engine implementations** in `/engines` folder:
+  - `QuantitativeEngineBrain.test.js` - Tests quantitative model generation and LLM setup
+  - `QualitativeEngineBrain.test.js` - Tests qualitative diagram generation
+  - `SeldonBrain.test.js` - Tests discussion engine functionality
+- **Evaluation methods** in `/evals/categories` - Tests cover causal relationship evaluation, conformance validation, and quantitative model assessment
 
 Run tests with:
 ```bash
 npm test
+```
+
+Generate code coverage report with:
+```bash
+npm run test:coverage
 ```
 
 Tests are built using Jest and Supertest, and use the actual engine implementations (no mocking) to ensure real-world functionality.
