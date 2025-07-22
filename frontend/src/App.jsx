@@ -10,7 +10,7 @@ import GetInvolved from './pages/GetInvolved';
 
 function App() {
   return (
-    <Router basename="/sd-ai-evals">
+    <Router basename="/sd-ai">
       <Layout>
         <Routes>
           <Route path="/" element={<Home />} />
