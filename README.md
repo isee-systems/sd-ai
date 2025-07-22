@@ -146,6 +146,7 @@ AUTHENTICATION_KEY="my_secret_key" # only needed for securing publically accessi
 4. npm start
 5. (optional) npm run evals -- -e evals/experiments/careful.json
 6. (optional) npm test
+7. (optional) npm test:coverage
 
 We recommend VSCode using a launch.json for the Node type applications (you get a debugger, and hot-reloading)
 
