@@ -86,7 +86,7 @@ You will conduct a multistep process:
         }) >= 0;
     }
 
-    #processResponse(originalResponse) {
+    processResponse(originalResponse) {
         //console.log(JSON.stringify(originalResponse));
         //console.log(originalResponse);
         const responseHasVariable = (variable) => {
@@ -218,7 +218,7 @@ You will conduct a multistep process:
         if (originalResponse.refusal) {
             throw new ResponseFormatError(originalResponse.refusal);
         } else if (originalResponse.parsed) {
-            return this.#processResponse(originalResponse.parsed);
+            return this.processResponse(originalResponse.parsed);
         } else if (originalResponse.content) {
             let parsedObj = {variables: [], relationships: []};
             try {
@@ -226,7 +226,7 @@ You will conduct a multistep process:
             } catch (err) {
                 throw new ResponseFormatError("Bad JSON returned by underlying LLM");
             }
-            return this.#processResponse(parsedObj);
+            return this.processResponse(parsedObj);
         }
     }
 }

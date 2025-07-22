@@ -147,7 +147,7 @@ You will conduct a multistep process:
        
     }
 
-    #processResponse(originalResponse) {
+    processResponse(originalResponse) {
         let origRelationships = originalResponse.relationships || [];
 
         let relationships = origRelationships.map(relationship => { 
@@ -263,7 +263,7 @@ You will conduct a multistep process:
         if (originalResponse.refusal) {
             throw new ResponseFormatError(originalResponse.refusal);
         } else if (originalResponse.parsed) {
-            return this.#processResponse(originalResponse.parsed);
+            return this.processResponse(originalResponse.parsed);
         } else if (originalResponse.content) {
             let parsedObj = {relationships: []};
             try {
@@ -271,7 +271,7 @@ You will conduct a multistep process:
             } catch (err) {
                 throw new ResponseFormatError("Bad JSON returned by underlying LLM");
             }
-            return this.#processResponse(parsedObj);
+            return this.processResponse(parsedObj);
         }
     }
 }
