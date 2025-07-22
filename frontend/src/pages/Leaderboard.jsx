@@ -267,7 +267,7 @@ function Leaderboard() {
                             e.stopPropagation();
                             navigate(`/evals/${encodeURIComponent(leaderboardData.categoryFirstTests[category].category)}/${encodeURIComponent(leaderboardData.categoryFirstTests[category].group)}/${encodeURIComponent(leaderboardData.categoryFirstTests[category].testName)}`);
                           }}
-                          className="px-1.5 py-0.5 text-xs bg-blue-100 text-blue-600 hover:bg-blue-200 hover:text-blue-800 rounded transition-colors duration-200 whitespace-nowrap flex-shrink-0"
+                          className="px-1.5 py-0.5 text-xs bg-blue-100 text-blue-600 hover:bg-blue-200 hover:text-blue-800 rounded whitespace-nowrap flex-shrink-0"
                           title="View test details"
                         >
                           View

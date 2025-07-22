@@ -22,7 +22,7 @@ function Home() {
                 </p>
                 <Link 
                   to="/engines"
-                  className="inline-block px-6 py-3 bg-blue-600 text-white no-underline rounded-lg text-base font-semibold transition-colors duration-200 border-none cursor-pointer hover:bg-blue-700"
+                  className="inline-block px-6 py-3 bg-blue-600 text-white no-underline rounded-lg text-base font-semibold border-none cursor-pointer hover:bg-blue-700"
                 >
                   Explore Engines
                 </Link>
@@ -34,7 +34,7 @@ function Home() {
                 </p>
                 <Link 
                   to="/evals"
-                  className="inline-block px-6 py-3 bg-green-600 text-white no-underline rounded-lg text-base font-semibold transition-colors duration-200 border-none cursor-pointer hover:bg-green-700"
+                  className="inline-block px-6 py-3 bg-green-600 text-white no-underline rounded-lg text-base font-semibold border-none cursor-pointer hover:bg-green-700"
                 >
                   View Evaluations
                 </Link>
@@ -127,16 +127,16 @@ function Home() {
         {/* Partner Logos */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-8 sm:gap-10 mb-10 items-center justify-items-center">
           <div className="flex items-center justify-center p-4 bg-white rounded-lg shadow-sm min-h-[80px]">
-            <a href="https://www.buffalo.edu/ai-data-science.html" className="text-sm font-medium text-gray-600 text-center hover:text-blue-600 transition-colors" target="_blank" rel="noopener noreferrer">University of Buffalo</a>
+            <a href="https://www.buffalo.edu/ai-data-science.html" className="text-sm font-medium text-gray-600 text-center hover:text-blue-600" target="_blank" rel="noopener noreferrer">University of Buffalo</a>
           </div>
           <div className="flex items-center justify-center p-4 bg-white rounded-lg shadow-sm min-h-[80px]">
-            <a href="https://www.iseesystems.com" className="text-sm font-medium text-gray-600 text-center hover:text-blue-600 transition-colors" target="_blank" rel="noopener noreferrer">isee systems</a>
+            <a href="https://www.iseesystems.com" className="text-sm font-medium text-gray-600 text-center hover:text-blue-600" target="_blank" rel="noopener noreferrer">isee systems</a>
           </div>
           <div className="flex items-center justify-center p-4 bg-white rounded-lg shadow-sm min-h-[80px]">
-            <a href="https://skipdesigned.com/" className="text-sm font-medium text-gray-600 text-center hover:text-blue-600 transition-colors" target="_blank" rel="noopener noreferrer">Skip Designed</a>
+            <a href="https://skipdesigned.com/" className="text-sm font-medium text-gray-600 text-center hover:text-blue-600" target="_blank" rel="noopener noreferrer">Skip Designed</a>
           </div>
           <div className="flex items-center justify-center p-4 bg-white rounded-lg shadow-sm min-h-[80px]">
-            <a href="https://systemdynamics.org/" className="text-sm font-medium text-gray-600 text-center hover:text-blue-600 transition-colors" target="_blank" rel="noopener noreferrer">System Dynamics Society</a>
+            <a href="https://systemdynamics.org/" className="text-sm font-medium text-gray-600 text-center hover:text-blue-600" target="_blank" rel="noopener noreferrer">System Dynamics Society</a>
           </div>
         </div>
 
@@ -156,7 +156,7 @@ function Home() {
           </p>
           <Link 
             to="/get-involved"
-            className="inline-block px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white no-underline rounded-lg text-lg font-semibold transition-all duration-200 border-none cursor-pointer hover:from-blue-700 hover:to-purple-700 shadow-lg hover:shadow-xl transform hover:-translate-y-1"
+            className="inline-block px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white no-underline rounded-lg text-lg font-semibold border-none cursor-pointer hover:from-blue-700 hover:to-purple-700 shadow-lg hover:shadow-xl"
           >
             Learn How to Contribute
           </Link>

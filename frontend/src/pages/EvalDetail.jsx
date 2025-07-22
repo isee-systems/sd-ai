@@ -92,7 +92,7 @@ function EvalDetail() {
                   {navigation.previousGroup && (
                     <Link
                       to={navigation.previousGroup.url}
-                      className="inline-flex items-center px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors duration-200 text-sm font-medium"
+                      className="inline-flex items-center px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 text-sm font-medium"
                       title={`Go to group: ${navigation.previousGroup.name || 'Previous Group'}`}
                     >
                       <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -104,7 +104,7 @@ function EvalDetail() {
                   {navigation.previousTest && (
                     <Link
                       to={navigation.previousTest.url}
-                      className="inline-flex items-center px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors duration-200 text-sm"
+                      className="inline-flex items-center px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 text-sm"
                       title={`Go to test: ${navigation.previousTest.name || 'Previous Test'}`}
                     >
                       <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -130,7 +130,7 @@ function EvalDetail() {
                   {navigation.nextTest && (
                     <Link
                       to={navigation.nextTest.url}
-                      className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors duration-200 text-sm"
+                      className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
                       title={`Go to test: ${navigation.nextTest.name || 'Next Test'}`}
                     >
                       Next Test
@@ -142,7 +142,7 @@ function EvalDetail() {
                   {navigation.nextGroup && (
                     <Link
                       to={navigation.nextGroup.url}
-                      className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors duration-200 text-sm font-medium"
+                      className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium"
                       title={`Go to group: ${navigation.nextGroup.name || 'Next Group'}`}
                     >
                       Next Group
@@ -162,7 +162,7 @@ function EvalDetail() {
       <div className="p-5">
         {loading && (
           <div className="p-8 text-center text-gray-600">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <div className="rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
             Loading test details...
           </div>
         )}

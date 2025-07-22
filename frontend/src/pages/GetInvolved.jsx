@@ -40,7 +40,7 @@ function GetInvolved() {
                 <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <a 
                     href="https://groups.io/g/sd-ai/"
-                    className="inline-flex items-center justify-center px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors duration-200 shadow-md hover:shadow-lg"
+                    className="inline-flex items-center justify-center px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-md hover:shadow-lg"
                     target="_blank"
                     rel="noopener noreferrer"
                   >
@@ -48,7 +48,7 @@ function GetInvolved() {
                   </a>
                   <a 
                     href="https://www.buffalo.edu/ai-data-science/research/beams.html"
-                    className="inline-flex items-center justify-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors duration-200 shadow-md hover:shadow-lg"
+                    className="inline-flex items-center justify-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg shadow-md hover:shadow-lg"
                     target="_blank"
                     rel="noopener noreferrer"
                   >
@@ -84,7 +84,7 @@ function GetInvolved() {
                 <div className="mt-8">
                   <a 
                     href="https://github.com/UB-IAD/sd-ai"
-                    className="inline-flex items-center justify-center w-full px-6 py-3 bg-gray-900 hover:bg-gray-800 text-white font-semibold rounded-lg transition-colors duration-200 shadow-md hover:shadow-lg"
+                    className="inline-flex items-center justify-center w-full px-6 py-3 bg-gray-900 hover:bg-gray-800 text-white font-semibold rounded-lg shadow-md hover:shadow-lg"
                     target="_blank"
                     rel="noopener noreferrer"
                   >

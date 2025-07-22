@@ -71,7 +71,7 @@ function EvalsList() {
         {!loading && !error && evals.categories && (
           <div className="grid gap-6 md:grid-cols-2">
             {evals.categories.map((category, categoryIndex) => (
-              <div key={categoryIndex} className="bg-white rounded-lg shadow-md border border-gray-200 hover:shadow-lg transition-shadow duration-200 flex flex-col">
+              <div key={categoryIndex} className="bg-white rounded-lg shadow-md border border-gray-200 hover:shadow-lg flex flex-col">
                 <div className="p-6 flex-1">
                   <h3 className="text-xl font-bold mb-3 text-gray-800">
                     {category.name}
@@ -95,7 +95,7 @@ function EvalsList() {
                             className="text-sm font-semibold mb-2 text-gray-700 cursor-pointer flex items-center"
                           >
                             <svg 
-                              className={`w-3 h-3 mr-2 ${isExpanded ? 'rotate-90' : ''}`}
+                              className={`w-3 h-3 mr-2 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
                               fill="currentColor" 
                               viewBox="0 0 20 20"
                             >
@@ -127,7 +127,7 @@ function EvalsList() {
                     {category.firstTestUrl && (
                       <Link
                         to={category.firstTestUrl}
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-sm font-medium no-underline transition-colors inline-block"
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-sm font-medium no-underline inline-block"
                         title="Browse tests in this category"
                       >
                         Browse
@@ -138,7 +138,7 @@ function EvalsList() {
                         href={category.link}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="bg-gray-100 hover:bg-gray-200 text-gray-700 hover:text-gray-900 px-3 py-2 rounded text-sm font-medium no-underline transition-colors inline-block"
+                        className="bg-gray-100 hover:bg-gray-200 text-gray-700 hover:text-gray-900 px-3 py-2 rounded text-sm font-medium no-underline inline-block"
                         title="Read more about this evaluation category"
                       >
                         Learn More
@@ -149,7 +149,7 @@ function EvalsList() {
                         href={category.source}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="bg-gray-100 hover:bg-gray-200 text-gray-700 hover:text-gray-900 px-3 py-2 rounded text-sm font-medium no-underline transition-colors inline-block"
+                        className="bg-gray-100 hover:bg-gray-200 text-gray-700 hover:text-gray-900 px-3 py-2 rounded text-sm font-medium no-underline inline-block"
                         title="View source code on GitHub"
                       >
                         View Source

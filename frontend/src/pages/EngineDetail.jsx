@@ -295,7 +295,7 @@ function EngineDetail() {
                 <button
                   type="submit"
                   disabled={generating}
-                  className="bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white px-6 py-3 rounded font-medium transition-colors"
+                  className="bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white px-6 py-3 rounded font-medium"
                 >
                   {generating ? 'Generating...' : 'Submit'}
                 </button>

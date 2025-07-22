@@ -134,7 +134,7 @@ function EnginesList() {
                     {section.hasLeaderboard && (
                       <Link
                         to={`/leaderboard/${section.mode}`}
-                        className="border border-green-500 text-green-600 hover:bg-green-50 px-3 py-1 rounded text-sm font-medium no-underline transition-colors flex-shrink-0"
+                        className="border border-green-500 text-green-600 hover:bg-green-50 px-3 py-1 rounded text-sm font-medium no-underline flex-shrink-0"
                       >
                         Leaderboard
                       </Link>
@@ -143,7 +143,7 @@ function EnginesList() {
                   
                   <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                     {section.engines.map((engine, index) => (
-                      <div key={`${section.mode}-${engine.name}-${index}`} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                      <div key={`${section.mode}-${engine.name}-${index}`} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md">
                         <div className="flex items-center justify-between mb-3">
                           <h4 className="text-lg font-semibold text-gray-800">
                             {engine.name}
@@ -183,7 +183,7 @@ function EnginesList() {
                           <div className="flex gap-2">
                             <Link
                               to={`/engines/${engine.name}`}
-                              className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium no-underline transition-colors"
+                              className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium no-underline"
                             >
                               Try it
                             </Link>
@@ -192,7 +192,7 @@ function EnginesList() {
                                 href={engine.link}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="bg-gray-100 hover:bg-gray-200 text-gray-700 hover:text-gray-900 px-3 py-2 rounded text-sm font-medium no-underline transition-colors"
+                                className="bg-gray-100 hover:bg-gray-200 text-gray-700 hover:text-gray-900 px-3 py-2 rounded text-sm font-medium no-underline"
                                 title="Read more about this engine"
                               >
                                 Learn More
@@ -203,7 +203,7 @@ function EnginesList() {
                                 href={engine.source}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="bg-gray-100 hover:bg-gray-200 text-gray-700 hover:text-gray-900 px-3 py-2 rounded text-sm font-medium no-underline transition-colors"
+                                className="bg-gray-100 hover:bg-gray-200 text-gray-700 hover:text-gray-900 px-3 py-2 rounded text-sm font-medium no-underline"
                                 title="View source code on GitHub"
                               >
                                 View Source
