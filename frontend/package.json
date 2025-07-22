@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "homepage": "https://dgcoskip.github.io/sd-ai-evals",
+  "homepage": "https://ub-iad.github.io/sd-ai/",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

@@ -1,34 +1,28 @@
-# Frontend - CLD Relationship Comparison Tool
+# SD-AI Frontend
+A user friendly homepage for the project currently running at: [https://ub-iad.github.io/sd-ai/](https://ub-iad.github.io/sd-ai/)
 
-## Purpose
-- create a simple html, css, js (react) app w/ no server side component
-- for comparing a list of relationships found in a causal loop diagram side by side
+## Development Setup
+- this project is a frontend only React single page application 
+- it lives in it's own world in the `frontend` folder, it has it's own dependencies and `package.json` seperate from the rest of the `sd-ai` project
+- it uses the main `sd-ai` node application as it's backend
 
-## Deployment
-This app is deployed to GitHub Pages at: https://dgcoskip.github.io/sd-ai-evals
+### Getting Started
+- if you're going to be making heavy use of the backend please use your own local server instead of the server listed in `src/services/api.js`
+```bash
+npm install
+npm run dev
+```
 
-### Manual Deployment
-To deploy manually:
+The app will be available at `http://localhost:5173`
+
+## Production Setup 
+This frontend code is hosted by Github Pages. The backend is hosted by the Skip Designed (CoModel) team for the time being.
+
+
+### Deployment
 ```bash
 npm run deploy
 ```
-
-### Automatic Deployment
-The app is automatically deployed via GitHub Actions when changes are pushed to the main branch that affect the `frontend/` directory.
-
-## Details
-- interface is populated with as many horizontally layed out cards as the user desires
-- each card has a width of 500px
-- to the right of the last card will always be a button saying "add new cld"
-- each card has a bar at the top for title and actions
-- and a details section
-- details section can be in json mode or relationship mode
-    - create a simple button icon for toggling between these modes in the bar at the top
-- in json mode the json representation of the cld is pretty printed into a standard textarea
-- in the relationship mode each relationship in the cld is listed on a new line
-- by default relationships are order alphabetically by to and then by from
-- but user should be able to drag and drop relationships to create a new order (use the dnd kit, libary w/ sortable)
-- a relationship is two variables with a polarity in between
-- each relationship should be a seperate text input that turns into a div when not selected
-- the polarity should be a button in between each varaible that toggles from + to - when pressed 
-- editing text we should have aggressive tab complete options that automatically show prediction in greyed out text for other variables that have already been used
+- this will take the code you have running in your current git environment and compile it
+- then take that compiled code and create a new commit to `gh-pages` on github
+- github should then trigger a github pages redeploy to refresh the content
