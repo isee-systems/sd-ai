@@ -130,18 +130,19 @@ const extractFlow = function(flowSpec, possibleNames,  generatedModel) {
             
             // If variable has multiplication but not the rate directly,
             // check if any of the causes have an equation equal to the rate
-            if (hasMultiplication && !hasRate && variable.causes) {
+            if (hasMultiplication && !hasRate) {
                 //filter all of the relationships to find the relationships where the to is the current variable
                 const causeVariableNames = (generatedModel.relationships || []).filter(r => 
                     r.to === variable.name
-                ).map(r => r.from) //map those relationships into an array of from variable names (these are the causes)
+                ).map(r => r.from); //map those relationships into an array of from variable names (these are the causes)
                 
                 //take the cause variable names and turn them into full causeVariables
                 const causeVariables = causeVariableNames.map(name => {
                     return (generatedModel.variables || []).find(v => v.name === name);
-                });
+                }).filter(v => v !== undefined); // Filter out any undefined variables
+                
                 //check that one of the cause variables has an equation which is the rate
-                return causeVariables.some(cause => cause.equation === rateString);
+                return causeVariables.some(cause => cause && cause.equation === rateString);
             }
             
             return false;
