@@ -13,10 +13,33 @@ router.get("/", async (req, res) => {
         const engine = await import(`./../../engines/${dir}/engine.js`);
         const supportedModes = engine.default.supportedModes();
         if (supportedModes && supportedModes.length > 0) {
-            engines.push({
+            let description = null;
+            try {
+                description = engine.default.description ? engine.default.description() : null;
+            } catch (e) {
+                // If description method doesn't exist or fails, description stays null
+            }
+            
+            let link = null;
+            try {
+                link = engine.default.link ? engine.default.link() : null;
+            } catch (e) {
+                // If link method doesn't exist or fails, link stays null
+            }
+            
+            const engineData = {
                 name: dir,
                 supports: supportedModes,
-            });
+                description: description,
+                source: `https://github.com/UB-IAD/sd-ai/tree/main/engines/${dir}`,
+            };
+            
+            // Only include link if it exists
+            if (link) {
+                engineData.link = link;
+            }
+            
+            engines.push(engineData);
         }
     }
     

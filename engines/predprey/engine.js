@@ -3,6 +3,10 @@ class Engine {
 
     }
 
+    static description() {
+        return `Demonstration engine that doesn't use AI and always returns the same simple predator-prey balancing loop. Typically used for testing and understanding SD-AI structure.`;
+    }
+
     static supportedModes() {
         return ["cld"];
     }

@@ -1,9 +1,21 @@
 import express from 'express'
+import fs from 'fs'
+import path from 'path'
 import utils, { ModelCapabilities, ModelType, LLMWrapper } from './../../utils.js'
 
 const router = express.Router()
 
 router.post("/:engine/generate", async (req, res) => {
+    const enginePath = path.join(process.cwd(), 'engines', req.params.engine, 'engine.js');
+    
+    // Check if engine file exists
+    if (!fs.existsSync(enginePath)) {
+        return res.status(404).send({
+            success: false,
+            message: `Engine "${req.params.engine}" not found`
+        });
+    }
+
     const authenticationKey = process.env.AUTHENTICATION_KEY;
     const underlyingModel = req.body.underlyingModel || LLMWrapper.DEFAULT_MODEL;
     const capabilities = new ModelCapabilities(underlyingModel);
@@ -17,18 +29,17 @@ router.post("/:engine/generate", async (req, res) => {
 
     if (!hasApiKey && authenticationKey) {
         if (!req.header('Authentication') || req.header('Authentication') !== authenticationKey) {
-          return res.status(403).send({ "success": false, err: 'Unauthorized, please pass valid Authentication header.' });
+          return res.status(403).send({ "success": false, message: 'Unauthorized, please pass valid Authentication header.' });
         }
     }
 
-    const engine = await import(`./../../engines/${req.params.engine}/engine.js`);
+    const engine = await import(enginePath);
     const instance = new engine.default();
 
     const prompt = req.body.prompt;
-    let format = req.body.format;
   
     const engineSpecificParameters = Object.fromEntries(Object.entries(req.body).filter(([k, v]) => {
-       return ["prompt", "currentModel", "format"].indexOf(k) == -1
+       return ["prompt", "currentModel"].indexOf(k) == -1
     }));
 
     instance.additionalParameters().forEach((param) => {
@@ -72,15 +83,7 @@ router.post("/:engine/generate", async (req, res) => {
     };
 
     if ('model' in generateResponse) {
-      let model = generateResponse.model
-      if (format == "xmile") {
-        model = utils.convertToXMILE(model)
-      } else {
-        format = "sd-json";
-      }
-
-      response.format = format;
-      response.model = model;
+      response.model = generateResponse.model;
     }
     
     if ('output' in generateResponse) {

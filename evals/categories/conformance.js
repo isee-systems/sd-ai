@@ -27,6 +27,21 @@
  * @module categories/conformance
  */
 
+/**
+ * Returns the description for this category
+ * @returns {string} The description describing this category
+ */
+export const description = () => {
+    return `The conformance test assesses an LLM’s ability to follow user instructions by evaluating whether 
+it includes requested variables, adheres to specified numbers of variables, and produces the instructed number 
+of feedback loops in open-ended real-world contexts like the American Revolution and road rage, resulting in 
+18 tests that challenge its capacity to generate complexity-varying models.`;
+};
+
+export const link = () => {
+  return "https://arxiv.org/abs/2503.15580";
+}
+
 /** The javascript object containing the two cases for the American Revolution and Road Rage that we want to use to test conformance with  */
 const cases = {
   "American Revolution": {

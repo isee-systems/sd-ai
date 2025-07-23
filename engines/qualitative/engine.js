@@ -5,6 +5,15 @@ class Engine {
 
     }
 
+    static description() {
+        return `SD-AI's original and most popular engine for generating Causal Loop Diagrams (CLDs). 
+        Works by sending Google's Gemini Flash 2.5 LLM the user's request along with a set of systems thinking process descriptions and tips.`
+    }
+
+    static link() {
+        return "https://arxiv.org/abs/2503.15580";
+    }
+
     static supportedModes() {
         return ["cld"];
     }
@@ -13,7 +22,7 @@ class Engine {
         return [{
             name: "googleKey",
             type: "string",
-            required: true,
+            required: false,
             uiElement: "password",
             saveForUser: "global",
             label: "Google API Key",

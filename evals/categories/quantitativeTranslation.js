@@ -1,3 +1,13 @@
+/**
+ * Returns the description for this category
+ * @returns {string} The description describing this category
+ */
+export const description = () => {
+    return `The quantitative causal translation test evaluates an LLM’s ability to convert quantitative stock-and-flow 
+model descriptions with gibberish variables into simulating models by identifying underlying causal relationships 
+involving fixed, proportional, and interdependent flows.`;
+} 
+
 import pluralize from 'pluralize';
 import numberToWords from 'number-to-words';
 

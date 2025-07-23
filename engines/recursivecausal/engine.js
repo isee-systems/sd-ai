@@ -17,6 +17,13 @@ You must keep in mind the following:
 
 
 class RecursiveCausalEngine {
+  static description() {
+    return `
+    An engine inspired by Philippe Giabbanelli’s paper, Generative AI for Systems Thinking: 
+Can a GPT Question-Answering System Turn Text into the Causal Maps Produced by Human Readers? 
+It uses the "Brain" from the qualitative engine in a recursive fashion making this engine slower.` 
+  }
+
   static supportedModes() {
     return ["cld"];
   }
@@ -59,7 +66,7 @@ class RecursiveCausalEngine {
         name: "depth",
         type: "number",
         required: true,
-        uiElement: "lineedit",
+        uiElement: "textarea",
         saveForUser: "local",
         label: "Depth",
         description: "How many layers of cause/effect to explore",
