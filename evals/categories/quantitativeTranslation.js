@@ -164,7 +164,6 @@ const extractFlow = function(flowSpec, possibleNames,  generatedModel) {
 
 const compareNames = function(aiName, groundTruthName) {
     const value =  aiName.toLowerCase().includes(groundTruthName.toLowerCase());
-    //console.log("Comparing names... " + aiName + " " + groundTruthName + " " + value);
     return value;
 };
 

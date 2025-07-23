@@ -1,4 +1,5 @@
 import QualitativeEngineBrain from './QualitativeEngineBrain.js'
+import logger from '../../logger.js'
 
 class Engine {
     constructor() {
@@ -70,7 +71,7 @@ class Engine {
                 }
             };
         } catch(err) {
-            console.error(err);
+            logger.error(err);
             return { 
                 err: err.toString() 
             };

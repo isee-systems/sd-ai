@@ -1,6 +1,7 @@
 import express from 'express'
 import config from './config.js'
 import cors from 'cors'
+import logger from './logger.js'
 
 import v1Initialize from './routes/v1/initialize.js'
 import v1Engines from './routes/v1/engines.js'
@@ -29,5 +30,5 @@ app.use("/api/v1/evals", v1EvalsTestDetails);
 app.use("/api/v1/leaderboard", v1Leaderboard);
 
 app.listen(config.port, () => {
-  console.log(`ai-proxy-service listening on port ${config.port}`);
+  logger.log(`ai-proxy-service listening on port ${config.port}`);
 });

@@ -1,5 +1,6 @@
 import { LLMWrapper } from '../../utils.js';
 import QuantitativeEngineBrain from './QuantitativeEngineBrain.js'
+import logger from '../../logger.js'
 
 class Engine {
     constructor() {
@@ -68,7 +69,7 @@ Works by sending Google's Gemini Flash 2.5 LLM the user's request along with a s
                 returnValue.model.specs = response.specs;
             return returnValue;
         } catch(err) {
-            console.error(err);
+            logger.error(err);
             return { 
                 err: err.toString() 
             };

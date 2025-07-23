@@ -87,8 +87,8 @@ You will conduct a multistep process:
     }
 
     processResponse(originalResponse) {
-        //console.log(JSON.stringify(originalResponse));
-        //console.log(originalResponse);
+        //logger.log(JSON.stringify(originalResponse));
+        //logger.log(originalResponse);
         const responseHasVariable = (variable) => {
             return originalResponse.variables.findIndex((v) => {
                 return projectUtils.sameVars(v.name, variable);
@@ -136,8 +136,8 @@ You will conduct a multistep process:
             //go through all the flows -- make sure they appear in an inflows or outflows, and if they don't change them to type variable
             if (v.type === "flow" && !this.#isFlowUsed(v, originalResponse)) {
                 v.type = "variable";
-                //console.log("Changing type from flow to variable for... " + v.name);
-                //console.log(v);
+                //logger.log("Changing type from flow to variable for... " + v.name);
+                //logger.log(v);
             }
         });
 

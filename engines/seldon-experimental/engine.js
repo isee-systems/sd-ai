@@ -147,7 +147,7 @@ wants to experiment with the specific prompts passed to the LLM.`;
                 }
             };
         } catch(err) {
-            console.error(err);
+            logger.error(err);
             return { 
                 err: err.toString() 
             };

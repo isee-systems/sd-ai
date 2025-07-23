@@ -2,6 +2,7 @@ import express from 'express'
 import fs from 'fs'
 import path from 'path'
 import utils, { ModelCapabilities, ModelType, LLMWrapper } from './../../utils.js'
+import logger from './../../logger.js'
 
 const router = express.Router()
 
@@ -96,7 +97,7 @@ router.post("/:engine/generate", async (req, res) => {
 
     const isDebugging = typeof v8debug === 'object';
     if (isDebugging) {
-      console.log(response);
+      logger.log(response);
     }
   
     return res.send(response)
