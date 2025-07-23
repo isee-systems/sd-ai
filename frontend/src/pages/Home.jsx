@@ -127,7 +127,7 @@ function Home() {
         {/* Partner Logos */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-8 sm:gap-10 mb-10 items-center justify-items-center">
           <div className="flex items-center justify-center p-4 bg-white rounded-lg shadow-sm min-h-[80px]">
-            <a href="https://www.buffalo.edu/ai-data-science.html" className="text-sm font-medium text-gray-600 text-center hover:text-blue-600" target="_blank" rel="noopener noreferrer">University of Buffalo</a>
+            <a href="https://www.buffalo.edu/ai-data-science.html" className="text-sm font-medium text-gray-600 text-center hover:text-blue-600" target="_blank" rel="noopener noreferrer">University at Buffalo</a>
           </div>
           <div className="flex items-center justify-center p-4 bg-white rounded-lg shadow-sm min-h-[80px]">
             <a href="https://www.iseesystems.com" className="text-sm font-medium text-gray-600 text-center hover:text-blue-600" target="_blank" rel="noopener noreferrer">isee systems</a>

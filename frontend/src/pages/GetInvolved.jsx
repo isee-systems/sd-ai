@@ -31,7 +31,7 @@ function GetInvolved() {
                   <li className="flex items-start">
                     <span className="text-blue-600 mr-3 mt-1 text-lg">•</span>
                     <span className="leading-relaxed">
-                      Follow discussions on our mailing list and learn about our parent organization BEAMS run by Institute for Artificial Intelligence and Data Science at University of Buffalo
+                      Follow discussions on our mailing list and learn about our parent organization BEAMS run by Institute for Artificial Intelligence and Data Science at University at Buffalo
                     </span>
                   </li>
                 </ul>
