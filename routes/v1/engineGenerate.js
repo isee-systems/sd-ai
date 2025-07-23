@@ -29,7 +29,7 @@ router.post("/:engine/generate", async (req, res) => {
 
     if (!hasApiKey && authenticationKey) {
         if (!req.header('Authentication') || req.header('Authentication') !== authenticationKey) {
-          return res.status(403).send({ "success": false, err: 'Unauthorized, please pass valid Authentication header.' });
+          return res.status(403).send({ "success": false, message: 'Unauthorized, please pass valid Authentication header.' });
         }
     }
 

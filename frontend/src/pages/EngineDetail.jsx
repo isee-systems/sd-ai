@@ -1,34 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import api from '../services/api';
-
-// Auto-resizing textarea component
-function AutoResizeTextarea({ value, onChange, className, placeholder, required, id }) {
-  const textareaRef = useRef(null);
-
-  useEffect(() => {
-    const textarea = textareaRef.current;
-    if (textarea) {
-      // Reset height to auto to get the correct scrollHeight
-      textarea.style.height = 'auto';
-      // Set height to scrollHeight to expand to content
-      textarea.style.height = `${textarea.scrollHeight}px`;
-    }
-  }, [value]);
-
-  return (
-    <textarea
-      ref={textareaRef}
-      id={id}
-      value={value}
-      onChange={onChange}
-      className={`${className} resize-none overflow-hidden`}
-      placeholder={placeholder}
-      required={required}
-      style={{ minHeight: '2.5rem' }}
-    />
-  );
-}
+import AutoResizeTextarea from '../components/AutoResizeTextarea';
 
 function EngineDetail() {
   const { engineName } = useParams();
@@ -36,10 +9,7 @@ function EngineDetail() {
   const [parameters, setParameters] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [formData, setFormData] = useState({
-    prompt: '',
-    currentModel: null
-  });
+  const [formData, setFormData] = useState({});
   const [generating, setGenerating] = useState(false);
   const [result, setResult] = useState(null);
   const [generationError, setGenerationError] = useState(null);
@@ -65,27 +35,15 @@ function EngineDetail() {
         setEngine({ name: engineName });
         
         // Initialize form data with default values
-        const initialFormData = {
-          prompt: '',
-          currentModel: null
-        };
+        const initialFormData = {};
         
-        // Add default values for additional parameters
+        // Add default values for parameters if they exist
         params.forEach(param => {
           if (param.defaultValue !== undefined) {
             initialFormData[param.name] = param.defaultValue;
           } else {
-            // Set appropriate default based on type
-            switch (param.type) {
-              case 'boolean':
-                initialFormData[param.name] = false;
-                break;
-              case 'number':
-                initialFormData[param.name] = 0;
-                break;
-              default:
-                initialFormData[param.name] = '';
-            }
+            // Leave field blank if no default value is provided
+            initialFormData[param.name] = '';
           }
         });
         
@@ -120,16 +78,31 @@ function EngineDetail() {
     setResult(null);
 
     try {
-      // Process form data to handle JSON fields
+      // Process form data to handle non-string types 
       const processedFormData = { ...formData };
       
       parameters.forEach(param => {
-        if (param.type === 'json' && processedFormData[param.name]) {
-          try {
-            // Parse JSON string into object
-            processedFormData[param.name] = JSON.parse(processedFormData[param.name]);
-          } catch (err) {
-            throw new Error(`Invalid JSON in field "${param.label || param.name}": ${err.message}`);
+        const value = processedFormData[param.name];
+        
+        if (param.type === 'json') {
+          if (value && value.trim() !== '') {
+            try {
+              // Parse JSON string into object
+              processedFormData[param.name] = JSON.parse(value);
+            } catch (err) {
+              throw new Error(`Invalid JSON in field "${param.label || param.name}": ${err.message}`);
+            }
+          } else {
+            // Remove empty JSON fields from the request
+            delete processedFormData[param.name];
+          }
+        } else if (param.type === 'number') {
+          if (value !== '' && value !== undefined && value !== null) {
+            // Convert number strings to actual numbers
+            processedFormData[param.name] = Number(value);
+          } else {
+            // Remove empty number fields from the request
+            delete processedFormData[param.name];
           }
         }
       });
@@ -148,39 +121,15 @@ function EngineDetail() {
   const renderFormInput = (param) => {
     const value = formData[param.name] || '';
     const baseClassName = "w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent";
-    const hiddenClassName = param.uiElement === 'hidden' ? `${baseClassName} bg-gray-100` : baseClassName;
     
     switch (param.uiElement) {
-      case 'textarea':
-        return (
-          <AutoResizeTextarea
-            id={param.name}
-            value={value}
-            onChange={(e) => handleInputChange(param.name, e.target.value)}
-            className={hiddenClassName}
-            required={param.required}
-          />
-        );
-      
-      case 'password':
-        return (
-          <input
-            type="password"
-            id={param.name}
-            value={value}
-            onChange={(e) => handleInputChange(param.name, e.target.value)}
-            className={hiddenClassName}
-            required={param.required}
-          />
-        );
-      
       case 'combobox':
         return (
           <select
             id={param.name}
             value={value}
             onChange={(e) => handleInputChange(param.name, e.target.value)}
-            className={hiddenClassName}
+            className={baseClassName}
             required={param.required}
           >
             <option value="">Select an option</option>
@@ -192,40 +141,28 @@ function EngineDetail() {
           </select>
         );
       
-      case 'checkbox':
-        return (
-          <input
-            type="checkbox"
-            id={param.name}
-            checked={value === true || value === 'true'}
-            onChange={(e) => handleInputChange(param.name, e.target.checked)}
-            className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
-          />
-        );
-      
-      case 'hidden':
-      case 'lineedit':
       default:
-        // Handle JSON type fields with textarea for better editing
-        if (param.type === 'json') {
+        // Default to number input for number types, otherwise fallback to textarea
+        if (param.type === 'number') {
           return (
-            <AutoResizeTextarea
+            <input
+              type="number"
               id={param.name}
               value={value}
               onChange={(e) => handleInputChange(param.name, e.target.value)}
-              className={hiddenClassName}
+              className={baseClassName}
               required={param.required}
             />
           );
         }
         
+        // For all other types (including text, json, textarea, etc.), use textarea
         return (
-          <input
-            type={param.type === 'number' ? 'number' : 'text'}
+          <AutoResizeTextarea
             id={param.name}
             value={value}
             onChange={(e) => handleInputChange(param.name, e.target.value)}
-            className={hiddenClassName}
+            className={baseClassName}
             required={param.required}
           />
         );
@@ -277,7 +214,7 @@ function EngineDetail() {
                 <div key={param.name}>
                   <label htmlFor={param.name} className="block text-sm font-medium text-gray-700 mb-1">
                     <span className={param.required ? "font-bold" : ""}>
-                      {param.label || param.name}
+                      {param.name}
                     </span>
                     {param.required && <span className="text-red-500 ml-1">*</span>}
                     {param.description && (
@@ -313,10 +250,14 @@ function EngineDetail() {
                 <h3 className="font-semibold text-green-800 mb-2">Generation Result:</h3>
                 {result.success ? (
                   <div>
-                    <div className="bg-white p-3 rounded border">
-                      <pre className="text-sm text-gray-800 whitespace-pre-wrap">
-                        {JSON.stringify(result, null, 2)}
-                      </pre>
+                    <div className="bg-white rounded border">
+                      <AutoResizeTextarea
+                        value={JSON.stringify(result, null, 2)}
+                        onChange={() => {}} // Read-only
+                        className="w-full p-3 font-mono text-sm text-gray-800 border-0 bg-transparent focus:ring-0 focus:outline-none"
+                        readOnly
+                        minHeight="4rem"
+                      />
                     </div>
                   </div>
                 ) : (

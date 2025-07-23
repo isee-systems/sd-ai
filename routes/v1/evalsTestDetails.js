@@ -13,7 +13,7 @@ router.get("/:category/:group/:testname", async (req, res) => {
         if (!categoryModule.groups || !categoryModule.groups[group]) {
             return res.status(404).send({
                 success: false,
-                error: `Group '${group}' not found in category '${category}'`
+                message: `Group '${group}' not found in category '${category}'`
             })
         }
         
@@ -24,7 +24,7 @@ router.get("/:category/:group/:testname", async (req, res) => {
         if (!test) {
             return res.status(404).send({
                 success: false,
-                error: `Test '${testname}' not found in group '${group}' of category '${category}'`
+                message: `Test '${testname}' not found in group '${group}' of category '${category}'`
             })
         }
         
@@ -37,7 +37,7 @@ router.get("/:category/:group/:testname", async (req, res) => {
         // Handle case where category doesn't exist or other import errors
         return res.status(404).send({
             success: false,
-            error: `Category '${category}' not found or could not be loaded: ${error.message}`
+            message: `Category '${category}' not found or could not be loaded: ${error.message}`
         })
     }
 })

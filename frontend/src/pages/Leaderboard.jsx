@@ -27,19 +27,14 @@ function Leaderboard() {
       try {
         setLoading(true);
         setError(null);
-        
-        const config = leaderboardConfig[mode];
-        if (!config) {
-          throw new Error(`Invalid leaderboard mode: ${mode}`);
-        }
 
         // Fetch leaderboard data from API
         const response = await api.get(`/leaderboard/${mode}`);
-        const data = response.data;
+        const data = response.data.success ? response.data.data : response.data;
         setLeaderboardData(processLeaderboardData(data));
         
       } catch (err) {
-        setError(err.response?.data?.error || err.message || 'Failed to fetch leaderboard data');
+        setError(err.response?.data?.message || err.message || 'Failed to fetch leaderboard data');
         console.error('Error fetching leaderboard data:', err);
       } finally {
         setLoading(false);

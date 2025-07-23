@@ -16,7 +16,8 @@ router.get('/:mode', async (req, res) => {
     // Validate mode
     if (!['cld', 'sfd'].includes(mode)) {
       return res.status(400).json({
-        error: 'Invalid mode. Must be either "cld" or "sfd"'
+        success: false,
+        message: 'Invalid mode. Must be either "cld" or "sfd"'
       })
     }
     
@@ -26,7 +27,8 @@ router.get('/:mode', async (req, res) => {
     // Check if file exists
     if (!fs.existsSync(filePath)) {
       return res.status(404).json({
-        error: `Leaderboard data not found for mode: ${mode}`
+        success: false,
+        message: `Leaderboard data not found for mode: ${mode}`
       })
     }
     
@@ -34,11 +36,15 @@ router.get('/:mode', async (req, res) => {
     const fileContent = fs.readFileSync(filePath, 'utf8')
     const data = JSON.parse(fileContent)
     
-    res.json(data)
+    res.json({
+      success: true,
+      data: data
+    })
   } catch (error) {
     console.error('Error fetching leaderboard data:', error)
     res.status(500).json({
-      error: 'Failed to fetch leaderboard data',
+      success: false,
+      message: 'Failed to fetch leaderboard data',
       details: error.message
     })
   }
@@ -51,6 +57,7 @@ router.get('/', async (req, res) => {
     
     if (!fs.existsSync(resultsDir)) {
       return res.json({
+        success: true,
         modes: [],
         message: 'No leaderboard results available'
       })
@@ -67,6 +74,7 @@ router.get('/', async (req, res) => {
     }).filter(Boolean)
     
     res.json({
+      success: true,
       modes,
       available: modes.map(mode => ({
         mode,
@@ -77,7 +85,8 @@ router.get('/', async (req, res) => {
   } catch (error) {
     console.error('Error listing leaderboard modes:', error)
     res.status(500).json({
-      error: 'Failed to list leaderboard modes',
+      success: false,
+      message: 'Failed to list leaderboard modes',
       details: error.message
     })
   }
