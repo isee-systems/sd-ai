@@ -84,7 +84,7 @@ function EngineDetail() {
       parameters.forEach(param => {
         const value = processedFormData[param.name];
         
-        if (param.type === 'json') {
+        if (param.type === 'json' || param.type === 'feedbackJSON') {
           if (value && value.trim() !== '') {
             try {
               // Parse JSON string into object

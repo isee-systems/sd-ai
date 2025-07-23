@@ -129,7 +129,7 @@ wants to experiment with the specific prompts passed to the LLM.`;
             maxHeight: 100
         },{
             name: "feedbackContent",
-            type: "json",
+            type: "feedbackJSON",
             required: false,
             uiElement: "hidden",
             label: "JSON Description of feedback loops",
