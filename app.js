@@ -7,7 +7,7 @@ import v1Engines from './routes/v1/engines.js'
 import v1EngineParameters from './routes/v1/engineParameters.js'
 import v1EngineGenerate from './routes/v1/engineGenerate.js'
 import v1EvalsList from './routes/v1/evalsList.js'
-import v1EvalsTest from './routes/v1/evalsTest.js'
+import v1EvalsTestDetails from './routes/v1/evalsTestDetails.js'
 import v1Leaderboard from './routes/v1/leaderboard.js'
 
 const app = express()
@@ -25,7 +25,7 @@ app.use("/api/v1/engines", v1Engines);
 app.use("/api/v1/engines/", v1EngineParameters); //:engine/parameters
 app.use("/api/v1/engines/", v1EngineGenerate); //:engine/generate
 app.use("/api/v1/evals", v1EvalsList);
-app.use("/api/v1/evals", v1EvalsTest);
+app.use("/api/v1/evals", v1EvalsTestDetails);
 app.use("/api/v1/leaderboard", v1Leaderboard);
 
 app.listen(config.port, () => {
