@@ -30,7 +30,6 @@ describe('EngineParameters Route', () => {
       const paramNames = response.body.parameters.map(p => p.name);
       
       expect(paramNames).toContain('prompt');
-      expect(paramNames).toContain('format');
       expect(paramNames).toContain('currentModel');
     });
 
@@ -49,21 +48,6 @@ describe('EngineParameters Route', () => {
       expect(promptParam.description).toContain('Description of desired model');
     });
 
-    it('should return format parameter with correct properties', async () => {
-      const response = await request(app)
-        .get('/quantitative/parameters')
-        .expect(200);
-
-      const formatParam = response.body.parameters.find(p => p.name === 'format');
-      
-      expect(formatParam).toBeDefined();
-      expect(formatParam.type).toBe('string');
-      expect(formatParam.defaultValue).toBe('sd-json');
-      expect(formatParam.required).toBe(true);
-      expect(formatParam.options).toEqual([{value: "sd-json"}, {value: "xmile"}]);
-      expect(formatParam.uiElement).toBe('hidden');
-    });
-
     it('should return currentModel parameter with correct properties', async () => {
       const response = await request(app)
         .get('/quantitative/parameters')
@@ -74,7 +58,7 @@ describe('EngineParameters Route', () => {
       expect(currentModelParam).toBeDefined();
       expect(currentModelParam.type).toBe('json');
       expect(currentModelParam.required).toBe(false);
-      expect(currentModelParam.defaultValue).toBe('{variables: [], relationships: []}');
+      expect(currentModelParam.defaultValue).toBe('{"variables": [], "relationships": []}');
       expect(currentModelParam.uiElement).toBe('hidden');
     });
 
@@ -100,7 +84,6 @@ describe('EngineParameters Route', () => {
         
         const paramNames = response.body.parameters.map(p => p.name);
         expect(paramNames).toContain('prompt');
-        expect(paramNames).toContain('format');
         expect(paramNames).toContain('currentModel');
       }
     });
