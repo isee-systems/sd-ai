@@ -18,11 +18,17 @@ The app will be available at `http://localhost:5173`
 ## Production Setup 
 This frontend code is hosted by Github Pages. The backend is hosted by the Skip Designed (CoModel) team for the time being.
 
-
 ### Deployment
+- assuming you're mostly working off of your own fork of the project
+- checkout the most recent code on `main` branch of the ub-iad fork ` git checkout upstream && git pull upstream `
+  - if you don't have upstream avalaible locally you can add it:
+    - `git remote add upstream git@github.com:UB-IAD/sd-ai.git `
+    - ` git checkout -b upstream upstream/main `
 ```bash
-npm run deploy
+cd frontend
+npm run build
+npx gh-pages -d dist -o upstream
 ```
 - this will take the code you have running in your current git environment and compile it
-- then take that compiled code and create a new commit to `gh-pages` on github
+- then take that compiled code and create a new commit to `gh-pages` on github (you need to have permission to do this)
 - github should then trigger a github pages redeploy to refresh the content
