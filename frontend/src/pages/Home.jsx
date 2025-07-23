@@ -10,8 +10,10 @@ function Home() {
             SD-AI
           </h1>
           <p className="text-xl sm:text-2xl text-gray-600 max-w-4xl mx-auto mb-12 leading-relaxed"> 
-            SD-AI is a collection of open source AI tools (called engines) that assist with the system dynamics modeling process. 
-            It's the backbone of AI functionality for applications like <a href="https://www.iseesystems.com/store/products/stella-architect.aspx" className="text-blue-600 hover:underline">Stella</a> and <a href="https://comodel.io" className="text-blue-600 hover:underline">CoModel</a>.
+            SD-AI is a collection of open source AI tools (called engines) that assist with the dynamic modeling process.  
+            It's the backbone of AI functionality for applications like <a href="https://www.iseesystems.com/store/products/stella-architect.aspx" className="text-blue-600 hover:underline">Stella</a> and <a href="https://comodel.io" className="text-blue-600 hover:underline">CoModel</a>.  It was originally built to support System Dynamics but is being extended to other forms of modeling and simulation through the <a href="https://www.buffalo.edu/ai-data-science/research/beams.html" className="text-blue-600 hover:underline">BEAMS</a> Initiative.
+          </p>
+          <p className="text-xl sm:text-2xl text-gray-600 max-w-4xl mx-auto mb-12 leading-relaxed"> 
           </p>
           {/* Engines and Evaluations Introduction */}
           <div className="bg-gradient-to-r from-blue-50 to-green-50 p-8 sm:p-10 rounded-xl max-w-5xl mx-auto">
@@ -56,7 +58,7 @@ function Home() {
           <ul className="space-y-6 text-gray-600 leading-relaxed">
             <li className="flex items-start">
               <span className="text-blue-600 mr-3 mt-1">•</span>
-              <span>Provide a hub for state of the art AI modeling tools (<Link to="/engines" className="text-blue-600 hover:underline">engines</Link>) and benchmarks (<Link to="/evals" className="text-blue-600 hover:underline">evals</Link>) for system dynamics</span>
+              <span>Provide a hub for state of the art AI tools (<Link to="/engines" className="text-blue-600 hover:underline">engines</Link>) and benchmarks (<Link to="/evals" className="text-blue-600 hover:underline">evals</Link>) for dynamic modeling</span>
             </li>
             <li className="flex items-start">
               <span className="text-blue-600 mr-3 mt-1">•</span>
@@ -68,7 +70,7 @@ function Home() {
             </li>
             <li className="flex items-start">
               <span className="text-blue-600 mr-3 mt-1">•</span>
-              <span>Create standardized data formats that allow rapid integration of AI tools into current system dynamics tools and projects</span>
+              <span>Create standardized data formats that allow rapid integration of AI tools into current modeling tools and projects</span>
             </li>
             <li className="flex items-start">
               <span className="text-blue-600 mr-3 mt-1">•</span>
@@ -152,7 +154,7 @@ function Home() {
             Ready to Get Involved?
           </h2>
           <p className="text-base sm:text-lg text-gray-600 mb-8 max-w-2xl mx-auto leading-relaxed">
-            Join our diverse community of academics, industry experts, and software vendors shaping the future of AI-powered system dynamics.
+            Join our diverse community of academics, industry experts, and software vendors shaping the future of AI-powered modeling.
           </p>
           <Link 
             to="/get-involved"
