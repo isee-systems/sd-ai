@@ -312,6 +312,20 @@ export const evaluate = function(generatedResponse, groundTruth) {
 };
 
 /**
+ * Returns the description for this category
+ * @returns {string} The description describing this category
+ */
+export const description = () => {
+    return `The causal translation test evaluates an LLM’s ability to convert plain English into structured causal graphs 
+by generating synthetic gibberish-based ground truths with defined causal relationships and testing the model on extracting 
+single links, single loops, and overlapping loops from these systematically constructed descriptions.`
+};
+
+export const link = () => {
+  return "https://arxiv.org/abs/2503.15580";
+}
+
+/**
  * The groups of tests to be evaluated as a part of this category
  */
 export const groups = {

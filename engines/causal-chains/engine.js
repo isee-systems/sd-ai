@@ -18,6 +18,11 @@ class Engine {
 
     static DEFAULT_MODEL = 'o4-mini';
 
+    static description() {
+        return `This engine improves conformance to user instructions about feedback complexity by prompting the LLM to 
+focus on chains of relationships, rather then individual links.`
+    }
+
     static supportedModes() {
         // check that the ./causal-chains Go binary exists
         try {
