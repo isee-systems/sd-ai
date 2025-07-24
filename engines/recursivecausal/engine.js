@@ -67,7 +67,7 @@ It uses the "Brain" from the qualitative engine in a recursive fashion making th
         name: "depth",
         type: "number",
         required: true,
-        uiElement: "textarea",
+        uiElement: "lineedit",
         saveForUser: "local",
         label: "Depth",
         description: "How many layers of cause/effect to explore",
