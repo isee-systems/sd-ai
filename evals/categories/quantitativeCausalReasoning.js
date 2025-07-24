@@ -16,6 +16,8 @@
  * @module categories/quantitativeCausalReasoning
  */
 
+import utils from '../../utils.js';
+
 // Note: pluralize import removed as it's not used in this evaluation
 
 /** generic prompt used for all tests */
@@ -31,26 +33,6 @@ const problemStatement = "I'm trying to understand the key causal mechanisms tha
  * @param {Array} expectedProcesses List of key processes that should be present
  * @returns {Object} Test case with prompt, parameters, and expectations
  */
-/**
- * Normalizes a variable name for case-insensitive and whitespace/underscore-insensitive comparison
- * @param {string} name The variable name to normalize
- * @returns {string} Normalized name (lowercase, spaces and underscores removed)
- */
-const normalizeVariableName = function(name) {
-    return name.toLowerCase().replace(/[\s_-]/g, '');
-};
-
-/**
- * Checks if a variable name matches the expected name using flexible matching
- * @param {string} variableName The variable name from the generated model
- * @param {string} expectedName The expected variable name
- * @returns {boolean} True if names match
- */
-const variableNameMatches = function(variableName, expectedName) {
-    const normalizedVariable = normalizeVariableName(variableName);
-    const normalizedExpected = normalizeVariableName(expectedName);
-    return normalizedVariable.includes(normalizedExpected) || normalizedExpected.includes(normalizedVariable);
-};
 
 const generateTest = function(name, timeUnit, backgroundKnowledge, expectedProcesses) {
     return {
@@ -82,7 +64,7 @@ const processIsPresent = function(process, generatedModel) {
         for (const stockName of process.requiredStocks) {
             const stock = variables.find(v => 
                 v.type === 'stock' && 
-                variableNameMatches(v.name, stockName)
+                utils.evalsVariableNameMatches(v.name, stockName)
             );
             if (!stock) {
                 return false;
@@ -95,7 +77,7 @@ const processIsPresent = function(process, generatedModel) {
         for (const flowName of process.requiredFlows) {
             const flow = variables.find(v => 
                 v.type === 'flow' && 
-                variableNameMatches(v.name, flowName)
+                utils.evalsVariableNameMatches(v.name, flowName)
             );
             if (!flow) {
                 return false;
@@ -107,8 +89,8 @@ const processIsPresent = function(process, generatedModel) {
     if (process.requiredRelationships) {
         for (const reqRel of process.requiredRelationships) {
             const relationshipExists = relationships.some(rel => {
-                const fromMatches = variables.some(v => variableNameMatches(v.name, reqRel.from) && variableNameMatches(rel.from, v.name));
-                const toMatches = variables.some(v => variableNameMatches(v.name, reqRel.to) && variableNameMatches(rel.to, v.name));
+                const fromMatches = variables.some(v => utils.evalsVariableNameMatches(v.name, reqRel.from) && utils.evalsVariableNameMatches(rel.from, v.name));
+                const toMatches = variables.some(v => utils.evalsVariableNameMatches(v.name, reqRel.to) && utils.evalsVariableNameMatches(rel.to, v.name));
                 const polarityMatches = !reqRel.polarity || rel.polarity === reqRel.polarity;
                 return fromMatches && toMatches && polarityMatches;
             });
@@ -122,7 +104,7 @@ const processIsPresent = function(process, generatedModel) {
     if (process.requiredVariables) {
         for (const keyVar of process.requiredVariables) {
             const variable = variables.find(v => {
-                const nameMatches = variableNameMatches(v.name, keyVar.name);
+                const nameMatches = utils.evalsVariableNameMatches(v.name, keyVar.name);
                 const typeMatches = !keyVar.type || v.type === keyVar.type;
                 return nameMatches && typeMatches;
             });
@@ -185,7 +167,7 @@ export const evaluate = function(generatedResponse, expectations) {
             // Identify what's missing
             if (process.requiredStocks) {
                 const missingStocks = process.requiredStocks.filter(stockName => 
-                    !variables.some(v => v.type === 'stock' && variableNameMatches(v.name, stockName))
+                    !variables.some(v => v.type === 'stock' && utils.evalsVariableNameMatches(v.name, stockName))
                 );
                 if (missingStocks.length > 0) {
                     missingElements.push(`stocks: ${missingStocks.join(', ')}`);
@@ -194,7 +176,7 @@ export const evaluate = function(generatedResponse, expectations) {
             
             if (process.requiredFlows) {
                 const missingFlows = process.requiredFlows.filter(flowName =>
-                    !variables.some(v => v.type === 'flow' && variableNameMatches(v.name, flowName))
+                    !variables.some(v => v.type === 'flow' && utils.evalsVariableNameMatches(v.name, flowName))
                 );
                 if (missingFlows.length > 0) {
                     missingElements.push(`flows: ${missingFlows.join(', ')}`);
@@ -204,8 +186,8 @@ export const evaluate = function(generatedResponse, expectations) {
             if (process.requiredRelationships) {
                 const missingRelationships = process.requiredRelationships.filter(reqRel => {
                     return !relationships.some(rel => {
-                        const fromMatches = variables.some(v => variableNameMatches(v.name, reqRel.from) && variableNameMatches(rel.from, v.name));
-                        const toMatches = variables.some(v => variableNameMatches(v.name, reqRel.to) && variableNameMatches(rel.to, v.name));
+                        const fromMatches = variables.some(v => utils.evalsVariableNameMatches(v.name, reqRel.from) && utils.evalsVariableNameMatches(rel.from, v.name));
+                        const toMatches = variables.some(v => utils.evalsVariableNameMatches(v.name, reqRel.to) && utils.evalsVariableNameMatches(rel.to, v.name));
                         const polarityMatches = !reqRel.polarity || rel.polarity === reqRel.polarity;
                         return fromMatches && toMatches && polarityMatches;
                     });
@@ -221,7 +203,7 @@ export const evaluate = function(generatedResponse, expectations) {
             if (process.requiredVariables) {
                 const missingVars = process.requiredVariables.filter(keyVar =>
                     !variables.some(v => {
-                        const nameMatches = variableNameMatches(v.name, keyVar.name);
+                        const nameMatches = utils.evalsVariableNameMatches(v.name, keyVar.name);
                         const typeMatches = !keyVar.type || v.type === keyVar.type;
                         return nameMatches && typeMatches;
                     })
@@ -255,7 +237,9 @@ export const groups = {
         generateTest(
             "Epidemic spread model with key epidemiological processes",
             "day",
-            `Epidemiologists understand that infectious disease spread follows well-established patterns that typically evolve over daily intervals. 
+            `Please rely on the following expert knowledge as much as possible when creating your model.
+            
+            Epidemiologists understand that infectious disease spread follows well-established patterns that typically evolve over daily intervals. 
             The susceptible population becomes exposed when they come into contact with infectious individuals. 
             After an incubation period, exposed individuals become infectious and can transmit the disease. 
             Infectious individuals then recover and develop immunity, or in some cases may die from the disease.
@@ -288,7 +272,9 @@ export const groups = {
         generateTest(
             "Healthcare capacity model with resource constraints",
             "week",
-            `Healthcare systems have limited capacity that affects patient outcomes during health crises that unfold over weekly cycles.
+            `Please rely on the following expert knowledge as much as possible when creating your model.
+            
+            Healthcare systems have limited capacity that affects patient outcomes during health crises that unfold over weekly cycles.
             Patients requiring care enter the system through admissions, but bed capacity limits how many can be treated.
             When demand exceeds capacity, patients face delays or are turned away, potentially worsening their condition.
             Healthcare workers are the key resource - they can treat patients but also become sick themselves,
@@ -323,7 +309,9 @@ export const groups = {
         generateTest(
             "Traffic congestion model with induced demand",
             "year",
-            `Transportation engineers recognize that building more roads often fails to reduce congestion due to induced demand effects that emerge over annual planning cycles.
+            `Please rely on the following expert knowledge as much as possible when creating your model.
+            
+            Transportation engineers recognize that building more roads often fails to reduce congestion due to induced demand effects that emerge over annual planning cycles.
             When new road capacity is added, it initially reduces travel time and congestion. However, this improvement
             attracts new drivers who switch from other routes, times, or modes of transport. Some people who previously
             didn't make trips now find driving more attractive. Over time, this increased traffic volume can return

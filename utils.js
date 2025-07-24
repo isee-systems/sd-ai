@@ -37,6 +37,31 @@ utils.sameVars = function(a,b) {
     return utils.caseFold(a) === utils.caseFold(b);
 }
 
+// EVALUATION UTILITIES - These functions are specifically designed for evaluation categories
+
+/**
+ * Normalizes a variable name for case-insensitive and whitespace/underscore-insensitive comparison
+ * Used in evaluation categories to match variable names flexibly
+ * @param {string} name The variable name to normalize
+ * @returns {string} Normalized name (lowercase, spaces and underscores removed)
+ */
+utils.evalsNormalizeVariableName = function(name) {
+    return name.toLowerCase().replace(/[\s_-]/g, '');
+};
+
+/**
+ * Checks if a variable name matches the expected name using flexible matching
+ * Used in evaluation categories to compare generated variable names with expected names
+ * @param {string} variableName The variable name from the generated model
+ * @param {string} expectedName The expected variable name
+ * @returns {boolean} True if names match
+ */
+utils.evalsVariableNameMatches = function(variableName, expectedName) {
+    const normalizedVariable = utils.evalsNormalizeVariableName(variableName);
+    const normalizedExpected = utils.evalsNormalizeVariableName(expectedName);
+    return normalizedVariable.includes(normalizedExpected) || normalizedExpected.includes(normalizedVariable);
+};
+
 
 
 export default utils; 
