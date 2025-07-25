@@ -29,7 +29,6 @@ We welcome Github Issues and Pull Requests from everyone! Here are some ideas fo
     - list all engines
     - list parameters required/supported by each specific engine
     - generating a model using a specific engine
-- models can be returned in sd-json (see below) or XMILE
 - all engines can be automatically tested for quality using `evals`
 
 ## Engine
@@ -39,7 +38,7 @@ We welcome Github Issues and Pull Requests from everyone! Here are some ideas fo
 
 ### Additional Parameters
 - defined via `additionalParameters()` function on each engine class
-- format specifically crafted to allow your engine to be automatically incorporated into the Stella GUI
+- format specifically crafted to allow your engine to be automatically incorporated into the Stella GUI and the sd-ai website
 
 #### API Example
 - `GET` `/api/v1/engines/:engine/parameters`
@@ -74,7 +73,6 @@ We welcome Github Issues and Pull Requests from everyone! Here are some ideas fo
 ```
 {
     "prompt": "", # Requested model or changes to model to be provided to the AI
-    "format": "xmile", # The return type for the information. Either sd-json or xmile, default is sd-json",
     "currentModel": { "relationships": [], "variables": []} # Optional sd-json representation of the current model
     ....
     # additionalParameters given by `/api/v1/:engine/parameters`
@@ -84,7 +82,6 @@ We welcome Github Issues and Pull Requests from everyone! Here are some ideas fo
 ```
 {
     success: <bool>,
-    format: <string>,
     model: {variables: [], relationships: [], specs?: {} },
     supportingInfo?: {} # only provided if supported by engine
 }
