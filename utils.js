@@ -169,7 +169,7 @@ export class LLMWrapper {
       {label: "GPT-4.1-mini", value: 'gpt-4.1-mini'},
       {label: "GPT-4.1-nano", value: 'gpt-4.1-nano'},
       {label: "Gemini 2.5-flash", value: 'gemini-2.5-flash'},
-      {label: "Gemini 2.5-flash-lite", value: 'gemini-2.5-flash-lite-preview-06-17'},
+      {label: "Gemini 2.5-flash-lite", value: 'gemini-2.5-flash-lite'},
       {label: "Gemini 2.5-pro", value: 'gemini-2.5-pro'},
       {label: "Gemini 2.0", value: 'gemini-2.0-flash'},
       {label: "Gemini 2.0-Lite", value: 'gemini-2.0-flash-lite'},
