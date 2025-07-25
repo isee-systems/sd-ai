@@ -104,7 +104,7 @@ It ensures the AI’s responses align with the intended user experience, such as
                 uiElement: "textarea",
                 saveForUser: "local",
                 label: "Background Knowledge",
-                description: "Background information you want the OpenAI model to consider when generating a diagram for you",
+                description: "Background information you want the underlying model to consider when generating a diagram for you",
                 minHeight: 100
             }
         ]);

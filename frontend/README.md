@@ -24,6 +24,8 @@ This frontend code is hosted by Github Pages. The backend is hosted by the Skip 
   - if you don't have upstream avalaible locally you can add it:
     - `git remote add upstream git@github.com:UB-IAD/sd-ai.git `
     - ` git checkout -b upstream upstream/main `
+- Contact Davidson @ SKIP to update the production website backend
+
 ```bash
 cd frontend
 npm run build
