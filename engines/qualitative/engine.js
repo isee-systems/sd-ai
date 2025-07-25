@@ -50,8 +50,13 @@ class Engine {
         }];
     }
 
+    manipulateParameters(parameters) {
+        return parameters;
+    }
+    
     async generate(prompt, currentModel, parameters) {
         try {
+            parameters = this.manipulateParameters(parameters);
             let brain = new QualitativeEngineBrain(parameters);
             const response = await brain.generateDiagram(prompt, currentModel);
             const variables =  [...new Set([...response.relationships.map( e => e.from),...response.relationships.map( e => e.to )])].map((v)=> {

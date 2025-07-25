@@ -81,6 +81,7 @@ describe('Engines Route', () => {
         'predprey', 
         'qualitative-experimental',
         'qualitative',
+        'qualitative-zero',
         'quantitative-experimental', 
         'quantitative',
         'recursivecausal',
