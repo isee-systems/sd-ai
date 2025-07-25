@@ -86,9 +86,9 @@ You will conduct a multistep process:
         }) >= 0;
     }
 
-    #processResponse(originalResponse) {
-        //console.log(JSON.stringify(originalResponse));
-        //console.log(originalResponse);
+    processResponse(originalResponse) {
+        //logger.log(JSON.stringify(originalResponse));
+        //logger.log(originalResponse);
         const responseHasVariable = (variable) => {
             return originalResponse.variables.findIndex((v) => {
                 return projectUtils.sameVars(v.name, variable);
@@ -136,15 +136,15 @@ You will conduct a multistep process:
             //go through all the flows -- make sure they appear in an inflows or outflows, and if they don't change them to type variable
             if (v.type === "flow" && !this.#isFlowUsed(v, originalResponse)) {
                 v.type = "variable";
-                //console.log("Changing type from flow to variable for... " + v.name);
-                //console.log(v);
+                //logger.log("Changing type from flow to variable for... " + v.name);
+                //logger.log(v);
             }
         });
 
         return originalResponse;
     }
 
-    async generateModel(userPrompt, lastModel) {        
+    setupLLMParameters(userPrompt, lastModel) {
         //start with the system prompt
         let underlyingModel = this.#data.underlyingModel;
         let systemRole = this.#llmWrapper.model.systemModeUser;
@@ -204,21 +204,27 @@ You will conduct a multistep process:
         //give it the user prompt
         messages.push({ role: "user", content: userPrompt });
         messages.push({ role: "user", content: this.#data.feedbackPrompt }); //then have it try to close feedback
-        
-        //get what it thinks the relationships are with this information
-        const originalCompletion = await this.#llmWrapper.openAIAPI.chat.completions.create({
-            messages: messages,
+
+        return {
+            messages,
             model: underlyingModel,
             response_format: responseFormat,
             temperature: temperature,
             reasoning_effort: reasoningEffort
-        });
+        };
+    }
+
+    async generateModel(userPrompt, lastModel) {
+        const llmParams = this.setupLLMParameters(userPrompt, lastModel);
+        
+        //get what it thinks the relationships are with this information
+        const originalCompletion = await this.#llmWrapper.openAIAPI.chat.completions.create(llmParams);
 
         const originalResponse = originalCompletion.choices[0].message;
         if (originalResponse.refusal) {
             throw new ResponseFormatError(originalResponse.refusal);
         } else if (originalResponse.parsed) {
-            return this.#processResponse(originalResponse.parsed);
+            return this.processResponse(originalResponse.parsed);
         } else if (originalResponse.content) {
             let parsedObj = {variables: [], relationships: []};
             try {
@@ -226,7 +232,7 @@ You will conduct a multistep process:
             } catch (err) {
                 throw new ResponseFormatError("Bad JSON returned by underlying LLM");
             }
-            return this.#processResponse(parsedObj);
+            return this.processResponse(parsedObj);
         }
     }
 }

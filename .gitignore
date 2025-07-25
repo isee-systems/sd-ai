@@ -5,6 +5,9 @@
 /*_results.json
 /*_in_progress.jsonl
 
+#code coverage report
+coverage/
+
 # Node.js dependencies
 node_modules/
 

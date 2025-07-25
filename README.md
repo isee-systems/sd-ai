@@ -17,14 +17,14 @@ We welcome Github Issues and Pull Requests from everyone! Here are some ideas fo
 - **Techy folks**
    - prompt engineering recommendations surfaced by using "Advanced" Assistant in Stella
 - **Peeps comfortable with programming**
-    - refinement of the `default` (our state of the art) engine or contribution of a brand new AI engine
-    - add or refine our [evals](#using-evals) used to measure model performance according to [BEAMS](https://www.buffalo.edu/ai-data-science/research/beams.html) goals
+    - refinement of existing engines (like `qualitative`, `quantitative`, or `seldon`) or contribution of a brand new AI engine
+    - add or refine our [evals](#evals) used to measure model performance according to [BEAMS](https://www.buffalo.edu/ai-data-science/research/beams.html) goals
 
 # Architecture and Data Structures 
 - sd-ai is a NodeJS Express app with simple JSON-encoded HTTP API
 - all AI functionality in sd-ai is implemented as an "engine"
 - an engine is a javascript class that can implement ai functionality using any libraries/apis supported by javascript
-    - `/engines` folder contains examples including the simplest possible engine: `predprey` and the current state of the art engine: `default`
+    - `/engines` folder contains examples including the simplest possible engine: `predprey` and engines like `qualitative`, `quantitative`, and `seldon`
 - sd-ai wraps engines to provides endpoints to:
     - list all engines
     - list parameters required/supported by each specific engine
@@ -138,22 +138,49 @@ We welcome Github Issues and Pull Requests from everyone! Here are some ideas fo
 1. fork this repo and git clone your fork locally 
 2. create an `.env` file at the top level which has the following keys:
 ```
-OPENAI_API_KEY="sk-asdjkshd" # if you're doing work with `default` or `advanced` engine or any engine that uses the LLMWrapper class in utils.js 
-GOOGLE_API_KEY="asdjkshd" # if you're doing work with `advanced` using any of the supported gemini engines 
+OPENAI_API_KEY="sk-asdjkshd" # if you're doing work with engines that use the LLMWrapper class in utils.js (quantitative, qualitative, seldon, etc.) 
+GOOGLE_API_KEY="asdjkshd" # if you're doing work with engines using Gemini models (causal-chains, seldon, quantitative, qualitative) 
 AUTHENTICATION_KEY="my_secret_key" # only needed for securing publically accessible deployments. Requires client pass an Authentication header matching this value. e.g. `curl -H "Authentication: my_super_secret_value_in_env_file"` to the engine generate request only
 ```
 3. npm install 
 4. npm start
-5. (optional) npm run evals -- -e evals/experiments/careful.json 
+5. (optional) npm run evals -- -e evals/experiments/careful.json
+6. (optional) npm test
+7. (optional) npm test:coverage
 
 We recommend VSCode using a launch.json for the Node type applications (you get a debugger, and hot-reloading)
 
 If you wish to run using the causal-chains engine you'll need to install the [Go toolchain](https://go.dev/doc/install) onto your PATH.
+
+## Testing
+### Unit Tests
+Unit tests are provided for:
+- **HTTP API routes** in `/routes/v1` folder:
+  - `engineParameters.test.js` - Validates that all engines return correct parameters
+  - `engineGenerate.test.js` - Tests model generation endpoints with authentication, parameter validation, and response structure
+  - `engines.test.js` - Tests engine listing and metadata endpoints
+- **Engine implementations** in `/engines` folder:
+  - `QuantitativeEngineBrain.test.js` - Tests quantitative model generation and LLM setup
+  - `QualitativeEngineBrain.test.js` - Tests qualitative diagram generation
+  - `SeldonBrain.test.js` - Tests discussion engine functionality
+- **Evaluation methods** in `/evals/categories` - Tests cover causal relationship evaluation, conformance validation, and quantitative model assessment
+
+Run tests with:
+```bash
+npm test
+```
+
+Generate code coverage report with:
+```bash
+npm run test:coverage
+```
+
+Tests are built using Jest and Supertest, and use the actual engine implementations (no mocking) to ensure real-world functionality.
 
 ## Evals
 - checkout the [Evals README](evals/README.md)
 
   
 # Inspiration and Related Work
-- https://github.com/bear96/System-Dynamics-Bot served as departure point the `default` prompts
+- https://github.com/bear96/System-Dynamics-Bot served as departure point for engine prompt development
 - [CoModel](https://comodel.io) created by the team at [Skip Designed](https://skipdesigned.com/) to use Generative AI in their CBSD work

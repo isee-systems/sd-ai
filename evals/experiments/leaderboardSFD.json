@@ -35,7 +35,6 @@
     },
     "categories": {
         "quantitativeTranslation": true,
-        "causalTranslation": true,
-        "conformance": true
+        "quantitativeCausalReasoning": true
     }
 }

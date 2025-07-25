@@ -8,6 +8,7 @@ import util from 'node:util';
 const promiseExec = util.promisify(exec);
 
 import {LLMWrapper} from "../../utils.js";
+import logger from "../../logger.js";
 
 const __filename = fileURLToPath(import.meta.url); // get the resolved path to the file
 const __dirname = path.dirname(__filename); // get the name of the directory
@@ -33,8 +34,8 @@ focus on chains of relationships, rather then individual links.`
                 return ["cld"];
             }
         } catch (err) {
-            console.log("Error checking supporting modes on causal-chains...");
-            console.log(err);
+            logger.log("Error checking supporting modes on causal-chains...");
+            logger.log(err);
             // fine to fallthrough to the return below
         }
 
@@ -114,12 +115,12 @@ focus on chains of relationships, rather then individual links.`
             tempDir = await fs.mkdtemp(path.join(tmpdir(), 'sd-ai-causal-chains-'));
             // get the absolute path to this temp file
             const inputPath = path.resolve(path.join(tempDir, 'data.json'));
-            // console.log(`input path is ${inputPath}`);
+            // logger.log(`input path is ${inputPath}`);
             await fs.writeFile(inputPath, JSON.stringify(input));
             const { stdout, stderr } = await promiseExec(`${__dirname}/causal-chains ${inputPath}`, {cwd: tempDir});
             return JSON.parse(stdout.toString());
         } catch (err) {
-            console.log(`causal-chains returned non-zero exit code: ${err.status}`);
+            logger.log(`causal-chains returned non-zero exit code: ${err.status}`);
             if (err.stderr) {
                 return {
                  err: err.stderr.toString(),

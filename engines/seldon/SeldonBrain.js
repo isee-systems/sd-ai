@@ -34,7 +34,7 @@ As the world's best System Dynamics Modeler, you will consider and apply the Sys
  
  {behaviorContent}`
 
-  static DEFAULT_FEEDBACK_PROMPT = `I want your response to consider all of the feedback loops in the model which you have already so helpfully given to us. Remember, a dominant feedback loop or set of feedback loops is when one or more feedback loops together of the same polarity add up to explain more than 50% of the model's behavior.  When determining which feedback loops are dominant you're trying to find the smallest number of feedback loops that add up to at least 50% with the same polarity.
+  static DEFAULT_FEEDBACK_PROMPT = `I want your response to consider all of the feedback loops in the model which you have already so helpfully given to us. There are no other feedback loops in the model that matter besides these. Remember, a dominant feedback loop or set of feedback loops is when one or more feedback loops together of the same polarity add up to explain more than 50% of the model's behavior.  When determining which feedback loops are dominant you're trying to find the smallest number of feedback loops that add up to at least 50% with the same polarity.
  
  {feedbackContent}`
 
@@ -96,7 +96,7 @@ As the world's best System Dynamics Modeler, you will consider and apply the Sys
         return result;
     }
 
-    async converse(userPrompt, lastModel) {        
+    setupLLMParameters(userPrompt, lastModel) {
         //start with the system prompt
         let underlyingModel = this.#data.underlyingModel;
         let systemRole = this.#llmWrapper.model.systemModeUser;
@@ -162,14 +162,20 @@ As the world's best System Dynamics Modeler, you will consider and apply the Sys
 
         //give it the user prompt
         messages.push({ role: "user", content: userPrompt });
-        
-        //get its response
-        const originalCompletion = await this.#llmWrapper.openAIAPI.chat.completions.create({
-            messages: messages,
+
+        return {
+            messages,
             model: underlyingModel,
             temperature: temperature,
             reasoning_effort: reasoningEffort
-        });
+        };
+    }
+
+    async converse(userPrompt, lastModel) {
+        const llmParams = this.setupLLMParameters(userPrompt, lastModel);
+        
+        //get its response
+        const originalCompletion = await this.#llmWrapper.openAIAPI.chat.completions.create(llmParams);
 
         const originalResponse = originalCompletion.choices[0].message;
         if (originalResponse.refusal) {
