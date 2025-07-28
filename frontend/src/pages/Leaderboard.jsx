@@ -271,7 +271,7 @@ function Leaderboard() {
                     ),
                     selector: row => row[category] || 0,
                     sortable: true,
-                    format: row => row[category] ? row[category].toFixed(3) : 'N/A',
+                    format: row => row[category].toFixed(3),
                     minWidth: '200px',
                     wrap: true,
                   })),
@@ -352,27 +352,26 @@ function Leaderboard() {
           <div className="mb-6 sm:mb-8">
             <h2 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 text-gray-800">Performance vs. Speed Curve</h2>
             <div className="bg-white p-2 sm:p-4 border border-gray-200 rounded-lg overflow-hidden">
-              <div className="w-full" style={{ minHeight: '400px' }}>
+              <div className="w-full" style={{ minHeight: '500px' }}>
                 <Plot
                   data={[
                     {
                       x: leaderboardData.engines.map(e => e.score),
                       y: leaderboardData.engines.map(e => e.speed),
-                      text: leaderboardData.engines.map(e => `${e.engineName} (${e.llmModel})`),
+                      text: leaderboardData.engines.map(e => e.engineName === 'qualitative-zero' ? `${e.llmModel}` : `${e.engineName} (${e.llmModel})`),
                       mode: 'markers+text',
                       type: 'scatter',
-                      textposition: 'top center',
+                      textposition: 'right center',
                       marker: { 
                         size: 12,
                         opacity: 0.7,
+                        color: leaderboardData.engines.map(e => e.engineName === 'qualitative-zero' ? 'rgba(102, 102, 102, 0.8)' : 'rgba(186, 72, 72, 0.82)'),
                         line: {
-                          width: 1,
-                          color: 'rgba(0,0,0,0.3)'
+                          width: 0,
                         }
                       },
                       textfont: {
                         size: 10,
-                        color: 'rgba(0,0,0,0.8)'
                       }
                     }
                   ]}
@@ -392,13 +391,14 @@ function Leaderboard() {
                         text: 'Speed (total seconds)',
                         standoff: 20
                       },
+                      type: 'log',
                       showgrid: true,
                       gridcolor: 'rgba(0,0,0,0.1)'
                     },
                     margin: { 
-                      t: 40, 
+                      t: 10,
                       r: 30, 
-                      b: 80, 
+                      b: 40, 
                       l: 80 
                     },
                     font: {
@@ -417,7 +417,7 @@ function Leaderboard() {
                     displaylogo: false,
                     modeBarButtonsToRemove: ['pan2d', 'lasso2d', 'select2d', 'resetScale2d']
                   }}
-                  style={{ width: '100%', height: '100%' }}
+                  style={{ width: '100%', height: '800px' }}
                   useResizeHandler={true}
                 />
               </div>
