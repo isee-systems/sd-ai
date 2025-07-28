@@ -1,24 +1,7 @@
 # sd-ai
-Fully open source web service that generates causal loop diagrams from user prompts. This service supports the AI functionality found in [Stella](https://www.iseesystems.com/store/products/stella-architect.aspx) (v3.8.0 or greater) and [CoModel](https://comodel.io).
+Open source repository for the [SD-AI Project](https://ub-iad.github.io/sd-ai/). 
 
-# Goals
-- provide pathways for folks with different levels of technical skill to get involved in refining best practices for using LLMs in System Dynamics work
-- provide a centralized location for the current state of the art for using LLMs in SD work
-- provide a flexible framework to support immediate integration of new AI concepts into existing SD applications
-- begin to support AI generation of quantitative SD models
-- easily support swapping out OpenAI for other LLM vendors or even generate models without using LLMs
-
-# Get Involved
-Join the discussion on the [sd-ai groups.io](https://groups.io/g/sd-ai/)<br/><br/> 
-We welcome Github Issues and Pull Requests from everyone! Here are some ideas for how to support this work:
-- **Anyone with an SD background**
-    - feedback on your experience building CLDs in either Stella (using AI Assistant) or CoModel (using Copilot)
-    - join [BEAMS](https://www.buffalo.edu/ai-data-science/research/beams.html) to steer our strategy for evaluating the accuracy, safety and bias of sd-ai models
-- **Techy folks**
-   - prompt engineering recommendations surfaced by using "Advanced" Assistant in Stella
-- **Peeps comfortable with programming**
-    - refinement of existing engines (like `qualitative`, `quantitative`, or `seldon`) or contribution of a brand new AI engine
-    - add or refine our [evals](#evals) used to measure model performance according to [BEAMS](https://www.buffalo.edu/ai-data-science/research/beams.html) goals
+Contains the engines used by [Stella](https://www.iseesystems.com/store/products/stella-architect.aspx) & [CoModel](https://comodel.io), evaluations used to test those engines and a frontend used to explore those evaluations and engines.
 
 # Architecture and Data Structures 
 - sd-ai is a NodeJS Express app with simple JSON-encoded HTTP API
