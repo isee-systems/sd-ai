@@ -1,4 +1,4 @@
-# sd-ai
+# SD-AI
 Open source repository for the [SD-AI Project](https://ub-iad.github.io/sd-ai/). 
 
 Contains the engines used by [Stella](https://www.iseesystems.com/store/products/stella-architect.aspx) & [CoModel](https://comodel.io), evaluations used to test those engines and a frontend used to explore those evaluations and engines.
