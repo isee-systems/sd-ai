@@ -11,6 +11,9 @@ class QualitativeZero extends Engine {
     static description() {
         return `This engine is for benchmarking purposes. This uses the structured output mechanism of the Qualitative engine, but with no other prompting.  This engine is supposed to represent the "out of the box" bare-minimum performance of LLMs.`; 
     }
+    static link() {
+        return null
+    }
 
     static supportedModes() {
         return ["cld"];

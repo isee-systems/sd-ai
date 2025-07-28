@@ -33,13 +33,6 @@
             }
         },
 
-        "qualitative-zero-gpt-3.5-turbo": {
-            "engine": "qualitative-zero",
-            "additionalParameters": {
-                "underlyingModel": "gpt-3.5-turbo"
-            }
-        },
-
         "qualitative-zero-gpt-4.1-nano": {
             "engine": "qualitative-zero",
             "additionalParameters": {
