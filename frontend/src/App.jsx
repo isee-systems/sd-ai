@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route } from 'react-router-dom';
 import Layout from './components/Layout';
 import Home from './pages/Home';
 import EvalsList from './pages/EvalsList';
@@ -10,7 +10,7 @@ import GetInvolved from './pages/GetInvolved';
 
 function App() {
   return (
-    <Router basename="/sd-ai">
+    <Router basename="/">
       <Layout>
         <Routes>
           <Route path="/" element={<Home />} />
