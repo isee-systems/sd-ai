@@ -128,17 +128,50 @@ function Home() {
         
         {/* Partner Logos */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-8 sm:gap-10 mb-10 items-center justify-items-center">
-          <div className="flex items-center justify-center p-4 bg-white rounded-lg shadow-sm min-h-[80px]">
-            <a href="https://www.buffalo.edu/ai-data-science.html" className="text-sm font-medium text-gray-600 text-center hover:text-blue-600" target="_blank" rel="noopener noreferrer">University at Buffalo</a>
+          <div className="flex items-center justify-center min-h-[80px]">
+            <a href="https://www.buffalo.edu/ai-data-science.html" target="_blank" rel="noopener noreferrer" aria-label="University at Buffalo">
+              <img 
+                src="https://www.buffalo.edu/v-fea3d69c5514d109f47d42a0d9913643/etc.clientlibs/wci/components/block/header/clientlibs/resources/ub-logo-blue-stacked-group.svg" 
+                alt="University at Buffalo logo" 
+                className="h-12 sm:h-16 object-contain mx-auto"
+                style={{ maxWidth: '120px' }}
+              />
+            </a>
           </div>
-          <div className="flex items-center justify-center p-4 bg-white rounded-lg shadow-sm min-h-[80px]">
-            <a href="https://www.iseesystems.com" className="text-sm font-medium text-gray-600 text-center hover:text-blue-600" target="_blank" rel="noopener noreferrer">isee systems</a>
+          <div className="flex items-center justify-center min-h-[80px]">
+            <a href="https://www.iseesystems.com" target="_blank" rel="noopener noreferrer" aria-label="isee systems">
+              <img
+                src="https://iseesystems.com/images/logos/isee-side.svg"
+                alt="isee systems logo"
+                className="h-10 sm:h-14 object-contain mx-auto"
+                style={{ maxWidth: '120px' }}
+              />
+            </a>
           </div>
-          <div className="flex items-center justify-center p-4 bg-white rounded-lg shadow-sm min-h-[80px]">
-            <a href="https://skipdesigned.com/" className="text-sm font-medium text-gray-600 text-center hover:text-blue-600" target="_blank" rel="noopener noreferrer">Skip Designed</a>
+          <div className="flex items-center justify-center min-h-[80px]">
+            <a href="https://skipdesigned.com/" target="_blank" rel="noopener noreferrer" aria-label="Skip Designed">
+              <span className="flex flex-col items-center gap-1" style={{ width: '70px' }}>
+                <svg version="1.1" id="Layer_1" xmlns="http://www.w3.org/2000/svg" xmlnsXlink="http://www.w3.org/1999/xlink" x="0px" y="0px" viewBox="0 0 153.5 185.2" style={{ width: '100%', height: '60px' }} xmlSpace="preserve">
+                  <defs>
+                    <linearGradient id="SVGID_1_" gradientUnits="userSpaceOnUse" x1="0" y1="92.6076" x2="153.5396" y2="92.6076">
+                      <stop offset="0.001221955" stopColor="#EB008B" />
+                      <stop offset="1" stopColor="#262261" />
+                    </linearGradient>
+                  </defs>
+                  <path className="st0" fill="url(#SVGID_1_)" d="M152.6,127.9L152.4,3c0.7-0.2,1.1-0.8,1.1-1.5c0-0.8-0.7-1.5-1.5-1.5c-0.8,0-1.5,0.7-1.5,1.5c0,0,0,0.1,0,0.1 l-40.4,27.5c-0.2-0.1-0.4-0.2-0.6-0.2c-0.6,0-1,0.5-1,1c0,0.4,0.3,0.8,0.7,1v16.5c-0.1,0-0.1,0-0.2,0.1l-18.9-29 c0.2-0.2,0.3-0.5,0.3-0.7c0-0.7-0.6-1.3-1.3-1.3c-0.5,0-1,0.3-1.2,0.8l-4.9,0c-0.1-0.1-0.2-0.1-0.3-0.1c-0.2,0-0.4,0.2-0.5,0.4 L41,51.8c-0.2-0.2-0.5-0.3-0.8-0.3c-0.8,0-1.4,0.6-1.4,1.4c0,0.6,0.3,1.1,0.8,1.3l0,32.6c-1.2,0.2-2.1,1.2-2.1,2.4 c0,0.4,0.1,0.8,0.3,1.2L1,131.2c-0.1,0-0.1,0-0.2,0c-0.5,0-0.8,0.4-0.8,0.8c0,0.5,0.4,0.8,0.8,0.8c0,0,0,0,0.1,0l32,50.4 c-0.2,0.2-0.3,0.5-0.3,0.8c0,0.7,0.5,1.2,1.2,1.2c0.5,0,0.9-0.3,1.1-0.8l4.1,0c0.2,0.4,0.5,0.7,1,0.7c0.6,0,1.1-0.5,1.1-1.1 c0-0.2,0-0.3-0.1-0.4l41.6-42c0.1,0,0.1,0,0.2,0c0.5,0,0.9-0.4,0.9-0.9c0-0.3-0.2-0.6-0.5-0.8v-7c0.1,0,0.1,0,0.2-0.1l20.2,26.4 c-0.1,0.1-0.1,0.3-0.1,0.4c0,0.6,0.5,1,1,1c0.4,0,0.8-0.3,1-0.6l2.8,0c0.1,0.6,0.7,1,1.3,1c0.7,0,1.3-0.6,1.3-1.3 c0-0.2,0-0.3-0.1-0.5l40.9-29.5c0.2,0.1,0.4,0.2,0.6,0.2c0.6,0,1.1-0.5,1.1-1.1C153.3,128.4,153,128.1,152.6,127.9z M39,183.7 l-4.1,0c-0.2-0.5-0.6-0.8-1.1-0.8c0,0-0.1,0-0.1,0L4.3,136.8l35,46.5C39.1,183.3,39,183.5,39,183.7z M39.4,183.1l-36.1-48l-1.7-2.7 c0.1-0.1,0.1-0.3,0.1-0.4c0-0.1,0-0.2-0.1-0.3l36.7-40.7c0.3,0.3,0.8,0.5,1.3,0.6l0,91.4C39.5,183.1,39.5,183.1,39.4,183.1z  M40.4,54.4c0.1,0,0.2,0,0.2,0l41.4,76c-0.1,0-0.1,0.1-0.2,0.1L41.9,90.7c0.3-0.4,0.5-0.9,0.5-1.5c0-1.2-0.9-2.2-2.1-2.4L40.4,54.4z  M81.9,141.1L40.4,183c0,0,0,0-0.1,0l0-91.4c0.5-0.1,1-0.3,1.3-0.7l40.4,49.1c-0.2,0.2-0.3,0.4-0.3,0.6 C81.9,140.9,81.9,141,81.9,141.1z M82.4,140c0,0-0.1,0-0.1,0.1L41.8,90.9c0,0,0,0,0,0l39.9,39.8c-0.2,0.3-0.4,0.6-0.4,1 c0,0.6,0.4,1.2,1,1.3V140z M82.4,130.2c-0.1,0-0.2,0-0.3,0.1l-41.4-76c0.5-0.2,0.9-0.7,0.9-1.3c0-0.2,0-0.4-0.1-0.6l40.9-34V130.2z  M87.9,18c0.1,0.6,0.6,1,1.2,1c0.1,0,0.3,0,0.4-0.1l18.9,29c0,0,0,0-0.1,0.1L83.2,18L87.9,18z M108.2,159.3l-2.8,0 c-0.2-0.4-0.5-0.6-1-0.6c-0.1,0-0.2,0-0.3,0.1l-18.6-24.3l23.4,24.1C108.5,158.7,108.3,159,108.2,159.3z M109,158.5l-24.3-25.1 l-0.8-1c0.2-0.2,0.2-0.5,0.2-0.8c0-0.7-0.5-1.2-1.1-1.4V18.1l25.1,30c-0.2,0.3-0.3,0.6-0.3,0.9c0,0.7,0.5,1.4,1.2,1.6L109,158.5 C109,158.5,109,158.5,109,158.5z M110,31.2l41.5,96.1l-41.3-76.8c0.6-0.2,1-0.8,1-1.5c0-0.8-0.5-1.4-1.2-1.6V31.2z M151.1,128.9 c0,0.1,0,0.2,0,0.3l-40.9,29.5c-0.1-0.1-0.3-0.1-0.4-0.2l0-107.9c0.1,0,0.1,0,0.2,0l41.6,77.4C151.3,128.2,151.1,128.5,151.1,128.9z  M110,30.9c0.4-0.2,0.6-0.5,0.6-0.9c0-0.1,0-0.1,0-0.2l40.2-27.4c0.2,0.3,0.5,0.5,0.9,0.6l0.2,124.8L110,30.9z" />
+                </svg>
+                <span className="text-center w-full" style={{width: 150, color: "#545255"}}>SKIP DESIGNED</span>
+              </span>
+            </a>
           </div>
-          <div className="flex items-center justify-center p-4 bg-white rounded-lg shadow-sm min-h-[80px]">
-            <a href="https://systemdynamics.org/" className="text-sm font-medium text-gray-600 text-center hover:text-blue-600" target="_blank" rel="noopener noreferrer">System Dynamics Society</a>
+          <div className="flex items-center justify-center min-h-[80px]">
+            <a href="https://systemdynamics.org/" target="_blank" rel="noopener noreferrer" aria-label="System Dynamics Society">
+              <img
+                src="https://b2104009.smushcdn.com/2104009/wp-content/uploads/2023/04/logo-vertical-web-01-1.png?lossy=2&strip=1&avif=1"
+                alt="System Dynamics Society logo"
+                className="h-14 sm:h-20 object-contain mx-auto"
+              />
+            </a>
           </div>
         </div>
 
