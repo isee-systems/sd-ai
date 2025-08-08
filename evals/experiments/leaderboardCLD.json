@@ -47,6 +47,27 @@
             }
         },
 
+        "qualitative-zero-gpt-5": {
+            "engine": "qualitative-zero",
+            "additionalParameters": {
+                "underlyingModel": "gpt-5"
+            }
+        },
+
+        "qualitative-zero-gpt-5-mini": {
+            "engine": "qualitative-zero",
+            "additionalParameters": {
+                "underlyingModel": "gpt-5-mini"
+            }
+        },
+
+        "qualitative-zero-gpt-5-nano": {
+            "engine": "qualitative-zero",
+            "additionalParameters": {
+                "underlyingModel": "gpt-5-nano"
+            }
+        },
+
         "qualitative-zero-o4-mini": {
             "engine": "qualitative-zero",
             "additionalParameters": {

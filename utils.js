@@ -87,7 +87,7 @@ export class ModelCapabilities {
 
       this.hasStructuredOutput = modelName !== 'o1-mini';
       this.hasSystemMode = modelName !== 'o1-mini';
-      this.hasTemperature = !modelName.startsWith('o');
+      this.hasTemperature = !modelName.startsWith('o') && !modelName.startsWith('gpt-5');
       if (modelName.includes('gemini') || modelName.includes('llama')) {
           this.systemModeUser = 'system';
       } else {
@@ -162,9 +162,11 @@ export class LLMWrapper {
   }
 
   static MODELS = [
+      {label: "GPT-5", value: 'gpt-5'},
+      {label: "GPT-5-mini", value: 'gpt-5-mini'},
+      {label: "GPT-5-nano", value: 'gpt-5-nano'},
       {label: "GPT-4o", value: 'gpt-4o'},
       {label: "GPT-4o-mini", value: 'gpt-4o-mini'},
-      //{label: "GPT-4.5-preview", value: 'gpt-4.5-preview'},
       {label: "GPT-4.1", value: 'gpt-4.1'},
       {label: "GPT-4.1-mini", value: 'gpt-4.1-mini'},
       {label: "GPT-4.1-nano", value: 'gpt-4.1-nano'},
