@@ -86,7 +86,7 @@ class LTMNarrativeToolBrain {
         if (!lastModel || !lastModel.variables || lastModel.variables.length == 0)
             throw new Error("You cannot run the LTM Narrative Tool without a model.");
 
-        if (!this.#data.feedbackContent || this.#data.feedbackContent.length == 0)
+        if (!this.#data.feedbackContent || !this.#data.feedbackContent.valid)
             throw new Error("You cannot run the LTM Narrative Tool without performing an LTM analysis");
 
         //start with the system prompt
