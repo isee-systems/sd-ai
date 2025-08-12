@@ -66,7 +66,7 @@ class Engine {
             required: false,
             uiElement: "hidden",
             label: "JSON Description of feedback loops",
-            description: "A JSON array of feedback loops in the model"
+            description: "A JSON object representing all of the feedback loops in the model"
         }];
     }
 
