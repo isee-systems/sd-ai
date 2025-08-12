@@ -13,10 +13,6 @@ class LTMNarrativeToolBrain {
     static DEFAULT_SYSTEM_PROMPT = 
 `You are the world's best System Dynamics Modeler. It is your job to name every feedback loop you are given using a simple, 1 to 5 word name that doesn't refer to the polarity of the loop.  You will then need to describe each feedback loop you are given with a 1-3 sentence description.  Finally you will take those feedback loop names and descriptions and weave them into an essay describing describing the origins of behavior in the model you are given.  In that essay you will identify and discuss the time periods when dominance shifts from one (set) of feedback processes to another (set) of feedback processes.`
 
-    static DEFAULT_STRUCTURE_PROMPT = 
-`I want your response to consider the model which you have already so helpfully given to us.`
-
-
   static DEFAULT_FEEDBACK_PROMPT = 
 `I want your response to consider all of the feedback loops in the model which you have already so helpfully given to us. There are no other feedback loops in the model that matter besides these. Remember, a dominant feedback loop or set of feedback loops is when one or more feedback loops together of the same polarity add up to explain more than 50% of the model's behavior.  When determining which feedback loops are dominant you're trying to find the smallest number of feedback loops that add up to at least 50% with the same polarity.`
 
@@ -44,7 +40,6 @@ class LTMNarrativeToolBrain {
         feedbackContent: null,
         underlyingModel: LLMWrapper.DEFAULT_MODEL,
         systemPrompt: LTMNarrativeToolBrain.DEFAULT_SYSTEM_PROMPT,
-        structurePrompt: LTMNarrativeToolBrain.DEFAULT_STRUCTURE_PROMPT,
         behaviorPrompt: LTMNarrativeToolBrain.DEFAULT_BEHAVIOR_PROMPT,
         feedbackPrompt: LTMNarrativeToolBrain.DEFAULT_FEEDBACK_PROMPT,
         backgroundPrompt: LTMNarrativeToolBrain.DEFAULT_BACKGROUND_PROMPT,
@@ -83,8 +78,7 @@ class LTMNarrativeToolBrain {
     }
 
     setupLLMParameters(userPrompt, lastModel) {
-        if (!lastModel || !lastModel.variables || lastModel.variables.length == 0)
-            throw new Error("You cannot run the LTM Narrative Tool without a model.");
+        //ignore lastModel we don't need it for this engine!!!
 
         if (!this.#data.feedbackContent || !this.#data.feedbackContent.valid)
             throw new Error("You cannot run the LTM Narrative Tool without performing an LTM analysis");
@@ -134,11 +128,6 @@ class LTMNarrativeToolBrain {
                 content: this.#data.problemStatementPrompt.replaceAll("{problemStatement}", this.#data.problemStatement),
             });
         }
-        
-        messages.push({ role: "assistant", content: JSON.stringify(lastModel, null, 2) });
-
-        if (this.#data.structurePrompt)
-            messages.push({ role: "user", content: this.#data.structurePrompt });
                     
         messages.push({ role: "assistant", content: JSON.stringify(this.#data.feedbackContent, null, 2) });
 

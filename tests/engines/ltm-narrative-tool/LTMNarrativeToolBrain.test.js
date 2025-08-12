@@ -11,29 +11,24 @@ describe('LTMNarrativeToolBrain', () => {
   });
 
   describe('setupLLMParameters', () => {
-    it('should throw error when lastModel is null', () => {
+    it('should throw error when feedbackContent is not provided', () => {
       expect(() => {
         ltmBrain.setupLLMParameters('Test prompt', null);
-      }).toThrow('You cannot run the LTM Narrative Tool without a model.');
-    });
-
-    it('should throw error when lastModel has no variables', () => {
-      const lastModel = { variables: [] };
-      
-      expect(() => {
-        ltmBrain.setupLLMParameters('Test prompt', lastModel);
-      }).toThrow('You cannot run the LTM Narrative Tool without a model.');
-    });
-
-    it('should throw error when feedbackContent is not provided', () => {
-      const lastModel = {
-        variables: [{ name: 'Population', type: 'stock', equation: '1000' }]
-      };
-      
-      expect(() => {
-        ltmBrain.setupLLMParameters('Test prompt', lastModel);
       }).toThrow('You cannot run the LTM Narrative Tool without performing an LTM analysis');
     });
+
+    it('should throw error when feedbackContent is invalid', () => {
+      const brainWithInvalidFeedback = new LTMNarrativeToolBrain({
+        openAIKey: 'test-key',
+        googleKey: 'test-google-key',
+        feedbackContent: { valid: false }
+      });
+      
+      expect(() => {
+        brainWithInvalidFeedback.setupLLMParameters('Test prompt', null);
+      }).toThrow('You cannot run the LTM Narrative Tool without performing an LTM analysis');
+    });
+
 
     it('should throw error when feedbackContent is empty', () => {
       const brainWithEmptyFeedback = new LTMNarrativeToolBrain({
@@ -41,13 +36,9 @@ describe('LTMNarrativeToolBrain', () => {
         googleKey: 'test-google-key',
         feedbackContent: []
       });
-
-      const lastModel = {
-        variables: [{ name: 'Population', type: 'stock', equation: '1000' }]
-      };
       
       expect(() => {
-        brainWithEmptyFeedback.setupLLMParameters('Test prompt', lastModel);
+        brainWithEmptyFeedback.setupLLMParameters('Test prompt', null);
       }).toThrow('You cannot run the LTM Narrative Tool without performing an LTM analysis');
     });
 
@@ -58,11 +49,7 @@ describe('LTMNarrativeToolBrain', () => {
         feedbackContent: { valid: true, loops: [{ loop: 'test loop', polarity: 'reinforcing' }] }
       });
 
-      const lastModel = {
-        variables: [{ name: 'Population', type: 'stock', equation: '1000' }]
-      };
-
-      const result = brainWithFeedback.setupLLMParameters('Test prompt', lastModel);
+      const result = brainWithFeedback.setupLLMParameters('Test prompt', null);
 
       expect(result.model).toBe('gemini-2.5-flash');
       expect(result.temperature).toBe(0);
@@ -80,11 +67,7 @@ describe('LTMNarrativeToolBrain', () => {
         feedbackContent: { valid: true, loops: [{ loop: 'test loop', polarity: 'reinforcing' }] }
       });
 
-      const lastModel = {
-        variables: [{ name: 'Population', type: 'stock', equation: '1000' }]
-      };
-
-      const result = brainWithO3Mini.setupLLMParameters('Test prompt', lastModel);
+      const result = brainWithO3Mini.setupLLMParameters('Test prompt', null);
 
       expect(result.model).toBe('o3-mini');
       expect(result.reasoning_effort).toBe('high');
@@ -98,11 +81,7 @@ describe('LTMNarrativeToolBrain', () => {
         feedbackContent: { valid: true, loops: [{ loop: 'test loop', polarity: 'reinforcing' }] }
       });
 
-      const lastModel = {
-        variables: [{ name: 'Population', type: 'stock', equation: '1000' }]
-      };
-
-      const result = brainWithO3.setupLLMParameters('Test prompt', lastModel);
+      const result = brainWithO3.setupLLMParameters('Test prompt', null);
 
       expect(result.model).toBe('o3');
       expect(result.reasoning_effort).toBe('low');
@@ -116,11 +95,7 @@ describe('LTMNarrativeToolBrain', () => {
         feedbackContent: { valid: true, loops: [{ loop: 'test loop', polarity: 'reinforcing' }] }
       });
 
-      const lastModel = {
-        variables: [{ name: 'Population', type: 'stock', equation: '1000' }]
-      };
-
-      const result = brainWithoutSystemMode.setupLLMParameters('Test prompt', lastModel);
+      const result = brainWithoutSystemMode.setupLLMParameters('Test prompt', null);
 
       expect(result.messages[0].role).toBe('system');
       expect(result.temperature).toBe(0);
@@ -134,11 +109,7 @@ describe('LTMNarrativeToolBrain', () => {
         feedbackContent: { valid: true, loops: [{ loop: 'test loop', polarity: 'reinforcing' }] }
       });
 
-      const lastModel = {
-        variables: [{ name: 'Population', type: 'stock', equation: '1000' }]
-      };
-
-      const result = brainWithO3.setupLLMParameters('Test prompt', lastModel);
+      const result = brainWithO3.setupLLMParameters('Test prompt', null);
 
       expect(result.temperature).toBeUndefined();
     });
@@ -151,11 +122,7 @@ describe('LTMNarrativeToolBrain', () => {
         feedbackContent: { valid: true, loops: [{ loop: 'test loop', polarity: 'reinforcing' }] }
       });
 
-      const lastModel = {
-        variables: [{ name: 'Population', type: 'stock', equation: '1000' }]
-      };
-
-      const result = brainWithBackground.setupLLMParameters('Test prompt', lastModel);
+      const result = brainWithBackground.setupLLMParameters('Test prompt', null);
 
       const backgroundMessage = result.messages.find(m => m.content.includes('Important context information'));
       expect(backgroundMessage).toBeDefined();
@@ -170,42 +137,29 @@ describe('LTMNarrativeToolBrain', () => {
         feedbackContent: { valid: true, loops: [{ loop: 'test loop', polarity: 'reinforcing' }] }
       });
 
-      const lastModel = {
-        variables: [{ name: 'Population', type: 'stock', equation: '1000' }]
-      };
-
-      const result = brainWithProblem.setupLLMParameters('Test prompt', lastModel);
+      const result = brainWithProblem.setupLLMParameters('Test prompt', null);
 
       const problemMessage = result.messages.find(m => m.content.includes('Analyze system behavior'));
       expect(problemMessage).toBeDefined();
     });
 
-    it('should include lastModel and structure prompt', () => {
+    it('should include feedback content in messages', () => {
       const brainWithFeedback = new LTMNarrativeToolBrain({
         openAIKey: 'test-key',
         googleKey: 'test-google-key',
         feedbackContent: { valid: true, loops: [{ loop: 'test loop', polarity: 'reinforcing' }] }
       });
 
-      const lastModel = {
-        variables: [
-          { name: 'Population', type: 'stock', equation: '1000' }
-        ],
-        relationships: [
-          { from: 'A', to: 'B', polarity: '+' }
-        ]
-      };
-
-      const result = brainWithFeedback.setupLLMParameters('Test prompt', lastModel);
+      const result = brainWithFeedback.setupLLMParameters('Test prompt', null);
 
       const assistantMessage = result.messages.find(m => m.role === 'assistant');
       expect(assistantMessage).toBeDefined();
-      expect(assistantMessage.content).toContain('Population');
+      expect(assistantMessage.content).toContain('test loop');
       
-      const structurePromptMessage = result.messages.find(m => 
-        m.role === 'user' && m.content.includes('consider the model which you have already')
+      const feedbackPromptMessage = result.messages.find(m => 
+        m.role === 'user' && m.content.includes('dominant feedback')
       );
-      expect(structurePromptMessage).toBeDefined();
+      expect(feedbackPromptMessage).toBeDefined();
     });
 
     it('should include behavior prompt when behaviorContent is provided', () => {
@@ -216,11 +170,7 @@ describe('LTMNarrativeToolBrain', () => {
         feedbackContent: { valid: true, loops: [{ loop: 'test loop', polarity: 'reinforcing' }] }
       });
 
-      const lastModel = {
-        variables: [{ name: 'Population', type: 'stock', equation: '1000' }]
-      };
-
-      const result = brainWithBehavior.setupLLMParameters('Test prompt', lastModel);
+      const result = brainWithBehavior.setupLLMParameters('Test prompt', null);
 
       const behaviorMessage = result.messages.find(m => 
         m.content.includes('Population grows exponentially')
@@ -241,11 +191,7 @@ describe('LTMNarrativeToolBrain', () => {
         feedbackContent: feedbackData
       });
 
-      const lastModel = {
-        variables: [{ name: 'Population', type: 'stock', equation: '1000' }]
-      };
-
-      const result = brainWithFeedback.setupLLMParameters('Test prompt', lastModel);
+      const result = brainWithFeedback.setupLLMParameters('Test prompt', null);
 
       const feedbackMessage = result.messages.find(m => 
         m.content.includes('Population Growth Loop')
@@ -264,7 +210,6 @@ describe('LTMNarrativeToolBrain', () => {
         openAIKey: 'test-key',
         googleKey: 'test-google-key',
         systemPrompt: 'Custom system prompt for analysis',
-        structurePrompt: 'Custom structure prompt',
         behaviorPrompt: 'Custom behavior: {behaviorContent}',
         feedbackPrompt: 'Custom feedback prompt',
         backgroundPrompt: 'Custom background: {backgroundKnowledge}',
@@ -275,10 +220,7 @@ describe('LTMNarrativeToolBrain', () => {
         problemStatement: 'Custom problem data'
       });
 
-      const lastModel = { 
-        variables: [{ name: 'Test', type: 'variable', equation: '10' }]
-      };
-      const result = brainWithCustomPrompts.setupLLMParameters('Test prompt', lastModel);
+      const result = brainWithCustomPrompts.setupLLMParameters('Test prompt', null);
 
       const systemMessage = result.messages[0];
       expect(systemMessage.content).toBe('Custom system prompt for analysis');
@@ -292,11 +234,6 @@ describe('LTMNarrativeToolBrain', () => {
         m.content.includes('Custom problem: Custom problem data')
       );
       expect(problemMessage).toBeDefined();
-
-      const structurePromptMessage = result.messages.find(m => 
-        m.content === 'Custom structure prompt'
-      );
-      expect(structurePromptMessage).toBeDefined();
 
       const behaviorMessage = result.messages.find(m => 
         m.content.includes('Custom behavior: Custom behavior data')
@@ -319,22 +256,17 @@ describe('LTMNarrativeToolBrain', () => {
         feedbackContent: { valid: true, loops: [{ feedback: 'loops' }] }
       });
 
-      const lastModel = { 
-        variables: [{ name: 'Test', type: 'variable', equation: '10' }]
-      };
-      const result = brainWithAll.setupLLMParameters('User prompt', lastModel);
+      const result = brainWithAll.setupLLMParameters('User prompt', null);
 
       expect(result.messages[0].role).toBe('system');
       expect(result.messages[1].role).toBe('user');
       expect(result.messages[1].content).toContain('Background info');
       expect(result.messages[2].role).toBe('system');
       expect(result.messages[2].content).toContain('Problem to solve');
-      expect(result.messages[3].role).toBe('assistant');
-      expect(result.messages[4].role).toBe('user'); // structure prompt
-      expect(result.messages[5].role).toBe('assistant'); // feedback content
-      expect(result.messages[6].role).toBe('user'); // feedback prompt
-      expect(result.messages[7].role).toBe('user'); // behavior prompt
-      expect(result.messages[8].content).toBe('User prompt');
+      expect(result.messages[3].role).toBe('assistant'); // feedback content
+      expect(result.messages[4].role).toBe('user'); // feedback prompt
+      expect(result.messages[5].role).toBe('user'); // behavior prompt
+      expect(result.messages[6].content).toBe('User prompt');
     });
 
     it('should return all required parameters for OpenAI API call', () => {
@@ -344,11 +276,7 @@ describe('LTMNarrativeToolBrain', () => {
         feedbackContent: { valid: true, loops: [{ loop: 'test loop', polarity: 'reinforcing' }] }
       });
 
-      const lastModel = {
-        variables: [{ name: 'Population', type: 'stock', equation: '1000' }]
-      };
-
-      const result = brainWithFeedback.setupLLMParameters('Test prompt', lastModel);
+      const result = brainWithFeedback.setupLLMParameters('Test prompt', null);
 
       expect(result).toHaveProperty('messages');
       expect(result).toHaveProperty('model');
@@ -368,11 +296,7 @@ describe('LTMNarrativeToolBrain', () => {
         feedbackContent: { valid: true, loops: [{ loop: 'test loop', polarity: 'reinforcing' }] }
       });
 
-      const lastModel = {
-        variables: [{ name: 'Test', type: 'variable' }]
-      };
-
-      const result = brainWithoutBehavior.setupLLMParameters('Test prompt', lastModel);
+      const result = brainWithoutBehavior.setupLLMParameters('Test prompt', null);
 
       const behaviorMessage = result.messages.find(m => 
         m.content.includes('Behavior:')
@@ -380,27 +304,7 @@ describe('LTMNarrativeToolBrain', () => {
       expect(behaviorMessage).toBeUndefined();
     });
 
-    it('should not include structure prompt when structurePrompt is null', () => {
-      const brainNoStructure = new LTMNarrativeToolBrain({
-        openAIKey: 'test-key',
-        googleKey: 'test-google-key',
-        structurePrompt: null,
-        feedbackContent: { valid: true, loops: [{ loop: 'test loop', polarity: 'reinforcing' }] }
-      });
-
-      const lastModel = {
-        variables: [{ name: 'Test', type: 'variable' }]
-      };
-
-      const result = brainNoStructure.setupLLMParameters('Test prompt', lastModel);
-
-      const structureMessage = result.messages.find(m => 
-        m.role === 'user' && m.content.includes('consider the model')
-      );
-      expect(structureMessage).toBeUndefined();
-    });
-
-    it('should not include feedback prompt when feedbackPrompt is null', () => {
+    it('should handle feedbackPrompt being null', () => {
       const brainNoFeedbackPrompt = new LTMNarrativeToolBrain({
         openAIKey: 'test-key',
         googleKey: 'test-google-key',
@@ -408,17 +312,14 @@ describe('LTMNarrativeToolBrain', () => {
         feedbackContent: { valid: true, loops: [{ loop: 'test loop', polarity: 'reinforcing' }] }
       });
 
-      const lastModel = {
-        variables: [{ name: 'Test', type: 'variable' }]
-      };
-
-      const result = brainNoFeedbackPrompt.setupLLMParameters('Test prompt', lastModel);
+      const result = brainNoFeedbackPrompt.setupLLMParameters('Test prompt', null);
 
       const feedbackPromptMessage = result.messages.find(m => 
         m.role === 'user' && m.content.includes('dominant feedback')
       );
       expect(feedbackPromptMessage).toBeUndefined();
     });
+
   });
 
   describe('integration tests', () => {
