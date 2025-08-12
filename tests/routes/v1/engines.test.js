@@ -31,7 +31,8 @@ describe('Engines Route', () => {
         "sfd": "quantitative",
         "cld": "qualitative",
         "sfd-discuss": "seldon",
-        "cld-discuss": "seldon"
+        "cld-discuss": "seldon",
+        "ltm-analyze": "ltm-narrative-tool"
       });
     });
 
@@ -86,7 +87,8 @@ describe('Engines Route', () => {
         'quantitative',
         'recursivecausal',
         'seldon-experimental',
-        'seldon'
+        'seldon',
+        'ltm-narrative-tool'
       ];
 
       const returnedEngineNames = response.body.engines.map(engine => engine.name);

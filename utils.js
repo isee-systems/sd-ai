@@ -224,14 +224,43 @@ export class LLMWrapper {
     "startTime": "The time at which this model starts calculating.  It is measured in the units of \"timeUnits\".",
     "stopTime": "The time at which this model stops calculating.  It is measured in the units of \"timeUnits\".",
     "dt": "The time step for the model, how often is it calculated.  The most common dt is 0.25. It is measured in the units of \"timeUnits\".",
-    "timeUnits": "The unit of time for this model.  This should match with the equations that you generate."
+    "timeUnits": "The unit of time for this model.  This should match with the equations that you generate.",
+
+    "loopIdentifier": "The globally unique identifer for this feedback loop.  You will take this value from the feedback loop identifier given to you.",
+    "loopName": "A short, ideally 1 to 5 word name, for the process this feedback loop represents. This name should not refer directly to the polarity of the loop.  Don't use balancing, reinforcing, positive or negative.",
+    "loopDescription": "A longer description of what the process this feedback loop represents.  Ideally this should be between 1 and 3 sentences which discusses the purpose of this feedback loop.",
+    "loopsDescription": "A list of feedback loops with names and descriptions for the end-user.",
+    "loopsNarrative": "An essay that stitches together the feedback loops and their descriptions into a narrative that describes the origins of behavior in the model. This essay should note each time period where there is a change in loop dominance."
   };
 
-  generateQualitativeSDJSONResponseSchema(remove_description = false) {
+  generateLTMNarrativeToolResponseSchema(removeDescription = false) {
       // Conditionally adds a description to a Zod schema object.
-      // If remove_description is true, it returns the schema without the description.
+      // If removeDescription is true, it returns the schema without the description.
       const withDescription = (schema, description) => {
-          return remove_description ? schema : schema.describe(description);
+          return removeDescription ? schema : schema.describe(description);
+      };
+
+      const FeedbackLoop = z.object({
+        identifier: withDescription(z.string(), LLMWrapper.SCHEMA_STRINGS.loopIdentifier),
+        name: withDescription(z.string(), LLMWrapper.SCHEMA_STRINGS.loopName),
+        description: withDescription(z.string(), LLMWrapper.SCHEMA_STRINGS.loopDescription)
+      });
+
+      const FeedbackLoopList = withDescription(z.array(FeedbackLoop), LLMWrapper.SCHEMA_STRINGS.loopsDescription);
+
+      const LTMToolResponse = z.object({
+        feedbackLoops: FeedbackLoopList,
+        narrative: withDescription(z.string(), LLMWrapper.SCHEMA_STRINGS.loopsNarrative)
+      });
+
+      return zodResponseFormat(LTMToolResponse, "ltm_tool_response");
+  }
+
+  generateQualitativeSDJSONResponseSchema(removeDescription = false) {
+      // Conditionally adds a description to a Zod schema object.
+      // If removeDescription is true, it returns the schema without the description.
+      const withDescription = (schema, description) => {
+          return removeDescription ? schema : schema.describe(description);
       };
 
       const PolarityEnum = withDescription(z.enum(["+", "-"]), LLMWrapper.SCHEMA_STRINGS.polarity);

@@ -1,0 +1,186 @@
+import { LLMWrapper } from '../../utils.js'
+import { marked } from 'marked';
+
+class ResponseFormatError extends Error {
+    constructor(message) {
+        super(message);
+        this.name = "ResponseFormatError";
+    }
+}
+
+class LTMNarrativeToolBrain {
+
+    static DEFAULT_SYSTEM_PROMPT = 
+`You are the world's best System Dynamics Modeler. It is your job to name every feedback loop you are given using a simple, 1 to 5 word name that doesn't refer to the polarity of the loop.  You will then need to describe each feedback loop you are given with a 1-3 sentence description.  Finally you will take those feedback loop names and descriptions and weave them into an essay describing describing the origins of behavior in the model you are given.  In that essay you will identify and discuss the time periods when dominance shifts from one (set) of feedback processes to another (set) of feedback processes.`
+
+    static DEFAULT_STRUCTURE_PROMPT = 
+`I want your response to consider the model which you have already so helpfully given to us.`
+
+
+  static DEFAULT_FEEDBACK_PROMPT = 
+`I want your response to consider all of the feedback loops in the model which you have already so helpfully given to us. There are no other feedback loops in the model that matter besides these. Remember, a dominant feedback loop or set of feedback loops is when one or more feedback loops together of the same polarity add up to explain more than 50% of the model's behavior.  When determining which feedback loops are dominant you're trying to find the smallest number of feedback loops that add up to at least 50% with the same polarity.`
+
+  static DEFAULT_BEHAVIOR_PROMPT = 
+`I want your response to consider the behavior of the model which you have already so helpfully given to us. 
+ 
+{behaviorContent}`
+
+    static DEFAULT_BACKGROUND_PROMPT =
+`Please be sure to consider the following critically important background information when you give your answer.
+
+{backgroundKnowledge}`
+
+    static DEFAULT_PROBLEM_STATEMENT_PROMPT = 
+`The user has stated that they are conducting this modeling exercise to understand the following problem better.
+
+{problemStatement}`
+
+    #data = {
+        backgroundKnowledge: null,
+        problemStatement: null,
+        openAIKey: null,
+        googleKey: null,
+        behaviorContent: null,
+        feedbackContent: null,
+        underlyingModel: LLMWrapper.DEFAULT_MODEL,
+        systemPrompt: LTMNarrativeToolBrain.DEFAULT_SYSTEM_PROMPT,
+        structurePrompt: LTMNarrativeToolBrain.DEFAULT_STRUCTURE_PROMPT,
+        behaviorPrompt: LTMNarrativeToolBrain.DEFAULT_BEHAVIOR_PROMPT,
+        feedbackPrompt: LTMNarrativeToolBrain.DEFAULT_FEEDBACK_PROMPT,
+        backgroundPrompt: LTMNarrativeToolBrain.DEFAULT_BACKGROUND_PROMPT,
+        problemStatementPrompt: LTMNarrativeToolBrain.DEFAULT_PROBLEM_STATEMENT_PROMPT
+    };
+
+    #llmWrapper;
+
+    constructor(params) {
+        Object.assign(this.#data, params);
+
+        if (!this.#data.problemStatementPrompt.includes('{problemStatement')) {
+            this.#data.problemStatementPrompt = this.#data.problemStatementPrompt.trim() + "\n\n{problemStatement}";
+        }
+
+        if (!this.#data.backgroundPrompt.includes('{backgroundKnowledge')) {
+            this.#data.backgroundPrompt = this.#data.backgroundPrompt.trim() + "\n\n{backgroundKnowledge}";
+        }
+
+        this.#llmWrapper = new LLMWrapper(params);
+    }
+
+    #containsHtmlTags(str) {
+        // This regex looks for patterns like <tag>, </tag>, or <tag attribute="value">
+        const htmlTagRegex = /<[a-z/][^>]*>/i; 
+        return htmlTagRegex.test(str);
+    }
+
+    async #processResponse(originalResponse) {
+        //if the string is html just returned
+        if (this.#containsHtmlTags(originalResponse.narrative))
+            return originalResponse;
+
+        originalResponse.narrative = await marked.parse(originalResponse.narrative);
+        return originalResponse;
+    }
+
+    setupLLMParameters(userPrompt, lastModel) {
+        if (!lastModel || !lastModel.variables || lastModel.variables.length == 0)
+            throw new Error("You cannot run the LTM Narrative Tool without a model.");
+
+        if (!this.#data.feedbackContent || this.#data.feedbackContent.length == 0)
+            throw new Error("You cannot run the LTM Narrative Tool without performing an LTM analysis");
+
+        //start with the system prompt
+        let responseFormat = this.#llmWrapper.generateLTMNarrativeToolResponseSchema();
+        let underlyingModel = this.#data.underlyingModel;
+        let systemRole = this.#llmWrapper.model.systemModeUser;
+        let systemPrompt = this.#data.systemPrompt;
+        let temperature = 0;
+        let reasoningEffort = undefined;
+
+        if (underlyingModel.startsWith('o3-mini ')) {
+            const parts = underlyingModel.split(' ');
+            underlyingModel = 'o3-mini';
+            reasoningEffort = parts[1].trim();
+        } else if (underlyingModel.startsWith('o3 ')) {
+            const parts = underlyingModel.split(' ');
+            underlyingModel = 'o3';
+            reasoningEffort = parts[1].trim();
+        }
+
+        if (!this.#llmWrapper.model.hasSystemMode) {
+            systemRole = "user";
+            temperature = 1;
+        }
+
+        if (!this.#llmWrapper.model.hasTemperature) {
+            temperature = undefined;
+        }
+
+        let messages = [{ 
+            role: systemRole, 
+            content: systemPrompt 
+        }];
+
+        if (this.#data.backgroundKnowledge) {
+            messages.push({
+                role: "user",
+                content:  this.#data.backgroundPrompt.replaceAll("{backgroundKnowledge}", this.#data.backgroundKnowledge),
+            });
+        }
+
+        if (this.#data.problemStatement) {
+            messages.push({
+                role: systemRole,
+                content: this.#data.problemStatementPrompt.replaceAll("{problemStatement}", this.#data.problemStatement),
+            });
+        }
+        
+        messages.push({ role: "assistant", content: JSON.stringify(lastModel, null, 2) });
+
+        if (this.#data.structurePrompt)
+            messages.push({ role: "user", content: this.#data.structurePrompt });
+                    
+        messages.push({ role: "assistant", content: JSON.stringify(this.#data.feedbackContent, null, 2) });
+
+        if (this.#data.feedbackPrompt)
+            messages.push({ role: "user", content: this.#data.feedbackPrompt });
+        
+        if (this.#data.behaviorPrompt && this.#data.behaviorContent)
+            messages.push({ role: "user", content: this.#data.behaviorPrompt.replaceAll("{behaviorContent}", this.#data.behaviorContent) });
+
+        //give it the user prompt
+        messages.push({ role: "user", content: userPrompt });
+
+        return {
+            messages,
+            model: underlyingModel,
+            temperature: temperature,
+            reasoning_effort: reasoningEffort,
+            response_format: responseFormat
+        };
+    }
+
+    async generate(userPrompt, lastModel) {
+        const llmParams = this.setupLLMParameters(userPrompt, lastModel);
+        
+        //get its response
+        const originalCompletion = await this.#llmWrapper.openAIAPI.chat.completions.create(llmParams);
+
+        const originalResponse = originalCompletion.choices[0].message;
+        if (originalResponse.refusal) {
+            throw new ResponseFormatError(originalResponse.refusal);
+        } else if (originalResponse.parsed) {
+            return await this.#processResponse(originalResponse.parsed);
+        } else if (originalResponse.content) {
+            let parsedObj = {feedbackLoops: [], narrative: ""};
+            try {
+                parsedObj = JSON.parse(originalResponse.content);
+            } catch (err) {
+                throw new ResponseFormatError("Bad JSON returned by underlying LLM");
+            }
+            return await this.#processResponse(parsedObj);
+        }
+    }
+}
+
+export default LTMNarrativeToolBrain;

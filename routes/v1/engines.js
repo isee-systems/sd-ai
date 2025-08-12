@@ -60,7 +60,8 @@ router.get("/", async (req, res) => {
             "sfd": "quantitative",
             "cld": "qualitative",
             "sfd-discuss": "seldon",
-            "cld-discuss": "seldon"
+            "cld-discuss": "seldon",
+            "ltm-analyze": "ltm-narrative-tool"
         }
     });
 })

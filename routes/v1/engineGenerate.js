@@ -91,6 +91,10 @@ router.post("/:engine/generate", async (req, res) => {
       response.output = generateResponse.output;
     }
 
+    if ('feedbackLoops' in generateResponse) {
+      response.feedbackLoops = generateResponse.feedbackLoops;
+    }
+
     if ('supportingInfo' in generateResponse) {
       response.supportingInfo = generateResponse.supportingInfo
     }
