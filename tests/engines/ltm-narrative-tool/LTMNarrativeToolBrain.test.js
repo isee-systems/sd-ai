@@ -55,7 +55,7 @@ describe('LTMNarrativeToolBrain', () => {
       const brainWithFeedback = new LTMNarrativeToolBrain({
         openAIKey: 'test-key',
         googleKey: 'test-google-key',
-        feedbackContent: [{ loop: 'test loop', polarity: 'reinforcing' }]
+        feedbackContent: { valid: true, loops: [{ loop: 'test loop', polarity: 'reinforcing' }] }
       });
 
       const lastModel = {
@@ -77,7 +77,7 @@ describe('LTMNarrativeToolBrain', () => {
         openAIKey: 'test-key',
         googleKey: 'test-google-key',
         underlyingModel: 'o3-mini high',
-        feedbackContent: [{ loop: 'test loop', polarity: 'reinforcing' }]
+        feedbackContent: { valid: true, loops: [{ loop: 'test loop', polarity: 'reinforcing' }] }
       });
 
       const lastModel = {
@@ -95,7 +95,7 @@ describe('LTMNarrativeToolBrain', () => {
         openAIKey: 'test-key',
         googleKey: 'test-google-key',
         underlyingModel: 'o3 low',
-        feedbackContent: [{ loop: 'test loop', polarity: 'reinforcing' }]
+        feedbackContent: { valid: true, loops: [{ loop: 'test loop', polarity: 'reinforcing' }] }
       });
 
       const lastModel = {
@@ -113,7 +113,7 @@ describe('LTMNarrativeToolBrain', () => {
         openAIKey: 'test-key',
         googleKey: 'test-google-key',
         underlyingModel: 'llama',
-        feedbackContent: [{ loop: 'test loop', polarity: 'reinforcing' }]
+        feedbackContent: { valid: true, loops: [{ loop: 'test loop', polarity: 'reinforcing' }] }
       });
 
       const lastModel = {
@@ -131,7 +131,7 @@ describe('LTMNarrativeToolBrain', () => {
         openAIKey: 'test-key',
         googleKey: 'test-google-key',
         underlyingModel: 'o3',
-        feedbackContent: [{ loop: 'test loop', polarity: 'reinforcing' }]
+        feedbackContent: { valid: true, loops: [{ loop: 'test loop', polarity: 'reinforcing' }] }
       });
 
       const lastModel = {
@@ -148,7 +148,7 @@ describe('LTMNarrativeToolBrain', () => {
         openAIKey: 'test-key',
         googleKey: 'test-google-key',
         backgroundKnowledge: 'Important context information',
-        feedbackContent: [{ loop: 'test loop', polarity: 'reinforcing' }]
+        feedbackContent: { valid: true, loops: [{ loop: 'test loop', polarity: 'reinforcing' }] }
       });
 
       const lastModel = {
@@ -167,7 +167,7 @@ describe('LTMNarrativeToolBrain', () => {
         openAIKey: 'test-key',
         googleKey: 'test-google-key',
         problemStatement: 'Analyze system behavior',
-        feedbackContent: [{ loop: 'test loop', polarity: 'reinforcing' }]
+        feedbackContent: { valid: true, loops: [{ loop: 'test loop', polarity: 'reinforcing' }] }
       });
 
       const lastModel = {
@@ -184,7 +184,7 @@ describe('LTMNarrativeToolBrain', () => {
       const brainWithFeedback = new LTMNarrativeToolBrain({
         openAIKey: 'test-key',
         googleKey: 'test-google-key',
-        feedbackContent: [{ loop: 'test loop', polarity: 'reinforcing' }]
+        feedbackContent: { valid: true, loops: [{ loop: 'test loop', polarity: 'reinforcing' }] }
       });
 
       const lastModel = {
@@ -213,7 +213,7 @@ describe('LTMNarrativeToolBrain', () => {
         openAIKey: 'test-key',
         googleKey: 'test-google-key',
         behaviorContent: 'Population grows exponentially',
-        feedbackContent: [{ loop: 'test loop', polarity: 'reinforcing' }]
+        feedbackContent: { valid: true, loops: [{ loop: 'test loop', polarity: 'reinforcing' }] }
       });
 
       const lastModel = {
@@ -230,9 +230,10 @@ describe('LTMNarrativeToolBrain', () => {
     });
 
     it('should include feedback prompt', () => {
-      const feedbackData = [
-        { loop: 'Population Growth Loop', polarity: 'reinforcing' }
-      ];
+      const feedbackData = {
+        valid: true,
+        loops: [{ loop: 'Population Growth Loop', polarity: 'reinforcing' }]
+      };
       
       const brainWithFeedback = new LTMNarrativeToolBrain({
         openAIKey: 'test-key',
@@ -269,7 +270,7 @@ describe('LTMNarrativeToolBrain', () => {
         backgroundPrompt: 'Custom background: {backgroundKnowledge}',
         problemStatementPrompt: 'Custom problem: {problemStatement}',
         behaviorContent: 'Custom behavior data',
-        feedbackContent: [{ loop: 'test loop' }],
+        feedbackContent: { valid: true, loops: [{ loop: 'test loop' }] },
         backgroundKnowledge: 'Custom background data',
         problemStatement: 'Custom problem data'
       });
@@ -315,7 +316,7 @@ describe('LTMNarrativeToolBrain', () => {
         backgroundKnowledge: 'Background info',
         problemStatement: 'Problem to solve',
         behaviorContent: 'Behavior data',
-        feedbackContent: [{ feedback: 'loops' }]
+        feedbackContent: { valid: true, loops: [{ feedback: 'loops' }] }
       });
 
       const lastModel = { 
@@ -340,7 +341,7 @@ describe('LTMNarrativeToolBrain', () => {
       const brainWithFeedback = new LTMNarrativeToolBrain({
         openAIKey: 'test-key',
         googleKey: 'test-google-key',
-        feedbackContent: [{ loop: 'test loop', polarity: 'reinforcing' }]
+        feedbackContent: { valid: true, loops: [{ loop: 'test loop', polarity: 'reinforcing' }] }
       });
 
       const lastModel = {
@@ -364,7 +365,7 @@ describe('LTMNarrativeToolBrain', () => {
         openAIKey: 'test-key',
         googleKey: 'test-google-key',
         behaviorPrompt: 'Behavior: {behaviorContent}',
-        feedbackContent: [{ loop: 'test loop', polarity: 'reinforcing' }]
+        feedbackContent: { valid: true, loops: [{ loop: 'test loop', polarity: 'reinforcing' }] }
       });
 
       const lastModel = {
@@ -384,7 +385,7 @@ describe('LTMNarrativeToolBrain', () => {
         openAIKey: 'test-key',
         googleKey: 'test-google-key',
         structurePrompt: null,
-        feedbackContent: [{ loop: 'test loop', polarity: 'reinforcing' }]
+        feedbackContent: { valid: true, loops: [{ loop: 'test loop', polarity: 'reinforcing' }] }
       });
 
       const lastModel = {
@@ -404,7 +405,7 @@ describe('LTMNarrativeToolBrain', () => {
         openAIKey: 'test-key',
         googleKey: 'test-google-key',
         feedbackPrompt: null,
-        feedbackContent: [{ loop: 'test loop', polarity: 'reinforcing' }]
+        feedbackContent: { valid: true, loops: [{ loop: 'test loop', polarity: 'reinforcing' }] }
       });
 
       const lastModel = {
