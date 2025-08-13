@@ -70,6 +70,9 @@ class LTMNarrativeToolBrain {
 
     async #processResponse(originalResponse) {
         //if the string is html just returned
+        originalResponse.narrative = originalResponse.narrativeMarkdown;
+        delete originalResponse.narrativeMarkdown;
+        
         if (this.#containsHtmlTags(originalResponse.narrative))
             return originalResponse;
 
