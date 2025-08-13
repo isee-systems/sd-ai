@@ -234,7 +234,7 @@ export class LLMWrapper {
     "loopsNarrative": "A markdown formatted string containing an essay consisting of multiple paragraphs (unless instructed to do otherwise) that stitches together the feedback loops and their descriptions into a narrative that describes the origins of behavior in the model. This essay should note each time period where there is a change in loop dominance."
   };
 
-  generateLTMNarrativeToolResponseSchema(removeDescription = false) {
+  generateLTMNarrativeResponseSchema(removeDescription = false) {
       // Conditionally adds a description to a Zod schema object.
       // If removeDescription is true, it returns the schema without the description.
       const withDescription = (schema, description) => {

@@ -1,10 +1,10 @@
-import LTMNarrativeToolBrain from '../../../engines/ltm-narrative-tool/LTMNarrativeToolBrain.js';
+import LTMNarrativeBrain from '../../../engines/ltm-narrative/LTMNarrativeBrain.js';
 
-describe('LTMNarrativeToolBrain', () => {
+describe('LTMNarrativeBrain', () => {
   let ltmBrain;
 
   beforeEach(() => {
-    ltmBrain = new LTMNarrativeToolBrain({
+    ltmBrain = new LTMNarrativeBrain({
       openAIKey: 'test-key',
       googleKey: 'test-google-key'
     });
@@ -18,7 +18,7 @@ describe('LTMNarrativeToolBrain', () => {
     });
 
     it('should throw error when feedbackContent is invalid', () => {
-      const brainWithInvalidFeedback = new LTMNarrativeToolBrain({
+      const brainWithInvalidFeedback = new LTMNarrativeBrain({
         openAIKey: 'test-key',
         googleKey: 'test-google-key',
         feedbackContent: { valid: false }
@@ -31,7 +31,7 @@ describe('LTMNarrativeToolBrain', () => {
 
 
     it('should throw error when feedbackContent is empty', () => {
-      const brainWithEmptyFeedback = new LTMNarrativeToolBrain({
+      const brainWithEmptyFeedback = new LTMNarrativeBrain({
         openAIKey: 'test-key',
         googleKey: 'test-google-key',
         feedbackContent: []
@@ -43,7 +43,7 @@ describe('LTMNarrativeToolBrain', () => {
     });
 
     it('should setup basic LLM parameters with default model', () => {
-      const brainWithFeedback = new LTMNarrativeToolBrain({
+      const brainWithFeedback = new LTMNarrativeBrain({
         openAIKey: 'test-key',
         googleKey: 'test-google-key',
         feedbackContent: { valid: true, loops: [{ loop: 'test loop', polarity: 'reinforcing' }] }
@@ -60,7 +60,7 @@ describe('LTMNarrativeToolBrain', () => {
     });
 
     it('should handle o3-mini model with reasoning effort', () => {
-      const brainWithO3Mini = new LTMNarrativeToolBrain({
+      const brainWithO3Mini = new LTMNarrativeBrain({
         openAIKey: 'test-key',
         googleKey: 'test-google-key',
         underlyingModel: 'o3-mini high',
@@ -74,7 +74,7 @@ describe('LTMNarrativeToolBrain', () => {
     });
 
     it('should handle o3 model with reasoning effort', () => {
-      const brainWithO3 = new LTMNarrativeToolBrain({
+      const brainWithO3 = new LTMNarrativeBrain({
         openAIKey: 'test-key',
         googleKey: 'test-google-key',
         underlyingModel: 'o3 low',
@@ -88,7 +88,7 @@ describe('LTMNarrativeToolBrain', () => {
     });
 
     it('should set system role to user and temperature to 1 when model lacks system mode', () => {
-      const brainWithoutSystemMode = new LTMNarrativeToolBrain({
+      const brainWithoutSystemMode = new LTMNarrativeBrain({
         openAIKey: 'test-key',
         googleKey: 'test-google-key',
         underlyingModel: 'llama',
@@ -102,7 +102,7 @@ describe('LTMNarrativeToolBrain', () => {
     });
 
     it('should set temperature to undefined when model lacks temperature support', () => {
-      const brainWithO3 = new LTMNarrativeToolBrain({
+      const brainWithO3 = new LTMNarrativeBrain({
         openAIKey: 'test-key',
         googleKey: 'test-google-key',
         underlyingModel: 'o3',
@@ -115,7 +115,7 @@ describe('LTMNarrativeToolBrain', () => {
     });
 
     it('should include background knowledge in messages when provided', () => {
-      const brainWithBackground = new LTMNarrativeToolBrain({
+      const brainWithBackground = new LTMNarrativeBrain({
         openAIKey: 'test-key',
         googleKey: 'test-google-key',
         backgroundKnowledge: 'Important context information',
@@ -130,7 +130,7 @@ describe('LTMNarrativeToolBrain', () => {
     });
 
     it('should include problem statement in messages when provided', () => {
-      const brainWithProblem = new LTMNarrativeToolBrain({
+      const brainWithProblem = new LTMNarrativeBrain({
         openAIKey: 'test-key',
         googleKey: 'test-google-key',
         problemStatement: 'Analyze system behavior',
@@ -144,7 +144,7 @@ describe('LTMNarrativeToolBrain', () => {
     });
 
     it('should include feedback content in messages', () => {
-      const brainWithFeedback = new LTMNarrativeToolBrain({
+      const brainWithFeedback = new LTMNarrativeBrain({
         openAIKey: 'test-key',
         googleKey: 'test-google-key',
         feedbackContent: { valid: true, loops: [{ loop: 'test loop', polarity: 'reinforcing' }] }
@@ -163,7 +163,7 @@ describe('LTMNarrativeToolBrain', () => {
     });
 
     it('should include behavior prompt when behaviorContent is provided', () => {
-      const brainWithBehavior = new LTMNarrativeToolBrain({
+      const brainWithBehavior = new LTMNarrativeBrain({
         openAIKey: 'test-key',
         googleKey: 'test-google-key',
         behaviorContent: 'Population grows exponentially',
@@ -185,7 +185,7 @@ describe('LTMNarrativeToolBrain', () => {
         loops: [{ loop: 'Population Growth Loop', polarity: 'reinforcing' }]
       };
       
-      const brainWithFeedback = new LTMNarrativeToolBrain({
+      const brainWithFeedback = new LTMNarrativeBrain({
         openAIKey: 'test-key',
         googleKey: 'test-google-key',
         feedbackContent: feedbackData
@@ -206,7 +206,7 @@ describe('LTMNarrativeToolBrain', () => {
     });
 
     it('should handle custom prompts', () => {
-      const brainWithCustomPrompts = new LTMNarrativeToolBrain({
+      const brainWithCustomPrompts = new LTMNarrativeBrain({
         openAIKey: 'test-key',
         googleKey: 'test-google-key',
         systemPrompt: 'Custom system prompt for analysis',
@@ -247,7 +247,7 @@ describe('LTMNarrativeToolBrain', () => {
     });
 
     it('should properly order messages in the conversation', () => {
-      const brainWithAll = new LTMNarrativeToolBrain({
+      const brainWithAll = new LTMNarrativeBrain({
         openAIKey: 'test-key',
         googleKey: 'test-google-key',
         backgroundKnowledge: 'Background info',
@@ -270,7 +270,7 @@ describe('LTMNarrativeToolBrain', () => {
     });
 
     it('should return all required parameters for OpenAI API call', () => {
-      const brainWithFeedback = new LTMNarrativeToolBrain({
+      const brainWithFeedback = new LTMNarrativeBrain({
         openAIKey: 'test-key',
         googleKey: 'test-google-key',
         feedbackContent: { valid: true, loops: [{ loop: 'test loop', polarity: 'reinforcing' }] }
@@ -289,7 +289,7 @@ describe('LTMNarrativeToolBrain', () => {
     });
 
     it('should not include behavior prompt when behaviorContent is not provided', () => {
-      const brainWithoutBehavior = new LTMNarrativeToolBrain({
+      const brainWithoutBehavior = new LTMNarrativeBrain({
         openAIKey: 'test-key',
         googleKey: 'test-google-key',
         behaviorPrompt: 'Behavior: {behaviorContent}',
@@ -305,7 +305,7 @@ describe('LTMNarrativeToolBrain', () => {
     });
 
     it('should handle feedbackPrompt being null', () => {
-      const brainNoFeedbackPrompt = new LTMNarrativeToolBrain({
+      const brainNoFeedbackPrompt = new LTMNarrativeBrain({
         openAIKey: 'test-key',
         googleKey: 'test-google-key',
         feedbackPrompt: null,
@@ -325,7 +325,7 @@ describe('LTMNarrativeToolBrain', () => {
   describe('integration tests', () => {
     it('should validate all required setup parameters are provided', () => {
       expect(() => {
-        new LTMNarrativeToolBrain({
+        new LTMNarrativeBrain({
           openAIKey: 'test-key',
           googleKey: 'test-google-key'
         });
@@ -333,7 +333,7 @@ describe('LTMNarrativeToolBrain', () => {
     });
 
     it('should handle constructor parameter validation', () => {
-      const brain = new LTMNarrativeToolBrain({
+      const brain = new LTMNarrativeBrain({
         openAIKey: 'test-key',
         googleKey: 'test-google-key',
         problemStatementPrompt: 'Custom prompt',

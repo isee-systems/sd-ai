@@ -8,10 +8,6 @@ class Engine {
 
     }
 
-    static role() {
-        return "discuss";
-    }
-
     static supportedModes() {
         return ["sfd-discuss", "cld-discuss"];
     }

@@ -74,7 +74,7 @@ router.get("/", async (req, res) => {
             "cld": "qualitative",
             "sfd-discuss": "seldon",
             "cld-discuss": "seldon",
-            "ltm-analyze": "ltm-narrative-tool"
+            "ltm-discuss": "ltm-narrative"
         }
     });
 })

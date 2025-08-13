@@ -32,7 +32,7 @@ describe('Engines Route', () => {
         "cld": "qualitative",
         "sfd-discuss": "seldon",
         "cld-discuss": "seldon",
-        "ltm-analyze": "ltm-narrative-tool"
+        "ltm-discuss": "ltm-narrative"
       });
     });
 
@@ -116,7 +116,7 @@ describe('Engines Route', () => {
         'recursivecausal',
         'seldon-experimental',
         'seldon',
-        'ltm-narrative-tool',
+        'ltm-narrative',
         'seldon-mentor',
         'quantitative-mentor'
       ];

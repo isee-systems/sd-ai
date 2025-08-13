@@ -23,10 +23,6 @@ It ensures the AI’s responses align with the intended user experience, such as
 
     }
 
-    static role() {
-        return "discuss";
-    }
-
     static supportedModes() {
         return ["sfd-discuss", "cld-discuss"];
     }

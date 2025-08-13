@@ -8,7 +8,7 @@ class ResponseFormatError extends Error {
     }
 }
 
-class LTMNarrativeToolBrain {
+class LTMNarrativeBrain {
 
     static DEFAULT_SYSTEM_PROMPT = 
 `You are the world's best System Dynamics Modeler. It is your job to name every feedback loop you are given using a simple, 1 to 5 word name that doesn't refer to the polarity of the loop. You will then need to describe each feedback loop you are given with a 1-3 sentence description. Finally you will take those feedback loop names and descriptions and weave them into an essay describing describing the origins of behavior in the model you are given. In that essay you will identify and discuss the time periods when dominance shifts from one (set) of feedback processes to another (set) of feedback processes. You can only use the information given to you by the user in your work. Any information you receive about feedback loops is accurate and correct, do not question it, nor should you use words that express uncertainity about the role of the feedback in creating model behavior. Rely on the information given by the user, and on the feedback loop descriptions you've written. Avoid the use of strong adjectives when describing changes in model behavior. Present the narrative in essay form using multiple paragraphs unless instructed to do otherwise.`
@@ -39,11 +39,11 @@ class LTMNarrativeToolBrain {
         behaviorContent: null,
         feedbackContent: null,
         underlyingModel: LLMWrapper.DEFAULT_MODEL,
-        systemPrompt: LTMNarrativeToolBrain.DEFAULT_SYSTEM_PROMPT,
-        behaviorPrompt: LTMNarrativeToolBrain.DEFAULT_BEHAVIOR_PROMPT,
-        feedbackPrompt: LTMNarrativeToolBrain.DEFAULT_FEEDBACK_PROMPT,
-        backgroundPrompt: LTMNarrativeToolBrain.DEFAULT_BACKGROUND_PROMPT,
-        problemStatementPrompt: LTMNarrativeToolBrain.DEFAULT_PROBLEM_STATEMENT_PROMPT
+        systemPrompt: LTMNarrativeBrain.DEFAULT_SYSTEM_PROMPT,
+        behaviorPrompt: LTMNarrativeBrain.DEFAULT_BEHAVIOR_PROMPT,
+        feedbackPrompt: LTMNarrativeBrain.DEFAULT_FEEDBACK_PROMPT,
+        backgroundPrompt: LTMNarrativeBrain.DEFAULT_BACKGROUND_PROMPT,
+        problemStatementPrompt: LTMNarrativeBrain.DEFAULT_PROBLEM_STATEMENT_PROMPT
     };
 
     #llmWrapper;
@@ -84,10 +84,10 @@ class LTMNarrativeToolBrain {
         //ignore lastModel we don't need it for this engine!!!
 
         if (!this.#data.feedbackContent || !this.#data.feedbackContent.valid)
-            throw new Error("You cannot run the LTM Narrative Tool without performing an LTM analysis");
+            throw new Error("You cannot run the LTM Narrative engine without performing an LTM analysis");
 
         //start with the system prompt
-        let responseFormat = this.#llmWrapper.generateLTMNarrativeToolResponseSchema();
+        let responseFormat = this.#llmWrapper.generateLTMNarrativeResponseSchema();
         let underlyingModel = this.#data.underlyingModel;
         let systemRole = this.#llmWrapper.model.systemModeUser;
         let systemPrompt = this.#data.systemPrompt;
@@ -175,4 +175,4 @@ class LTMNarrativeToolBrain {
     }
 }
 
-export default LTMNarrativeToolBrain;
+export default LTMNarrativeBrain;

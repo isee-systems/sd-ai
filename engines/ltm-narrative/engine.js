@@ -1,5 +1,5 @@
 import { LLMWrapper } from '../../utils.js';
-import LTMNarrativeToolBrain from './LTMNarrativeToolBrain.js'
+import LTMNarrativeBrain from './LTMNarrativeBrain.js'
 import logger from '../../logger.js'
 
 class Engine {
@@ -7,16 +7,12 @@ class Engine {
 
     }
 
-    static role() {
-        return "analyze";
-    }
-
     static supportedModes() {
-        return ["ltm-analyze"];
+        return ["ltm-discuss"];
     }
 
     static description() {
-        return ` This engine is used to automate the process of performing a Loops That Matter (LTM) feedback narrative construction process. It automates the Feedback Narrative cirriculum developed at the University of Bergen which can be downloaded here: https://proceedings.systemdynamics.org/2024/supp/S1041.zip`;    
+        return `This engine is used to automate the process of performing a Loops That Matter (LTM) feedback narrative construction process. It automates the Feedback Narrative cirriculum developed at the University of Bergen which can be downloaded here: https://proceedings.systemdynamics.org/2024/supp/S1041.zip`;    
     }
 
     static link() {
@@ -72,7 +68,7 @@ class Engine {
 
     async generate(prompt, currentModel, parameters) {
         try {
-            let brain = new LTMNarrativeToolBrain(parameters);
+            let brain = new LTMNarrativeBrain(parameters);
             const response = await brain.generate(prompt, currentModel);
             return {
                 feedbackLoops: response.feedbackLoops,
