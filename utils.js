@@ -200,7 +200,8 @@ export class LLMWrapper {
     
     "title": "A highly descriptive 7 word max title describing your explanation.",
 
-    "quantExplanation": "Concisely explain your reasoning for each change you made to the old model to create the new model. Speak in plain English, refer to system archetypes, don't reference json specifically. Don't reiterate the request or any of these instructions.",
+    "quantExplanation": "This is markdown formatted text. Concisely explain your reasoning for each change you made to the old model to create the new model. Speak in plain English, refer to system archetypes, don't reference json specifically. Don't reiterate the request or any of these instructions.",
+    "mentorModeQuantExplanation": "This is markdown formatted text where you try to teach the user about the model you built, explaining any flaws it may have, or problems that could exist with it. Never enumerate the feedback loops in the model!  This explanation should contain questions for the user customized to their specific context to help them think through their work.  This critque of the model you deliever here should be thorough and complete, leave no reasonable critque of the model unsaid.  Consider any missing concepts or other issues with model scope and construction technqiue.  Help the user to understand if their model is giving them the right behavior for the right reason. Speak in plain English, don't reference json specifically. Don't reiterate the request or any of these instructions.",
 
     "variables": "The list of variables you think are appropriate to satisfy my request based on all of the information I have given you",
 
@@ -282,7 +283,7 @@ export class LLMWrapper {
       return zodResponseFormat(Relationships, "relationships_response");
   }
 
-  generateQuantitativeSDJSONResponseSchema() {
+  generateQuantitativeSDJSONResponseSchema(mentorMode) {
       const TypeEnum = z.enum(["stock", "flow", "variable"]).describe(LLMWrapper.SCHEMA_STRINGS.type);
       const PolarityEnum = z.enum(["+", "-"]).describe(LLMWrapper.SCHEMA_STRINGS.polarity);
       
@@ -328,7 +329,7 @@ export class LLMWrapper {
       const Model = z.object({
         variables: Variables,
         relationships: Relationships,
-        explanation: z.string().describe(LLMWrapper.SCHEMA_STRINGS.quantExplanation),
+        explanation: z.string().describe(mentorMode ? LLMWrapper.SCHEMA_STRINGS.mentorModeQuantExplanation: LLMWrapper.SCHEMA_STRINGS.quantExplanation),
         title: z.string().describe(LLMWrapper.SCHEMA_STRINGS.title),
         specs: SimSpecs
       });
