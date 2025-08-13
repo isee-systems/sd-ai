@@ -14,7 +14,7 @@ describe('LTMNarrativeBrain', () => {
     it('should throw error when feedbackContent is not provided', () => {
       expect(() => {
         ltmBrain.setupLLMParameters('Test prompt', null);
-      }).toThrow('You cannot run the LTM Narrative Tool without performing an LTM analysis');
+      }).toThrow('You cannot run the LTM Narrative engine without performing an LTM analysis');
     });
 
     it('should throw error when feedbackContent is invalid', () => {
@@ -26,7 +26,7 @@ describe('LTMNarrativeBrain', () => {
       
       expect(() => {
         brainWithInvalidFeedback.setupLLMParameters('Test prompt', null);
-      }).toThrow('You cannot run the LTM Narrative Tool without performing an LTM analysis');
+      }).toThrow('You cannot run the LTM Narrative engine without performing an LTM analysis');
     });
 
 
@@ -39,7 +39,7 @@ describe('LTMNarrativeBrain', () => {
       
       expect(() => {
         brainWithEmptyFeedback.setupLLMParameters('Test prompt', null);
-      }).toThrow('You cannot run the LTM Narrative Tool without performing an LTM analysis');
+      }).toThrow('You cannot run the LTM Narrative engine without performing an LTM analysis');
     });
 
     it('should setup basic LLM parameters with default model', () => {
