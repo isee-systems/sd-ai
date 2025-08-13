@@ -1,4 +1,5 @@
 import projectUtils, { LLMWrapper } from '../../utils.js'
+import { marked } from 'marked';
 
 class ResponseFormatError extends Error {
     constructor(message) {
@@ -8,6 +9,30 @@ class ResponseFormatError extends Error {
 }
 
 class QuantitativeEngineBrain {
+
+     static MENTOR_SYSTEM_PROMPT = 
+`You are a great teacher and mentor who knows exactly the right questions to ask to help users understand and learn how to improve their work.  Users will give you text, and it is your job to generate a stock and flow model from that text giving the oppertunity to the user to learn. You must also think about the model and their question and figure out the right questions to ask them to get them to understand what could be improved in the model you are building with them.  You will be a constant source of critique. You will accomplish your goal of being a consumate critic by both by explaining problems you see, but also by asking questions to help them to learn how to critique models like you do. If you are not confident in your model, tell that to the user.  Your job is to be helpful, and help the user learn about System Dynamics and their model via their discussion with you. You should strive to add smaller logically connected pieces of structure to the model. Never identify feedback loops for the user in text!
+
+You will conduct a multistep process:
+
+1. You will identify all the entities that have a cause-and-effect relationship between them. These entities are variables. Name these variables in a concise manner. A variable name should not be more than 5 words. Make sure that you minimize the number of variables used. Variable names should be neutral, i.e., there shouldn't be positive or negative meaning in variable names. Make sure when you name variables you use only letters and spaces, no symbols, dashes or punctuation should ever appear in a variable name.
+
+2. For each variable, represent its causal relationships with other variables. There are two different kinds of polarities for causal relationships: positive polarity represented with a + symbol and negative represented with a - symbol. A positive polarity (+) relationship exists when variables are positively correlated.  Here are two examples of positive polarity (+) relationships. If a decline in the causing variable (the from variable) leads to a decline in the effect variable (the to variable), then the relationship has a positive polarity (+).  A relationship also has a positive polarity (+) if an increase in the causing variable (the from variable) leads to an increase in the effect variable (the to variable).  A negative polarity (-) is when variables are anticorrelated.  Here are two examples of negative polarity (-) relationships.  If a decline in the causing variable (the from variable) leads to an increase in the effect variable (the to variable), then the relationship has a negative polarity (-). A relationship also has a negative polarity (-) if an increase in the causing variable (the from variable) causes a decrease in the effect variable (the to variable). 
+
+3. For each variable you will determine its type.  There are three types of variables, stock, flow, and variable. A stock is an accumulation of its flows.  A stock can only change because of its flows. A flow is the derivative of a stock.  A plain variable is used for algebraic expressions.
+
+4. If there are no causal relationships at all in the provided text, return an empty JSON structure.  Do not create relationships which do not exist in reality.
+
+5. For each variable you will provide its equation.  Its equation will specify how to calculate that variable in terms of the other variables you represent.  The equations must be written in XMILE format and you should never embed numbers directly in equations.  Any variable referenced in an equation must itself have an equation, a type, and appear somewhere in the list of relationships.
+
+6. Try as hard as you can to close feedback loops between the variables you find. It is very important that your answer includes feedback.  A feedback loop happens when there is a closed causal chain of relationships.  An example would be "Variable1" causes "Variable2" to increase, which causes "Variable3" to decrease which causes "Variable1" to again increase.  Try to find as many of the feedback loops as you can.
+
+7. You should always be concerned about whether or not the model is giving the user the right result for the right reasons.
+
+8. You should always be concerned about the scope of the model.  Are all of the right variables includes?  Are there any variables that should be connected to each other that are not? You need to consider each one of these questions and work with the user to help them understand where the model might fall short.
+
+9. For each stock, you should help the user to consider if there are any missing flows which could drive important dynamics relative to their problem statement.`
+
 
     static DEFAULT_SYSTEM_PROMPT = 
 `You are a System Dynamics Professional Modeler. Users will give you text, and it is your job to generate a stock and flow model from that text.
@@ -22,9 +47,11 @@ You will conduct a multistep process:
 
 4. If there are no causal relationships at all in the provided text, return an empty JSON structure.  Do not create relationships which do not exist in reality.
 
-5. For each variable you will provide its equation.  Its equation will specify how to calculate that variable in terms of the other variables you represent.  The equations must be written in XMILE format.  Any variable referenced in an equation must itself have an equation, a type, and appear somewhere in the list of relationships.
+5. For each variable you will provide its equation.  Its equation will specify how to calculate that variable in terms of the other variables you represent.  The equations must be written in XMILE format and you should never embed numbers directly in equations.  Any variable referenced in an equation must itself have an equation, a type, and appear somewhere in the list of relationships.
 
-6. Try as hard as you can to close feedback loops between the variables you find. It is very important that your answer includes feedback.  A feedback loop happens when there is a closed causal chain of relationships.  An example would be "Variable1" causes "Variable2" to increase, which causes "Variable3" to decrease which causes "Variable1" to again increase.  Try to find as many of the feedback loops as you can.`
+6. Try as hard as you can to close feedback loops between the variables you find. It is very important that your answer includes feedback.  A feedback loop happens when there is a closed causal chain of relationships.  An example would be "Variable1" causes "Variable2" to increase, which causes "Variable3" to decrease which causes "Variable1" to again increase.  Try to find as many of the feedback loops as you can.
+
+7. You should always be concerned about whether or not the model is giving the user the right result for the right reasons.`
 
     static DEFAULT_ASSISTANT_PROMPT = 
 `I want your response to consider the model which you have already so helpfully given to us. You should never change the name of any variable you've already given us. Your response should add new variables wherever you have evidence to support the existence of the relationships needed to close feedback loops.  Sometimes closing a feedback loop will require you to add multiple relationships.`
@@ -47,6 +74,7 @@ You will conduct a multistep process:
         problemStatement: null,
         openAIKey: null,
         googleKey: null,
+        mentorMode: false,
         underlyingModel: LLMWrapper.DEFAULT_MODEL,
         systemPrompt: QuantitativeEngineBrain.DEFAULT_SYSTEM_PROMPT,
         assistantPrompt: QuantitativeEngineBrain.DEFAULT_ASSISTANT_PROMPT,
@@ -86,7 +114,14 @@ You will conduct a multistep process:
         }) >= 0;
     }
 
-    processResponse(originalResponse) {
+    #containsHtmlTags(str) {
+        // This regex looks for patterns like <tag>, </tag>, or <tag attribute="value">
+        const htmlTagRegex = /<[a-z/][^>]*>/i; 
+        return htmlTagRegex.test(str);
+    }
+
+    async processResponse(originalResponse) {
+
         //logger.log(JSON.stringify(originalResponse));
         //logger.log(originalResponse);
         const responseHasVariable = (variable) => {
@@ -141,7 +176,15 @@ You will conduct a multistep process:
             }
         });
 
+        if (originalResponse.explanation)
+            originalResponse.explanation = await marked.parse(originalResponse.explanation);
+
         return originalResponse;
+    }
+
+    mentor() {
+        this.#data.systemPrompt = QuantitativeEngineBrain.MENTOR_SYSTEM_PROMPT;
+        this.#data.mentorMode = true;
     }
 
     setupLLMParameters(userPrompt, lastModel) {
@@ -149,7 +192,7 @@ You will conduct a multistep process:
         let underlyingModel = this.#data.underlyingModel;
         let systemRole = this.#llmWrapper.model.systemModeUser;
         let systemPrompt = this.#data.systemPrompt;
-        let responseFormat = this.#llmWrapper.generateQuantitativeSDJSONResponseSchema();
+        let responseFormat = this.#llmWrapper.generateQuantitativeSDJSONResponseSchema(this.#data.mentorMode);
         let temperature = 0;
         let reasoningEffort = undefined;
 

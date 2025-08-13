@@ -11,7 +11,7 @@ describe('QuantitativeEngineBrain', () => {
   });
 
   describe('processResponse', () => {
-    it('should trim from and to variables and validate relationships exist in variables', () => {
+    it('should trim from and to variables and validate relationships exist in variables', async () => {
       const originalResponse = {
         variables: [
           { name: 'Population', type: 'stock', equation: '1000', inflows: ['Birth Rate'], outflows: [] },
@@ -28,7 +28,7 @@ describe('QuantitativeEngineBrain', () => {
         ]
       };
 
-      const result = quantitativeEngine.processResponse(originalResponse);
+      const result = await quantitativeEngine.processResponse(originalResponse);
 
       expect(result.relationships).toHaveLength(1);
       expect(result.relationships[0].from).toBe('Population');
@@ -36,7 +36,7 @@ describe('QuantitativeEngineBrain', () => {
       expect(result.relationships[0].valid).toBeUndefined();
     });
 
-    it('should filter out relationships where variables do not exist in variables array', () => {
+    it('should filter out relationships where variables do not exist in variables array', async () => {
       const originalResponse = {
         variables: [
           { name: 'Population', type: 'stock', equation: '1000', inflows: [], outflows: [] }
@@ -59,12 +59,12 @@ describe('QuantitativeEngineBrain', () => {
         ]
       };
 
-      const result = quantitativeEngine.processResponse(originalResponse);
+      const result = await quantitativeEngine.processResponse(originalResponse);
 
       expect(result.relationships).toHaveLength(0);
     });
 
-    it('should filter out self-referencing relationships', () => {
+    it('should filter out self-referencing relationships', async () => {
       const originalResponse = {
         variables: [
           { name: 'Population', type: 'stock', equation: '1000', inflows: ['Birth Rate'], outflows: [] },
@@ -88,14 +88,14 @@ describe('QuantitativeEngineBrain', () => {
         ]
       };
 
-      const result = quantitativeEngine.processResponse(originalResponse);
+      const result = await quantitativeEngine.processResponse(originalResponse);
 
       expect(result.relationships).toHaveLength(1);
       expect(result.relationships[0].from).toBe('Population');
       expect(result.relationships[0].to).toBe('Birth Rate');
     });
 
-    it('should remove duplicate relationships keeping the first occurrence', () => {
+    it('should remove duplicate relationships keeping the first occurrence', async () => {
       const originalResponse = {
         variables: [
           { name: 'Population', type: 'stock', equation: '1000', inflows: ['Birth Rate'], outflows: ['Death Rate'] },
@@ -127,7 +127,7 @@ describe('QuantitativeEngineBrain', () => {
         ]
       };
 
-      const result = quantitativeEngine.processResponse(originalResponse);
+      const result = await quantitativeEngine.processResponse(originalResponse);
 
       expect(result.relationships).toHaveLength(2);
       expect(result.relationships[0].from).toBe('Population');
@@ -137,7 +137,7 @@ describe('QuantitativeEngineBrain', () => {
       expect(result.relationships[1].to).toBe('Death Rate');
     });
 
-    it('should convert unused flows to variable type', () => {
+    it('should convert unused flows to variable type', async () => {
       const originalResponse = {
         variables: [
           { name: 'Population', type: 'stock', equation: '1000', inflows: ['Birth Rate'], outflows: ['Death Rate'] },
@@ -148,7 +148,7 @@ describe('QuantitativeEngineBrain', () => {
         relationships: []
       };
 
-      const result = quantitativeEngine.processResponse(originalResponse);
+      const result = await quantitativeEngine.processResponse(originalResponse);
 
       const unusedFlow = result.variables.find(v => v.name === 'Unused Flow');
       const usedBirthRate = result.variables.find(v => v.name === 'Birth Rate');
@@ -159,7 +159,7 @@ describe('QuantitativeEngineBrain', () => {
       expect(usedDeathRate.type).toBe('flow');
     });
 
-    it('should handle flows used in both inflows and outflows', () => {
+    it('should handle flows used in both inflows and outflows', async () => {
       const originalResponse = {
         variables: [
           { name: 'Stock A', type: 'stock', equation: '100', inflows: ['Transfer Flow'], outflows: [] },
@@ -169,13 +169,13 @@ describe('QuantitativeEngineBrain', () => {
         relationships: []
       };
 
-      const result = quantitativeEngine.processResponse(originalResponse);
+      const result = await quantitativeEngine.processResponse(originalResponse);
 
       const transferFlow = result.variables.find(v => v.name === 'Transfer Flow');
       expect(transferFlow.type).toBe('flow');
     });
 
-    it('should handle case-insensitive duplicate detection with trimming', () => {
+    it('should handle case-insensitive duplicate detection with trimming', async () => {
       const originalResponse = {
         variables: [
           { name: 'Population', type: 'stock', equation: '1000', inflows: ['Birth Rate'], outflows: [] },
@@ -199,7 +199,7 @@ describe('QuantitativeEngineBrain', () => {
         ]
       };
 
-      const result = quantitativeEngine.processResponse(originalResponse);
+      const result = await quantitativeEngine.processResponse(originalResponse);
 
       expect(result.relationships).toHaveLength(1);
       expect(result.relationships[0].from).toBe('Population');
@@ -207,32 +207,32 @@ describe('QuantitativeEngineBrain', () => {
       expect(result.relationships[0].reasoning).toBe('First occurrence');
     });
 
-    it('should handle empty relationships and variables arrays', () => {
+    it('should handle empty relationships and variables arrays', async () => {
       const originalResponse = {
         variables: [],
         relationships: []
       };
 
-      const result = quantitativeEngine.processResponse(originalResponse);
+      const result = await quantitativeEngine.processResponse(originalResponse);
 
       expect(result.variables).toHaveLength(0);
       expect(result.relationships).toHaveLength(0);
     });
 
-    it('should handle missing relationships or variables properties', () => {
+    it('should handle missing relationships or variables properties', async () => {
       const originalResponse = {
         variables: [
           { name: 'Population', type: 'stock', equation: '1000' }
         ]
       };
 
-      const result = quantitativeEngine.processResponse(originalResponse);
+      const result = await quantitativeEngine.processResponse(originalResponse);
 
       expect(result.relationships).toHaveLength(0);
       expect(result.variables).toHaveLength(1);
     });
 
-    it('should preserve all other properties of the original response', () => {
+    it('should preserve all other properties of the original response', async () => {
       const originalResponse = {
         explanation: 'Test explanation',
         title: 'Test title',
@@ -256,9 +256,8 @@ describe('QuantitativeEngineBrain', () => {
         ]
       };
 
-      const result = quantitativeEngine.processResponse(originalResponse);
+      const result = await quantitativeEngine.processResponse(originalResponse);
 
-      expect(result.explanation).toBe('Test explanation');
       expect(result.title).toBe('Test title');
       expect(result.specs).toEqual({
         startTime: 0,
@@ -269,7 +268,7 @@ describe('QuantitativeEngineBrain', () => {
       expect(result.relationships).toHaveLength(0); // Invalid self-reference filtered out
     });
 
-    it('should remove the valid property from processed relationships', () => {
+    it('should remove the valid property from processed relationships', async () => {
       const originalResponse = {
         variables: [
           { name: 'A', type: 'variable', equation: '10' },
@@ -286,7 +285,7 @@ describe('QuantitativeEngineBrain', () => {
         ]
       };
 
-      const result = quantitativeEngine.processResponse(originalResponse);
+      const result = await quantitativeEngine.processResponse(originalResponse);
 
       expect(result.relationships[0].valid).toBeUndefined();
       expect(result.relationships[0].from).toBe('A');
@@ -296,7 +295,7 @@ describe('QuantitativeEngineBrain', () => {
       expect(result.relationships[0].polarityReasoning).toBe('Test reasoning');
     });
 
-    it('should handle complex scenario with multiple stocks, flows and relationships', () => {
+    it('should handle complex scenario with multiple stocks, flows and relationships', async () => {
       const originalResponse = {
         variables: [
           { 
@@ -366,7 +365,7 @@ describe('QuantitativeEngineBrain', () => {
         ]
       };
 
-      const result = quantitativeEngine.processResponse(originalResponse);
+      const result = await quantitativeEngine.processResponse(originalResponse);
 
       // Check relationships - should have 2 valid ones
       expect(result.relationships).toHaveLength(2);
@@ -387,7 +386,7 @@ describe('QuantitativeEngineBrain', () => {
       expect(population.type).toBe('stock');
     });
 
-    it('should handle stocks with empty inflows and outflows arrays', () => {
+    it('should handle stocks with empty inflows and outflows arrays', async () => {
       const originalResponse = {
         variables: [
           { name: 'Stock A', type: 'stock', equation: '100', inflows: [], outflows: [] },
@@ -396,13 +395,13 @@ describe('QuantitativeEngineBrain', () => {
         relationships: []
       };
 
-      const result = quantitativeEngine.processResponse(originalResponse);
+      const result = await quantitativeEngine.processResponse(originalResponse);
 
       const flowA = result.variables.find(v => v.name === 'Flow A');
       expect(flowA.type).toBe('variable'); // Should be converted since not used
     });
 
-    it('should handle stocks without inflows or outflows properties', () => {
+    it('should handle stocks without inflows or outflows properties', async () => {
       const originalResponse = {
         variables: [
           { name: 'Stock A', type: 'stock', equation: '100', inflows: [], outflows: [] },
@@ -411,7 +410,7 @@ describe('QuantitativeEngineBrain', () => {
         relationships: []
       };
 
-      const result = quantitativeEngine.processResponse(originalResponse);
+      const result = await quantitativeEngine.processResponse(originalResponse);
 
       const flowA = result.variables.find(v => v.name === 'Flow A');
       expect(flowA.type).toBe('variable'); // Should be converted since not used

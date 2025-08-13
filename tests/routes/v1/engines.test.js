@@ -31,7 +31,8 @@ describe('Engines Route', () => {
         "sfd": "quantitative",
         "cld": "qualitative",
         "sfd-discuss": "seldon",
-        "cld-discuss": "seldon"
+        "cld-discuss": "seldon",
+        "ltm-discuss": "ltm-narrative"
       });
     });
 
@@ -71,6 +72,34 @@ describe('Engines Route', () => {
       });
     });
 
+    it('should place engines ending in -experimental at the end of the list', async () => {
+      const response = await request(app)
+        .get('/')
+        .expect(200);
+
+      const engines = response.body.engines;
+      const experimentalEngines = engines.filter(engine => engine.name.endsWith('-experimental'));
+      const nonExperimentalEngines = engines.filter(engine => !engine.name.endsWith('-experimental'));
+
+      if (experimentalEngines.length > 0) {
+        // Find the indices of experimental engines
+        const experimentalIndices = experimentalEngines.map(expEngine => 
+          engines.findIndex(engine => engine.name === expEngine.name)
+        );
+        
+        // Find the indices of non-experimental engines
+        const nonExperimentalIndices = nonExperimentalEngines.map(nonExpEngine => 
+          engines.findIndex(engine => engine.name === nonExpEngine.name)
+        );
+
+        // All experimental engines should come after all non-experimental engines
+        const maxNonExperimentalIndex = Math.max(...nonExperimentalIndices);
+        const minExperimentalIndex = Math.min(...experimentalIndices);
+
+        expect(minExperimentalIndex).toBeGreaterThan(maxNonExperimentalIndex);
+      }
+    });
+
     it('should include ALL engines from /engines folder', async () => {
       const response = await request(app)
         .get('/')
@@ -86,7 +115,10 @@ describe('Engines Route', () => {
         'quantitative',
         'recursivecausal',
         'seldon-experimental',
-        'seldon'
+        'seldon',
+        'ltm-narrative',
+        'seldon-mentor',
+        'quantitative-mentor'
       ];
 
       const returnedEngineNames = response.body.engines.map(engine => engine.name);

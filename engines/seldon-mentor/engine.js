@@ -1,8 +1,9 @@
 import { LLMWrapper } from '../../utils.js';
-import SeldonBrain from './SeldonBrain.js'
+import SeldonBrain from '././../seldon/SeldonBrain.js'
 import logger from '../../logger.js'
 
 class Engine {
+    
     constructor() {
 
     }
@@ -12,13 +13,12 @@ class Engine {
     }
 
     static description() {
-        return ` This engine is used to discuss your model with “Seldon” (aka Hari Seldon the greatest System 
-    Dynamicist who never lived), to learn about your model (AI built or human built, quantitative or qualitative). 
-    Seldon is a chatbot that isn’t capable of editing or changing your model, but instead Seldon answers questions about your model.`;    
+        return `This engine is used to discuss your model with Seldon as a mentor for the purposes of learning about your model (AI built or human built, quantitative or qualitative). 
+    Plato is a chatbot that isn’t capable of editing or changing your model, but instead Seldon asks you questions to help you learn about your model.`;    
     }
 
     static link() {
-        return "https://papers.ssrn.com/sol3/papers.cfm?abstract_id=5341966";
+        return "";
     }
 
     additionalParameters()  {
@@ -71,6 +71,8 @@ class Engine {
     async generate(prompt, currentModel, parameters) {
         try {
             let brain = new SeldonBrain(parameters);
+            brain.mentor();
+
             const response = await brain.converse(prompt, currentModel);
             return {
                 output: {

@@ -1,5 +1,5 @@
 import { LLMWrapper } from '../../utils.js';
-import SeldonBrain from './SeldonBrain.js'
+import LTMNarrativeBrain from './LTMNarrativeBrain.js'
 import logger from '../../logger.js'
 
 class Engine {
@@ -8,17 +8,15 @@ class Engine {
     }
 
     static supportedModes() {
-        return ["sfd-discuss", "cld-discuss"];
+        return ["ltm-discuss"];
     }
 
     static description() {
-        return ` This engine is used to discuss your model with “Seldon” (aka Hari Seldon the greatest System 
-    Dynamicist who never lived), to learn about your model (AI built or human built, quantitative or qualitative). 
-    Seldon is a chatbot that isn’t capable of editing or changing your model, but instead Seldon answers questions about your model.`;    
+        return `This engine is used to automate the process of performing a Loops That Matter (LTM) feedback narrative construction process. It automates the Feedback Narrative cirriculum developed at the University of Bergen which can be downloaded here: https://proceedings.systemdynamics.org/2024/supp/S1041.zip`;    
     }
 
     static link() {
-        return "https://papers.ssrn.com/sol3/papers.cfm?abstract_id=5341966";
+        return "https://proceedings.systemdynamics.org/2024/papers/O1041.pdf";
     }
 
     additionalParameters()  {
@@ -70,11 +68,12 @@ class Engine {
 
     async generate(prompt, currentModel, parameters) {
         try {
-            let brain = new SeldonBrain(parameters);
-            const response = await brain.converse(prompt, currentModel);
+            let brain = new LTMNarrativeBrain(parameters);
+            const response = await brain.generate(prompt, currentModel);
             return {
+                feedbackLoops: response.feedbackLoops,
                 output: {
-                    textContent: response
+                    textContent: response.narrative
                 }
             };
         } catch(err) {

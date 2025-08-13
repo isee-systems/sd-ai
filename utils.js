@@ -200,7 +200,8 @@ export class LLMWrapper {
     
     "title": "A highly descriptive 7 word max title describing your explanation.",
 
-    "quantExplanation": "Concisely explain your reasoning for each change you made to the old model to create the new model. Speak in plain English, refer to system archetypes, don't reference json specifically. Don't reiterate the request or any of these instructions.",
+    "quantExplanation": "This is markdown formatted text. Concisely explain your reasoning for each change you made to the old model to create the new model. Speak in plain English, refer to system archetypes, don't reference json specifically. Don't reiterate the request or any of these instructions.",
+    "mentorModeQuantExplanation": "This is markdown formatted text where you try to teach the user about the model you built, explaining any flaws it may have, or problems that could exist with it. Never enumerate the feedback loops in the model!  This explanation should contain questions for the user customized to their specific context to help them think through their work.  This critique of the model you deliver here should be thorough and complete, leave no reasonable critique of the model unsaid.  Consider any missing concepts or other issues with model scope and construction technqiue.  Help the user to understand if their model is giving them the right behavior for the right reason. Speak in plain English, don't reference json specifically. Don't reiterate the request or any of these instructions.",
 
     "variables": "The list of variables you think are appropriate to satisfy my request based on all of the information I have given you",
 
@@ -224,14 +225,43 @@ export class LLMWrapper {
     "startTime": "The time at which this model starts calculating.  It is measured in the units of \"timeUnits\".",
     "stopTime": "The time at which this model stops calculating.  It is measured in the units of \"timeUnits\".",
     "dt": "The time step for the model, how often is it calculated.  The most common dt is 0.25. It is measured in the units of \"timeUnits\".",
-    "timeUnits": "The unit of time for this model.  This should match with the equations that you generate."
+    "timeUnits": "The unit of time for this model.  This should match with the equations that you generate.",
+
+    "loopIdentifier": "The globally unique identifer for this feedback loop.  You will take this value from the feedback loop identifier given to you.",
+    "loopName": "A short, ideally 1 to 5 word name, for the process this feedback loop represents. This name should not refer directly to the polarity of the loop.  Don't use balancing, reinforcing, positive or negative.",
+    "loopDescription": "A longer description of what the process this feedback loop represents.  Ideally this should be between 1 and 3 sentences which discusses the purpose of this feedback loop.",
+    "loopsDescription": "A list of feedback loops with names and descriptions for the end-user.",
+    "loopsNarrative": "A markdown formatted string containing an essay consisting of multiple paragraphs (unless instructed to do otherwise) that stitches together the feedback loops and their descriptions into a narrative that describes the origins of behavior in the model. This essay should note each time period where there is a change in loop dominance."
   };
 
-  generateQualitativeSDJSONResponseSchema(remove_description = false) {
+  generateLTMNarrativeResponseSchema(removeDescription = false) {
       // Conditionally adds a description to a Zod schema object.
-      // If remove_description is true, it returns the schema without the description.
+      // If removeDescription is true, it returns the schema without the description.
       const withDescription = (schema, description) => {
-          return remove_description ? schema : schema.describe(description);
+          return removeDescription ? schema : schema.describe(description);
+      };
+
+      const FeedbackLoop = z.object({
+        identifier: withDescription(z.string(), LLMWrapper.SCHEMA_STRINGS.loopIdentifier),
+        name: withDescription(z.string(), LLMWrapper.SCHEMA_STRINGS.loopName),
+        description: withDescription(z.string(), LLMWrapper.SCHEMA_STRINGS.loopDescription)
+      });
+
+      const FeedbackLoopList = withDescription(z.array(FeedbackLoop), LLMWrapper.SCHEMA_STRINGS.loopsDescription);
+
+      const LTMToolResponse = z.object({
+        feedbackLoops: FeedbackLoopList,
+        narrativeMarkdown: withDescription(z.string(), LLMWrapper.SCHEMA_STRINGS.loopsNarrative)
+      });
+
+      return zodResponseFormat(LTMToolResponse, "ltm_tool_response");
+  }
+
+  generateQualitativeSDJSONResponseSchema(removeDescription = false) {
+      // Conditionally adds a description to a Zod schema object.
+      // If removeDescription is true, it returns the schema without the description.
+      const withDescription = (schema, description) => {
+          return removeDescription ? schema : schema.describe(description);
       };
 
       const PolarityEnum = withDescription(z.enum(["+", "-"]), LLMWrapper.SCHEMA_STRINGS.polarity);
@@ -253,7 +283,7 @@ export class LLMWrapper {
       return zodResponseFormat(Relationships, "relationships_response");
   }
 
-  generateQuantitativeSDJSONResponseSchema() {
+  generateQuantitativeSDJSONResponseSchema(mentorMode) {
       const TypeEnum = z.enum(["stock", "flow", "variable"]).describe(LLMWrapper.SCHEMA_STRINGS.type);
       const PolarityEnum = z.enum(["+", "-"]).describe(LLMWrapper.SCHEMA_STRINGS.polarity);
       
@@ -299,7 +329,7 @@ export class LLMWrapper {
       const Model = z.object({
         variables: Variables,
         relationships: Relationships,
-        explanation: z.string().describe(LLMWrapper.SCHEMA_STRINGS.quantExplanation),
+        explanation: z.string().describe(mentorMode ? LLMWrapper.SCHEMA_STRINGS.mentorModeQuantExplanation: LLMWrapper.SCHEMA_STRINGS.quantExplanation),
         title: z.string().describe(LLMWrapper.SCHEMA_STRINGS.title),
         specs: SimSpecs
       });

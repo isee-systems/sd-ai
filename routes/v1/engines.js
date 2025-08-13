@@ -47,6 +47,19 @@ router.get("/", async (req, res) => {
     const qualIndex = engines.findIndex((engine) => {
         return engine.name === 'qualitative';
     });
+    
+    // Sort alphabetically with experimental engines at the bottom
+    engines.sort((a, b) => {
+        const aIsExperimental = a.name.endsWith('-experimental');
+        const bIsExperimental = b.name.endsWith('-experimental');
+        
+        // If one is experimental and the other isn't, experimental goes to bottom
+        if (aIsExperimental && !bIsExperimental) return 1;
+        if (!aIsExperimental && bIsExperimental) return -1;
+        
+        // If both are experimental or both are not experimental, sort alphabetically
+        return a.name.localeCompare(b.name);
+    });
 
     if (qualIndex >= 0) {
         let qualEngine = engines.splice(qualIndex, 1)[0];
@@ -60,7 +73,8 @@ router.get("/", async (req, res) => {
             "sfd": "quantitative",
             "cld": "qualitative",
             "sfd-discuss": "seldon",
-            "cld-discuss": "seldon"
+            "cld-discuss": "seldon",
+            "ltm-discuss": "ltm-narrative"
         }
     });
 })
