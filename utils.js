@@ -230,7 +230,7 @@ export class LLMWrapper {
     "loopName": "A short, ideally 1 to 5 word name, for the process this feedback loop represents. This name should not refer directly to the polarity of the loop.  Don't use balancing, reinforcing, positive or negative.",
     "loopDescription": "A longer description of what the process this feedback loop represents.  Ideally this should be between 1 and 3 sentences which discusses the purpose of this feedback loop.",
     "loopsDescription": "A list of feedback loops with names and descriptions for the end-user.",
-    "loopsNarrative": "An essay that stitches together the feedback loops and their descriptions into a narrative that describes the origins of behavior in the model. This essay should note each time period where there is a change in loop dominance."
+    "loopsNarrative": "An essay consisting of multiple paragraphs (unless instructed to do otherwise) that stitches together the feedback loops and their descriptions into a narrative that describes the origins of behavior in the model. This essay should note each time period where there is a change in loop dominance."
   };
 
   generateLTMNarrativeToolResponseSchema(removeDescription = false) {
