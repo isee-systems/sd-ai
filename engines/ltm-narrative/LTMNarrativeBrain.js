@@ -62,6 +62,22 @@ class LTMNarrativeBrain {
         this.#llmWrapper = new LLMWrapper(params);
     }
 
+    #isValidFeedbackContent() {
+        if (!this.#data.feedbackContent) {
+            return false;
+        }
+        
+        if (this.#data.feedbackContent.hasOwnProperty('valid') && !this.#data.feedbackContent.valid) {
+            return false;
+        }
+        
+        if (Array.isArray(this.#data.feedbackContent) && this.#data.feedbackContent.length < 1) {
+            return false;
+        }
+        
+        return true;
+    }
+
     #containsHtmlTags(str) {
         // This regex looks for patterns like <tag>, </tag>, or <tag attribute="value">
         const htmlTagRegex = /<[a-z/][^>]*>/i; 
@@ -83,7 +99,7 @@ class LTMNarrativeBrain {
     setupLLMParameters(userPrompt, lastModel) {
         //ignore lastModel we don't need it for this engine!!!
 
-        if (!this.#data.feedbackContent || !this.#data.feedbackContent.valid)
+        if (!this.#isValidFeedbackContent())
             throw new Error("You cannot run the LTM Narrative engine without performing an LTM analysis");
 
         //start with the system prompt
