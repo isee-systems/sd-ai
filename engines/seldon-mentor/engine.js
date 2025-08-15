@@ -9,12 +9,12 @@ class Engine {
     }
 
     static supportedModes() {
-        return ["sfd-discuss", "cld-discuss"];
+        return ["sfd-discuss"];
     }
 
     static description() {
-        return `This engine is used to discuss your model with Seldon as a mentor for the purposes of learning about your model (AI built or human built, quantitative or qualitative). 
-    Plato is a chatbot that isn’t capable of editing or changing your model, but instead Seldon asks you questions to help you learn about your model.`;    
+        return `This engine is used to discuss your model with Seldon as a mentor for the purposes of learning about your model (AI built or human built, quantitative only). 
+    Seldon is a chatbot that isn’t capable of editing or changing your model, but instead Seldon asks you questions to help you learn about your model.`;    
     }
 
     static link() {
