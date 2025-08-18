@@ -1,4 +1,4 @@
-import { LLMWrapper } from '../../utils.js'
+import utils, { LLMWrapper } from '../../utils.js'
 import { marked } from 'marked';
 
 class ResponseFormatError extends Error {
@@ -122,20 +122,8 @@ As the world's best System Dynamics Modeler, you will consider and apply the Sys
         this.#data.systemPrompt = SeldonEngineBrain.MENTOR_SYSTEM_PROMPT;
     }
 
-     #isValidFeedbackContent() {
-        if (!this.#data.feedbackContent) {
-            return false;
-        }
-        
-        if (this.#data.feedbackContent.hasOwnProperty('valid') && !this.#data.feedbackContent.valid) {
-            return false;
-        }
-        
-        if (Array.isArray(this.#data.feedbackContent) && this.#data.feedbackContent.length < 1) {
-            return false;
-        }
-        
-        return true;
+    #isValidFeedbackContent() {
+        return utils.isValidFeedbackContent(this.#data.feedbackContent);
     }
 
     setupLLMParameters(userPrompt, lastModel) {
@@ -195,6 +183,9 @@ As the world's best System Dynamics Modeler, you will consider and apply the Sys
 
             if (this.#isValidFeedbackContent())
                 messages.push({ role: "user", content: this.#data.feedbackPrompt.replaceAll("{feedbackContent}", JSON.stringify(this.#data.feedbackContent, null, 2)) });
+            else
+                throw new Error("Without active Loops that Matter Information I am unable to provide a feedback based explanation of behavior. Please turn LTM on and rerun the model.");
+
         } else {
 
             if (this.#data.behaviorPrompt && this.#data.behaviorContent)

@@ -1,4 +1,4 @@
-import { LLMWrapper } from '../../utils.js'
+import utils, { LLMWrapper } from '../../utils.js'
 import { marked } from 'marked';
 
 class ResponseFormatError extends Error {
@@ -63,19 +63,7 @@ class LTMNarrativeBrain {
     }
 
     #isValidFeedbackContent() {
-        if (!this.#data.feedbackContent) {
-            return false;
-        }
-        
-        if (this.#data.feedbackContent.hasOwnProperty('valid') && !this.#data.feedbackContent.valid) {
-            return false;
-        }
-        
-        if (Array.isArray(this.#data.feedbackContent) && this.#data.feedbackContent.length < 1) {
-            return false;
-        }
-        
-        return true;
+        return utils.isValidFeedbackContent(this.#data.feedbackContent);
     }
 
     #containsHtmlTags(str) {
@@ -100,7 +88,7 @@ class LTMNarrativeBrain {
         //ignore lastModel we don't need it for this engine!!!
 
         if (!this.#isValidFeedbackContent())
-            throw new Error("You cannot run the LTM Narrative engine without performing an LTM analysis");
+            throw new Error("Without active Loops that Matter Information I am unable to provide a feedback based explanation of behavior. Please turn LTM on and rerun the model.");
 
         //start with the system prompt
         let responseFormat = this.#llmWrapper.generateLTMNarrativeResponseSchema();

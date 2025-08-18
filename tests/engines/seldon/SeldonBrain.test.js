@@ -102,6 +102,12 @@ describe('SeldonEngineBrain', () => {
     });
 
     it('should include lastModel and structure prompt when lastModel has variables', () => {
+      const engineWithFeedback = new SeldonEngineBrain({
+        openAIKey: 'test-key',
+        googleKey: 'test-google-key',
+        feedbackContent: { valid: true, loops: [{ loop: 'test loop', polarity: 'reinforcing' }] }
+      });
+
       const lastModel = {
         variables: [
           { name: 'Population', type: 'stock', equation: '1000' }
@@ -111,7 +117,7 @@ describe('SeldonEngineBrain', () => {
         ]
       };
 
-      const result = seldonEngine.setupLLMParameters('Test prompt', lastModel);
+      const result = engineWithFeedback.setupLLMParameters('Test prompt', lastModel);
 
       const assistantMessage = result.messages.find(m => m.role === 'assistant');
       expect(assistantMessage).toBeDefined();
@@ -127,7 +133,8 @@ describe('SeldonEngineBrain', () => {
       const engineWithBehavior = new SeldonEngineBrain({
         openAIKey: 'test-key',
         googleKey: 'test-google-key',
-        behaviorContent: 'Population grows exponentially'
+        behaviorContent: 'Population grows exponentially',
+        feedbackContent: { valid: true, loops: [{ loop: 'test loop', polarity: 'reinforcing' }] }
       });
 
       const lastModel = {
@@ -289,7 +296,8 @@ describe('SeldonEngineBrain', () => {
       const engineNoStructure = new SeldonEngineBrain({
         openAIKey: 'test-key',
         googleKey: 'test-google-key',
-        structurePrompt: null
+        structurePrompt: null,
+        feedbackContent: { valid: true, loops: [{ loop: 'test loop', polarity: 'reinforcing' }] }
       });
 
       const lastModel = {
@@ -307,13 +315,14 @@ describe('SeldonEngineBrain', () => {
       expect(structureMessage).toBeUndefined();
     });
 
-    it('should handle behavior and feedback prompts only when content is provided', () => {
+    it('should include feedback prompt but not behavior prompt when only feedbackContent is provided', () => {
       const engineWithPrompts = new SeldonEngineBrain({
         openAIKey: 'test-key',
         googleKey: 'test-google-key',
         behaviorPrompt: 'Behavior: {behaviorContent}',
-        feedbackPrompt: 'Feedback: {feedbackContent}'
-        // No behaviorContent or feedbackContent provided
+        feedbackPrompt: 'Feedback: {feedbackContent}',
+        feedbackContent: { valid: true, loops: [{ loop: 'test loop', polarity: 'reinforcing' }] }
+        // No behaviorContent provided
       });
 
       const lastModel = {
@@ -330,7 +339,7 @@ describe('SeldonEngineBrain', () => {
       const feedbackMessage = result.messages.find(m => 
         m.content.includes('Feedback:')
       );
-      expect(feedbackMessage).toBeUndefined();
+      expect(feedbackMessage).toBeDefined();
     });
   });
 });

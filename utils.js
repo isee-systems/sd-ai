@@ -37,6 +37,22 @@ utils.sameVars = function(a,b) {
     return utils.caseFold(a) === utils.caseFold(b);
 }
 
+utils.isValidFeedbackContent = function(feedbackContent) {
+  if (!feedbackContent) {
+    return false;
+  }
+
+  if (feedbackContent.hasOwnProperty('valid') && !feedbackContent.valid) {
+    return false;
+  }
+
+  if (Array.isArray(feedbackContent) && feedbackContent.length < 1) {
+    return false;
+  }
+
+  return true;
+}
+
 // EVALUATION UTILITIES - These functions are specifically designed for evaluation categories
 
 /**
