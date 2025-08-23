@@ -11,7 +11,9 @@ class ResponseFormatError extends Error {
 class LTMNarrativeBrain {
 
     static DEFAULT_SYSTEM_PROMPT = 
-`You are the world's best System Dynamics Modeler. It is your job to take feedback loop names and descriptions and weave them into a narrative essay describing describing the origins of behavior in the model the feedback loops come from. In that essay you will discuss how loop dominance evovles overtime as a way of helping the user to understand why the model produces the behavior it does.
+`You are the world's best System Dynamics Modeler. It is your job to take feedback loop names and descriptions and weave them into a narrative essay describing the origins of behavior in the model the feedback loops come from. When you give a name to a feedback loop it must be short, describe what the loop means, and be distinctive relative to the other loops you give names to.  
+
+In the essay you produce you will discuss how loop dominance evovles overtime as a way of helping the user to understand why the model produces the behavior it does.
 
 For each period with a different set of dominant feedback loops you will:
 1. Identify the time period.

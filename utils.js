@@ -244,7 +244,7 @@ export class LLMWrapper {
     "timeUnits": "The unit of time for this model.  This should match with the equations that you generate.",
 
     "loopIdentifier": "The globally unique identifer for this feedback loop.  You will take this value from the feedback loop identifier given to you.",
-    "loopName": "A short, ideally 1 to 5 word name, for the process this feedback loop represents. This name should not refer directly to the polarity of the loop.  Don't use balancing, reinforcing, positive or negative.",
+    "loopName": "A short, but unique name, for the process this feedback loop represents.  This name must be distinct for each loop you give a name to. This name should not refer directly to the polarity of the loop.  Don't use the words: growth, decline, stablizing, dampening, balancing, reinforcing, positive or negative in the name.",
     "loopDescription": "A description of what the process this feedback loop represents.  This description should discusses the purpose of this feedback loop. It should not be longer then 3 paragraphs",
     "loopsDescription": "A list of feedback loops with names and descriptions for the end-user.",
     "loopsNarrative": "A markdown formatted string containing an essay consisting of multiple paragraphs (unless instructed to do otherwise) that stitches together the feedback loops and their loopDescriptions into a narrative that describes the origins of behavior in the model. This essay should note each time period where there is a change in loop dominance."
