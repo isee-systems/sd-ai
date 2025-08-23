@@ -20,7 +20,9 @@ class Engine {
     }
 
     additionalParameters()  {
-         return [{
+        let parameters = LLMWrapper.additionalParameters();
+
+        return parameters.concat([{
             name: "googleKey",
             type: "string",
             required: false,
@@ -63,7 +65,7 @@ class Engine {
             uiElement: "hidden",
             label: "JSON Description of feedback loops",
             description: "A JSON object representing all of the feedback loops in the model"
-        }];
+        }]);
     }
 
     async generate(prompt, currentModel, parameters) {
