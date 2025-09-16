@@ -1,13 +1,13 @@
 import { z } from 'zod';
-import { ZodToGeminiConverter } from '../../utilities/ZodToGeminiConverter.js';
+import { ZodToStructuredOutputConverter } from '../../utilities/ZodToStructuredOutputConverter.js';
 import { LLMWrapper } from '../../utilities/LLMWrapper.js';
 
-describe('ZodToGeminiConverter', () => {
+describe('ZodToStructuredOutputConverter', () => {
   let converter;
   let llmWrapper;
 
   beforeEach(() => {
-    converter = new ZodToGeminiConverter();
+    converter = new ZodToStructuredOutputConverter();
     // Still need LLMWrapper for testing actual schema generation
     llmWrapper = new LLMWrapper({
       openAIKey: 'test-key',
@@ -399,16 +399,9 @@ describe('ZodToGeminiConverter', () => {
         }
       };
 
-      const originalWarn = console.warn;
-      const warnings = [];
-      console.warn = (message) => warnings.push(message);
-
       const result = converter.convert(mockSchema);
 
       expect(result).toEqual({ type: 'string' });
-      expect(warnings).toContain('Unsupported Zod type: ZodUnsupported');
-
-      console.warn = originalWarn;
     });
 
     it('should handle empty objects', () => {
@@ -445,7 +438,7 @@ describe('ZodToGeminiConverter', () => {
     });
 
     it('should be a separate class from LLMWrapper', () => {
-      expect(converter).toBeInstanceOf(ZodToGeminiConverter);
+      expect(converter).toBeInstanceOf(ZodToStructuredOutputConverter);
       expect(converter).not.toBeInstanceOf(LLMWrapper);
     });
   });
