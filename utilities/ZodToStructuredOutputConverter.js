@@ -1,3 +1,5 @@
+import logger from "./logger.js"
+
 export class ZodToStructuredOutputConverter {
   convert(zodSchema) {
     if (!zodSchema || !zodSchema._def) {
@@ -27,7 +29,7 @@ export class ZodToStructuredOutputConverter {
       case 'ZodLiteral':
         return this.convertZodLiteralToStructuredOutput(zodSchema._def);
       default:
-        console.warn(`Unsupported Zod type: ${zodType}`);
+        logger.warn(`Unsupported Zod type: ${zodType}`);
         return { type: 'string' };
     }
   }
@@ -144,7 +146,7 @@ export class ZodToStructuredOutputConverter {
       };
     }
 
-    //console.warn('Complex union types not fully supported, defaulting to string');
+    logger.warn('Complex union types not fully supported, defaulting to string');
     return { type: 'string' };
   }
 

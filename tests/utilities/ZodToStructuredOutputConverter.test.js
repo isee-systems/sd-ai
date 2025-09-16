@@ -399,16 +399,9 @@ describe('ZodToStructuredOutputConverter', () => {
         }
       };
 
-      const originalWarn = console.warn;
-      const warnings = [];
-      console.warn = (message) => warnings.push(message);
-
       const result = converter.convert(mockSchema);
 
       expect(result).toEqual({ type: 'string' });
-      expect(warnings).toContain('Unsupported Zod type: ZodUnsupported');
-
-      console.warn = originalWarn;
     });
 
     it('should handle empty objects', () => {

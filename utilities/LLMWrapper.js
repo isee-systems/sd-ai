@@ -368,7 +368,7 @@ export class LLMWrapper {
     const completionParams = {
       model,
       messages: claudeMessages.messages,
-      max_tokens: 4096    
+      max_tokens: 8192    
     };
 
     if (claudeMessages.system) {
