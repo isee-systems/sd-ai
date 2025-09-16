@@ -1,4 +1,5 @@
-import utils, { LLMWrapper } from '../../utils.js'
+import {LLMWrapper} from "../../utilities/LLMWrapper.js";
+import utils from "../../utilities/utils.js";
 import { marked } from 'marked';
 
 class ResponseFormatError extends Error {

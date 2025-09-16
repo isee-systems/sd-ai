@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { ZodToGeminiConverter } from '../ZodToGeminiConverter.js';
-import { LLMWrapper } from '../utils.js';
+import { ZodToGeminiConverter } from '../../utilities/ZodToGeminiConverter.js';
+import { LLMWrapper } from '../../utilities/LLMWrapper.js';
 
 describe('ZodToGeminiConverter', () => {
   let converter;
@@ -327,7 +327,8 @@ describe('ZodToGeminiConverter', () => {
       expect(result.properties.relationships.items.properties.to.type).toBe('string');
       expect(result.properties.relationships.items.properties.polarity).toEqual({
         type: 'string',
-        enum: ['+', '-']
+        enum: ['+', '-'],
+        description: "There are two possible kinds of relationships.  The first are relationships with positive polarity that are represented with a + symbol.  In relationships with positive polarity (+) a change in the from variable causes a change in the same direction in the to variable.  For example, in a relationship with positive polarity (+), a decrease in the from variable, would lead to a decrease in the to variable.  The second kind of relationship are those with negative polarity that are represented with a - symbol.  In relationships with negative polarity (-) a change in the from variable causes a change in the opposite direction in the to variable.  For example, in a relationship with negative polarity (-) an increase in the from variable, would lead to a decrease in the to variable."
       });
       expect(result.properties.explanation.type).toBe('string');
       expect(result.properties.title.type).toBe('string');

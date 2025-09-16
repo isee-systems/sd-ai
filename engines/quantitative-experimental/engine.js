@@ -1,4 +1,4 @@
-import { LLMWrapper } from '../../utils.js';
+import { LLMWrapper } from '../../utilities/LLMWrapper.js';
 import QuantitativeEngineBrain from '../quantitative/QuantitativeEngineBrain.js'
 import Engine from './../quantitative/engine.js'
 

@@ -1,6 +1,7 @@
-import { LLMWrapper } from '../../utils.js';
 import LTMNarrativeBrain from './LTMNarrativeBrain.js'
-import logger from '../../logger.js'
+import {LLMWrapper} from "../../utilities/LLMWrapper.js";
+import logger from "../../utilities/logger.js";
+
 
 class Engine {
     constructor() {

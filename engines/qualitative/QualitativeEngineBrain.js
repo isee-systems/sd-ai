@@ -1,4 +1,5 @@
-import projectUtils, { LLMWrapper } from '../../utils.js'
+import {LLMWrapper} from "../../utilities/LLMWrapper.js";
+import projectUtils from "../../utilities/utils.js";
 
 class ResponseFormatError extends Error {
     constructor(message) {

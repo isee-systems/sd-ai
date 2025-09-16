@@ -1,5 +1,4 @@
-import { LLMWrapper } from '../../utils.js';
-import QualitativeEngineBrain from '../qualitative/QualitativeEngineBrain.js'
+import { LLMWrapper } from '../../utilities/LLMWrapper.js';
 import Engine from './../qualitative/engine.js'
 
 class QualitativeZero extends Engine {

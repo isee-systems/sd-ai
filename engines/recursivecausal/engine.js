@@ -1,6 +1,6 @@
 import QualitativeEngineBrain from '../qualitative/QualitativeEngineBrain.js';
-import { LLMWrapper } from '../../utils.js';
-import logger from '../../logger.js';
+import { LLMWrapper } from '../../utilities/LLMWrapper.js';
+import logger from '../../utilities/logger.js';
 
 const RECURSIVE_SYSTEM_PROMPT = `You are a System Dynamics Assistant. Users will give you a topic, text and optionally some extra information to take into consideration. It is your job to generate causal relationships from that text while following other user specifications.
         

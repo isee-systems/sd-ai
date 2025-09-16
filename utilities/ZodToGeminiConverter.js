@@ -144,7 +144,7 @@ export class ZodToGeminiConverter {
       };
     }
 
-    console.warn('Complex union types not fully supported, defaulting to string');
+    //console.warn('Complex union types not fully supported, defaulting to string');
     return { type: 'string' };
   }
 

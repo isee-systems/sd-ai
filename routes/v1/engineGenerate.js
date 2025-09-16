@@ -1,8 +1,9 @@
 import express from 'express'
 import fs from 'fs'
 import path from 'path'
-import utils, { ModelCapabilities, ModelType, LLMWrapper } from './../../utils.js'
-import logger from './../../logger.js'
+import utils from './../../utilities/utils.js'
+import { ModelCapabilities, ModelType, LLMWrapper } from './../../utilities/LLMWrapper.js'
+import logger from './../../utilities/logger.js'
 
 const router = express.Router()
 
