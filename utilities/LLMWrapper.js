@@ -274,15 +274,15 @@ export class LLMWrapper {
       return Model;
   }
 
-  async createChatCompletion(messages, model, zodSchema = null, temperature = null, reasoning_effort = null) {
+  async createChatCompletion(messages, model, zodSchema = null, temperature = null, reasoningEffort = null) {
     if (this.model.kind === ModelType.GEMINI) {
       return await this.#createGeminiChatCompletion(messages, model, zodSchema, temperature);
     }
 
-    return await this.#createOpenAIChatCompletion(messages, model, zodSchema, temperature, reasoning_effort);
+    return await this.#createOpenAIChatCompletion(messages, model, zodSchema, temperature, reasoningEffort);
   }
 
-  async #createOpenAIChatCompletion(messages, model, zodSchema = null, temperature = null, reasoning_effort = null) {
+  async #createOpenAIChatCompletion(messages, model, zodSchema = null, temperature = null, reasoningEffort = null) {
     const completionParams = {
       messages,
       model
@@ -296,8 +296,8 @@ export class LLMWrapper {
       completionParams.temperature = temperature;
     }
 
-    if (reasoning_effort) {
-      completionParams.reasoning_effort = reasoning_effort;
+    if (reasoningEffort) {
+      completionParams.reasoning_effort = reasoningEffort;
     }
 
     const completion = await this.#openAIAPI.chat.completions.create(completionParams);

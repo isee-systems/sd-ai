@@ -53,7 +53,7 @@ describe('LTMNarrativeBrain', () => {
 
       expect(result.model).toBe('gemini-2.5-flash');
       expect(result.temperature).toBe(0);
-      expect(result.reasoning_effort).toBeUndefined();
+      expect(result.reasoningEffort).toBeUndefined();
       expect(result.messages).toBeInstanceOf(Array);
       expect(result.messages.length).toBeGreaterThan(0);
       expect(result.messages[result.messages.length - 1].content).toBe('Test prompt');
@@ -70,7 +70,7 @@ describe('LTMNarrativeBrain', () => {
       const result = brainWithO3Mini.setupLLMParameters('Test prompt', null);
 
       expect(result.model).toBe('o3-mini');
-      expect(result.reasoning_effort).toBe('high');
+      expect(result.reasoningEffort).toBe('high');
     });
 
     it('should handle o3 model with reasoning effort', () => {
@@ -84,7 +84,7 @@ describe('LTMNarrativeBrain', () => {
       const result = brainWithO3.setupLLMParameters('Test prompt', null);
 
       expect(result.model).toBe('o3');
-      expect(result.reasoning_effort).toBe('low');
+      expect(result.reasoningEffort).toBe('low');
     });
 
     it('should set system role to user and temperature to 1 when model lacks system mode', () => {
@@ -281,8 +281,8 @@ describe('LTMNarrativeBrain', () => {
       expect(result).toHaveProperty('messages');
       expect(result).toHaveProperty('model');
       expect(result).toHaveProperty('temperature');
-      expect(result).toHaveProperty('reasoning_effort');
-      expect(result).toHaveProperty('response_format');
+      expect(result).toHaveProperty('reasoningEffort');
+      expect(result).toHaveProperty('responseFormat');
 
       expect(Array.isArray(result.messages)).toBe(true);
       expect(typeof result.model).toBe('string');

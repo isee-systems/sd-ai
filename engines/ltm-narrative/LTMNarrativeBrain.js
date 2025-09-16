@@ -161,8 +161,8 @@ You can only use the information given to you by the user in your work. Any info
             messages,
             model: underlyingModel,
             temperature: temperature,
-            reasoning_effort: reasoningEffort,
-            response_format: responseFormat
+            reasoningEffort: reasoningEffort,
+            responseFormat: responseFormat
         };
     }
 
@@ -173,9 +173,9 @@ You can only use the information given to you by the user in your work. Any info
         const originalResponse = await this.#llmWrapper.createChatCompletion(
             llmParams.messages,
             llmParams.model,
-            llmParams.response_format,
+            llmParams.responseFormat,
             llmParams.temperature,
-            llmParams.reasoning_effort
+            llmParams.reasoningEffort
         );
         if (originalResponse.refusal) {
             throw new ResponseFormatError(originalResponse.refusal);

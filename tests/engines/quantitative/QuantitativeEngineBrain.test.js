@@ -424,8 +424,8 @@ describe('QuantitativeEngineBrain', () => {
 
       expect(result.model).toBe('gemini-2.5-flash');
       expect(result.temperature).toBe(0);
-      expect(result.reasoning_effort).toBeUndefined();
-      expect(result.response_format).toBeDefined();
+      expect(result.reasoningEffort).toBeUndefined();
+      expect(result.responseFormat).toBeDefined();
       expect(result.messages).toBeInstanceOf(Array);
       expect(result.messages.length).toBeGreaterThan(0);
       expect(result.messages[result.messages.length - 2].content).toBe(userPrompt);
@@ -441,7 +441,7 @@ describe('QuantitativeEngineBrain', () => {
       const result = engineWithO3Mini.setupLLMParameters('Test prompt');
 
       expect(result.model).toBe('o3-mini');
-      expect(result.reasoning_effort).toBe('low');
+      expect(result.reasoningEffort).toBe('low');
     });
 
     it('should handle o3 model with reasoning effort', () => {
@@ -454,7 +454,7 @@ describe('QuantitativeEngineBrain', () => {
       const result = engineWithO3.setupLLMParameters('Test prompt');
 
       expect(result.model).toBe('o3');
-      expect(result.reasoning_effort).toBe('high');
+      expect(result.reasoningEffort).toBe('high');
     });
 
     it('should throw error when model lacks structured output support', () => {
@@ -640,9 +640,9 @@ describe('QuantitativeEngineBrain', () => {
 
       expect(result).toHaveProperty('messages');
       expect(result).toHaveProperty('model');
-      expect(result).toHaveProperty('response_format');
+      expect(result).toHaveProperty('responseFormat');
       expect(result).toHaveProperty('temperature');
-      expect(result).toHaveProperty('reasoning_effort');
+      expect(result).toHaveProperty('reasoningEffort');
 
       expect(Array.isArray(result.messages)).toBe(true);
       expect(typeof result.model).toBe('string');

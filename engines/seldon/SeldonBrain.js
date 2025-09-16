@@ -201,7 +201,7 @@ As the world's best System Dynamics Modeler, you will consider and apply the Sys
             messages,
             model: underlyingModel,
             temperature: temperature,
-            reasoning_effort: reasoningEffort
+            reasoningEffort: reasoningEffort
         };
     }
 
@@ -212,9 +212,9 @@ As the world's best System Dynamics Modeler, you will consider and apply the Sys
         const originalResponse = await this.#llmWrapper.createChatCompletion(
             llmParams.messages,
             llmParams.model,
-            null, // no response_format for this engine
+            null, // no responseFormat for this engine
             llmParams.temperature,
-            llmParams.reasoning_effort
+            llmParams.reasoningEffort
         );
         if (originalResponse.refusal) {
             throw new ResponseFormatError(originalResponse.refusal);

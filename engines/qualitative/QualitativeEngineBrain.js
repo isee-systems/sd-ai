@@ -254,9 +254,9 @@ You will conduct a multistep process:
         return {
             messages,
             model: underlyingModel,
-            response_format: responseFormat,
+            responseFormat: responseFormat,
             temperature: temperature,
-            reasoning_effort: reasoningEffort
+            reasoningEffort: reasoningEffort
         };
     }
 
@@ -267,9 +267,9 @@ You will conduct a multistep process:
         const originalResponse = await this.#llmWrapper.createChatCompletion(
             llmParams.messages,
             llmParams.model,
-            llmParams.response_format,
+            llmParams.responseFormat,
             llmParams.temperature,
-            llmParams.reasoning_effort
+            llmParams.reasoningEffort
         );
         if (originalResponse.refusal) {
             throw new ResponseFormatError(originalResponse.refusal);
