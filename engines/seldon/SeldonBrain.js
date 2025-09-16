@@ -208,15 +208,13 @@ As the world's best System Dynamics Modeler, you will consider and apply the Sys
         const llmParams = this.setupLLMParameters(userPrompt, lastModel);
 
         //get its response
-        const originalCompletion = await this.#llmWrapper.createChatCompletion(
+        const originalResponse = await this.#llmWrapper.createChatCompletion(
             llmParams.messages,
             llmParams.model,
             null, // no response_format for this engine
             llmParams.temperature,
             llmParams.reasoning_effort
         );
-
-        const originalResponse = originalCompletion.choices[0].message;
         if (originalResponse.refusal) {
             throw new ResponseFormatError(originalResponse.refusal);
         }

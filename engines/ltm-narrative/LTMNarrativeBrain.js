@@ -169,15 +169,13 @@ You can only use the information given to you by the user in your work. Any info
         const llmParams = this.setupLLMParameters(userPrompt, lastModel);
 
         //get its response
-        const originalCompletion = await this.#llmWrapper.createChatCompletion(
+        const originalResponse = await this.#llmWrapper.createChatCompletion(
             llmParams.messages,
             llmParams.model,
             llmParams.response_format,
             llmParams.temperature,
             llmParams.reasoning_effort
         );
-
-        const originalResponse = originalCompletion.choices[0].message;
         if (originalResponse.refusal) {
             throw new ResponseFormatError(originalResponse.refusal);
         } else if (originalResponse.parsed) {

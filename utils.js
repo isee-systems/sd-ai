@@ -371,7 +371,8 @@ export class LLMWrapper {
       completionParams.reasoning_effort = reasoning_effort;
     }
 
-    return await this.#openAIAPI.chat.completions.create(completionParams);
+    const completion = await this.#openAIAPI.chat.completions.create(completionParams);
+    return completion.choices[0].message;
   }
 
   generateMessages(systemPrompt, userPrompt, options = {}) {
