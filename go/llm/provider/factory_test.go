@@ -28,11 +28,11 @@ func TestNewClientOpenAIModelRequiresAPIKey(t *testing.T) {
 
 func TestNewClientClaudeModels(t *testing.T) {
 	tests := []struct {
-		name     string
-		model    string
-		apiKey   string
-		envKey   string
-		wantErr  bool
+		name    string
+		model   string
+		apiKey  string
+		envKey  string
+		wantErr bool
 		errMsg  string
 	}{
 		{
@@ -78,11 +78,11 @@ func TestNewClientClaudeModels(t *testing.T) {
 
 func TestNewClientGeminiModels(t *testing.T) {
 	tests := []struct {
-		name     string
-		model    string
-		apiKey   string
-		envKey   string
-		wantErr  bool
+		name    string
+		model   string
+		apiKey  string
+		envKey  string
+		wantErr bool
 		errMsg  string
 	}{
 		{
@@ -128,8 +128,8 @@ func TestNewClientGeminiModels(t *testing.T) {
 
 func TestNewClientLocalModels(t *testing.T) {
 	tests := []struct {
-		name   string
-		model  string
+		name  string
+		model string
 	}{
 		{name: "Llama model", model: "llama3.1"},
 		{name: "Mistral model", model: "mistral-7b"},
