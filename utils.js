@@ -375,59 +375,6 @@ export class LLMWrapper {
     return completion.choices[0].message;
   }
 
-  generateMessages(systemPrompt, userPrompt, options = {}) {
-    const {
-      backgroundKnowledge,
-      backgroundPrompt,
-      problemStatement,
-      problemStatementPrompt,
-      lastModel,
-      assistantPrompt,
-      feedbackPrompt
-    } = options;
-
-    let systemRole = this.model.systemModeUser;
-
-    if (!this.model.hasSystemMode) {
-      systemRole = "user";
-    }
-
-    let messages = [{
-      role: systemRole,
-      content: systemPrompt
-    }];
-
-    if (backgroundKnowledge && backgroundPrompt) {
-      messages.push({
-        role: "user",
-        content: backgroundPrompt.replaceAll("{backgroundKnowledge}", backgroundKnowledge),
-      });
-    }
-
-    if (problemStatement && problemStatementPrompt) {
-      messages.push({
-        role: systemRole,
-        content: problemStatementPrompt.replaceAll("{problemStatement}", problemStatement),
-      });
-    }
-
-    if (lastModel) {
-      messages.push({ role: "assistant", content: JSON.stringify(lastModel, null, 2) });
-
-      if (assistantPrompt) {
-        messages.push({ role: "user", content: assistantPrompt });
-      }
-    }
-
-    messages.push({ role: "user", content: userPrompt });
-
-    if (feedbackPrompt) {
-      messages.push({ role: "user", content: feedbackPrompt });
-    }
-
-    return messages;
-  }
-
   static additionalParameters() {
     return [{
             name: "openAIKey",
