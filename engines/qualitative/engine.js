@@ -1,5 +1,5 @@
 import QualitativeEngineBrain from './QualitativeEngineBrain.js'
-import logger from '../../logger.js'
+import logger from '../../utilities/logger.js'
 
 class Engine {
     constructor() {

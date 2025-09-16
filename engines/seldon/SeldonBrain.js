@@ -1,4 +1,5 @@
-import utils, { LLMWrapper } from '../../utils.js'
+import utils from '../../utilities/utils.js'
+import { LLMWrapper } from '../../utilities/LLMWrapper.js'
 import { marked } from 'marked';
 
 class ResponseFormatError extends Error {
@@ -206,11 +207,15 @@ As the world's best System Dynamics Modeler, you will consider and apply the Sys
 
     async converse(userPrompt, lastModel) {
         const llmParams = this.setupLLMParameters(userPrompt, lastModel);
-        
-        //get its response
-        const originalCompletion = await this.#llmWrapper.openAIAPI.chat.completions.create(llmParams);
 
-        const originalResponse = originalCompletion.choices[0].message;
+        //get its response
+        const originalResponse = await this.#llmWrapper.createChatCompletion(
+            llmParams.messages,
+            llmParams.model,
+            null, // no response_format for this engine
+            llmParams.temperature,
+            llmParams.reasoning_effort
+        );
         if (originalResponse.refusal) {
             throw new ResponseFormatError(originalResponse.refusal);
         }

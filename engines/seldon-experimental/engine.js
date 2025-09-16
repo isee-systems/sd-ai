@@ -1,4 +1,4 @@
-import { LLMWrapper } from '../../utils.js';
+import { LLMWrapper } from '../../utilities/LLMWrapper.js';
 import SeldonBrain from '../seldon/SeldonBrain.js'
 
 class Engine {

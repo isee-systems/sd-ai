@@ -7,8 +7,8 @@ import util from 'node:util';
 
 const promiseExec = util.promisify(exec);
 
-import {LLMWrapper} from "../../utils.js";
-import logger from "../../logger.js";
+import {LLMWrapper} from "../../utilities/LLMWrapper.js";
+import logger from "../../utilities/logger.js";
 
 const __filename = fileURLToPath(import.meta.url); // get the resolved path to the file
 const __dirname = path.dirname(__filename); // get the name of the directory

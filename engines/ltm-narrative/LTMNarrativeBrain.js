@@ -1,4 +1,5 @@
-import utils, { LLMWrapper } from '../../utils.js'
+import {LLMWrapper} from "../../utilities/LLMWrapper.js";
+import utils from "../../utilities/utils.js";
 import { marked } from 'marked';
 
 class ResponseFormatError extends Error {
@@ -167,11 +168,15 @@ You can only use the information given to you by the user in your work. Any info
 
     async generate(userPrompt, lastModel) {
         const llmParams = this.setupLLMParameters(userPrompt, lastModel);
-        
-        //get its response
-        const originalCompletion = await this.#llmWrapper.openAIAPI.chat.completions.create(llmParams);
 
-        const originalResponse = originalCompletion.choices[0].message;
+        //get its response
+        const originalResponse = await this.#llmWrapper.createChatCompletion(
+            llmParams.messages,
+            llmParams.model,
+            llmParams.response_format,
+            llmParams.temperature,
+            llmParams.reasoning_effort
+        );
         if (originalResponse.refusal) {
             throw new ResponseFormatError(originalResponse.refusal);
         } else if (originalResponse.parsed) {

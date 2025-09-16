@@ -1,6 +1,6 @@
-import { LLMWrapper } from '../../utils.js';
 import QualitativeEngineBrain from '../qualitative/QualitativeEngineBrain.js'
 import Engine from './../qualitative/engine.js'
+import { LLMWrapper } from '../../utilities/LLMWrapper.js';
 
 class QualitativeExperimental extends Engine {
     static SYSTEM_PROMPT_DESC = 

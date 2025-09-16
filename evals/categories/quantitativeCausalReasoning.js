@@ -16,7 +16,7 @@
  * @module categories/quantitativeCausalReasoning
  */
 
-import utils from '../../utils.js';
+import utils from '../../utilities/utils.js';
 
 // Note: pluralize import removed as it's not used in this evaluation
 

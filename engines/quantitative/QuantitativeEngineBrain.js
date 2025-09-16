@@ -1,4 +1,5 @@
-import projectUtils, { LLMWrapper } from '../../utils.js'
+import projectUtils from '../../utilities/utils.js'
+import { LLMWrapper } from '../../utilities/LLMWrapper.js'
 import { marked } from 'marked';
 
 class ResponseFormatError extends Error {
@@ -103,11 +104,13 @@ You will conduct a multistep process:
     #isFlowUsed(flow, response) {
         return response.variables.findIndex((v)=> {
             if (v.type === "stock") {
-                return v.inflows.findIndex((f) => {
-                    return flow.name === f;
-                }) >= 0 || v.outflows.findIndex((f) => {
+                const inflowMatch = (v.inflows || []).findIndex((f) => {
                     return flow.name === f;
                 }) >= 0;
+                const outflowMatch = (v.outflows || []).findIndex((f) => {
+                    return flow.name === f;
+                }) >= 0;
+                return inflowMatch || outflowMatch;
             }
 
             return false;
@@ -259,11 +262,15 @@ You will conduct a multistep process:
 
     async generateModel(userPrompt, lastModel) {
         const llmParams = this.setupLLMParameters(userPrompt, lastModel);
-        
-        //get what it thinks the relationships are with this information
-        const originalCompletion = await this.#llmWrapper.openAIAPI.chat.completions.create(llmParams);
 
-        const originalResponse = originalCompletion.choices[0].message;
+        //get what it thinks the relationships are with this information
+        const originalResponse = await this.#llmWrapper.createChatCompletion(
+            llmParams.messages,
+            llmParams.model,
+            llmParams.response_format,
+            llmParams.temperature,
+            llmParams.reasoning_effort
+        );
         if (originalResponse.refusal) {
             throw new ResponseFormatError(originalResponse.refusal);
         } else if (originalResponse.parsed) {

@@ -1,86 +1,8 @@
 import OpenAI from "openai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { z } from "zod";
 import { zodResponseFormat } from "openai/helpers/zod";
-
-let utils = {};
-
-//this will let us deny old clients in the future
-utils.supportedPlatform = function(clientProduct, clientVersion) {
-  if (!clientProduct || !clientVersion)
-    return false;
-  
-  //both product and version may be null or undefined if not passed in
-  return true;
-}
-
-utils.xmileName = function(name) {
-  let cleanName = name.replaceAll("\n", " ")
-             .replaceAll("\r", " ");
-
-  const splits = cleanName.split(" ").filter((c) => {
-    return c !== " ";
-  });
-
-  return splits.join("_");
-}
-
-utils.caseFold = function(name) {
-  let xname = utils.xmileName(name);
-  return xname.toLowerCase();
-}
-
-utils.prettyifyName = function(variable) {
-  return variable.replaceAll("\n", "\\\n").replaceAll("\r", "\\\r");
-}
-
-utils.sameVars = function(a,b) {
-    return utils.caseFold(a) === utils.caseFold(b);
-}
-
-utils.isValidFeedbackContent = function(feedbackContent) {
-  if (!feedbackContent) {
-    return false;
-  }
-
-  if (feedbackContent.hasOwnProperty('valid') && !feedbackContent.valid) {
-    return false;
-  }
-
-  if (Array.isArray(feedbackContent) && feedbackContent.length < 1) {
-    return false;
-  }
-
-  return true;
-}
-
-// EVALUATION UTILITIES - These functions are specifically designed for evaluation categories
-
-/**
- * Normalizes a variable name for case-insensitive and whitespace/underscore-insensitive comparison
- * Used in evaluation categories to match variable names flexibly
- * @param {string} name The variable name to normalize
- * @returns {string} Normalized name (lowercase, spaces and underscores removed)
- */
-utils.evalsNormalizeVariableName = function(name) {
-    return name.toLowerCase().replace(/[\s_-]/g, '');
-};
-
-/**
- * Checks if a variable name matches the expected name using flexible matching
- * Used in evaluation categories to compare generated variable names with expected names
- * @param {string} variableName The variable name from the generated model
- * @param {string} expectedName The expected variable name
- * @returns {boolean} True if names match
- */
-utils.evalsVariableNameMatches = function(variableName, expectedName) {
-    const normalizedVariable = utils.evalsNormalizeVariableName(variableName);
-    const normalizedExpected = utils.evalsNormalizeVariableName(expectedName);
-    return normalizedVariable.includes(normalizedExpected) || normalizedExpected.includes(normalizedVariable);
-};
-
-
-
-export default utils; 
+import { ZodToGeminiConverter } from "./ZodToGeminiConverter.js";
 
 export const ModelType = Object.freeze({
   GEMINI:   Symbol("Gemini"),
@@ -127,9 +49,11 @@ export class ModelCapabilities {
 export class LLMWrapper {
   #openAIKey;
   #googleKey;
-  
+  #openAIAPI = null;
+  #geminiAPI = null;
+  #zodToGeminiConverter = new ZodToGeminiConverter();
+
   model = new ModelCapabilities(LLMWrapper.DEFAULT_MODEL);
-  openAIAPI = null;
 
   constructor(parameters) {
     if (!parameters.openAIKey) {
@@ -152,24 +76,21 @@ export class LLMWrapper {
             if (!this.#googleKey) {
               throw new Error("To access this service you need to send a Google key");
             }
-            
-            this.openAIAPI = new OpenAI({
-                apiKey: this.#googleKey,
-                baseURL: "https://generativelanguage.googleapis.com/v1beta/openai"
-            });
+
+            this.#geminiAPI = new GoogleGenerativeAI(this.#googleKey);
             break;
         case ModelType.OPEN_AI:
             if (!this.#openAIKey) {
               throw new Error("To access this service you need to send an OpenAI key");
             }
 
-            this.openAIAPI = new OpenAI({
+            this.#openAIAPI = new OpenAI({
                 apiKey: this.#openAIKey,
             });
             break;
         case ModelType.DEEPSEEK:
         case ModelType.LLAMA:
-            this.openAIAPI = new OpenAI({
+            this.#openAIAPI = new OpenAI({
                 apiKey: 'junk', // required but unused
                 baseURL: 'http://localhost:11434/v1',
             });
@@ -211,9 +132,9 @@ export class LLMWrapper {
     "relationship": "This is a relationship between two variables, from and to (from is the cause, to is the effect).  The relationship also contains a polarity which describes how a change in the from variable impacts the to variable",
 
     "relationships": "The list of relationships you think are appropriate to satisfy my request based on all of the information I have given you",
-    
+
     "explanation": "Concisely explain your reasoning for each change you made to the old model to create the new model. Speak in plain English, refer to system archetypes, don't reference json specifically. Don't reiterate the request or any of these instructions.",
-    
+
     "title": "A highly descriptive 7 word max title describing your explanation.",
 
     "quantExplanation": "This is markdown formatted text. Concisely explain your reasoning for each change you made to the old model to create the new model. Speak in plain English, refer to system archetypes, don't reference json specifically. Don't reiterate the request or any of these instructions.",
@@ -225,7 +146,7 @@ export class LLMWrapper {
 
     "type": "There are three types of variables, stock, flow, and variable. A stock is an accumulation of its flows, it is an integral.  A stock can only change because of its flows. A flow is the derivative of a stock.  A plain variable is used for algebraic expressions.",
     "name": "The name of a variable",
- 
+
     "inflows": "Only used on variables that are of type stock.  It is an array of variable names representing flows that add to this stock.",
     "outflows": "Only used on variables that are of type stock.  It is an array of variable names representing flows that subtract from this stock.",
     "documentation": "Documentation for the variable including the reason why it was chosen, what it represents, and a simple explanation why it is calculated this way",
@@ -270,7 +191,7 @@ export class LLMWrapper {
         narrativeMarkdown: withDescription(z.string(), LLMWrapper.SCHEMA_STRINGS.loopsNarrative)
       });
 
-      return zodResponseFormat(LTMToolResponse, "ltm_tool_response");
+      return LTMToolResponse;
   }
 
   generateQualitativeSDJSONResponseSchema(removeDescription = false) {
@@ -289,20 +210,20 @@ export class LLMWrapper {
           reasoning: withDescription(z.string(), LLMWrapper.SCHEMA_STRINGS.reasoning),
           polarityReasoning: withDescription(z.string(), LLMWrapper.SCHEMA_STRINGS.polarityReasoning)
       }), LLMWrapper.SCHEMA_STRINGS.relationship);
-          
+
       const Relationships = z.object({
           explanation: withDescription(z.string(), LLMWrapper.SCHEMA_STRINGS.explanation),
           title: withDescription(z.string(), LLMWrapper.SCHEMA_STRINGS.title),
           relationships: withDescription(z.array(Relationship), LLMWrapper.SCHEMA_STRINGS.relationships)
       });
 
-      return zodResponseFormat(Relationships, "relationships_response");
+      return Relationships;
   }
 
   generateQuantitativeSDJSONResponseSchema(mentorMode) {
       const TypeEnum = z.enum(["stock", "flow", "variable"]).describe(LLMWrapper.SCHEMA_STRINGS.type);
       const PolarityEnum = z.enum(["+", "-"]).describe(LLMWrapper.SCHEMA_STRINGS.polarity);
-      
+
       const GFPoint = z.object({
         x: z.number().describe(LLMWrapper.SCHEMA_STRINGS.gfPointX),
         y: z.number().describe(LLMWrapper.SCHEMA_STRINGS.gfPointY)
@@ -319,7 +240,7 @@ export class LLMWrapper {
           reasoning: z.string().describe(LLMWrapper.SCHEMA_STRINGS.reasoning),
           polarityReasoning: z.string().describe(LLMWrapper.SCHEMA_STRINGS.polarityReasoning)
       }).describe(LLMWrapper.SCHEMA_STRINGS.relationship);
-      
+
       const Relationships = z.array(Relationship).describe(LLMWrapper.SCHEMA_STRINGS.relationships);
 
       const Variable = z.object({
@@ -332,7 +253,7 @@ export class LLMWrapper {
         documentation: z.string().describe(LLMWrapper.SCHEMA_STRINGS.documentation),
         units: z.string().describe(LLMWrapper.SCHEMA_STRINGS.units)
       });
-      
+
       const Variables = z.array(Variable).describe(LLMWrapper.SCHEMA_STRINGS.variables);
 
       const SimSpecs = z.object({
@@ -350,7 +271,101 @@ export class LLMWrapper {
         specs: SimSpecs
       });
 
-      return zodResponseFormat(Model, "model_response");
+      return Model;
+  }
+
+  async createChatCompletion(messages, model, zodSchema = null, temperature = null, reasoning_effort = null) {
+    if (this.model.kind === ModelType.GEMINI) {
+      return await this.#createGeminiChatCompletion(messages, model, zodSchema, temperature);
+    }
+
+    return await this.#createOpenAIChatCompletion(messages, model, zodSchema, temperature, reasoning_effort);
+  }
+
+  async #createOpenAIChatCompletion(messages, model, zodSchema = null, temperature = null, reasoning_effort = null) {
+    const completionParams = {
+      messages,
+      model
+    };
+
+    if (zodSchema) {
+      completionParams.response_format = zodResponseFormat(zodSchema, "sdai_schema");
+    }
+
+    if (temperature !== null && temperature !== undefined) {
+      completionParams.temperature = temperature;
+    }
+
+    if (reasoning_effort) {
+      completionParams.reasoning_effort = reasoning_effort;
+    }
+
+    const completion = await this.#openAIAPI.chat.completions.create(completionParams);
+    return completion.choices[0].message;
+  }
+
+  async #createGeminiChatCompletion(messages, model, zodSchema = null, temperature = null) {
+    const geminiMessages = this.#convertMessagesToGeminiFormat(messages);
+
+    // Set up model with system instruction if present
+    const modelConfig = { model };
+    if (geminiMessages.systemInstruction) {
+      modelConfig.systemInstruction = geminiMessages.systemInstruction;
+    }
+
+    const geminiModel = this.#geminiAPI.getGenerativeModel(modelConfig);
+
+    // Set up generation config
+    const generationConfig = {};
+    if (temperature !== null && temperature !== undefined) {
+      generationConfig.temperature = temperature;
+    }
+
+    if (zodSchema) {
+      generationConfig.responseMimeType = "application/json";
+      generationConfig.responseSchema = this.#zodToGeminiConverter.convert(zodSchema);
+    }
+
+    const result = await geminiModel.generateContent({
+      contents: geminiMessages.contents,
+      generationConfig
+    });
+
+    // Convert Gemini response to OpenAI format
+    return {
+      content: result.response.text()
+    };
+  }
+
+
+  #convertMessagesToGeminiFormat(messages) {
+    const geminiMessages = {
+      systemInstruction: null,
+      contents: []
+    };
+
+    for (const message of messages) {
+      if (message.role === "system") {
+        // Combine all system messages into a single instruction
+        if (geminiMessages.systemInstruction) {
+          geminiMessages.systemInstruction += "\n\n" + message.content;
+        } else {
+          geminiMessages.systemInstruction = message.content;
+        }
+      } else if (message.role === "user") {
+        geminiMessages.contents.push({
+          role: "user",
+          parts: [{ text: message.content }]
+        });
+      } else if (message.role === "assistant") {
+        geminiMessages.contents.push({
+          role: "model",
+          parts: [{ text: message.content }]
+        });
+      }
+    }
+
+    return geminiMessages;
   }
 
   static additionalParameters() {
@@ -383,4 +398,3 @@ export class LLMWrapper {
         }];
     }
 };
-
