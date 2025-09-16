@@ -12,8 +12,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/UB-IAD/sd-ai/go/schema"
 	"github.com/UB-IAD/sd-ai/go/sdjson"
+	"github.com/bpowers/go-agent/schema"
 )
 
 //go:embed response_schema.json

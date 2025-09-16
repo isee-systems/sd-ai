@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/UB-IAD/sd-ai/go/chat"
+	"github.com/bpowers/go-agent/chat"
 )
 
 type Diagrammer interface {
