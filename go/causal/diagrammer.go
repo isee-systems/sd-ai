@@ -65,7 +65,29 @@ func (d diagrammer) Generate(ctx context.Context, prompt, backgroundKnowledge st
 		return nil, fmt.Errorf("c.ChatCompletion: %w", err)
 	}
 
-	return parseRelationshipsResponse(resp.Content)
+	result, err := parseRelationshipsResponse(resp.Content)
+	if err != nil {
+		// Retry with a correction message
+		retryMsg := chat.Message{
+			Role: chat.UserRole,
+			Content: fmt.Sprintf("Your response didn't match the required structured JSON output. The specific error was: %v\n\nRe-generate your response addressing this error, ensuring it matches the required structured JSON output format from the system prompt.", err),
+		}
+
+		resp, retryErr := c.Message(ctx, retryMsg,
+			chat.WithResponseFormat("relationships_response", true, RelationshipsResponseSchema),
+			chat.WithMaxTokens(maxTokens),
+		)
+		if retryErr != nil {
+			return nil, fmt.Errorf("retry failed: %w (original error: %v)", retryErr, err)
+		}
+
+		result, err = parseRelationshipsResponse(resp.Content)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse response after retry: %w", err)
+		}
+	}
+
+	return result, nil
 }
 
 func parseRelationshipsResponse(content string) (*Map, error) {
@@ -86,22 +108,29 @@ func parseRelationshipsResponse(content string) (*Map, error) {
 
 func stripCodeFence(s string) string {
 	trimmed := strings.TrimSpace(s)
-	if !strings.HasPrefix(trimmed, "```") {
-		return trimmed
+
+	// Handle multiple fence formats: ```json, ```JSON, ```
+	if strings.HasPrefix(trimmed, "```") {
+		trimmed = strings.TrimPrefix(trimmed, "```")
+
+		// Skip the language identifier (json, JSON, etc.) if present
+		if newline := strings.Index(trimmed, "\n"); newline != -1 {
+			trimmed = trimmed[newline+1:]
+		} else if strings.TrimSpace(trimmed) == "" {
+			// Just "```" with nothing after
+			return ""
+		}
+
+		// Remove closing fence if present
+		if idx := strings.LastIndex(trimmed, "```"); idx != -1 {
+			trimmed = trimmed[:idx]
+		}
 	}
 
-	trimmed = strings.TrimPrefix(trimmed, "```")
+	// Also handle backticks that might wrap the entire response
 	trimmed = strings.TrimSpace(trimmed)
-
-	if newline := strings.Index(trimmed, "\n"); newline != -1 {
-		trimmed = trimmed[newline+1:]
-	} else {
-		// No newline means there was nothing beyond the fence header
-		return ""
-	}
-
-	if idx := strings.LastIndex(trimmed, "```"); idx != -1 {
-		trimmed = trimmed[:idx]
+	if strings.HasPrefix(trimmed, "`") && strings.HasSuffix(trimmed, "`") && len(trimmed) > 2 {
+		trimmed = trimmed[1 : len(trimmed)-1]
 	}
 
 	return strings.TrimSpace(trimmed)
