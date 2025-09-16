@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.62.0",
     "@google/generative-ai": "^0.24.1",
     "async": "^3.2.6",
     "chalk": "^5.4.1",

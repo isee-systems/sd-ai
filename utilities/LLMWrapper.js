@@ -1,14 +1,16 @@
 import OpenAI from "openai";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { zodResponseFormat } from "openai/helpers/zod";
-import { ZodToGeminiConverter } from "./ZodToGeminiConverter.js";
+import { ZodToStructuredOutputConverter } from "./ZodToStructuredOutputConverter.js";
 
 export const ModelType = Object.freeze({
   GEMINI:   Symbol("Gemini"),
   OPEN_AI:  Symbol("OpenAI"),
   LLAMA: Symbol("Llama"),
-  DEEPSEEK: Symbol("Deepseek")
+  DEEPSEEK: Symbol("Deepseek"),
+  CLAUDE: Symbol("Claude")
 });
 
 
@@ -26,7 +28,7 @@ export class ModelCapabilities {
       this.hasStructuredOutput = modelName !== 'o1-mini';
       this.hasSystemMode = modelName !== 'o1-mini';
       this.hasTemperature = !modelName.startsWith('o') && !modelName.startsWith('gpt-5');
-      if (modelName.includes('gemini') || modelName.includes('llama')) {
+      if (modelName.includes('gemini') || modelName.includes('llama') || modelName.includes('claude')) {
           this.systemModeUser = 'system';
       } else {
           this.systemModeUser = 'developer';
@@ -40,6 +42,8 @@ export class ModelCapabilities {
           return ModelType.LLAMA;
       } else if (this.name.includes('deepseek')) {
           return ModelType.DEEPSEEK;
+      } else if (this.name.includes('claude')) {
+          return ModelType.CLAUDE;
       } else {
           return ModelType.OPEN_AI;
       }
@@ -49,9 +53,11 @@ export class ModelCapabilities {
 export class LLMWrapper {
   #openAIKey;
   #googleKey;
+  #anthropicKey;
   #openAIAPI = null;
   #geminiAPI = null;
-  #zodToGeminiConverter = new ZodToGeminiConverter();
+  #anthropicAPI = null;
+  #zodToStructuredOutputConverter = new ZodToStructuredOutputConverter();
 
   model = new ModelCapabilities(LLMWrapper.DEFAULT_MODEL);
 
@@ -66,6 +72,12 @@ export class LLMWrapper {
         this.#googleKey = process.env.GOOGLE_API_KEY
     } else {
       this.#googleKey = parameters.googleKey;
+    }
+
+    if (!parameters.anthropicKey) {
+        this.#anthropicKey = process.env.ANTHROPIC_API_KEY
+    } else {
+      this.#anthropicKey = parameters.anthropicKey;
     }
 
     if (parameters.underlyingModel)
@@ -86,6 +98,15 @@ export class LLMWrapper {
 
             this.#openAIAPI = new OpenAI({
                 apiKey: this.#openAIKey,
+            });
+            break;
+        case ModelType.CLAUDE:
+            if (!this.#anthropicKey) {
+              throw new Error("To access this service you need to send an Anthropic key");
+            }
+
+            this.#anthropicAPI = new Anthropic({
+                apiKey: this.#anthropicKey,
             });
             break;
         case ModelType.DEEPSEEK:
@@ -113,6 +134,8 @@ export class LLMWrapper {
       {label: "Gemini 2.0", value: 'gemini-2.0-flash'},
       {label: "Gemini 2.0-Lite", value: 'gemini-2.0-flash-lite'},
       {label: "Gemini 1.5", value: 'gemini-1.5-flash'},
+      {label: "Claude Opus 4.1", value: 'claude-opus-4-1-20250805'},
+      {label: "Claude Sonnet 4", value: 'claude-sonnet-4-20250514'},
       {label: "o1", value: 'o1'},
       {label: "o3-mini low", value: 'o3-mini low'},
       {label: "o3-mini medium", value: 'o3-mini medium'},
@@ -277,6 +300,8 @@ export class LLMWrapper {
   async createChatCompletion(messages, model, zodSchema = null, temperature = null, reasoningEffort = null) {
     if (this.model.kind === ModelType.GEMINI) {
       return await this.#createGeminiChatCompletion(messages, model, zodSchema, temperature);
+    } else if (this.model.kind === ModelType.CLAUDE) {
+      return await this.#createClaudeChatCompletion(messages, model, zodSchema, temperature);
     }
 
     return await this.#createOpenAIChatCompletion(messages, model, zodSchema, temperature, reasoningEffort);
@@ -323,7 +348,7 @@ export class LLMWrapper {
 
     if (zodSchema) {
       generationConfig.responseMimeType = "application/json";
-      generationConfig.responseSchema = this.#zodToGeminiConverter.convert(zodSchema);
+      generationConfig.responseSchema = this.#zodToStructuredOutputConverter.convert(zodSchema);
     }
 
     const result = await geminiModel.generateContent({
@@ -337,6 +362,44 @@ export class LLMWrapper {
     };
   }
 
+  async #createClaudeChatCompletion(messages, model, zodSchema = null, temperature = null) {
+    const claudeMessages = this.#convertMessagesToClaudeFormat(messages);
+
+    const completionParams = {
+      model,
+      messages: claudeMessages.messages,
+      max_tokens: 4096    
+    };
+
+    if (claudeMessages.system) {
+      completionParams.system = claudeMessages.system;
+    }
+
+    if (temperature !== null && temperature !== undefined) {
+      completionParams.temperature = temperature;
+    }
+
+    if (zodSchema) {
+      completionParams.tools = [{
+        name: "structured_output",
+        description: "Output structured data according to the schema",
+        input_schema: this.#zodToStructuredOutputConverter.convert(zodSchema)
+      }];
+      completionParams.tool_choice = { type: "tool", name: "structured_output" };
+    }
+
+    const completion = await this.#anthropicAPI.messages.create(completionParams);
+
+    if (zodSchema && completion.content[0].type === 'tool_use') {
+      return {
+        content: JSON.stringify(completion.content[0].input)
+      };
+    }
+
+    return {
+      content: completion.content[0].text
+    };
+  }
 
   #convertMessagesToGeminiFormat(messages) {
     const geminiMessages = {
@@ -368,6 +431,30 @@ export class LLMWrapper {
     return geminiMessages;
   }
 
+  #convertMessagesToClaudeFormat(messages) {
+    const claudeMessages = {
+      system: null,
+      messages: []
+    };
+
+    for (const message of messages) {
+      if (message.role === "system") {
+        if (claudeMessages.system) {
+          claudeMessages.system += "\n\n" + message.content;
+        } else {
+          claudeMessages.system = message.content;
+        }
+      } else if (message.role === "user" || message.role === "assistant") {
+        claudeMessages.messages.push({
+          role: message.role,
+          content: message.content
+        });
+      }
+    }
+
+    return claudeMessages;
+  }
+
   static additionalParameters() {
     return [{
             name: "openAIKey",
@@ -385,6 +472,14 @@ export class LLMWrapper {
             saveForUser: "global",
             label: "Google API Key",
             description: "Leave blank for the default, or your Google API key - XXXXXX"
+        },{
+            name: "anthropicKey",
+            type: "string",
+            required: false,
+            uiElement: "password",
+            saveForUser: "global",
+            label: "Anthropic API Key",
+            description: "Leave blank for the default, or your Anthropic API key - sk-ant-XXXXXX"
         },{
             name: "underlyingModel",
             type: "string",

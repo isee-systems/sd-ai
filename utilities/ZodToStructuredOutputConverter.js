@@ -1,4 +1,4 @@
-export class ZodToGeminiConverter {
+export class ZodToStructuredOutputConverter {
   convert(zodSchema) {
     if (!zodSchema || !zodSchema._def) {
       return {};
@@ -8,31 +8,31 @@ export class ZodToGeminiConverter {
 
     switch (zodType) {
       case 'ZodString':
-        return this.convertZodStringToGemini(zodSchema._def);
+        return this.convertZodStringToStructuredOutput(zodSchema._def);
       case 'ZodNumber':
-        return this.convertZodNumberToGemini(zodSchema._def);
+        return this.convertZodNumberToStructuredOutput(zodSchema._def);
       case 'ZodBoolean':
         return { type: 'boolean' };
       case 'ZodArray':
-        return this.convertZodArrayToGemini(zodSchema._def);
+        return this.convertZodArrayToStructuredOutput(zodSchema._def);
       case 'ZodObject':
-        return this.convertZodObjectToGemini(zodSchema._def);
+        return this.convertZodObjectToStructuredOutput(zodSchema._def);
       case 'ZodEnum':
-        return this.convertZodEnumToGemini(zodSchema._def);
+        return this.convertZodEnumToStructuredOutput(zodSchema._def);
       case 'ZodOptional':
         const innerSchema = this.convert(zodSchema._def.innerType);
         return { ...innerSchema, nullable: true };
       case 'ZodUnion':
-        return this.convertZodUnionToGemini(zodSchema._def);
+        return this.convertZodUnionToStructuredOutput(zodSchema._def);
       case 'ZodLiteral':
-        return this.convertZodLiteralToGemini(zodSchema._def);
+        return this.convertZodLiteralToStructuredOutput(zodSchema._def);
       default:
         console.warn(`Unsupported Zod type: ${zodType}`);
         return { type: 'string' };
     }
   }
 
-  convertZodStringToGemini(def) {
+  convertZodStringToStructuredOutput(def) {
     const schema = { type: 'string' };
 
     if (def.description) {
@@ -42,7 +42,7 @@ export class ZodToGeminiConverter {
     return schema;
   }
 
-  convertZodNumberToGemini(def) {
+  convertZodNumberToStructuredOutput(def) {
     const schema = { type: 'number' };
 
     if (def.description) {
@@ -52,7 +52,7 @@ export class ZodToGeminiConverter {
     return schema;
   }
 
-  convertZodArrayToGemini(def) {
+  convertZodArrayToStructuredOutput(def) {
     const schema = {
       type: 'array',
       items: this.convert(def.type)
@@ -73,7 +73,7 @@ export class ZodToGeminiConverter {
     return schema;
   }
 
-  convertZodObjectToGemini(def) {
+  convertZodObjectToStructuredOutput(def) {
     const schema = {
       type: 'object',
       properties: {},
@@ -102,7 +102,7 @@ export class ZodToGeminiConverter {
     return schema;
   }
 
-  convertZodEnumToGemini(def) {
+  convertZodEnumToStructuredOutput(def) {
     const schema = {
       type: 'string',
       enum: def.values
@@ -115,7 +115,7 @@ export class ZodToGeminiConverter {
     return schema;
   }
 
-  convertZodUnionToGemini(def) {
+  convertZodUnionToStructuredOutput(def) {
     const options = def.options;
 
     if (options.length === 2 && options.some(opt => opt._def.typeName === 'ZodNull')) {
@@ -148,7 +148,7 @@ export class ZodToGeminiConverter {
     return { type: 'string' };
   }
 
-  convertZodLiteralToGemini(def) {
+  convertZodLiteralToStructuredOutput(def) {
     return {
       type: typeof def.value === 'string' ? 'string' : 'number',
       enum: [def.value]
