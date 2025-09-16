@@ -206,9 +206,15 @@ As the world's best System Dynamics Modeler, you will consider and apply the Sys
 
     async converse(userPrompt, lastModel) {
         const llmParams = this.setupLLMParameters(userPrompt, lastModel);
-        
+
         //get its response
-        const originalCompletion = await this.#llmWrapper.openAIAPI.chat.completions.create(llmParams);
+        const originalCompletion = await this.#llmWrapper.createChatCompletion(
+            llmParams.messages,
+            llmParams.model,
+            null, // no response_format for this engine
+            llmParams.temperature,
+            llmParams.reasoning_effort
+        );
 
         const originalResponse = originalCompletion.choices[0].message;
         if (originalResponse.refusal) {

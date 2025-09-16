@@ -127,9 +127,9 @@ export class ModelCapabilities {
 export class LLMWrapper {
   #openAIKey;
   #googleKey;
-  
+  #openAIAPI = null;
+
   model = new ModelCapabilities(LLMWrapper.DEFAULT_MODEL);
-  openAIAPI = null;
 
   constructor(parameters) {
     if (!parameters.openAIKey) {
@@ -153,7 +153,7 @@ export class LLMWrapper {
               throw new Error("To access this service you need to send a Google key");
             }
             
-            this.openAIAPI = new OpenAI({
+            this.#openAIAPI = new OpenAI({
                 apiKey: this.#googleKey,
                 baseURL: "https://generativelanguage.googleapis.com/v1beta/openai"
             });
@@ -163,13 +163,13 @@ export class LLMWrapper {
               throw new Error("To access this service you need to send an OpenAI key");
             }
 
-            this.openAIAPI = new OpenAI({
+            this.#openAIAPI = new OpenAI({
                 apiKey: this.#openAIKey,
             });
             break;
         case ModelType.DEEPSEEK:
         case ModelType.LLAMA:
-            this.openAIAPI = new OpenAI({
+            this.#openAIAPI = new OpenAI({
                 apiKey: 'junk', // required but unused
                 baseURL: 'http://localhost:11434/v1',
             });
@@ -200,7 +200,7 @@ export class LLMWrapper {
       {label: "o4-mini", value: 'o4-mini'}
   ];
 
-  static DEFAULT_MODEL = 'gpt-4.1';
+  static DEFAULT_MODEL = 'gemini-2.5-flash';
 
   static SCHEMA_STRINGS = {
     "from": "This is a variable which causes the to variable in this relationship that is between two variables, from and to.  The from variable is the equivalent of a cause.  The to variable is the equivalent of an effect",
@@ -351,6 +351,80 @@ export class LLMWrapper {
       });
 
       return zodResponseFormat(Model, "model_response");
+  }
+
+  async createChatCompletion(messages, model, response_format = null, temperature = null, reasoning_effort = null) {
+    const completionParams = {
+      messages,
+      model
+    };
+
+    if (response_format) {
+      completionParams.response_format = response_format;
+    }
+
+    if (temperature !== null && temperature !== undefined) {
+      completionParams.temperature = temperature;
+    }
+
+    if (reasoning_effort) {
+      completionParams.reasoning_effort = reasoning_effort;
+    }
+
+    return await this.#openAIAPI.chat.completions.create(completionParams);
+  }
+
+  generateMessages(systemPrompt, userPrompt, options = {}) {
+    const {
+      backgroundKnowledge,
+      backgroundPrompt,
+      problemStatement,
+      problemStatementPrompt,
+      lastModel,
+      assistantPrompt,
+      feedbackPrompt
+    } = options;
+
+    let systemRole = this.model.systemModeUser;
+
+    if (!this.model.hasSystemMode) {
+      systemRole = "user";
+    }
+
+    let messages = [{
+      role: systemRole,
+      content: systemPrompt
+    }];
+
+    if (backgroundKnowledge && backgroundPrompt) {
+      messages.push({
+        role: "user",
+        content: backgroundPrompt.replaceAll("{backgroundKnowledge}", backgroundKnowledge),
+      });
+    }
+
+    if (problemStatement && problemStatementPrompt) {
+      messages.push({
+        role: systemRole,
+        content: problemStatementPrompt.replaceAll("{problemStatement}", problemStatement),
+      });
+    }
+
+    if (lastModel) {
+      messages.push({ role: "assistant", content: JSON.stringify(lastModel, null, 2) });
+
+      if (assistantPrompt) {
+        messages.push({ role: "user", content: assistantPrompt });
+      }
+    }
+
+    messages.push({ role: "user", content: userPrompt });
+
+    if (feedbackPrompt) {
+      messages.push({ role: "user", content: feedbackPrompt });
+    }
+
+    return messages;
   }
 
   static additionalParameters() {
