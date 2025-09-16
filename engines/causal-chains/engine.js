@@ -45,8 +45,8 @@ focus on chains of relationships, rather then individual links.`
 
     additionalParameters() {
         const models = LLMWrapper.MODELS.filter(item => {
-            // true if the value starts with "gpt", "o[0-9]", or contains "gemini"
-            return /^(gpt|o\d)/.test(item.value) || item.value.includes('gemini');
+            // true if the value starts with "gpt", "o[0-9]", or contains "gemini" or "claude"
+            return /^(gpt|o\d)/.test(item.value) || item.value.includes('gemini') || item.value.includes('claude');
         });
 
         return [
@@ -67,6 +67,15 @@ focus on chains of relationships, rather then individual links.`
                 saveForUser: "global",
                 label: "Google API Key",
                 description: "Leave blank for the default, or your Google API key (required for Gemini models)",
+            },
+            {
+                name: "anthropicKey",
+                type: "string",
+                required: false,
+                uiElement: "password",
+                saveForUser: "global",
+                label: "Anthropic API Key",
+                description: "Leave blank for the default, or your Anthropic API key (required for Claude models)",
             },
             {
                 name: "underlyingModel",

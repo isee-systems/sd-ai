@@ -18,6 +18,7 @@ import (
 type parameters struct {
 	ApiKey              string `json:"apiKey"`
 	GoogleKey           string `json:"googleKey"`
+	AnthropicKey        string `json:"anthropicKey"`
 	UnderlyingModel     string `json:"underlyingModel"`
 	ProblemStatement    string `json:"problemStatement"`
 	BackgroundKnowledge string `json:"backgroundKnowledge"`
@@ -37,6 +38,17 @@ type supportingInfo struct {
 type output struct {
 	SupportingInfo supportingInfo `json:"supportingInfo"`
 	Model          sdjson.Model   `json:"model"`
+}
+
+func selectAPIKey(model string, params parameters) string {
+	switch {
+	case strings.HasPrefix(model, "claude-"):
+		return params.AnthropicKey
+	case strings.HasPrefix(model, "models/gemini-") || strings.HasPrefix(model, "gemini-"):
+		return params.GoogleKey
+	default:
+		return params.ApiKey
+	}
 }
 
 func main() {
@@ -61,17 +73,15 @@ func main() {
 	if input.Parameters.GoogleKey == "" {
 		input.Parameters.GoogleKey = os.Getenv("GOOGLE_API_KEY")
 	}
-
-	// Determine the appropriate API key based on the model
-	apiKey := input.Parameters.ApiKey
-	if strings.Contains(strings.ToLower(input.Parameters.UnderlyingModel), "gemini") {
-		apiKey = input.Parameters.GoogleKey
+	if input.Parameters.AnthropicKey == "" {
+		input.Parameters.AnthropicKey = os.Getenv("ANTHROPIC_API_KEY")
 	}
 
+	model := strings.ToLower(strings.TrimSpace(input.Parameters.UnderlyingModel))
 	c, err := provider.NewClient(provider.Config{
 		Model:  input.Parameters.UnderlyingModel,
-		APIKey: apiKey,
-		Debug:  false,
+		APIKey: selectAPIKey(model, input.Parameters),
+		Debug:  os.Getenv("SD_AI_DEBUG") != "",
 	})
 	if err != nil {
 		log.Fatalf("provider.NewClient: %s", err)
