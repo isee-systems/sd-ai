@@ -103,11 +103,13 @@ You will conduct a multistep process:
     #isFlowUsed(flow, response) {
         return response.variables.findIndex((v)=> {
             if (v.type === "stock") {
-                return v.inflows.findIndex((f) => {
-                    return flow.name === f;
-                }) >= 0 || v.outflows.findIndex((f) => {
+                const inflowMatch = (v.inflows || []).findIndex((f) => {
                     return flow.name === f;
                 }) >= 0;
+                const outflowMatch = (v.outflows || []).findIndex((f) => {
+                    return flow.name === f;
+                }) >= 0;
+                return inflowMatch || outflowMatch;
             }
 
             return false;

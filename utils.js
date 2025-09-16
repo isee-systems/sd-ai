@@ -1,6 +1,8 @@
 import OpenAI from "openai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { z } from "zod";
 import { zodResponseFormat } from "openai/helpers/zod";
+import { ZodToGeminiConverter } from "./ZodToGeminiConverter.js";
 
 let utils = {};
 
@@ -128,6 +130,8 @@ export class LLMWrapper {
   #openAIKey;
   #googleKey;
   #openAIAPI = null;
+  #geminiAPI = null;
+  #zodToGeminiConverter = new ZodToGeminiConverter();
 
   model = new ModelCapabilities(LLMWrapper.DEFAULT_MODEL);
 
@@ -152,11 +156,8 @@ export class LLMWrapper {
             if (!this.#googleKey) {
               throw new Error("To access this service you need to send a Google key");
             }
-            
-            this.#openAIAPI = new OpenAI({
-                apiKey: this.#googleKey,
-                baseURL: "https://generativelanguage.googleapis.com/v1beta/openai"
-            });
+
+            this.#geminiAPI = new GoogleGenerativeAI(this.#googleKey);
             break;
         case ModelType.OPEN_AI:
             if (!this.#openAIKey) {
@@ -270,7 +271,7 @@ export class LLMWrapper {
         narrativeMarkdown: withDescription(z.string(), LLMWrapper.SCHEMA_STRINGS.loopsNarrative)
       });
 
-      return zodResponseFormat(LTMToolResponse, "ltm_tool_response");
+      return LTMToolResponse;
   }
 
   generateQualitativeSDJSONResponseSchema(removeDescription = false) {
@@ -296,7 +297,7 @@ export class LLMWrapper {
           relationships: withDescription(z.array(Relationship), LLMWrapper.SCHEMA_STRINGS.relationships)
       });
 
-      return zodResponseFormat(Relationships, "relationships_response");
+      return Relationships;
   }
 
   generateQuantitativeSDJSONResponseSchema(mentorMode) {
@@ -350,17 +351,25 @@ export class LLMWrapper {
         specs: SimSpecs
       });
 
-      return zodResponseFormat(Model, "model_response");
+      return Model;
   }
 
-  async createChatCompletion(messages, model, response_format = null, temperature = null, reasoning_effort = null) {
+  async createChatCompletion(messages, model, zodSchema = null, temperature = null, reasoning_effort = null) {
+    if (this.model.kind === ModelType.GEMINI) {
+      return await this.#createGeminiChatCompletion(messages, model, zodSchema, temperature);
+    }
+
+    return await this.#createOpenAIChatCompletion(messages, model, zodSchema, temperature, reasoning_effort);
+  }
+
+  async #createOpenAIChatCompletion(messages, model, zodSchema = null, temperature = null, reasoning_effort = null) {
     const completionParams = {
       messages,
       model
     };
 
-    if (response_format) {
-      completionParams.response_format = response_format;
+    if (zodSchema) {
+      completionParams.response_format = zodResponseFormat(zodSchema, "sdai_schema");
     }
 
     if (temperature !== null && temperature !== undefined) {
@@ -373,6 +382,70 @@ export class LLMWrapper {
 
     const completion = await this.#openAIAPI.chat.completions.create(completionParams);
     return completion.choices[0].message;
+  }
+
+  async #createGeminiChatCompletion(messages, model, zodSchema = null, temperature = null) {
+    const geminiMessages = this.#convertMessagesToGeminiFormat(messages);
+
+    // Set up model with system instruction if present
+    const modelConfig = { model };
+    if (geminiMessages.systemInstruction) {
+      modelConfig.systemInstruction = geminiMessages.systemInstruction;
+    }
+
+    const geminiModel = this.#geminiAPI.getGenerativeModel(modelConfig);
+
+    // Set up generation config
+    const generationConfig = {};
+    if (temperature !== null && temperature !== undefined) {
+      generationConfig.temperature = temperature;
+    }
+
+    if (zodSchema) {
+      generationConfig.responseMimeType = "application/json";
+      generationConfig.responseSchema = this.#zodToGeminiConverter.convert(zodSchema);
+    }
+
+    const result = await geminiModel.generateContent({
+      contents: geminiMessages.contents,
+      generationConfig
+    });
+
+    // Convert Gemini response to OpenAI format
+    return {
+      content: result.response.text()
+    };
+  }
+
+
+  #convertMessagesToGeminiFormat(messages) {
+    const geminiMessages = {
+      systemInstruction: null,
+      contents: []
+    };
+
+    for (const message of messages) {
+      if (message.role === "system") {
+        // Combine all system messages into a single instruction
+        if (geminiMessages.systemInstruction) {
+          geminiMessages.systemInstruction += "\n\n" + message.content;
+        } else {
+          geminiMessages.systemInstruction = message.content;
+        }
+      } else if (message.role === "user") {
+        geminiMessages.contents.push({
+          role: "user",
+          parts: [{ text: message.content }]
+        });
+      } else if (message.role === "assistant") {
+        geminiMessages.contents.push({
+          role: "model",
+          parts: [{ text: message.content }]
+        });
+      }
+    }
+
+    return geminiMessages;
   }
 
   static additionalParameters() {

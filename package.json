@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "async": "^3.2.6",
     "chalk": "^5.4.1",
     "cli-progress": "^3.12.0",
