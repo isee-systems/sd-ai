@@ -5,10 +5,13 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/bpowers/go-agent/chat"
 )
+
+var codeFenceStartRe = regexp.MustCompile("^```.*\n")
 
 type Diagrammer interface {
 	Generate(ctx context.Context, prompt, backgroundKnowledge string) (*Map, error)
@@ -91,9 +94,7 @@ func (d diagrammer) Generate(ctx context.Context, prompt, backgroundKnowledge st
 }
 
 func parseRelationshipsResponse(content string) (*Map, error) {
-	cleaned := strings.TrimSpace(content)
-	cleaned = stripCodeFence(cleaned)
-	cleaned = strings.TrimSpace(cleaned)
+	cleaned := stripCodeFence(content)
 	if cleaned == "" {
 		return nil, fmt.Errorf("empty response content")
 	}
@@ -111,26 +112,13 @@ func stripCodeFence(s string) string {
 
 	// Handle multiple fence formats: ```json, ```JSON, ```
 	if strings.HasPrefix(trimmed, "```") {
-		trimmed = strings.TrimPrefix(trimmed, "```")
-
-		// Skip the language identifier (json, JSON, etc.) if present
-		if newline := strings.Index(trimmed, "\n"); newline != -1 {
-			trimmed = trimmed[newline+1:]
-		} else if strings.TrimSpace(trimmed) == "" {
-			// Just "```" with nothing after
-			return ""
-		}
+		// Remove opening fence and optional language identifier
+		trimmed = codeFenceStartRe.ReplaceAllString(trimmed, "")
 
 		// Remove closing fence if present
 		if idx := strings.LastIndex(trimmed, "```"); idx != -1 {
 			trimmed = trimmed[:idx]
 		}
-	}
-
-	// Also handle backticks that might wrap the entire response
-	trimmed = strings.TrimSpace(trimmed)
-	if strings.HasPrefix(trimmed, "`") && strings.HasSuffix(trimmed, "`") && len(trimmed) > 2 {
-		trimmed = trimmed[1 : len(trimmed)-1]
 	}
 
 	return strings.TrimSpace(trimmed)
