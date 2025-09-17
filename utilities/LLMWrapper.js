@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { zodResponseFormat } from "openai/helpers/zod";
@@ -89,7 +89,7 @@ export class LLMWrapper {
               throw new Error("To access this service you need to send a Google key");
             }
 
-            this.#geminiAPI = new GoogleGenerativeAI(this.#googleKey);
+            this.#geminiAPI = new GoogleGenAI({ apiKey: this.#googleKey });
             break;
         case ModelType.OPEN_AI:
             if (!this.#openAIKey) {
@@ -332,33 +332,37 @@ export class LLMWrapper {
   async #createGeminiChatCompletion(messages, model, zodSchema = null, temperature = null) {
     const geminiMessages = this.#convertMessagesToGeminiFormat(messages);
 
-    // Set up model with system instruction if present
-    const modelConfig = { model };
+    // Set up request config
+    const requestConfig = {
+      model: model,
+      contents: geminiMessages.contents
+    };
+
+    // Add system instruction if present
     if (geminiMessages.systemInstruction) {
-      modelConfig.systemInstruction = geminiMessages.systemInstruction;
+      requestConfig.systemInstruction = { parts: [{ text: geminiMessages.systemInstruction }] };
     }
 
-    const geminiModel = this.#geminiAPI.getGenerativeModel(modelConfig);
-
     // Set up generation config
-    const generationConfig = {};
+    const config = {};
     if (temperature !== null && temperature !== undefined) {
-      generationConfig.temperature = temperature;
+      config.temperature = temperature;
     }
 
     if (zodSchema) {
-      generationConfig.responseMimeType = "application/json";
-      generationConfig.responseSchema = this.#zodToStructuredOutputConverter.convert(zodSchema);
+      config.responseMimeType = "application/json";
+      config.responseSchema = this.#zodToStructuredOutputConverter.convert(zodSchema);
     }
 
-    const result = await geminiModel.generateContent({
-      contents: geminiMessages.contents,
-      generationConfig
-    });
+    if (Object.keys(config).length > 0) {
+      requestConfig.config = config;
+    }
+
+    const result = await this.#geminiAPI.models.generateContent(requestConfig);
 
     // Convert Gemini response to OpenAI format
     return {
-      content: result.response.text()
+      content: result.text
     };
   }
 
