@@ -411,13 +411,19 @@ export class LLMWrapper {
       contents: []
     };
 
+    let systemMessageCount = 0;
     for (const message of messages) {
       if (message.role === "system") {
-        // Combine all system messages into a single instruction
-        if (geminiMessages.systemInstruction) {
-          geminiMessages.systemInstruction += "\n\n" + message.content;
-        } else {
+        systemMessageCount++;
+        if (systemMessageCount === 1) {
+          // First system message becomes system instruction
           geminiMessages.systemInstruction = message.content;
+        } else {
+          // Second and subsequent system messages become user prompts
+          geminiMessages.contents.push({
+            role: "user",
+            parts: [{ text: message.content }]
+          });
         }
       } else if (message.role === "user") {
         geminiMessages.contents.push({
@@ -441,12 +447,19 @@ export class LLMWrapper {
       messages: []
     };
 
+    let systemMessageCount = 0;
     for (const message of messages) {
       if (message.role === "system") {
-        if (claudeMessages.system) {
-          claudeMessages.system += "\n\n" + message.content;
-        } else {
+        systemMessageCount++;
+        if (systemMessageCount === 1) {
+          // First system message becomes system instruction
           claudeMessages.system = message.content;
+        } else {
+          // Second and subsequent system messages become user prompts
+          claudeMessages.messages.push({
+            role: "user",
+            content: message.content
+          });
         }
       } else if (message.role === "user" || message.role === "assistant") {
         claudeMessages.messages.push({
