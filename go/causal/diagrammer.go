@@ -70,7 +70,8 @@ func (d diagrammer) Generate(ctx context.Context, prompt, backgroundKnowledge st
 
 	result, err := parseRelationshipsResponse(resp.Content)
 	if err != nil {
-		// Retry with a correction message
+		// Some models like Anthropic's don't _actually_ support structured outputs.
+		// Retry a second time with the error we just got, hoping they can get their act together.
 		retryMsg := chat.Message{
 			Role:    chat.UserRole,
 			Content: fmt.Sprintf("Your response didn't match the required structured JSON output. The specific error was: %v\n\nRe-generate your response addressing this error, ensuring it matches the required structured JSON output format from the system prompt.", err),
