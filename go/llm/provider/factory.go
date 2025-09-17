@@ -11,11 +11,6 @@ import (
 	"github.com/bpowers/go-agent/llm/openai"
 )
 
-const (
-	OpenAIAPIBase = "https://api.openai.com/v1"
-	OllamaAPIBase = "http://localhost:11434/v1"
-)
-
 type Config struct {
 	Model   string
 	APIBase string
@@ -74,14 +69,14 @@ func NewClient(cfg Config) (chat.Client, error) {
 	apiKey := cfg.APIKey
 
 	if apiBase == "" {
-		if isLocalModel(modelLower) {
-			apiBase = OllamaAPIBase
+		if isOpenAIModel(modelLower) {
+			apiBase = openai.OpenAIURL
 		} else {
-			apiBase = OpenAIAPIBase
+			apiBase = openai.OllamaURL
 		}
 	}
 
-	if apiKey == "" && !isLocalModel(modelLower) {
+	if apiKey == "" && isOpenAIModel(modelLower) {
 		apiKey = os.Getenv("OPENAI_API_KEY")
 		if apiKey == "" {
 			return nil, fmt.Errorf("OpenAI API key required for model %s", cfg.Model)
@@ -123,24 +118,4 @@ func isOpenAIModel(model string) bool {
 func isOpenAIReasoningModel(model string) bool {
 	return strings.HasPrefix(model, "o1-") ||
 		strings.HasPrefix(model, "o3-")
-}
-
-func isLocalModel(model string) bool {
-	localPrefixes := []string{
-		"llama", "mistral", "mixtral", "qwen", "phi",
-		"deepseek-coder", "codellama", "vicuna", "alpaca",
-	}
-
-	for _, prefix := range localPrefixes {
-		if strings.HasPrefix(model, prefix) {
-			return true
-		}
-	}
-
-	if isOpenAIModel(model) || isClaudeModel(model) || isGeminiModel(model) {
-		return false
-	}
-
-	// Treat all unrecognized models as local (Ollama) by default.
-	return true
 }
