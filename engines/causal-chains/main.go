@@ -10,14 +10,15 @@ import (
 	"strings"
 
 	"github.com/UB-IAD/sd-ai/go/causal"
-	"github.com/UB-IAD/sd-ai/go/chat"
-	"github.com/UB-IAD/sd-ai/go/llm/openai"
+	"github.com/UB-IAD/sd-ai/go/llm/provider"
 	"github.com/UB-IAD/sd-ai/go/sdjson"
+	"github.com/bpowers/go-agent/chat"
 )
 
 type parameters struct {
 	ApiKey              string `json:"apiKey"`
 	GoogleKey           string `json:"googleKey"`
+	AnthropicKey        string `json:"anthropicKey"`
 	UnderlyingModel     string `json:"underlyingModel"`
 	ProblemStatement    string `json:"problemStatement"`
 	BackgroundKnowledge string `json:"backgroundKnowledge"`
@@ -39,25 +40,15 @@ type output struct {
 	Model          sdjson.Model   `json:"model"`
 }
 
-// isOpenAIModel returns true if the given model is an OpenAI model.
-// It is approximate, and focuses on models we might care about.
-func isOpenAIModel(model string) bool {
-	model = strings.ToLower(model)
-	if strings.HasPrefix(model, "gpt") || strings.HasPrefix(model, "chatgpt") {
-		return true
+func selectAPIKey(model string, params parameters) string {
+	switch {
+	case strings.HasPrefix(model, "claude-"):
+		return params.AnthropicKey
+	case strings.HasPrefix(model, "models/gemini-") || strings.HasPrefix(model, "gemini-"):
+		return params.GoogleKey
+	default:
+		return params.ApiKey
 	}
-
-	if strings.HasPrefix(model, "o1") || strings.HasPrefix(model, "o3") || strings.HasPrefix(model, "o4") {
-		return true
-	}
-
-	return false
-}
-
-// isGeminiModel returns true if the given model is a Google Gemini model.
-func isGeminiModel(model string) bool {
-	model = strings.ToLower(model)
-	return strings.Contains(model, "gemini")
 }
 
 func main() {
@@ -82,34 +73,18 @@ func main() {
 	if input.Parameters.GoogleKey == "" {
 		input.Parameters.GoogleKey = os.Getenv("GOOGLE_API_KEY")
 	}
-
-	var url string
-	var apiKey string
-
-	if isGeminiModel(input.Parameters.UnderlyingModel) {
-		url = openai.GeminiURL
-		apiKey = input.Parameters.GoogleKey
-		if apiKey == "" {
-			log.Fatalf("Google API key is required for Gemini models")
-		}
-	} else if isOpenAIModel(input.Parameters.UnderlyingModel) {
-		url = openai.OpenAIURL
-		apiKey = input.Parameters.ApiKey
-		if apiKey == "" {
-			log.Fatalf("OpenAI API key is required for OpenAI models")
-		}
-	} else {
-		// Default to Ollama for local models
-		url = openai.OllamaURL
-		apiKey = "" // Ollama doesn't need an API key
+	if input.Parameters.AnthropicKey == "" {
+		input.Parameters.AnthropicKey = os.Getenv("ANTHROPIC_API_KEY")
 	}
 
-	c, err := openai.NewClient(url,
-		openai.WithModel(input.Parameters.UnderlyingModel),
-		openai.WithAPIKey(apiKey),
-	)
+	model := strings.ToLower(strings.TrimSpace(input.Parameters.UnderlyingModel))
+	c, err := provider.NewClient(provider.Config{
+		Model:  input.Parameters.UnderlyingModel,
+		APIKey: selectAPIKey(model, input.Parameters),
+		Debug:  os.Getenv("SD_AI_DEBUG") != "",
+	})
 	if err != nil {
-		log.Fatalf("openai.NewClient: %s", err)
+		log.Fatalf("provider.NewClient: %s", err)
 	}
 
 	d := causal.NewDiagrammer(c)
