@@ -75,6 +75,11 @@ utils.evalsVariableNameMatches = function(variableName, expectedName) {
     return normalizedVariable.includes(normalizedExpected) || normalizedExpected.includes(normalizedVariable);
 };
 
+/**
+ * Standardized array of gibberish nouns for use across evaluation categories
+ */
+utils.evalsGibberishNouns = [ "frimbulator",  "whatajig", "balack", "whoziewhat", "funkado", "maxabizer", "marticatene", "reflupper", "exeminte", "oc", "proptimatire", "priary", "houtal", "poval", "auspong", "dominitoxing", "outrance", "illigent", "yelb", "traze", "pablanksill", "posistorather", "crypteral", "oclate", "reveforly", "yoffa", "buwheal", "geyflorrin", "ih", "aferraron", "paffling", "pershipfulty", "copyring", "dickstonyx", "bellignorance", "hashtockle", "succupserva", "relity", "hazmick", "ku", "obvia", "unliescatice", "gissorm", "phildiscals", "loopnova", "hoza", "arinterpord", "burgination", "perstablintome", "memostorer", "baxtoy", "hensologic", "estintant", "perfecton", "raez", "younjuring"];
+
 
 
 export default utils; 
