@@ -169,6 +169,7 @@ You will conduct a multistep process:
         });
         
         originalResponse.relationships = relationships;
+        originalResponse.variables = originalResponse.variables || [];
 
         originalResponse.variables.forEach((v)=>{
             //go through all the flows -- make sure they appear in an inflows or outflows, and if they don't change them to type variable
