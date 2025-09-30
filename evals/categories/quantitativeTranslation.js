@@ -10,13 +10,14 @@ involving fixed, proportional, and interdependent flows.`;
 
 import pluralize from 'pluralize';
 import numberToWords from 'number-to-words';
+import utils from '../../utilities/utils.js';
 
 //generic prompt and problem statement used for all tests
 const prompt = "Please give me a model which includes all causal relationships in the background information.";
 const problemStatement = "I'm trying to do causal discovery, and extract every cause and effect relationship from the information I give you.";
 
 //random variable names to pick from
-const nouns = [ "frimbulator",  "whatajig", "balack", "whoziewhat", "funkado", "maxabizer", "marticatene", "reflupper", "exeminte", "oc", "proptimatire", "priary", "houtal", "poval", "auspong", "dominitoxing", "outrance", "illigent", "yelb", "traze", "pablanksill", "posistorather", "crypteral", "oclate", "reveforly", "yoffa", "buwheal", "geyflorrin", "ih", "aferraron", "paffling", "pershipfulty", "copyring", "dickstonyx", "bellignorance", "hashtockle", "succupserva", "relity", "hazmick", "ku", "obvia", "unliescatice", "gissorm", "phildiscals", "loopnova", "hoza", "arinterpord", "burgination", "perstablintome", "memostorer", "baxtoy", "hensologic", "estintant", "perfecton", "raez", "younjuring"];
+const nouns = utils.evalsGibberishNouns;
 
 const generateTest = function(name, timeUnit, stocks) {
     // Generate more natural, story-like descriptions

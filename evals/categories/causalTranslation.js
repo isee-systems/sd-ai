@@ -11,6 +11,7 @@
  */
 
 import pluralize from 'pluralize';
+import utils from '../../utilities/utils.js';
 
 /**  generic prompt used for all tests */
 const prompt = "Please find all causal relationships in the background information.";
@@ -18,7 +19,7 @@ const prompt = "Please find all causal relationships in the background informati
 const problemStatement = "I'm trying to do causal discovery, and extract every cause and effect relationship from the information I give you.";
 
 /** random nouns, variable names to pick from */
-let nouns = [ "frimbulator",  "whatajig", "balack", "whoziewhat", "funkado", "maxabizer", "marticatene", "reflupper", "exeminte", "oc", "proptimatire", "priary", "houtal", "poval", "auspong", "dominitoxing", "outrance", "illigent", "yelb", "traze", "pablanksill", "posistorather", "crypteral", "oclate", "reveforly", "yoffa", "buwheal", "geyflorrin", "ih", "aferraron", "paffling", "pershipfulty", "copyring", "dickstonyx", "bellignorance", "hashtockle", "succupserva", "relity", "hazmick", "ku", "obvia", "unliescatice", "gissorm", "phildiscals", "loopnova", "hoza", "arinterpord", "burgination", "perstablintome", "memostorer", "baxtoy", "hensologic", "estintant", "perfecton", "raez", "younjuring"];
+const nouns = utils.evalsGibberishNouns;
 
 /**
  * This function builds a causal relationship between two variables (nouns) before pluralization
