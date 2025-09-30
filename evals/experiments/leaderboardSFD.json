@@ -31,7 +31,7 @@
             }
         },
 
-        "quantitative-ggemini-2.5-pro": {
+        "quantitative-gemini-2.5-pro": {
             "engine": "quantitative",
             "additionalParameters": {
                 "underlyingModel": "gemini-2.5-pro"
