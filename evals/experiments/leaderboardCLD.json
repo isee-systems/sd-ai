@@ -116,11 +116,23 @@
                 "tokensPerMinute": 90000,
                 "requestsPerMinute": 10
             }
+        },
+
+        "qualitative-zero-claude-4.5-sonnet": {
+            "engine": "qualitative-zero",
+            "additionalParameters": {
+                "underlyingModel": "claude-sonnet-4-5-20250929"
+            },
+            "limits": {
+                "tokensPerMinute": 90000,
+                "requestsPerMinute": 10
+            }
         }
     },
     "categories": {
-        "causalTranslation": true,
+        "qualitativeTranslation": true,
         "conformance": true,
-        "qualitativeCausalReasoning": true
+        "qualitativeCausalReasoning": true,
+        "qualitativeIteration": true
     }
 }

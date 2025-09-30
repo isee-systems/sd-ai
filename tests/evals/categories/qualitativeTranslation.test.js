@@ -1,4 +1,4 @@
-import { evaluate } from '../../../evals/categories/causalTranslation.js';
+import { evaluate } from '../../../evals/categories/qualitativeTranslation.js';
 
 describe('CausalTranslation Evaluate', () => {
   describe('successful evaluations', () => {

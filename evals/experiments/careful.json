@@ -11,7 +11,7 @@
     },
     "categories": {
         "conformance": false,
-        "causalTranslation": false,
+        "qualitativeTranslation": false,
         "quantitativeCausalReasoning": false,
         "qualitativeIteration": true
     }
