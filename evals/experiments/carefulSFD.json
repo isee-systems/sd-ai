@@ -1,6 +1,6 @@
 {
     "sequential": false,
-    "verbose": true,
+    "verbose": false,
     "engineConfigs": {
         "quantitative-gemini-2.5-flash": {
             "engine": "quantitative",
@@ -15,7 +15,8 @@
     },
     "categories": {
         "quantitativeTranslation": false,
-        "quantitativeCausalReasoning": true,
-        "quantitativeIteration": false
+        "quantitativeCausalReasoning": false,
+        "quantitativeIteration": false,
+        "conformance": true
     }
 }

@@ -79,6 +79,7 @@
     "categories": {
         "quantitativeTranslation": true,
         "quantitativeCausalReasoning": true,
-        "quantitativeIteration": true
+        "quantitativeIteration": true,
+        "conformance": true
     }
 }

@@ -1,4 +1,230 @@
-import { evaluate } from '../../../evals/categories/conformance.js';
+import { evaluate, makeRelationshipsFromStocks } from '../../../evals/categories/conformance.js';
+
+describe('makeRelationshipsFromStocks', () => {
+  it('should return empty array when variables is null or undefined', () => {
+    expect(makeRelationshipsFromStocks(null)).toEqual([]);
+    expect(makeRelationshipsFromStocks(undefined)).toEqual([]);
+  });
+
+  it('should return empty array when variables is empty', () => {
+    expect(makeRelationshipsFromStocks([])).toEqual([]);
+  });
+
+  it('should skip non-stock variables', () => {
+    const variables = [
+      { type: 'flow', name: 'growth rate' },
+      { type: 'auxiliary', name: 'some factor' }
+    ];
+    expect(makeRelationshipsFromStocks(variables)).toEqual([]);
+  });
+
+  it('should create positive polarity relationships for inflows', () => {
+    const variables = [
+      {
+        type: 'stock',
+        name: 'Population',
+        inflows: ['births', 'immigration']
+      }
+    ];
+
+    const result = makeRelationshipsFromStocks(variables);
+
+    expect(result).toHaveLength(2);
+    expect(result).toContainEqual({
+      from: 'births',
+      to: 'Population',
+      polarity: '+'
+    });
+    expect(result).toContainEqual({
+      from: 'immigration',
+      to: 'Population',
+      polarity: '+'
+    });
+  });
+
+  it('should create negative polarity relationships for outflows', () => {
+    const variables = [
+      {
+        type: 'stock',
+        name: 'Population',
+        outflows: ['deaths', 'emigration']
+      }
+    ];
+
+    const result = makeRelationshipsFromStocks(variables);
+
+    expect(result).toHaveLength(2);
+    expect(result).toContainEqual({
+      from: 'deaths',
+      to: 'Population',
+      polarity: '-'
+    });
+    expect(result).toContainEqual({
+      from: 'emigration',
+      to: 'Population',
+      polarity: '-'
+    });
+  });
+
+  it('should handle stocks with both inflows and outflows', () => {
+    const variables = [
+      {
+        type: 'stock',
+        name: 'Inventory',
+        inflows: ['production', 'returns'],
+        outflows: ['sales', 'waste']
+      }
+    ];
+
+    const result = makeRelationshipsFromStocks(variables);
+
+    expect(result).toHaveLength(4);
+    expect(result).toContainEqual({
+      from: 'production',
+      to: 'Inventory',
+      polarity: '+'
+    });
+    expect(result).toContainEqual({
+      from: 'returns',
+      to: 'Inventory',
+      polarity: '+'
+    });
+    expect(result).toContainEqual({
+      from: 'sales',
+      to: 'Inventory',
+      polarity: '-'
+    });
+    expect(result).toContainEqual({
+      from: 'waste',
+      to: 'Inventory',
+      polarity: '-'
+    });
+  });
+
+  it('should handle multiple stocks', () => {
+    const variables = [
+      {
+        type: 'stock',
+        name: 'Stock1',
+        inflows: ['inflow1'],
+        outflows: ['outflow1']
+      },
+      {
+        type: 'stock',
+        name: 'Stock2',
+        inflows: ['inflow2'],
+        outflows: ['outflow2']
+      }
+    ];
+
+    const result = makeRelationshipsFromStocks(variables);
+
+    expect(result).toHaveLength(4);
+    expect(result).toContainEqual({
+      from: 'inflow1',
+      to: 'Stock1',
+      polarity: '+'
+    });
+    expect(result).toContainEqual({
+      from: 'outflow1',
+      to: 'Stock1',
+      polarity: '-'
+    });
+    expect(result).toContainEqual({
+      from: 'inflow2',
+      to: 'Stock2',
+      polarity: '+'
+    });
+    expect(result).toContainEqual({
+      from: 'outflow2',
+      to: 'Stock2',
+      polarity: '-'
+    });
+  });
+
+  it('should handle stocks with no inflows', () => {
+    const variables = [
+      {
+        type: 'stock',
+        name: 'Stock',
+        outflows: ['outflow']
+      }
+    ];
+
+    const result = makeRelationshipsFromStocks(variables);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual({
+      from: 'outflow',
+      to: 'Stock',
+      polarity: '-'
+    });
+  });
+
+  it('should handle stocks with no outflows', () => {
+    const variables = [
+      {
+        type: 'stock',
+        name: 'Stock',
+        inflows: ['inflow']
+      }
+    ];
+
+    const result = makeRelationshipsFromStocks(variables);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual({
+      from: 'inflow',
+      to: 'Stock',
+      polarity: '+'
+    });
+  });
+
+  it('should handle stocks with empty inflows and outflows arrays', () => {
+    const variables = [
+      {
+        type: 'stock',
+        name: 'Stock',
+        inflows: [],
+        outflows: []
+      }
+    ];
+
+    const result = makeRelationshipsFromStocks(variables);
+    expect(result).toEqual([]);
+  });
+
+  it('should handle mixed variable types', () => {
+    const variables = [
+      { type: 'flow', name: 'rate' },
+      {
+        type: 'stock',
+        name: 'Stock1',
+        inflows: ['in1']
+      },
+      { type: 'auxiliary', name: 'helper' },
+      {
+        type: 'stock',
+        name: 'Stock2',
+        outflows: ['out2']
+      }
+    ];
+
+    const result = makeRelationshipsFromStocks(variables);
+
+    expect(result).toHaveLength(2);
+    expect(result).toContainEqual({
+      from: 'in1',
+      to: 'Stock1',
+      polarity: '+'
+    });
+    expect(result).toContainEqual({
+      from: 'out2',
+      to: 'Stock2',
+      polarity: '-'
+    });
+  });
+});
 
 describe('Conformance Evaluate', () => {
   describe('variable requirements', () => {

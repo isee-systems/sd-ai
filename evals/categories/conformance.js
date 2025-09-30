@@ -97,7 +97,7 @@ Distracted Driving: Using a phone, texting, or eating while driving can increase
 
 /**
  * From a list of relationships extract all of the variables
- * @param {Array<Object>} list List of relationships in form of {from: <string>, to: <string> } 
+ * @param {Array<Object>} list List of relationships in form of {from: <string>, to: <string> }
  * @returns {Set<String>} A set of variables containing all of the from and to variables.
  */
 const extractVariables = (list) => {
@@ -233,13 +233,51 @@ const generateConformanceTest = function(conformanceElement, specificCase) {
 };
 
 /**
+ * Makes relationship objects {from: , to: , polarity: } for each inflow->stock and outflow->stock connection
+ * @param {Array} variables
+ * @returns {Array<Object>} Array of relationship objects
+ */
+export const makeRelationshipsFromStocks = function(variables) {
+  if (!variables) return [];
+
+  const relationships = [];
+
+  for (const stock of variables) {
+    if (stock.type !== 'stock') continue;
+
+    // Inflows add to the stock: inflow -> stock with positive polarity
+    if (stock.inflows && Array.isArray(stock.inflows)) {
+      for (const inflow of stock.inflows) {
+        relationships.push({
+          from: inflow,
+          to: stock.name,
+          polarity: "+"
+        });
+      }
+    }
+
+    // Outflows subtract from the stock: outflow -> stock with negative polarity
+    if (stock.outflows && Array.isArray(stock.outflows)) {
+      for (const outflow of stock.outflows) {
+        relationships.push({
+          from: outflow,
+          to: stock.name,
+          polarity: "-"
+        });
+      }
+    }
+  }
+
+  return relationships;
+}
+/**
  * This method compares the generated response to the ground truth and returns a list of failure objects
  * @param {Object} generatedResponse The response from the engine
  * @param {Object} groundTruth The exepected response based on the background knowledge
  * @returns {Array<Object>} A list of failures with type and details.
  */
 export const evaluate = function(generatedResponse, requirements) {
-  const fromAI = generatedResponse.model?.relationships || [];
+  let fromAI = (generatedResponse.model?.relationships || []).concat(makeRelationshipsFromStocks(generatedResponse.model?.variables));
   const vars = extractVariables(fromAI);
   const loops = countLoops(fromAI);
   const fails = [];
