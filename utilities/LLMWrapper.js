@@ -135,6 +135,7 @@ export class LLMWrapper {
       {label: "Gemini 2.0", value: 'gemini-2.0-flash'},
       {label: "Gemini 2.0-Lite", value: 'gemini-2.0-flash-lite'},
       {label: "Gemini 1.5", value: 'gemini-1.5-flash'},
+      {label: "Claude Sonnet 4.5", value: 'claude-sonnet-4-5-20250929'},
       {label: "Claude Opus 4.1", value: 'claude-opus-4-1-20250805'},
       {label: "Claude Sonnet 4", value: 'claude-sonnet-4-20250514'},
       {label: "o1", value: 'o1'},
