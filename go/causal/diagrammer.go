@@ -45,13 +45,10 @@ func (d diagrammer) Generate(ctx context.Context, prompt, backgroundKnowledge st
 
 	systemPrompt := strings.ReplaceAll(baseSystemPrompt, "{schema}", string(schema))
 
-	msg := chat.Message{
-		Role: chat.UserRole,
-		Content: fmt.Sprintf("%s\n\n%s",
-			strings.ReplaceAll(backgroundPrompt, "{backgroundKnowledge}", backgroundKnowledge),
-			prompt,
-		),
-	}
+	msg := chat.UserMessage(fmt.Sprintf("%s\n\n%s",
+		strings.ReplaceAll(backgroundPrompt, "{backgroundKnowledge}", backgroundKnowledge),
+		prompt,
+	))
 
 	c := d.client.NewChat(systemPrompt)
 
@@ -68,14 +65,11 @@ func (d diagrammer) Generate(ctx context.Context, prompt, backgroundKnowledge st
 		return nil, fmt.Errorf("c.ChatCompletion: %w", err)
 	}
 
-	result, err := parseRelationshipsResponse(resp.Content)
+	result, err := parseRelationshipsResponse(resp.GetText())
 	if err != nil {
 		// Some models like Anthropic's don't _actually_ support structured outputs.
 		// Retry a second time with the error we just got, hoping they can get their act together.
-		retryMsg := chat.Message{
-			Role:    chat.UserRole,
-			Content: fmt.Sprintf("Your response didn't match the required structured JSON output. The specific error was: %v\n\nRe-generate your response addressing this error, ensuring it matches the required structured JSON output format from the system prompt.", err),
-		}
+		retryMsg := chat.UserMessage(fmt.Sprintf("Your response didn't match the required structured JSON output. The specific error was: %v\n\nRe-generate your response addressing this error, ensuring it matches the required structured JSON output format from the system prompt.", err))
 
 		resp, retryErr := c.Message(ctx, retryMsg,
 			chat.WithResponseFormat("relationships_response", true, RelationshipsResponseSchema),
@@ -85,7 +79,7 @@ func (d diagrammer) Generate(ctx context.Context, prompt, backgroundKnowledge st
 			return nil, fmt.Errorf("retry failed: %w (original error: %v)", retryErr, err)
 		}
 
-		result, err = parseRelationshipsResponse(resp.Content)
+		result, err = parseRelationshipsResponse(resp.GetText())
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse response after retry: %w", err)
 		}
