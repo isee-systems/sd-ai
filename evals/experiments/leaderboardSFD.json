@@ -63,17 +63,6 @@
                 "tokensPerMinute": 90000,
                 "requestsPerMinute": 10
             }
-        },
-
-        "quantitative-claude-4.5-sonnet": {
-            "engine": "quantitative",
-            "additionalParameters": {
-                "underlyingModel": "claude-sonnet-4-5-20250929"
-            },
-            "limits": {
-                "tokensPerMinute": 90000,
-                "requestsPerMinute": 10
-            }
         }
     },
     "categories": {
