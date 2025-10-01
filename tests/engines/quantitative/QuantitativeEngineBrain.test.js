@@ -1,4 +1,5 @@
 import QuantitativeEngineBrain from '../../../engines/quantitative/QuantitativeEngineBrain.js';
+import { LLMWrapper } from '../../../utilities/LLMWrapper.js';
 
 describe('QuantitativeEngineBrain', () => {
   let quantitativeEngine;
@@ -422,7 +423,7 @@ describe('QuantitativeEngineBrain', () => {
       const userPrompt = 'Test prompt';
       const result = quantitativeEngine.setupLLMParameters(userPrompt);
 
-      expect(result.model).toBe('gemini-2.5-flash');
+      expect(result.model).toBe(LLMWrapper.DEFAULT_MODEL);
       expect(result.temperature).toBe(0);
       expect(result.reasoningEffort).toBeUndefined();
       expect(result.responseFormat).toBeDefined();

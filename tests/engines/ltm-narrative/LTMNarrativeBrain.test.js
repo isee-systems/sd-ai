@@ -1,4 +1,5 @@
 import LTMNarrativeBrain from '../../../engines/ltm-narrative/LTMNarrativeBrain.js';
+import { LLMWrapper } from '../../../utilities/LLMWrapper.js';
 
 describe('LTMNarrativeBrain', () => {
   let ltmBrain;
@@ -51,7 +52,7 @@ describe('LTMNarrativeBrain', () => {
 
       const result = brainWithFeedback.setupLLMParameters('Test prompt', null);
 
-      expect(result.model).toBe('gemini-2.5-flash');
+      expect(result.model).toBe(LLMWrapper.DEFAULT_MODEL);
       expect(result.temperature).toBe(0);
       expect(result.reasoningEffort).toBeUndefined();
       expect(result.messages).toBeInstanceOf(Array);

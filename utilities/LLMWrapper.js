@@ -146,7 +146,7 @@ export class LLMWrapper {
       {label: "o4-mini", value: 'o4-mini'}
   ];
 
-  static DEFAULT_MODEL = 'gemini-2.5-flash';
+  static DEFAULT_MODEL = 'gemini-2.5-flash-preview-09-2025';
 
   static SCHEMA_STRINGS = {
     "from": "This is a variable which causes the to variable in this relationship that is between two variables, from and to.  The from variable is the equivalent of a cause.  The to variable is the equivalent of an effect",
@@ -195,6 +195,12 @@ export class LLMWrapper {
     "loopsDescription": "A list of feedback loops with names and descriptions for the end-user.",
     "loopsNarrative": "A markdown formatted string containing an essay consisting of multiple paragraphs (unless instructed to do otherwise) that stitches together the feedback loops and their loopDescriptions into a narrative that describes the origins of behavior in the model. This essay should note each time period where there is a change in loop dominance."
   };
+
+  generateSeldonResponseSchema() {
+      return z.object({
+        response: z.string().describe("The text containing the response. This text can only contain simple HTML formatted text.  Use only the HTML tags <h4>, <h5>, <h6>, <ol>, <ul>, <li>, <a>, <b>, <i>, <br>, <p> and <span>. Do not use markdown, LaTeX or any other kind of formatting")
+      });
+  }
 
   generateLTMNarrativeResponseSchema(removeDescription = false) {
       // Conditionally adds a description to a Zod schema object.

@@ -14,8 +14,6 @@ class SeldonEngineBrain {
     static MENTOR_SYSTEM_PROMPT = 
 `You are a great teacher and mentor who knows exactly the right questions to ask to help users understand and learn how to improve their work. Do not give out praise! Users will ask you questions about their model, it is your job to think about their model and their question and figure out the right questions to ask them to get them to understand what could be improved in their model.  You will be a constant source of positive critique. You will accomplish your goal of being a consumate critic by both by explaining problems you see, but also by asking questions to help them to learn how to critique models like you do.  If you don't have an answer, that is okay, and when that happens you need to instead suggest to the user a different way to ask their question that you think might allow you to mentor with confidence.  If you are not confident in your answer, tell that to the user.  Your job is to be helpful, and help the user learn about System Dynamics and their model via their discussion with you.
 
-Your answer should come in the form of simple HTML formatted text.  Use only the HTML tags <h4>, <h5>, <h6>, <ol>, <ul>, <li>, <a>, <b>, <i>, <br>, <p> and <span>. Do not use markdown or any other kind of formatting.
-
 As a great teacher and mentor, you will consider and apply the System Dynamics method to all questions you answer.  You need to consider the following most important aspects of System Dynamics when you answer questions:
 
 1. Feedback is key to understanding model dynamics, without an understanding of the feedback in a model someone cannot truly understand the problem they're trying to model.
@@ -35,8 +33,6 @@ As a great teacher and mentor, you will consider and apply the System Dynamics m
 
     static DEFAULT_SYSTEM_PROMPT = 
 `You are the world's best System Dynamics Modeler. Users will ask you questions about their model, it is your job to think about their question and answer it to the best of your abilities.  If you don't have an answer, that is okay, and when that happens you need to instead suggest to the user a different way to ask their question that you think might allow you to answer it with confidence.  If you are not confident in your answer, tell that to the user.  Your job is to be helpful, and help the user learn about System Dynamics and their model via their discussion with you.  You should always explain your reasoning and include a step by step guide for how you got to your response.
-
-Your answer should come in the form of simple HTML formatted text.  Use only the HTML tags <h4>, <h5>, <h6>, <ol>, <ul>, <li>, <a>, <b>, <i>, <br>, <p> and <span>. Do not use markdown or any other kind of formatting.
 
 As the world's best System Dynamics Modeler, you will consider and apply the System Dynamics method to all questions you answer.  You need to consider the following most important aspects of System Dynamics when you answer questions:
 
@@ -111,6 +107,7 @@ As the world's best System Dynamics Modeler, you will consider and apply the Sys
 
 
     async #processResponse(originalResponse) {
+        originalResponse = originalResponse.response || "";
         //if the string is html just returned
         if (this.#containsHtmlTags(originalResponse))
             return originalResponse;
@@ -132,6 +129,7 @@ As the world's best System Dynamics Modeler, you will consider and apply the Sys
         let underlyingModel = this.#data.underlyingModel;
         let systemRole = this.#llmWrapper.model.systemModeUser;
         let systemPrompt = this.#data.systemPrompt;
+        let responseFormat = this.#llmWrapper.generateSeldonResponseSchema();
         let temperature = 0;
         let reasoningEffort = undefined;
 
@@ -201,7 +199,8 @@ As the world's best System Dynamics Modeler, you will consider and apply the Sys
             messages,
             model: underlyingModel,
             temperature: temperature,
-            reasoningEffort: reasoningEffort
+            reasoningEffort: reasoningEffort,
+            responseFormat: responseFormat
         };
     }
 
@@ -212,15 +211,24 @@ As the world's best System Dynamics Modeler, you will consider and apply the Sys
         const originalResponse = await this.#llmWrapper.createChatCompletion(
             llmParams.messages,
             llmParams.model,
-            null, // no responseFormat for this engine
+            llmParams.responseFormat,
             llmParams.temperature,
             llmParams.reasoningEffort
         );
+
         if (originalResponse.refusal) {
             throw new ResponseFormatError(originalResponse.refusal);
+        } else if (originalResponse.parsed) {
+            return this.#processResponse(originalResponse.parsed);
+        } else if (originalResponse.content) {
+            let parsedObj = {variables: [], relationships: []};
+            try {
+                parsedObj = JSON.parse(originalResponse.content);
+            } catch (err) {
+                throw new ResponseFormatError("Bad JSON returned by underlying LLM");
+            }
+            return this.#processResponse(parsedObj);
         }
-
-        return await this.#processResponse(originalResponse.content);
     }
 }
 

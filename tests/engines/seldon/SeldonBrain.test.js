@@ -1,4 +1,5 @@
 import SeldonEngineBrain from '../../../engines/seldon/SeldonBrain.js';
+import { LLMWrapper } from '../../../utilities/LLMWrapper.js';
 
 describe('SeldonEngineBrain', () => {
   let seldonEngine;
@@ -15,7 +16,7 @@ describe('SeldonEngineBrain', () => {
       const userPrompt = 'Test prompt';
       const result = seldonEngine.setupLLMParameters(userPrompt);
 
-      expect(result.model).toBe('gemini-2.5-flash');
+      expect(result.model).toBe(LLMWrapper.DEFAULT_MODEL);
       expect(result.temperature).toBe(0);
       expect(result.reasoningEffort).toBeUndefined();
       expect(result.messages).toBeInstanceOf(Array);
