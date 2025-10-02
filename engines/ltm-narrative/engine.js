@@ -24,14 +24,6 @@ class Engine {
         let parameters = LLMWrapper.additionalParameters();
 
         return parameters.concat([{
-            name: "googleKey",
-            type: "string",
-            required: false,
-            uiElement: "password",
-            saveForUser: "global",
-            label: "Google API Key",
-            description: "Leave blank for the default, or your Google API key - XXXXXX"
-        },{
             name: "problemStatement",
             type: "string",
             required: false,
