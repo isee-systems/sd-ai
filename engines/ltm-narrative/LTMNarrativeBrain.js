@@ -82,6 +82,23 @@ You can only use the information given to you by the user in your work. Any info
         return htmlTagRegex.test(str);
     }
 
+    processFeedbackContent(feedbackJSON) {
+        //test if feedbackJSON contains an attribute called feedbackLoops that is an array
+        //if it is, go through each object and remove the name attribute as long as an identifier attribute exists
+        
+        if (feedbackJSON && Array.isArray(feedbackJSON.feedbackLoops)) {
+            feedbackJSON.feedbackLoops.forEach(loop => {
+                if (loop.identifier && loop.name) {
+                    //if the loop name begins with B, Bu, R, Ru, or U all followed by a number delete the name
+                    if (/^(B\d|Bu\d|R\d|Ru\d|U\d)/.test(loop.name)) {
+                        delete loop.name;
+                    }
+                }
+            });
+        }
+        return feedbackJSON;
+    }
+
     async #processResponse(originalResponse) {
         //if the string is html just returned
         originalResponse.narrative = originalResponse.narrativeMarkdown;
@@ -146,7 +163,7 @@ You can only use the information given to you by the user in your work. Any info
             });
         }
                     
-        messages.push({ role: "assistant", content: JSON.stringify(this.#data.feedbackContent, null, 2) });
+        messages.push({ role: "assistant", content: JSON.stringify(this.processFeedbackContent(this.#data.feedbackContent), null, 2) });
 
         if (this.#data.feedbackPrompt)
             messages.push({ role: "user", content: this.#data.feedbackPrompt });

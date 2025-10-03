@@ -323,6 +323,147 @@ describe('LTMNarrativeBrain', () => {
 
   });
 
+  describe('processFeedbackContent', () => {
+    it('should return unchanged feedbackJSON when feedbackLoops is not an array', () => {
+      const feedbackJSON = { feedbackLoops: 'not an array' };
+      const result = ltmBrain.processFeedbackContent(feedbackJSON);
+      expect(result).toEqual(feedbackJSON);
+    });
+
+    it('should return unchanged feedbackJSON when feedbackJSON is null', () => {
+      const result = ltmBrain.processFeedbackContent(null);
+      expect(result).toBeNull();
+    });
+
+    it('should delete name when loop name starts with B followed by a number', () => {
+      const feedbackJSON = {
+        feedbackLoops: [
+          { identifier: 'loop1', name: 'B1 Loop' },
+          { identifier: 'loop2', name: 'B2 Balance' },
+          { identifier: 'loop3', name: 'B99 Test' }
+        ]
+      };
+      const result = ltmBrain.processFeedbackContent(feedbackJSON);
+      expect(result.feedbackLoops[0].name).toBeUndefined();
+      expect(result.feedbackLoops[1].name).toBeUndefined();
+      expect(result.feedbackLoops[2].name).toBeUndefined();
+    });
+
+    it('should delete name when loop name starts with Bu followed by a number', () => {
+      const feedbackJSON = {
+        feedbackLoops: [
+          { identifier: 'loop1', name: 'Bu1 Loop' },
+          { identifier: 'loop2', name: 'Bu5 Building' }
+        ]
+      };
+      const result = ltmBrain.processFeedbackContent(feedbackJSON);
+      expect(result.feedbackLoops[0].name).toBeUndefined();
+      expect(result.feedbackLoops[1].name).toBeUndefined();
+    });
+
+    it('should delete name when loop name starts with R followed by a number', () => {
+      const feedbackJSON = {
+        feedbackLoops: [
+          { identifier: 'loop1', name: 'R1 Loop' },
+          { identifier: 'loop2', name: 'R2 Reinforcing' },
+          { identifier: 'loop3', name: 'R99 Test' }
+        ]
+      };
+      const result = ltmBrain.processFeedbackContent(feedbackJSON);
+      expect(result.feedbackLoops[0].name).toBeUndefined();
+      expect(result.feedbackLoops[1].name).toBeUndefined();
+      expect(result.feedbackLoops[2].name).toBeUndefined();
+    });
+
+    it('should delete name when loop name starts with Ru followed by a number', () => {
+      const feedbackJSON = {
+        feedbackLoops: [
+          { identifier: 'loop1', name: 'Ru1 Loop' },
+          { identifier: 'loop2', name: 'Ru7 Running' }
+        ]
+      };
+      const result = ltmBrain.processFeedbackContent(feedbackJSON);
+      expect(result.feedbackLoops[0].name).toBeUndefined();
+      expect(result.feedbackLoops[1].name).toBeUndefined();
+    });
+
+    it('should delete name when loop name starts with U followed by a number', () => {
+      const feedbackJSON = {
+        feedbackLoops: [
+          { identifier: 'loop1', name: 'U1 Loop' },
+          { identifier: 'loop2', name: 'U3 Usage' }
+        ]
+      };
+      const result = ltmBrain.processFeedbackContent(feedbackJSON);
+      expect(result.feedbackLoops[0].name).toBeUndefined();
+      expect(result.feedbackLoops[1].name).toBeUndefined();
+    });
+
+    it('should NOT delete name when pattern matches but no number follows', () => {
+      const feedbackJSON = {
+        feedbackLoops: [
+          { identifier: 'loop1', name: 'Balance Loop' },
+          { identifier: 'loop2', name: 'Building Loop' },
+          { identifier: 'loop3', name: 'Revenue Growth' },
+          { identifier: 'loop4', name: 'Running Loop' },
+          { identifier: 'loop5', name: 'Usage Loop' }
+        ]
+      };
+      const result = ltmBrain.processFeedbackContent(feedbackJSON);
+      expect(result.feedbackLoops[0].name).toBe('Balance Loop');
+      expect(result.feedbackLoops[1].name).toBe('Building Loop');
+      expect(result.feedbackLoops[2].name).toBe('Revenue Growth');
+      expect(result.feedbackLoops[3].name).toBe('Running Loop');
+      expect(result.feedbackLoops[4].name).toBe('Usage Loop');
+    });
+
+    it('should NOT delete name when it does not match any patterns', () => {
+      const feedbackJSON = {
+        feedbackLoops: [
+          { identifier: 'loop1', name: 'Growth Loop' },
+          { identifier: 'loop2', name: 'Quality Loop' },
+          { identifier: 'loop3', name: 'Price Adjustment' }
+        ]
+      };
+      const result = ltmBrain.processFeedbackContent(feedbackJSON);
+      expect(result.feedbackLoops[0].name).toBe('Growth Loop');
+      expect(result.feedbackLoops[1].name).toBe('Quality Loop');
+      expect(result.feedbackLoops[2].name).toBe('Price Adjustment');
+    });
+
+    it('should not delete name when identifier is missing', () => {
+      const feedbackJSON = {
+        feedbackLoops: [
+          { name: 'B1 Loop' }
+        ]
+      };
+      const result = ltmBrain.processFeedbackContent(feedbackJSON);
+      expect(result.feedbackLoops[0].name).toBe('B1 Loop');
+    });
+
+    it('should handle mixed cases correctly', () => {
+      const feedbackJSON = {
+        feedbackLoops: [
+          { identifier: 'loop1', name: 'B1 Loop' },
+          { identifier: 'loop2', name: 'Revenue Growth' },
+          { identifier: 'loop3', name: 'R5 Loop' },
+          { name: 'Bu1 Loop' },
+          { identifier: 'loop5', name: 'Quality Improvement' },
+          { identifier: 'loop6', name: 'U2 Test' },
+          { identifier: 'loop7', name: 'Ru3 Running' }
+        ]
+      };
+      const result = ltmBrain.processFeedbackContent(feedbackJSON);
+      expect(result.feedbackLoops[0].name).toBeUndefined();
+      expect(result.feedbackLoops[1].name).toBe('Revenue Growth');
+      expect(result.feedbackLoops[2].name).toBeUndefined();
+      expect(result.feedbackLoops[3].name).toBe('Bu1 Loop');
+      expect(result.feedbackLoops[4].name).toBe('Quality Improvement');
+      expect(result.feedbackLoops[5].name).toBeUndefined();
+      expect(result.feedbackLoops[6].name).toBeUndefined();
+    });
+  });
+
   describe('integration tests', () => {
     it('should validate all required setup parameters are provided', () => {
       expect(() => {
@@ -340,7 +481,7 @@ describe('LTMNarrativeBrain', () => {
         problemStatementPrompt: 'Custom prompt',
         backgroundPrompt: 'Custom background'
       });
-      
+
       expect(brain).toBeDefined();
     });
   });
