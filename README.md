@@ -114,6 +114,28 @@ Contains the engines used by [Stella](https://www.iseesystems.com/store/products
 }
 ```  
 
+## Discussion Engine Feedback JSON input
+```
+{
+    feedbackLoops: [{
+        identifier: <string>,
+        name: <string>,
+        variables: Array<string>,
+        polarity: <string +|-|?>,
+        loopset?: <number> 
+        “Percent of Model Behavior Explained By Loop”?: [
+            { time: <number>, value: <number> }
+            ...
+        ]
+    }],
+    dominantLoopsByPeriod?: [{
+        dominantLoops: Array<string>,
+        startTime: <number>,
+        endTime: <number>
+    }]   
+}
+```
+
 # Setup
 1. fork this repo and git clone your fork locally 
 2. create an `.env` file at the top level which has the following keys:
