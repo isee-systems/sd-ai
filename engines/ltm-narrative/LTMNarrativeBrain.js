@@ -172,7 +172,8 @@ You can only use the information given to you by the user in your work. Any info
             messages.push({ role: "user", content: this.#data.behaviorPrompt.replaceAll("{behaviorContent}", this.#data.behaviorContent) });
 
         //give it the user prompt
-        messages.push({ role: "user", content: userPrompt });
+        if (userPrompt)
+            messages.push({ role: "user", content: userPrompt });
 
         return {
             messages,
