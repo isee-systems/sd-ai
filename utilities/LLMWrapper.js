@@ -338,7 +338,7 @@ export class LLMWrapper {
   }
 
   async #createGeminiChatCompletion(messages, model, zodSchema = null, temperature = null) {
-    const geminiMessages = this.#convertMessagesToGeminiFormat(messages);
+    const geminiMessages = this.convertMessagesToGeminiFormat(messages);
 
     // Set up request config
     const requestConfig = {
@@ -375,7 +375,7 @@ export class LLMWrapper {
   }
 
   async #createClaudeChatCompletion(messages, model, zodSchema = null, temperature = null) {
-    const claudeMessages = this.#convertMessagesToClaudeFormat(messages);
+    const claudeMessages = this.convertMessagesToClaudeFormat(messages);
 
     const completionParams = {
       model,
@@ -413,7 +413,7 @@ export class LLMWrapper {
     };
   }
 
-  #convertMessagesToGeminiFormat(messages) {
+  convertMessagesToGeminiFormat(messages) {
     const geminiMessages = {
       systemInstruction: null,
       contents: []
@@ -421,6 +421,8 @@ export class LLMWrapper {
 
     let systemMessageCount = 0;
     for (const message of messages) {
+      if (!message.content)
+        continue; //don't send empty messages, throws a 500 inside of gemini
       if (message.role === "system") {
         systemMessageCount++;
         if (systemMessageCount === 1) {
@@ -449,7 +451,7 @@ export class LLMWrapper {
     return geminiMessages;
   }
 
-  #convertMessagesToClaudeFormat(messages) {
+  convertMessagesToClaudeFormat(messages) {
     const claudeMessages = {
       system: null,
       messages: []
