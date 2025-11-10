@@ -9,7 +9,7 @@ const router = express.Router()
 
 router.post("/:engine/generate", async (req, res) => {
     const enginePath = path.join(process.cwd(), 'engines', req.params.engine, 'engine.js');
-    
+
     // Check if engine file exists
     if (!fs.existsSync(enginePath)) {
         return res.status(404).send({
@@ -35,7 +35,8 @@ router.post("/:engine/generate", async (req, res) => {
         }
     }
 
-    const engine = await import(enginePath);
+    const importPath = process.platform === 'win32' ? `file://${enginePath}` : enginePath;
+    const engine = await import(importPath);
     const instance = new engine.default();
 
     const prompt = req.body.prompt;

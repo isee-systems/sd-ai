@@ -15,7 +15,8 @@ router.get("/:engine/parameters", async (req, res) => {
         });
     }
 
-    const engine = await import(enginePath);
+    const importPath = process.platform === 'win32' ? `file://${enginePath}` : enginePath;
+    const engine = await import(importPath);
     const instance = new engine.default();
 
     const baseParameters = [{
