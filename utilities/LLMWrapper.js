@@ -120,6 +120,7 @@ export class LLMWrapper {
   }
 
   static MODELS = [
+      {label: "GPT-5.1", value: 'gpt-5.1'},
       {label: "GPT-5", value: 'gpt-5'},
       {label: "GPT-5-mini", value: 'gpt-5-mini'},
       {label: "GPT-5-nano", value: 'gpt-5-nano'},
