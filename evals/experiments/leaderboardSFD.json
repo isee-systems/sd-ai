@@ -21,10 +21,10 @@
             }
         },
 
-        "quantitative-gpt-5": {
+        "quantitative-gpt-5.1": {
             "engine": "quantitative",
             "additionalParameters": {
-                "underlyingModel": "gpt-5"
+                "underlyingModel": "gpt-5.1"
             },
             "limits": {
                 "baselineTokenUsage": 10000
