@@ -61,7 +61,7 @@
         "qualitative-zero-gpt-5.1": {
             "engine": "qualitative-zero",
             "additionalParameters": {
-                "underlyingModel": "gpt-5.1"
+                "underlyingModel": "gpt-5.1 medium"
             }
         },
 
