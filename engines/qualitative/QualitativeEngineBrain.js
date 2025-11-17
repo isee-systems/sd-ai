@@ -190,35 +190,13 @@ You will conduct a multistep process:
 
     setupLLMParameters(userPrompt, lastModel) {
         //start with the system prompt
-        let underlyingModel = this.#data.underlyingModel;
-        let systemRole = this.#llmWrapper.model.systemModeUser;
+        const { underlyingModel, systemRole, temperature, reasoningEffort } = this.#llmWrapper.getLLMParameters();
         let systemPrompt = this.#data.systemPrompt;
         let responseFormat = this.#llmWrapper.generateQualitativeSDJSONResponseSchema(this.#data.descriptionlessStructuredOutput);
-        let temperature = 0;
-        let reasoningEffort = undefined;
-
-        if (underlyingModel.startsWith('o3-mini ')) {
-            const parts = underlyingModel.split(' ');
-            underlyingModel = 'o3-mini';
-            reasoningEffort = parts[1].trim();
-        } else if (underlyingModel.startsWith('o3 ')) {
-            const parts = underlyingModel.split(' ');
-            underlyingModel = 'o3';
-            reasoningEffort = parts[1].trim();
-        }
 
         if (!this.#llmWrapper.model.hasStructuredOutput) {
             systemPrompt += "\n" + QualitativeEngineBrain.NON_STRUCTURED_OUTPUT_SYSTEM_PROMPT_ADDITION;
             responseFormat = undefined;
-        }
-
-        if (!this.#llmWrapper.model.hasSystemMode) {
-            systemRole = "user";
-            temperature = 1;
-        }
-
-        if (!this.#llmWrapper.model.hasTemperature) {
-            temperature = undefined;
         }
 
         let messages = [{ 

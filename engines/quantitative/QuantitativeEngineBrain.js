@@ -193,34 +193,12 @@ You will conduct a multistep process:
 
     setupLLMParameters(userPrompt, lastModel) {
         //start with the system prompt
-        let underlyingModel = this.#data.underlyingModel;
-        let systemRole = this.#llmWrapper.model.systemModeUser;
+        const { underlyingModel, systemRole, temperature, reasoningEffort } = this.#llmWrapper.getLLMParameters();
         let systemPrompt = this.#data.systemPrompt;
         let responseFormat = this.#llmWrapper.generateQuantitativeSDJSONResponseSchema(this.#data.mentorMode);
-        let temperature = 0;
-        let reasoningEffort = undefined;
-
-        if (underlyingModel.startsWith('o3-mini ')) {
-            const parts = underlyingModel.split(' ');
-            underlyingModel = 'o3-mini';
-            reasoningEffort = parts[1].trim();
-        } else if (underlyingModel.startsWith('o3 ')) {
-            const parts = underlyingModel.split(' ');
-            underlyingModel = 'o3';
-            reasoningEffort = parts[1].trim();
-        }
 
         if (!this.#llmWrapper.model.hasStructuredOutput) {
             throw new Error("Unsupported LLM " + this.#data.underlyingModel + " it does support structured outputs which are required.");
-        }
-
-        if (!this.#llmWrapper.model.hasSystemMode) {
-            systemRole = "user";
-            temperature = 1;
-        }
-
-        if (!this.#llmWrapper.model.hasTemperature) {
-            temperature = undefined;
         }
 
         let messages = [{ 

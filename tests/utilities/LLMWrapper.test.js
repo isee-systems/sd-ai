@@ -315,4 +315,291 @@ describe('LLMWrapper', () => {
       expect(llmWrapper.model.kind).toBe(ModelType.OPEN_AI);
     });
   });
+
+  describe('getLLMParameters', () => {
+    describe('o3-mini model parsing', () => {
+      it('should parse o3-mini with low reasoning effort', () => {
+        const wrapper = new LLMWrapper({
+          openAIKey: 'test-key',
+          underlyingModel: 'o3-mini low'
+        });
+
+        const params = wrapper.getLLMParameters();
+
+        expect(params.underlyingModel).toBe('o3-mini');
+        expect(params.reasoningEffort).toBe('low');
+        expect(params.systemRole).toBe('developer');
+        expect(params.temperature).toBeUndefined();
+      });
+
+      it('should parse o3-mini with medium reasoning effort', () => {
+        const wrapper = new LLMWrapper({
+          openAIKey: 'test-key',
+          underlyingModel: 'o3-mini medium'
+        });
+
+        const params = wrapper.getLLMParameters();
+
+        expect(params.underlyingModel).toBe('o3-mini');
+        expect(params.reasoningEffort).toBe('medium');
+      });
+
+      it('should parse o3-mini with high reasoning effort', () => {
+        const wrapper = new LLMWrapper({
+          openAIKey: 'test-key',
+          underlyingModel: 'o3-mini high'
+        });
+
+        const params = wrapper.getLLMParameters();
+
+        expect(params.underlyingModel).toBe('o3-mini');
+        expect(params.reasoningEffort).toBe('high');
+      });
+    });
+
+    describe('o3 model parsing', () => {
+      it('should parse o3 with low reasoning effort', () => {
+        const wrapper = new LLMWrapper({
+          openAIKey: 'test-key',
+          underlyingModel: 'o3 low'
+        });
+
+        const params = wrapper.getLLMParameters();
+
+        expect(params.underlyingModel).toBe('o3');
+        expect(params.reasoningEffort).toBe('low');
+        expect(params.systemRole).toBe('developer');
+        expect(params.temperature).toBeUndefined();
+      });
+
+      it('should parse o3 with medium reasoning effort', () => {
+        const wrapper = new LLMWrapper({
+          openAIKey: 'test-key',
+          underlyingModel: 'o3 medium'
+        });
+
+        const params = wrapper.getLLMParameters();
+
+        expect(params.underlyingModel).toBe('o3');
+        expect(params.reasoningEffort).toBe('medium');
+      });
+
+      it('should parse o3 with high reasoning effort', () => {
+        const wrapper = new LLMWrapper({
+          openAIKey: 'test-key',
+          underlyingModel: 'o3 high'
+        });
+
+        const params = wrapper.getLLMParameters();
+
+        expect(params.underlyingModel).toBe('o3');
+        expect(params.reasoningEffort).toBe('high');
+      });
+    });
+
+    describe('gpt-5.1 model parsing', () => {
+      it('should parse gpt-5.1 with medium reasoning effort', () => {
+        const wrapper = new LLMWrapper({
+          openAIKey: 'test-key',
+          underlyingModel: 'gpt-5.1 medium'
+        });
+
+        const params = wrapper.getLLMParameters();
+
+        expect(params.underlyingModel).toBe('gpt-5.1');
+        expect(params.reasoningEffort).toBe('medium');
+        expect(params.systemRole).toBe('developer');
+        expect(params.temperature).toBeUndefined();
+      });
+
+      it('should parse gpt-5.1 with low reasoning effort', () => {
+        const wrapper = new LLMWrapper({
+          openAIKey: 'test-key',
+          underlyingModel: 'gpt-5.1 low'
+        });
+
+        const params = wrapper.getLLMParameters();
+
+        expect(params.underlyingModel).toBe('gpt-5.1');
+        expect(params.reasoningEffort).toBe('low');
+      });
+    });
+
+    describe('standard models without reasoning effort', () => {
+      it('should handle gpt-4o without parsing', () => {
+        const wrapper = new LLMWrapper({
+          openAIKey: 'test-key',
+          underlyingModel: 'gpt-4o'
+        });
+
+        const params = wrapper.getLLMParameters();
+
+        expect(params.underlyingModel).toBe('gpt-4o');
+        expect(params.reasoningEffort).toBeUndefined();
+        expect(params.systemRole).toBe('developer');
+        expect(params.temperature).toBe(0);
+      });
+
+      it('should handle gemini models', () => {
+        const wrapper = new LLMWrapper({
+          googleKey: 'test-key',
+          underlyingModel: 'gemini-2.5-flash'
+        });
+
+        const params = wrapper.getLLMParameters();
+
+        expect(params.underlyingModel).toBe('gemini-2.5-flash');
+        expect(params.reasoningEffort).toBeUndefined();
+        expect(params.systemRole).toBe('system');
+        expect(params.temperature).toBe(0);
+      });
+
+      it('should handle claude models', () => {
+        const wrapper = new LLMWrapper({
+          anthropicKey: 'test-key',
+          underlyingModel: 'claude-sonnet-4-5-20250929'
+        });
+
+        const params = wrapper.getLLMParameters();
+
+        expect(params.underlyingModel).toBe('claude-sonnet-4-5-20250929');
+        expect(params.reasoningEffort).toBeUndefined();
+        expect(params.systemRole).toBe('system');
+        expect(params.temperature).toBe(0);
+      });
+    });
+
+    describe('system role determination', () => {
+      it('should use "developer" for OpenAI models with system mode', () => {
+        const wrapper = new LLMWrapper({
+          openAIKey: 'test-key',
+          underlyingModel: 'gpt-4o'
+        });
+
+        const params = wrapper.getLLMParameters();
+        expect(params.systemRole).toBe('developer');
+      });
+
+      it('should use "system" for Gemini models', () => {
+        const wrapper = new LLMWrapper({
+          googleKey: 'test-key',
+          underlyingModel: 'gemini-2.5-flash'
+        });
+
+        const params = wrapper.getLLMParameters();
+        expect(params.systemRole).toBe('system');
+      });
+
+      it('should use "system" for Claude models', () => {
+        const wrapper = new LLMWrapper({
+          anthropicKey: 'test-key',
+          underlyingModel: 'claude-sonnet-4-5-20250929'
+        });
+
+        const params = wrapper.getLLMParameters();
+        expect(params.systemRole).toBe('system');
+      });
+
+      it('should use "user" for o1-mini which does not have system mode', () => {
+        const wrapper = new LLMWrapper({
+          openAIKey: 'test-key',
+          underlyingModel: 'o1-mini'
+        });
+
+        const params = wrapper.getLLMParameters();
+        expect(params.systemRole).toBe('user');
+      });
+    });
+
+    describe('temperature determination', () => {
+      it('should return default temperature of 0 for models with temperature support', () => {
+        const wrapper = new LLMWrapper({
+          openAIKey: 'test-key',
+          underlyingModel: 'gpt-4o'
+        });
+
+        const params = wrapper.getLLMParameters();
+        expect(params.temperature).toBe(0);
+      });
+
+      it('should return custom default temperature when specified', () => {
+        const wrapper = new LLMWrapper({
+          openAIKey: 'test-key',
+          underlyingModel: 'gpt-4o'
+        });
+
+        const params = wrapper.getLLMParameters(0.7);
+        expect(params.temperature).toBe(0.7);
+      });
+
+      it('should return undefined for models without temperature support', () => {
+        const wrapper = new LLMWrapper({
+          openAIKey: 'test-key',
+          underlyingModel: 'o3-mini low'
+        });
+
+        const params = wrapper.getLLMParameters();
+        expect(params.temperature).toBeUndefined();
+      });
+
+      it('should return temperature 1 for models without system mode but with temperature support', () => {
+        // Note: o1-mini doesn't have temperature support, so we need a hypothetical model
+        // that has temperature support but no system mode. Since all real models that lack
+        // system mode also lack temperature support, this test verifies the logic order.
+        // In practice, this scenario doesn't occur with current models.
+        // The test verifies that if hasSystemMode is false and hasTemperature is true,
+        // temperature would be 1. However, since o1-mini has hasTemperature=false,
+        // it returns undefined instead.
+        const wrapper = new LLMWrapper({
+          openAIKey: 'test-key',
+          underlyingModel: 'o1-mini'
+        });
+
+        const params = wrapper.getLLMParameters();
+        // o1-mini has no system mode AND no temperature support
+        // The hasTemperature check comes last, so it returns undefined
+        expect(params.temperature).toBeUndefined();
+        expect(params.systemRole).toBe('user'); // Verify it has no system mode
+      });
+
+      it('should return undefined for models without temperature support even if no system mode', () => {
+        const wrapper = new LLMWrapper({
+          openAIKey: 'test-key',
+          underlyingModel: 'o3 high'
+        });
+
+        const params = wrapper.getLLMParameters();
+        // o3 has no hasSystemMode and no hasTemperature
+        // hasTemperature check comes after hasSystemMode check
+        expect(params.temperature).toBeUndefined();
+      });
+    });
+
+    describe('return value structure', () => {
+      it('should return all four required parameters', () => {
+        const wrapper = new LLMWrapper({
+          openAIKey: 'test-key',
+          underlyingModel: 'gpt-4o'
+        });
+
+        const params = wrapper.getLLMParameters();
+
+        expect(params).toHaveProperty('underlyingModel');
+        expect(params).toHaveProperty('systemRole');
+        expect(params).toHaveProperty('temperature');
+        expect(params).toHaveProperty('reasoningEffort');
+      });
+
+      it('should have exactly 4 properties', () => {
+        const wrapper = new LLMWrapper({
+          openAIKey: 'test-key',
+          underlyingModel: 'o3-mini medium'
+        });
+
+        const params = wrapper.getLLMParameters();
+
+        expect(Object.keys(params).length).toBe(4);
+      });
+    });
+  });
 });

@@ -120,7 +120,7 @@ export class LLMWrapper {
   }
 
   static MODELS = [
-      {label: "GPT-5.1", value: 'gpt-5.1'},
+      {label: "GPT-5.1", value: 'gpt-5.1 medium'},
       {label: "GPT-5", value: 'gpt-5'},
       {label: "GPT-5-mini", value: 'gpt-5-mini'},
       {label: "GPT-5-nano", value: 'gpt-5-nano'},
@@ -304,6 +304,45 @@ export class LLMWrapper {
       });
 
       return Model;
+  }
+
+  /**
+   * Gets the LLM parameters based on model capabilities
+   * @param {number} defaultTemperature - The default temperature to use (default: 0)
+   * @returns {{underlyingModel: string, systemRole: string, temperature: number|undefined, reasoningEffort: string|undefined}}
+   */
+  getLLMParameters(defaultTemperature = 0) {
+    let underlyingModel = this.model.name;
+    let reasoningEffort = undefined;
+
+    // Parse o3 models with reasoning effort
+    if (underlyingModel.startsWith('o3-mini ')) {
+      const parts = underlyingModel.split(' ');
+      underlyingModel = 'o3-mini';
+      reasoningEffort = parts[1].trim();
+    } else if (underlyingModel.startsWith('o3 ')) {
+      const parts = underlyingModel.split(' ');
+      underlyingModel = 'o3';
+      reasoningEffort = parts[1].trim();
+    } else if (underlyingModel.startsWith('gpt-5.1 ')) {
+      const parts = underlyingModel.split(' ');
+      underlyingModel = 'gpt-5.1';
+      reasoningEffort = parts[1].trim();
+    }
+
+    // Determine system role
+    let systemRole = this.model.hasSystemMode ? this.model.systemModeUser : 'user';
+
+    // Determine temperature
+    let temperature = defaultTemperature;
+    if (!this.model.hasSystemMode) {
+      temperature = 1;
+    }
+    if (!this.model.hasTemperature) {
+      temperature = undefined;
+    }
+
+    return { underlyingModel, systemRole, temperature, reasoningEffort };
   }
 
   async createChatCompletion(messages, model, zodSchema = null, temperature = null, reasoningEffort = null) {

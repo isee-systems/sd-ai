@@ -126,31 +126,9 @@ As the world's best System Dynamics Modeler, you will consider and apply the Sys
 
     setupLLMParameters(userPrompt, lastModel) {
         //start with the system prompt
-        let underlyingModel = this.#data.underlyingModel;
-        let systemRole = this.#llmWrapper.model.systemModeUser;
+        const { underlyingModel, systemRole, temperature, reasoningEffort } = this.#llmWrapper.getLLMParameters();
         let systemPrompt = this.#data.systemPrompt;
         let responseFormat = this.#llmWrapper.generateSeldonResponseSchema();
-        let temperature = 0;
-        let reasoningEffort = undefined;
-
-        if (underlyingModel.startsWith('o3-mini ')) {
-            const parts = underlyingModel.split(' ');
-            underlyingModel = 'o3-mini';
-            reasoningEffort = parts[1].trim();
-        } else if (underlyingModel.startsWith('o3 ')) {
-            const parts = underlyingModel.split(' ');
-            underlyingModel = 'o3';
-            reasoningEffort = parts[1].trim();
-        }
-
-        if (!this.#llmWrapper.model.hasSystemMode) {
-            systemRole = "user";
-            temperature = 1;
-        }
-
-        if (!this.#llmWrapper.model.hasTemperature) {
-            temperature = undefined;
-        }
 
         let messages = [{ 
             role: systemRole, 
