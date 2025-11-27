@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, spawnSync } from "node:child_process";
 import util from "node:util";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19,32 +19,30 @@ class Engine {
   }
 
   static supportedModes() {
-    return ["cld"];
+    try {
+      const pythonExe =
+        process.env.PYTHON ||
+        (process.platform === "win32" ? "python" : "python3");
+
+      const check = spawnSync(
+        pythonExe,
+        ["-c", "import transformers, torch, accelerate"],
+        { encoding: "utf8" }
+      );
+
+
+      if (check.error || check.status !== 0) {
+        return [];
+      }
+
+      return ["cld"];
+    } catch {
+      return [];
+    }
   }
 
   static additionalParameters() {
-    return [
-      {
-        name: "prompt",
-        type: "string",
-        required: true,
-        uiElement: "textarea",
-        label: "Prompt",
-        description: "Input text to analyze for causal relationships.",
-      },
-    ];
-  }
-
-  description() {
-    return Engine.description();
-  }
-
-  supportedModes() {
-    return Engine.supportedModes();
-  }
-
-  additionalParameters() {
-    return Engine.additionalParameters();
+    return [];
   }
 
   normalizePrompt(candidate) {
