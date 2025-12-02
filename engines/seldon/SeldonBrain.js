@@ -158,9 +158,13 @@ As the world's best System Dynamics Modeler, you will consider and apply the Sys
             if (this.#data.behaviorPrompt && this.#data.behaviorContent)
                 messages.push({ role: "user", content: this.#data.behaviorPrompt.replaceAll("{behaviorContent}", this.#data.behaviorContent) });
 
+            let hasNoErrors = true;
+            if (lastModel.errors)
+                hasNoErrors = lastModel.errors.length === 0;
+
             if (this.#isValidFeedbackContent())
                 messages.push({ role: "user", content: this.#data.feedbackPrompt.replaceAll("{feedbackContent}", JSON.stringify(this.#data.feedbackContent, null, 2)) });
-            else
+            else if (hasNoErrors)
                 throw new Error("Without active Loops that Matter Information I am unable to provide a feedback based explanation of behavior. Please turn LTM on and rerun the model.");
 
         } else {

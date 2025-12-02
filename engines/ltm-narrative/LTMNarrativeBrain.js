@@ -100,6 +100,11 @@ You can only use the information given to you by the user in your work. Any info
     }
 
     async #processResponse(originalResponse) {
+        if (!originalResponse.feedbackLoops) {
+            originalResponse.feedbackLoops = [];
+            debugger;
+        }
+
         //if the string is html just returned
         originalResponse.narrative = originalResponse.narrativeMarkdown;
         delete originalResponse.narrativeMarkdown;
