@@ -120,7 +120,10 @@ Contains the engines used by [Stella](https://www.iseesystems.com/store/products
     feedbackLoops: [{
         identifier: <string>,
         name: <string>,
-        variables: Array<string>,
+        links: [
+            { from: <string>, to: <string>, polarity: <string - +|-|? > }
+            ...
+        ],
         polarity: <string +|-|?>,
         loopset?: <number> 
         “Percent of Model Behavior Explained By Loop”?: [
