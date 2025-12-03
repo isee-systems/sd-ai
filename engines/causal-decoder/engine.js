@@ -116,6 +116,14 @@ class Engine {
     newModel?.relationships.forEach(processRelationship);
     //then add the relationships from the old model for completeness
     currentModel?.relationships.forEach(processRelationship);
+
+    //turn variables into objects with name
+    ret.variables = ret.variables.map((v) => {
+      return {
+        name: v
+      }
+    });
+
     return {model: ret};
   }
 
