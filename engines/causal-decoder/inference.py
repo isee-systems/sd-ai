@@ -80,8 +80,8 @@ if __name__=="__main__":
         model.eval()
 
         paragraph = sys.argv[1]
-        raw, _ = generate_targets(tok, model, paragraph, max_new_tokens=512, strategy="beam", temperature=1, num_beams= 2)
+        raw, _ = generate_targets(tok, model, paragraph, max_new_tokens=1024, strategy="beam", temperature=1, num_beams= 3)
         relationships = parse_relationships(raw)
 
-        out = {"success": True, "model": {"relationships": raw}}
+        out = {"success": True, "model": {"relationships": relationships}}
         sys.stdout.write(json.dumps(out))

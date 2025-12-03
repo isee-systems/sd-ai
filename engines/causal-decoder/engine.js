@@ -41,33 +41,87 @@ class Engine {
     }
   }
 
-  static additionalParameters() {
-    return [];
+  additionalParameters() {
+    return [{
+        name: "backgroundKnowledge",
+        type: "string",
+        required: false,
+        uiElement: "textarea",
+        saveForUser: "local",
+        label: "Background Knowledge",
+        description: "Background information you want the underlying model to consider when generating a diagram for you",
+        minHeight: 100
+    }];
   }
 
-  normalizePrompt(candidate) {
+  //this combines the background knowledge and the prompt together if there are both
+  normalizePrompt(prompt, candidate) {
+    let content = "";
+    let background = "";
     if (candidate && typeof candidate === "object") {
-      return String(candidate.backgroundKnowledge ?? "").trim();
-    }
-
-    if (typeof candidate === "string") {
+      background = String(candidate.backgroundKnowledge ?? "").trim();
+    } else if (typeof candidate === "string") {
       const trimmed = candidate.trim();
-      if (!trimmed) return "";
+      if (!trimmed) background = "";
 
       try {
         const parsed = JSON.parse(trimmed);
-        return String(parsed?.backgroundKnowledge ?? "").trim();
+        background = String(parsed?.backgroundKnowledge ?? "").trim();
       } catch {
-        return trimmed;
+        background = trimmed;
       }
     }
-    
-    return "";
+
+    if (prompt)
+      content = prompt.trim();
+
+    if (content.length > 0)
+      content += " " + background;
+
+    return content.trim();
+  }
+
+  //this makes this engine nominally iterative... it just adds onto the existing model
+  combineModels(currentModel, newModel) {
+    let ret = {
+      specs: currentModel?.specs,
+      variables: [],
+      relationships: []
+    };
+
+    const processRelationship = function(r) {
+      let duplicate = false;
+      //first determine if a relationship from from to to exists already
+      for (const existing of ret.relationships) {
+        if (existing.from == r.from && existing.to == r.to) {
+          duplicate = true;
+          break;
+        }
+      }
+
+      //if it doesn't add it to the returned model
+      if (!duplicate) {
+
+        if (ret.variables.indexOf(r.from) < 0)
+          ret.variables.push(r.from);
+
+        if (ret.variables.indexOf(r.to) < 0)
+          ret.variables.push(r.to);
+
+        ret.relationships.push(r);
+      }
+    };
+
+    //give precedence to relationships from new model
+    newModel?.relationships.forEach(processRelationship);
+    //then add the relationships from the old model for completeness
+    currentModel?.relationships.forEach(processRelationship);
+    return {model: ret};
   }
 
   async generate(prompt, currentModel, parameters) {
     const candidate = parameters;
-    const effectivePrompt = this.normalizePrompt(candidate);
+    const effectivePrompt = this.normalizePrompt(prompt, candidate);
 
     if (!effectivePrompt) {
       return { err: "No prompt provided (no backgroundKnowledge or text found)" };
@@ -106,7 +160,7 @@ class Engine {
       }
 
       if (parsed && typeof parsed === "object") {
-        return { model: parsed.model ?? parsed };
+        return this.combineModels(currentModel, parsed.model ?? parsed );
       }
 
       return {
