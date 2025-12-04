@@ -32,11 +32,11 @@ def _setup_ists_path():
     if getattr(sys, 'frozen', False):
         # Running as compiled executable
         base_path = Path(sys._MEIPASS)
-        ists_path = base_path / "ISTS-1.0"
+        ists_path = base_path / "ISTS"
     else:
         # Running as script
         _current_dir = Path(__file__).parent.resolve()
-        ists_path = _current_dir.parent / "ISTS-1.0"
+        ists_path = _current_dir.parent / "ISTS"
     
     if str(ists_path) not in sys.path:
         sys.path.insert(0, str(ists_path))

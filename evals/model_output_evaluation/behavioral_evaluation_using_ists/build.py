@@ -25,8 +25,8 @@ def get_project_paths():
         'root': script_dir,
         'src': script_dir / 'src',
         'main_script': script_dir / 'src' / 'classify_behavior.py',
-        'ists_lib': script_dir / 'ISTS-1.0',
-        'ists_training_data': script_dir / 'ISTS-1.0' / 'lib',
+        'ists_lib': script_dir / 'ISTS',
+        'ists_training_data': script_dir / 'ISTS' / 'lib',
         'dist': script_dir / 'dist',
         'build': script_dir / 'build',
     }
@@ -99,10 +99,10 @@ def build_executable(paths, onefile=True):
     # Add data files - ISTS library and training data
     ists_lib = paths['ists_lib']
     if ists_lib.exists():
-        # Include the entire ISTS-1.0 folder with its lib subdirectory
+        # Include the entire ISTS folder with its lib subdirectory
         # Use proper separator for the platform
         args.extend([
-            '--add-data', f'{ists_lib}{os.pathsep}ISTS-1.0'
+            '--add-data', f'{ists_lib}{os.pathsep}ISTS'
         ])
         print(f"  Including ISTS library from: {ists_lib}")
     else:
@@ -167,7 +167,7 @@ a = Analysis(
     pathex=[r'{paths["src"]}', r'{paths["ists_lib"]}'],
     binaries=[],
     datas=[
-        (ists_path, 'ISTS-1.0'),
+        (ists_path, 'ISTS'),
     ],
     hiddenimports=['numpy', 'scipy', 'scipy.interpolate'],
     hookspath=[],

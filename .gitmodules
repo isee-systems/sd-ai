@@ -1,0 +1,3 @@
+[submodule "evals/model_output_evaluation/behavioral_evaluation_using_ists/ISTS"]
+	path = evals/model_output_evaluation/behavioral_evaluation_using_ists/ISTS
+	url = https://github.com/UB-IAD/ISTS.git

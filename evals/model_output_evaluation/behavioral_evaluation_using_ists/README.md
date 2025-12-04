@@ -24,7 +24,7 @@ behavioral_evaluation_using_ists/
 │   ├── classify_behavior.exe # Standalone executable
 │   └── exe_usage_example.ipynb  # Example notebook for exe usage
 │
-├── ISTS-1.0/                 # ISTS library (included)
+├── ISTS/                     # ISTS library (git submodule - https://github.com/UB-IAD/ISTS)
 │   ├── ists.py               # ISTS algorithm implementation
 │   └── lib/                  # Training data
 │
