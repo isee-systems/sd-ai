@@ -120,6 +120,7 @@ export class LLMWrapper {
   }
 
   static MODELS = [
+      {label: "GPT-5.2", value: 'gpt-5.2 medium'},
       {label: "GPT-5.1", value: 'gpt-5.1 medium'},
       {label: "GPT-5", value: 'gpt-5'},
       {label: "GPT-5-mini", value: 'gpt-5-mini'},
@@ -328,6 +329,10 @@ export class LLMWrapper {
     } else if (underlyingModel.startsWith('gpt-5.1 ')) {
       const parts = underlyingModel.split(' ');
       underlyingModel = 'gpt-5.1';
+      reasoningEffort = parts[1].trim();
+    } else if (underlyingModel.startsWith('gpt-5.2 ')) {
+      const parts = underlyingModel.split(' ');
+      underlyingModel = 'gpt-5.2';
       reasoningEffort = parts[1].trim();
     }
 

@@ -31,6 +31,16 @@
             }
         },
 
+        "quantitative-gpt-5.2": {
+            "engine": "quantitative",
+            "additionalParameters": {
+                "underlyingModel": "gpt-5.2 medium"
+            },
+            "limits": {
+                "baselineTokenUsage": 10000
+            }
+        },
+
         "quantitative-gemini-2.5-pro": {
             "engine": "quantitative",
             "additionalParameters": {

@@ -65,6 +65,13 @@
             }
         },
 
+        "qualitative-zero-gpt-5.2": {
+            "engine": "qualitative-zero",
+            "additionalParameters": {
+                "underlyingModel": "gpt-5.2 medium"
+            }
+        },
+
         "qualitative-zero-gpt-5-mini": {
             "engine": "qualitative-zero",
             "additionalParameters": {
