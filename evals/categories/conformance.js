@@ -206,7 +206,7 @@ const specificConformanceElements = {
     text: 'Your response must include the variables "Taxation", "Anti-British Sentiment" and "Colonial Identity".',
     name: "include requested variables",
     expectations: {
-      variables: ["taxation", "anti-british sentiment", "colonial cdentity"]
+      variables: ["taxation", "anti-british sentiment", "colonial identity"]
     }
   }
 };
