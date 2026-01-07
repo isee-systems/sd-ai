@@ -445,8 +445,8 @@ describe('Conformance Evaluate', () => {
       const generatedResponse = {
         model: {
           relationships: [
-            { from: 'taxation', to: 'sentiment' },
-            { from: 'sentiment', to: 'taxation' },
+            { from: 'taxation', to: 'Sentiment' },
+            { from: 'Sentiment', to: 'taxation' },
             { from: 'var1', to: 'var2' },
             { from: 'var2', to: 'var3' }
           ]
@@ -454,7 +454,7 @@ describe('Conformance Evaluate', () => {
       };
 
       const requirements = {
-        variables: ['taxation', 'sentiment'],
+        variables: ['Taxation', 'sentiment'],
         minVariables: 3,
         maxVariables: 10,
         minFeedback: 1,

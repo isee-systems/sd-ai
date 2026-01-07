@@ -103,8 +103,8 @@ Distracted Driving: Using a phone, texting, or eating while driving can increase
 const extractVariables = (list) => {
   const set = new Set();
   for (const r of list) {
-    set.add(r.from);
-    set.add(r.to);
+    set.add(r.from.toLowerCase());
+    set.add(r.to.toLowerCase());
   }
   return set;
 };
@@ -283,6 +283,8 @@ export const evaluate = function(generatedResponse, requirements) {
   const fails = [];
 
   if (requirements.variables) {
+    requirements.variables = requirements.variables.map((v) => { return v.toLowerCase() });
+    
     for (const v of requirements.variables) {
       if (!vars.has(v)) {
         fails.push({
