@@ -171,6 +171,44 @@ You will conduct a multistep process:
         originalResponse.relationships = relationships;
         originalResponse.variables = originalResponse.variables || [];
 
+        //LLMs like gemini-3-flash-preview do not like to generate the inflow and outflow lists for stocks
+        //to solve the problem, we look at the list of relationships to generate the inflow and outflow lists
+        //We do that by going through all of the relationships and if there is a link pointing to a stock from a flow, 
+        //make sure its registered as an inflow or an outflow
+        relationships.forEach((relationship) => {
+            const toVariable = originalResponse.variables.find(v => projectUtils.sameVars(v.name, relationship.to));
+            const fromVariable = originalResponse.variables.find(v => projectUtils.sameVars(v.name, relationship.from));
+
+            if (toVariable && toVariable.type === "stock" && fromVariable && fromVariable.type === "flow") {
+                // Initialize inflows and outflows arrays if they don't exist
+                if (!toVariable.inflows) {
+                    toVariable.inflows = [];
+                }
+                if (!toVariable.outflows) {
+                    toVariable.outflows = [];
+                }
+
+                // If this variable is an inflow or an outflow already, don't re-add it
+                const isInInflows = toVariable.inflows.findIndex(f => projectUtils.sameVars(f, fromVariable.name)) >= 0;
+                const isInOutflows = toVariable.outflows.findIndex(f => projectUtils.sameVars(f, fromVariable.name)) >= 0;
+                if (isInInflows || isInOutflows) {
+                    return;
+                }
+
+                // Add flow to inflows or outflows based on polarity, if no polarity then we add it as an inflow
+                if (relationship.polarity === "-") {
+                    if (!isInOutflows) {
+                        toVariable.outflows.push(fromVariable.name);
+                    }
+                } else { //positive polarity or unknown, its an inflow
+                    if (!isInInflows) {
+                        toVariable.inflows.push(fromVariable.name);
+                    }
+                }
+            }
+        });
+
+        //this fixes generating flows that are not connected to stocks
         originalResponse.variables.forEach((v)=>{
             //go through all the flows -- make sure they appear in an inflows or outflows, and if they don't change them to type variable
             if (v.type === "flow" && !this.#isFlowUsed(v, originalResponse)) {
