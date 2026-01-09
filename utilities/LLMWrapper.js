@@ -405,6 +405,10 @@ export class LLMWrapper {
     }
 
     if (zodSchema) {
+      this.#zodToStructuredOutputConverter.setOptions({
+        emitOptionalProperties: false
+      });
+
       config.responseMimeType = "application/json";
       config.responseSchema = this.#zodToStructuredOutputConverter.convert(zodSchema);
     }

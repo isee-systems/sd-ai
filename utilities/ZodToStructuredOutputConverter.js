@@ -1,6 +1,12 @@
 import logger from "./logger.js"
 
 export class ZodToStructuredOutputConverter {
+  #emitOptionalProperties = true;
+
+  setOptions(parameters) {
+    this.#emitOptionalProperties = parameters?.emitOptionalProperties || true;
+  }
+
   convert(zodSchema) {
     if (!zodSchema || !zodSchema._def) {
       return {};
@@ -92,7 +98,12 @@ export class ZodToStructuredOutputConverter {
       schema.properties[key] = this.convert(zodSchema);
       propertyOrder.push(key);
 
-      if (!zodSchema.isOptional()) {
+      if (this.#emitOptionalProperties) {
+        if (!zodSchema.isOptional()) {
+          schema.required.push(key);
+        }
+      } else {
+        // Make all fields required (optional fields will be nullable)
         schema.required.push(key);
       }
     }

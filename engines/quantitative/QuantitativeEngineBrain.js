@@ -171,7 +171,8 @@ You will conduct a multistep process:
         originalResponse.relationships = relationships;
         originalResponse.variables = originalResponse.variables || [];
 
-        //LLMs like gemini-3-flash-preview do not like to generate the inflow and outflow lists for stocks
+        //LLMs like gemini-3-flash-preview (before I made it so that all properties are required, but nullable) 
+        //does not like to generate the inflow and outflow lists for stocks.
         //to solve the problem, we look at the list of relationships to generate the inflow and outflow lists
         //We do that by going through all of the relationships and if there is a link pointing to a stock from a flow, 
         //make sure its registered as an inflow or an outflow
