@@ -1,0 +1,145 @@
+{
+    "engineConfigs": {
+        "Seldon-o4-mini": {
+            "engine": "Seldon",
+            "additionalParameters": {
+                "underlyingModel": "o4-mini"
+            },
+            "limits": {
+                "baselineTokenUsage": 10000
+            }
+        },
+        "ltm-narrative-o4-mini": {
+            "engine": "ltm-narrative",
+            "additionalParameters": {
+                "underlyingModel": "o4-mini"
+            },
+            "limits": {
+                "baselineTokenUsage": 10000
+            }
+        },
+
+        "Seldon-gpt-4.1": {
+            "engine": "Seldon",
+            "additionalParameters": {
+                "underlyingModel": "gpt-4.1"
+            },
+            "limits": {
+                "baselineTokenUsage": 10000
+            }
+        },
+        "ltm-narrative-gpt-4.1": {
+            "engine": "ltm-narrative",
+            "additionalParameters": {
+                "underlyingModel": "gpt-4.1"
+            },
+            "limits": {
+                "baselineTokenUsage": 10000
+            }
+        },
+
+        "Seldon-gpt-5.1": {
+            "engine": "Seldon",
+            "additionalParameters": {
+                "underlyingModel": "gpt-5.1 medium"
+            },
+            "limits": {
+                "baselineTokenUsage": 10000
+            }
+        },
+        "ltm-narrative-gpt-5.1": {
+            "engine": "ltm-narrative",
+            "additionalParameters": {
+                "underlyingModel": "gpt-5.1 medium"
+            },
+            "limits": {
+                "baselineTokenUsage": 10000
+            }
+        },
+
+        "Seldon-gpt-5.2": {
+            "engine": "Seldon",
+            "additionalParameters": {
+                "underlyingModel": "gpt-5.2 medium"
+            },
+            "limits": {
+                "baselineTokenUsage": 10000
+            }
+        },
+        "ltm-narrative-gpt-5.2": {
+            "engine": "ltm-narrative",
+            "additionalParameters": {
+                "underlyingModel": "gpt-5.2 medium"
+            },
+            "limits": {
+                "baselineTokenUsage": 10000
+            }
+        },
+
+        "Seldon-gemini-2.5-pro": {
+            "engine": "Seldon",
+            "additionalParameters": {
+                "underlyingModel": "gemini-2.5-pro"
+            },
+            "limits": {
+                "tokensPerMinute": 90000,
+                "requestsPerMinute": 10
+            }
+        },
+        "ltm-narrative-gemini-2.5-pro": {
+            "engine": "ltm-narrative",
+            "additionalParameters": {
+                "underlyingModel": "gemini-2.5-pro"
+            },
+            "limits": {
+                "tokensPerMinute": 90000,
+                "requestsPerMinute": 10
+            }
+        },
+
+        "Seldon-gemini-2.5-flash": {
+            "engine": "Seldon",
+            "additionalParameters": {
+                "underlyingModel": "gemini-2.5-flash"
+            },
+            "limits": {
+                "tokensPerMinute": 90000,
+                "requestsPerMinute": 10
+            }
+        },
+        "ltm-narrative-gemini-2.5-flash": {
+            "engine": "ltm-narrative",
+            "additionalParameters": {
+                "underlyingModel": "gemini-2.5-flash"
+            },
+            "limits": {
+                "tokensPerMinute": 90000,
+                "requestsPerMinute": 10
+            }
+        },
+
+        "Seldon-gemini-2.5-flash-preview-09-2025": {
+            "engine": "Seldon",
+            "additionalParameters": {
+                "underlyingModel": "gemini-2.5-flash-preview-09-2025"
+            },
+            "limits": {
+                "tokensPerMinute": 90000,
+                "requestsPerMinute": 10
+            }
+        },
+        "ltm-narrative-gemini-2.5-flash-preview-09-2025": {
+            "engine": "ltm-narrative",
+            "additionalParameters": {
+                "underlyingModel": "gemini-2.5-flash-preview-09-2025"
+            },
+            "limits": {
+                "tokensPerMinute": 90000,
+                "requestsPerMinute": 10
+            }
+        }
+    },
+    "categories": {
+        "feedbackExplanation": true
+    }
+}
