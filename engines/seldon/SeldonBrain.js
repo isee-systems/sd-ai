@@ -63,7 +63,7 @@ As the world's best System Dynamics Modeler, you will consider and apply the Sys
 {backgroundKnowledge}`
 
     static DEFAULT_PROBLEM_STATEMENT_PROMPT = 
-`The user has stated that they are conducting this modeling exercise to understand the following problem better.
+`The user has stated that they are conducting this modeling exercise to understand the following problem better using the System Dynamics modeling method.
 
 {problemStatement}`
 
