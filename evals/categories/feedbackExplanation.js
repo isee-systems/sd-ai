@@ -25,6 +25,14 @@ const bassDiffusionModel = JSON.parse(
     readFileSync(join(__dirname, 'feedbackExplanationData', 'bassDiffusion.json'), 'utf-8')
 );
 
+const inventoryWorforceModel = JSON.parse(
+    readFileSync(join(__dirname, 'feedbackExplanationData', 'inventoryWorkforce.json'), 'utf-8')
+);
+
+const predatorPreyModel = JSON.parse(
+    readFileSync(join(__dirname, 'feedbackExplanationData', 'predatorPrey.json'), 'utf-8')
+);
+
 /**
  * Returns the description for this category
  * @returns {string} The description describing this category
@@ -139,6 +147,24 @@ export const groups = {
                 "There are two feedback loops in this model. A balancing (negative) feedback loop and a reinforcing (positive) feedback loop.",
                 "Before time 9.625 the system's behavior is dominated by the reinforcing (positive) feedback loop.",
                 "After time 9.625, the system's behavior is dominated by the balancing (negative) feedback loop.",
+            ]
+        ),
+        generateTest(
+            "Inventory workforce dynamics explanation",
+            inventoryWorforceModel,
+            [
+                "There are three balancing feedback loops in this model, all are balancing.  One involves both inventory and workforce, one just workforce",
+                "The balancing feedback process involving both inventory and workforce is primarily responsible for the oscillation in behavior",
+                "The balancing feedback process involving just workforce represents the worker adjustment process and is also involved with the oscillation in behavior",
+            ]
+        ),
+        generateTest(
+            "Predator prey dynamics explanation",
+            predatorPreyModel,
+            [
+                "The model produces oscillations",
+                "The growth part of the oscillations are driven by reinforcing loops involving hare births and lynx births",
+                "The decline part of the oscillaitons are driven by balancing feedback loops relating to deaths, especially the predation/starvation process"
             ]
         )
     ]
