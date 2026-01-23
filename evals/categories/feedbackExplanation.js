@@ -33,6 +33,10 @@ const predatorPreyModel = JSON.parse(
     readFileSync(join(__dirname, 'feedbackExplanationData', 'predatorPrey.json'), 'utf-8')
 );
 
+const marketGrowthModel = JSON.parse(
+    readFileSync(join(__dirname, 'feedbackExplanationData', 'marketGrowth.json'), 'utf-8')
+);
+
 /**
  * Returns the description for this category
  * @returns {string} The description describing this category
@@ -130,7 +134,7 @@ export const evaluate = async function(generatedResponse, expectations) {
  * The groups of tests to be evaluated as a part of this category
  */
 export const groups = {
-    "feedbackExplanation": [
+    "simpleFeedbackExplanation": [
         generateTest(
             "Arms race dynamics explanation",
             armsRaceModel,
@@ -165,6 +169,19 @@ export const groups = {
                 "The model produces oscillations",
                 "The growth part of the oscillations are driven by reinforcing loops involving hare births and lynx births",
                 "The decline part of the oscillaitons are driven by balancing feedback loops relating to deaths, especially the predation/starvation process"
+            ]
+        )
+    ],
+    "mediumFeedbackExplanation": [
+        generateTest(
+            "Market growth dynamics explanation",
+            marketGrowthModel,
+            [
+                "The model produces oscillations",
+                "Sales effectiveness, revenue expansion and capacity expansion are the keys to growing the business",
+                "Reinforcing feedback loops involving the sales force and revenue drive growth",
+                "Growth is constrained by capacity and delievery delays, balancing feedback loops involving delivery delays are in part responsible for the observed oscillations",
+                "In the long run the business saturates due to balancing feedback loops that stablize growth in in sales, and sales effectiveness"
             ]
         )
     ]
