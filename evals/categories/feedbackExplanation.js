@@ -55,7 +55,7 @@ export const description = () => {
 const generateTest = function(name, modelData, facts) {
     return {
         name: name,
-        prompt: "Please explain the behavior of this model over time based on the feedback loop domaince analysis provided.",
+        prompt: "Please explain the behavior of this model over time based on the feedback loop dominance analysis provided.",
         currentModel: modelData.model,
         additionalParameters: {
             feedbackContent: modelData.feedback
@@ -139,7 +139,7 @@ export const groups = {
             "Arms race dynamics explanation",
             armsRaceModel,
             [
-                "There are three feedback loops in this model.  Two balancing (negative) feedback loops, and a single reinforcing (positive) feedback loop.",
+                "There are three feedback loops in this model. Two balancing (negative) feedback loops, and a single reinforcing (positive) feedback loop.",
                 "Before time 7.625 the system's behavior is dominated by balancing (negative) feedback loops.",
                 "After time 7.625, the system's behavior is dominated by the reinforcing (positive) feedback loop.",
             ]
@@ -157,7 +157,7 @@ export const groups = {
             "Inventory workforce dynamics explanation",
             inventoryWorforceModel,
             [
-                "There are three balancing feedback loops in this model, all are balancing.  One involves both inventory and workforce, one just workforce",
+                "There are three balancing feedback loops in this model, all are balancing. One involves both inventory and workforce, one just workforce",
                 "The balancing feedback process involving both inventory and workforce is primarily responsible for the oscillation in behavior",
                 "The balancing feedback process involving just workforce represents the worker adjustment process and is also involved with the oscillation in behavior",
             ]
@@ -168,7 +168,7 @@ export const groups = {
             [
                 "The model produces oscillations",
                 "The growth part of the oscillations are driven by reinforcing loops involving hare births and lynx births",
-                "The decline part of the oscillaitons are driven by balancing feedback loops relating to deaths, especially the predation/starvation process"
+                "The decline part of the oscillations are driven by balancing feedback loops relating to deaths, especially the predation/starvation process"
             ]
         )
     ],
@@ -180,9 +180,9 @@ export const groups = {
                 "The model produces oscillations",
                 "Sales effectiveness, revenue expansion and capacity expansion are the keys to growing the business",
                 "Reinforcing feedback loops involving the sales force and revenue drive growth",
-                "Growth is constrained by capacity and delievery delays, balancing feedback loops involving delivery delays are in part responsible for the observed oscillations",
-                "In the long run the business saturates due to balancing feedback loops that stablize growth in in sales, and sales effectiveness"
+                "Growth is constrained by capacity and delivery delays, balancing feedback loops involving delivery delays are in part responsible for the observed oscillations",
+                "In the long run the business saturates due to balancing feedback loops that stabilize growth in in sales, and sales effectiveness"
             ]
         )
     ]
-};
+}; 
