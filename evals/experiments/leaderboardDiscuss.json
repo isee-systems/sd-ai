@@ -14,7 +14,7 @@
             "additionalParameters": {
                 "underlyingModel": "o4-mini"
             },
-            "skipCategories": ["modelBuildingSteps"],
+            "skipCategories": ["modelBuildingSteps", "errorFixingSuggestions"],
             "limits": {
                 "baselineTokenUsage": 10000
             }
@@ -34,7 +34,7 @@
             "additionalParameters": {
                 "underlyingModel": "gpt-4.1"
             },
-            "skipCategories": ["modelBuildingSteps"],
+            "skipCategories": ["modelBuildingSteps", "errorFixingSuggestions"],
             "limits": {
                 "baselineTokenUsage": 10000
             }
@@ -54,7 +54,7 @@
             "additionalParameters": {
                 "underlyingModel": "gpt-5.1 medium"
             },
-            "skipCategories": ["modelBuildingSteps"],
+            "skipCategories": ["modelBuildingSteps", "errorFixingSuggestions"],
             "limits": {
                 "baselineTokenUsage": 10000
             }
@@ -74,7 +74,7 @@
             "additionalParameters": {
                 "underlyingModel": "gpt-5.2 medium"
             },
-            "skipCategories": ["modelBuildingSteps"],
+            "skipCategories": ["modelBuildingSteps", "errorFixingSuggestions"],
             "limits": {
                 "baselineTokenUsage": 10000
             }
@@ -95,7 +95,7 @@
             "additionalParameters": {
                 "underlyingModel": "gemini-2.5-pro"
             },
-            "skipCategories": ["modelBuildingSteps"],
+            "skipCategories": ["modelBuildingSteps", "errorFixingSuggestions"],
             "limits": {
                 "tokensPerMinute": 90000,
                 "requestsPerMinute": 10
@@ -117,7 +117,7 @@
             "additionalParameters": {
                 "underlyingModel": "gemini-2.5-flash"
             },
-            "skipCategories": ["modelBuildingSteps"],
+            "skipCategories": ["modelBuildingSteps", "errorFixingSuggestions"],
             "limits": {
                 "tokensPerMinute": 90000,
                 "requestsPerMinute": 10
@@ -139,7 +139,7 @@
             "additionalParameters": {
                 "underlyingModel": "gemini-2.5-flash-preview-09-2025"
             },
-            "skipCategories": ["modelBuildingSteps"],
+            "skipCategories": ["modelBuildingSteps", "errorFixingSuggestions"],
             "limits": {
                 "tokensPerMinute": 90000,
                 "requestsPerMinute": 10
@@ -148,6 +148,7 @@
     },
     "categories": {
         "feedbackExplanation": true,
-        "modelBuildingSteps": true
+        "modelBuildingSteps": true,
+        "errorFixingSuggestions": true
     }
 }
