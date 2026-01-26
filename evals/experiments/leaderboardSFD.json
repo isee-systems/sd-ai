@@ -79,6 +79,7 @@
         "quantitativeTranslation": true,
         "quantitativeCausalReasoning": true,
         "quantitativeIteration": true,
-        "conformance": true
+        "conformance": true,
+        "quantitativeErrorFixing": true
     }
 }
