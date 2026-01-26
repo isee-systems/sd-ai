@@ -133,6 +133,8 @@ const tests = Object.fromEntries(
               testObj["category"] = category;
               testObj["group"] = groupName;
               testObj["testParams"] = test;
+              // Check if this category should be skipped for this engine
+              testObj["skip"] = engineConfig.skipCategories && engineConfig.skipCategories.includes(category);
               return testObj;
             });
           });
@@ -323,6 +325,23 @@ const runSingleTest = async (
       console.log(chalk.blue(`No need to run "${name}" test, we already have results from previous experiment run.`));
 
     testWithResult = cachedResult;
+
+  } else if (test.skip) {
+    // This category is skipped for this engine, create a failing test result
+    if (experiment.verbose)
+      console.log(chalk.blue(`Skipping "${name}" test for ${test.engineConfigName} (category: ${test.category})`));
+
+    testWithResult = structuredClone(test);
+    testWithResult["duration"] = 0;
+    testWithResult["generatedResponse"] = { skipped: true };
+    testWithResult["failures"] = [{
+      type: 'Skipped category',
+      details: `Category "${test.category}" is in skipCategories for engine "${test.engineConfigName}"`
+    }];
+    testWithResult["failureSummary"] = { 'Skipped category': 1 };
+    testWithResult["pass"] = false;
+    testWithResult["name"] = name;
+    fs.appendFileSync(`${experimentResultsName}${inProgressFileSuffix}`, JSON.stringify(testWithResult) + "\n");
 
   } else {
     const additionalTestParametersTokenCount =
