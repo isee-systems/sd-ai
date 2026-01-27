@@ -9778,6 +9778,173 @@
             {
                 "from": "Infection",
                 "to": "Total incubation"
+            },
+            {
+                "from": "Average period of asymptomatic infections",
+                "to": "Recovery without symptoms"
+            },
+            {
+                "from": "Symptomatic infectious",
+                "to": "Dying of COVID"
+            },
+            {
+                "from": "Case fatality rate of COVID patients",
+                "to": "Dying of COVID"
+            },
+            {
+                "from": "Case fatality rate of COVID patients",
+                "to": "Recovery"
+            },
+            {
+                "from": "Presymptomatic period",
+                "to": "Developing symptoms"
+            },
+            {
+                "from": "Recovered population",
+                "to": "Losing immunity"
+            },
+            {
+                "from": "Average immunity period",
+                "to": "Losing immunity"
+            },
+            {
+                "from": "Symptomatic infectious",
+                "to": "Recovery"
+            },
+            {
+                "from": "Average length of symptomatic period",
+                "to": "Dying of COVID"
+            },
+            {
+                "from": "Average length of symptomatic period",
+                "to": "Recovery"
+            },
+            {
+                "from": "Presymptomatic infectious",
+                "to": "Infectious population"
+            },
+            {
+                "from": "Symptomatic infectious",
+                "to": "Infectious population"
+            },
+            {
+                "from": "Asymptomatic infectious",
+                "to": "Infectious population"
+            },
+            {
+                "from": "Infectious population",
+                "to": "Infection"
+            },
+            {
+                "from": "Contacts per person per week",
+                "to": "Infection"
+            },
+            {
+                "from": "Infection",
+                "to": "Actual reproduction number"
+            },
+            {
+                "from": "Infectious population",
+                "to": "Actual reproduction number"
+            },
+            {
+                "from": "Dying of COVID",
+                "polarity": "+",
+                "to": "Cumulative COVID deaths"
+            },
+            {
+                "from": "Normal number of contacts per week",
+                "to": "Contacts per person per week"
+            },
+            {
+                "from": "Social distancing measures",
+                "to": "Contacts per person per week"
+            },
+            {
+                "from": "Additional case estimates",
+                "polarity": "+",
+                "to": "Estimated cumulative cases"
+            },
+            {
+                "from": "Cases tested",
+                "polarity": "+",
+                "to": "Estimated cumulative cases"
+            },
+            {
+                "from": "Asymptomatic incubation",
+                "to": "Recovery without symptoms"
+            },
+            {
+                "from": "Testing grade",
+                "to": "Cases tested"
+            },
+            {
+                "from": "Symptomatic infectious",
+                "to": "Cases tested"
+            },
+            {
+                "from": "Incubation",
+                "to": "Developing symptoms"
+            },
+            {
+                "from": "Estimation period",
+                "to": "Additional case estimates"
+            },
+            {
+                "from": "Asymptomatic infectious",
+                "to": "Additional case estimates"
+            },
+            {
+                "from": "Symptomatic infectious",
+                "to": "Additional case estimates"
+            },
+            {
+                "from": "Testing grade",
+                "to": "Additional case estimates"
+            },
+            {
+                "from": "Days per week",
+                "to": "Developing symptoms"
+            },
+            {
+                "from": "Days per week",
+                "to": "Recovery without symptoms"
+            },
+            {
+                "from": "Days per week",
+                "to": "Total incubation"
+            },
+            {
+                "from": "Influx of presymptomatic infectious people from abroad",
+                "to": "Developing symptoms"
+            },
+            {
+                "from": "Measurement period",
+                "to": "Additional case estimates"
+            },
+            {
+                "from": "Susceptible population",
+                "to": "Total population net flow"
+            },
+            {
+                "from": "Exposed population",
+                "to": "Total population net flow"
+            },
+            {
+                "from": "Asymptomatic infectious",
+                "to": "Total population net flow"
+            },
+            {
+                "from": "Presymptomatic infectious",
+                "to": "Total population net flow"
+            },
+            {
+                "from": "Symptomatic infectious",
+                "to": "Total population net flow"
+            },
+            {
+                "from": "Recovered population",
+                "to": "Total population net flow"
             }
         ],
         "specs": {
@@ -10014,6 +10181,257 @@
                     }
                 ],
                 "name": "Influx of presymptomatic infectious people from abroad",
+                "type": "flow",
+                "units": "Person/Week"
+            },
+            {
+                "equation": "6",
+                "name": "Average period of asymptomatic infections",
+                "type": "variable",
+                "units": "Day"
+            },
+            {
+                "equation": "Case_fatality_rate_of_COVID_patients*Symptomatic_infectious/Average_length_of_symptomatic_period",
+                "name": "Dying of COVID",
+                "type": "flow",
+                "units": "Person/Week"
+            },
+            {
+                "equation": "0.01",
+                "name": "Case fatality rate of COVID patients",
+                "type": "variable",
+                "units": "Dmnl"
+            },
+            {
+                "equation": "3",
+                "name": "Presymptomatic period",
+                "type": "variable",
+                "units": "Day"
+            },
+            {
+                "equation": "Recovered_population/Average_immunity_period",
+                "name": "Losing immunity",
+                "type": "flow",
+                "units": "Person/Week"
+            },
+            {
+                "equation": "52",
+                "name": "Average immunity period",
+                "type": "variable",
+                "units": "Week"
+            },
+            {
+                "equation": "1",
+                "name": "Average length of symptomatic period",
+                "type": "variable",
+                "units": "Week"
+            },
+            {
+                "equation": "Symptomatic_infectious+Presymptomatic_infectious+Asymptomatic_infectious",
+                "name": "Infectious population",
+                "type": "variable",
+                "units": "Person"
+            },
+            {
+                "equation": "(1-Social_distancing_measures)*Normal_number_of_contacts_per_week",
+                "name": "Contacts per person per week",
+                "type": "variable",
+                "units": "1/Week"
+            },
+            {
+                "equation": "SAFEDIV(Infection, Infectious_population)",
+                "name": "Actual reproduction number",
+                "type": "variable",
+                "units": "1/Week"
+            },
+            {
+                "equation": "DT",
+                "graphicalFunction": [
+                    {
+                        "x": 0,
+                        "y": 0
+                    },
+                    {
+                        "x": 8.9,
+                        "y": 0
+                    },
+                    {
+                        "x": 9,
+                        "y": 0.1
+                    },
+                    {
+                        "x": 9.9,
+                        "y": 0.1
+                    },
+                    {
+                        "x": 10,
+                        "y": 0.4
+                    },
+                    {
+                        "x": 10.9,
+                        "y": 0.4
+                    },
+                    {
+                        "x": 11,
+                        "y": 0.7
+                    },
+                    {
+                        "x": 18.9,
+                        "y": 0.7
+                    },
+                    {
+                        "x": 19,
+                        "y": 0.6
+                    },
+                    {
+                        "x": 21.9,
+                        "y": 0.6
+                    },
+                    {
+                        "x": 22,
+                        "y": 0.55
+                    },
+                    {
+                        "x": 40.9,
+                        "y": 0.5
+                    },
+                    {
+                        "x": 41,
+                        "y": 0.55
+                    },
+                    {
+                        "x": 49.9,
+                        "y": 0.55
+                    },
+                    {
+                        "x": 50,
+                        "y": 0.6
+                    },
+                    {
+                        "x": 55.9,
+                        "y": 0.6
+                    },
+                    {
+                        "x": 56,
+                        "y": 0.7
+                    },
+                    {
+                        "x": 58,
+                        "y": 0.7
+                    },
+                    {
+                        "x": 104,
+                        "y": 0
+                    }
+                ],
+                "name": "Social distancing measures",
+                "type": "variable",
+                "units": "Dmnl"
+            },
+            {
+                "equation": "0",
+                "inflows": [
+                    "Dying of COVID"
+                ],
+                "name": "Cumulative COVID deaths",
+                "outflows": [
+                ],
+                "type": "stock",
+                "units": "Person"
+            },
+            {
+                "equation": "7.5",
+                "name": "Normal number of contacts per week",
+                "type": "variable",
+                "units": "1/Week"
+            },
+            {
+                "equation": "TIME",
+                "graphicalFunction": [
+                    {
+                        "x": 0,
+                        "y": 0
+                    },
+                    {
+                        "x": 7,
+                        "y": 0
+                    },
+                    {
+                        "x": 10,
+                        "y": 0.2
+                    },
+                    {
+                        "x": 40,
+                        "y": 0.7
+                    },
+                    {
+                        "x": 104,
+                        "y": 0.8
+                    }
+                ],
+                "name": "Testing grade",
+                "type": "variable",
+                "units": "1/Week"
+            },
+            {
+                "equation": "0",
+                "inflows": [
+                    "Additional case estimates",
+                    "Cases tested"
+                ],
+                "name": "Estimated cumulative cases",
+                "outflows": [
+                ],
+                "type": "stock",
+                "units": "Person"
+            },
+            {
+                "equation": "Symptomatic_infectious*Testing_grade",
+                "name": "Cases tested",
+                "type": "flow",
+                "units": "Person/Week"
+            },
+            {
+                "equation": "DELAY1(Asymptomatic_infectious/Measurement_period, Estimation_period)+DELAY1(Symptomatic_infectious*(1-Testing_grade), Estimation_period)",
+                "name": "Additional case estimates",
+                "type": "flow",
+                "units": "Person/Week"
+            },
+            {
+                "equation": "TIME",
+                "graphicalFunction": [
+                    {
+                        "x": 0,
+                        "y": 20
+                    },
+                    {
+                        "x": 52,
+                        "y": 2
+                    },
+                    {
+                        "x": 104,
+                        "y": 1
+                    }
+                ],
+                "name": "Estimation period",
+                "type": "variable",
+                "units": "Week"
+            },
+            {
+                "equation": "7",
+                "name": "Days per week",
+                "type": "variable",
+                "units": "Day/Week"
+            },
+            {
+                "equation": "1",
+                "name": "Measurement period",
+                "type": "variable",
+                "units": "Week"
+            },
+            {
+                "equation": "Susceptible_population+Exposed_population+Asymptomatic_infectious+Presymptomatic_infectious+Symptomatic_infectious+Recovered_population",
+                "name": "Total population net flow",
                 "type": "flow",
                 "units": "Person/Week"
             }

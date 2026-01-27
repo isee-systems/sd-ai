@@ -71,7 +71,7 @@ export const evaluate = async function(generatedResponse, expectations) {
     });
 
     // Extract the text content from the generated response
-    const generatedText = generatedResponse.textContent || JSON.stringify(generatedResponse);
+    const generatedText = generatedResponse.output.textContent || JSON.stringify(generatedResponse);
 
     if (!generatedText) {
         failures.push({
