@@ -1,8 +1,7 @@
 {
     "engineConfigs": {
-
-        "quantitative-o4-mini": {
-            "engine": "quantitative",
+        "Seldon-o4-mini": {
+            "engine": "Seldon",
             "additionalParameters": {
                 "underlyingModel": "o4-mini"
             },
@@ -11,8 +10,8 @@
             }
         },
 
-        "quantitative-gpt-4.1": {
-            "engine": "quantitative",
+        "Seldon-gpt-4.1": {
+            "engine": "Seldon",
             "additionalParameters": {
                 "underlyingModel": "gpt-4.1"
             },
@@ -21,8 +20,8 @@
             }
         },
 
-        "quantitative-gpt-5.1": {
-            "engine": "quantitative",
+        "Seldon-gpt-5.1": {
+            "engine": "Seldon",
             "additionalParameters": {
                 "underlyingModel": "gpt-5.1 medium"
             },
@@ -31,8 +30,8 @@
             }
         },
 
-        "quantitative-gpt-5.2": {
-            "engine": "quantitative",
+        "Seldon-gpt-5.2": {
+            "engine": "Seldon",
             "additionalParameters": {
                 "underlyingModel": "gpt-5.2 medium"
             },
@@ -41,8 +40,8 @@
             }
         },
 
-        "quantitative-gemini-2.5-pro": {
-            "engine": "quantitative",
+        "Seldon-gemini-2.5-pro": {
+            "engine": "Seldon",
             "additionalParameters": {
                 "underlyingModel": "gemini-2.5-pro"
             },
@@ -52,9 +51,8 @@
             }
         },
 
-
-        "quantitative-gemini-2.5-flash": {
-            "engine": "quantitative",
+        "Seldon-gemini-2.5-flash": {
+            "engine": "Seldon",
             "additionalParameters": {
                 "underlyingModel": "gemini-2.5-flash"
             },
@@ -64,8 +62,8 @@
             }
         },
 
-        "quantitative-gemini-2.5-flash-preview-09-2025": {
-            "engine": "quantitative",
+        "Seldon-gemini-2.5-flash-preview-09-2025": {
+            "engine": "Seldon",
             "additionalParameters": {
                 "underlyingModel": "gemini-2.5-flash-preview-09-2025"
             },
@@ -76,10 +74,8 @@
         }
     },
     "categories": {
-        "quantitativeTranslation": true,
-        "quantitativeCausalReasoning": true,
-        "quantitativeIteration": true,
-        "conformance": true,
-        "quantitativeErrorFixing": true
+        "feedbackExplanation": true,
+        "modelBuildingSteps": true,
+        "errorFixingSuggestions": true
     }
 }

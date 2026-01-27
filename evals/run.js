@@ -392,7 +392,7 @@ const runSingleTest = async (
     }
 
     const { evaluate } = await import(`./categories/${test.category}.js`);
-    testWithResult["failures"] = evaluate(
+    testWithResult["failures"] = await evaluate(
       testWithResult["generatedResponse"],
       test.testParams["expectations"]
     );
