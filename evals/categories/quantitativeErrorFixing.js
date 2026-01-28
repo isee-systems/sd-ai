@@ -18,7 +18,7 @@ import { z } from 'zod';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const prompt = `If the given model contains formulation errors please fix each formulation error you identify and generate an explanation that contains a listing of all errors, why they were an error, and how you fixed them.  Do not add any new variables, or change the name of any existing variables.  Under no circumstances are you to add new relationships or feedback loops to this model. `;
+const prompt = `Please analyze the given model for formulation errors. Please take into account the style of existing formulations i.e. pipeline delays vs. exponential delays etc. If the given model contains formulation errors please fix each formulation error you identify and generate an explanation that contains a listing of all errors, why they were an error, and how you fixed them.  Do not add any new variables, or change the name of any existing variables.  Under no circumstances are you to add new relationships or feedback loops to this model.`;
 
 /**
  * Generate a test case for a COVID-19 model with errors

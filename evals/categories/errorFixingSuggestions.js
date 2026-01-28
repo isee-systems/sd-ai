@@ -18,7 +18,7 @@ import { z } from 'zod';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const prompt = `Please analyze the given model for formulation errors. Identify any errors you find, explain why they are errors, and suggest how to fix them.`;
+const prompt = `Please analyze the given model for formulation errors. Please take into account the style of existing formulations i.e. pipeline delays vs. exponential delays etc. Identify any errors you find, explain why they are errors, and suggest how to fix them.`;
 
 /**
  * Returns the description for this category
