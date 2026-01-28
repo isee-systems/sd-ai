@@ -28,8 +28,9 @@ export class ZodToStructuredOutputConverter {
       case 'ZodEnum':
         return this.convertZodEnumToStructuredOutput(zodSchema._def);
       case 'ZodOptional':
-        const innerSchema = this.convert(zodSchema._def.innerType);
-        return { ...innerSchema, nullable: true };
+        // For Claude's structured outputs, optional fields are handled via the 'required' array
+        // in the parent object, not via a 'nullable' property
+        return this.convert(zodSchema._def.innerType);
       case 'ZodUnion':
         return this.convertZodUnionToStructuredOutput(zodSchema._def);
       case 'ZodLiteral':
@@ -85,18 +86,16 @@ export class ZodToStructuredOutputConverter {
     const schema = {
       type: 'object',
       properties: {},
-      required: []
+      required: [],
+      additionalProperties: false
     };
 
     if (def.description) {
       schema.description = def.description;
     }
 
-    const propertyOrder = [];
-
     for (const [key, zodSchema] of Object.entries(def.shape())) {
       schema.properties[key] = this.convert(zodSchema);
-      propertyOrder.push(key);
 
       if (this.#emitOptionalProperties) {
         if (!zodSchema.isOptional()) {
@@ -106,10 +105,6 @@ export class ZodToStructuredOutputConverter {
         // Make all fields required (optional fields will be nullable)
         schema.required.push(key);
       }
-    }
-
-    if (propertyOrder.length > 0) {
-      schema.propertyOrdering = propertyOrder;
     }
 
     return schema;
@@ -131,11 +126,11 @@ export class ZodToStructuredOutputConverter {
   convertZodUnionToStructuredOutput(def) {
     const options = def.options;
 
+    // For nullable unions (T | null), just return the non-null type
+    // Claude handles nullability through the 'required' array in parent objects
     if (options.length === 2 && options.some(opt => opt._def.typeName === 'ZodNull')) {
       const nonNullOption = options.find(opt => opt._def.typeName !== 'ZodNull');
-      const schema = this.convert(nonNullOption);
-      schema.nullable = true;
-      return schema;
+      return this.convert(nonNullOption);
     }
 
     const enumValues = [];
