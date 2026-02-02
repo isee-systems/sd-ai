@@ -32,7 +32,8 @@ describe('Engines Route', () => {
         "cld": "qualitative",
         "sfd-discuss": "seldon",
         "cld-discuss": "seldon",
-        "ltm-discuss": "ltm-narrative"
+        "ltm-discuss": "ltm-narrative",
+        "documentation": "generate-documentation"
       });
     });
 
