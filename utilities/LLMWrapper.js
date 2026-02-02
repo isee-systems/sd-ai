@@ -199,7 +199,12 @@ export class LLMWrapper {
     "loopName": "A short, but unique name, for the process this feedback loop represents.  This name must be distinct for each loop you give a name to. This name should not refer directly to the polarity of the loop.  Don't use the words: growth, decline, stablizing, dampening, balancing, reinforcing, positive or negative in the name.",
     "loopDescription": "A description of what the process this feedback loop represents.  This description should discusses the purpose of this feedback loop. It should not be longer then 3 paragraphs",
     "loopsDescription": "A list of feedback loops with names and descriptions for the end-user.",
-    "loopsNarrative": "A markdown formatted string containing an essay consisting of multiple paragraphs (unless instructed to do otherwise) that stitches together the feedback loops and their loopDescriptions into a narrative that describes the origins of behavior in the model. This essay should note each time period where there is a change in loop dominance."
+    "loopsNarrative": "A markdown formatted string containing an essay consisting of multiple paragraphs (unless instructed to do otherwise) that stitches together the feedback loops and their loopDescriptions into a narrative that describes the origins of behavior in the model. This essay should note each time period where there is a change in loop dominance.",
+
+    "variableName": "The name of the variable being documented",
+    "variableDocumentation": "Clear, comprehensive documentation for this variable describing what it represents, its role within the model, and how it relates to other elements. Should be 2-4 sentences that are informative without being overly verbose.",
+    "documentedVariables": "A list of variables with their generated documentation",
+    "documentationSummary": "A markdown formatted summary that provides an overview of the documentation generated, highlights key variables in the model, and is helpful for understanding the structure of the model."
   };
 
   generateSeldonResponseSchema() {
@@ -229,6 +234,28 @@ export class LLMWrapper {
       });
 
       return LTMToolResponse;
+  }
+
+  generateDocumentationResponseSchema(removeDescription = false) {
+      // Conditionally adds a description to a Zod schema object.
+      // If removeDescription is true, it returns the schema without the description.
+      const withDescription = (schema, description) => {
+          return removeDescription ? schema : schema.describe(description);
+      };
+
+      const DocumentedVariable = z.object({
+        name: withDescription(z.string(), LLMWrapper.SCHEMA_STRINGS.variableName),
+        documentation: withDescription(z.string(), LLMWrapper.SCHEMA_STRINGS.variableDocumentation)
+      });
+
+      const DocumentedVariableList = withDescription(z.array(DocumentedVariable), LLMWrapper.SCHEMA_STRINGS.documentedVariables);
+
+      const DocumentationResponse = z.object({
+        variables: DocumentedVariableList,
+        summary: withDescription(z.string(), LLMWrapper.SCHEMA_STRINGS.documentationSummary)
+      });
+
+      return DocumentationResponse;
   }
 
   generateQualitativeSDJSONResponseSchema(removeDescription = false) {
