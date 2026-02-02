@@ -37,6 +37,10 @@ const marketGrowthModel = JSON.parse(
     readFileSync(join(__dirname, 'feedbackExplanationData', 'marketGrowth.json'), 'utf-8')
 );
 
+const maibabModel = JSON.parse(
+    readFileSync(join(__dirname, 'feedbackExplanationData', 'maibab.json'), 'utf-8')
+);
+
 /**
  * Returns the description for this category
  * @returns {string} The description describing this category
@@ -90,7 +94,7 @@ export const evaluate = async function(generatedResponse, expectations) {
                 },
                 {
                     role: 'user',
-                    content: `Here is the text to analyze:\n\n${generatedResponse.textContent || JSON.stringify(generatedResponse)}`
+                    content: `Here is the text to analyze:\n\n${generatedResponse.output?.textContent || JSON.stringify(generatedResponse)}`
                 },
                 {
                     role: 'user',
@@ -182,6 +186,16 @@ export const groups = {
                 "Reinforcing feedback loops involving the sales force and revenue drive growth",
                 "Growth is constrained by capacity and delivery delays, balancing feedback loops involving delivery delays are in part responsible for the observed oscillations",
                 "In the long run the business saturates due to balancing feedback loops that stabilize growth in in sales, and sales effectiveness"
+            ]
+        ),
+        generateTest(
+            "Maibab predator prey and food dynamics explanation",
+            maibabModel,
+            [
+                "System behavior is governed by predator–prey feedback. The oscillations are driven mainly by the reinforcing loop R1 and the balancing loops B1 and B2, which together create classic predator–prey cycles.",
+                "Growth and collapse phases alternate across the timeline. Periods dominated by R1 (e.g., 1810–1818, 1881–1893, 1957–1964) trigger rapid deer population growth, which are then followed by crashes or stabilization when B1 and B2 take over.",
+                "U1 briefly dominates during transitions (e.g., 1830–1834, 1865–1869, 1906–1909, 1941–1944), marking rapid predator adjustments that reset the system before returning to balancing control.",
+                "After 1972, balancing loops dominate continuously, and from 1980 to 2300, B1 and B2 maintain control, indicating a damped oscillatory regime with stable predator–prey dynamics."
             ]
         )
     ]
