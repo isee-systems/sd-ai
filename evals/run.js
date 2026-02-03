@@ -32,6 +32,14 @@ const argv = yargs(hideBin(process.argv))
 const experiment = JSON.parse(fs.readFileSync(argv.experiment, "utf8"));
 const experimentName = path.basename(path.resolve(argv.experiment)).split(".")[0];
 
+// Normalize verbose flag to integer levels
+// false or undefined -> 0, true -> 2, otherwise use the integer value
+if (experiment.verbose === false || experiment.verbose === undefined) {
+  experiment.verbose = 0;
+} else if (experiment.verbose === true) {
+  experiment.verbose = 2;
+}
+
 const files = fs.readdirSync('.');
 const inProgressFileSuffix = "_in_progress.jsonl"
 const matchingFiles = files.filter(file => file.includes(`${experimentName}${inProgressFileSuffix}`));
@@ -150,10 +158,10 @@ const tests = Object.fromEntries(
 console.log(chalk.blue("Experiment Configuration:"));
 console.log("Experiment Name: " + experimentResultsName);
 if (isContinuing) {
-  console.log(`  will attempt to use ${previousResults.length} previously saved test results`); 
+  console.log(`  will attempt to use ${previousResults.length} previously saved test results`);
 }
 console.log("Sequential: " + (experiment.sequential || "false"));
-console.log("Verbose: " + (experiment.verbose || "false"));
+console.log("Verbose: " + experiment.verbose);
 console.log();
 
 console.log(chalk.blue("Engine Configurations:"));
@@ -219,7 +227,7 @@ const progress = new cliProgress.MultiBar(
     hideCursor: true,
     format:
       "{bar} | ETA: {eta}s | {earlyResults} = {value} of {total} | {engineConfigName} | {inProgress}",
-    stream: experiment.verbose
+    stream: experiment.verbose > 0
     ? fs.createWriteStream(process.platform === "win32" ? "NULL" : "/dev/null")
     : process.stderr,
 
@@ -259,7 +267,7 @@ const runEngineTests = async ([engineConfigName, engineTests]) => {
     earlyResults: printEarlyResults(earlyResults),
     inProgress: printProgress(inProgress),
   });
-  if (experiment.verbose)
+  if (experiment.verbose > 0)
     console.log(chalk.blue(`Running tests for: ${engineConfigName}`));
 
   let testRuns = [];
@@ -293,7 +301,7 @@ const runEngineTests = async ([engineConfigName, engineTests]) => {
   }
 
   engineBar.update({ inProgress: "[Done]" });
-  if (experiment.verbose)
+  if (experiment.verbose > 0)
     console.log(chalk.blue(`Finished all tests for: ${engineConfigName}`));
 
   return testRuns;
@@ -319,7 +327,7 @@ const runSingleTest = async (
 
   let testWithResult;
   if (cachedResult) {
-    if (experiment.verbose)
+    if (experiment.verbose > 0)
       console.log(chalk.blue(`No need to run "${name}" test, we already have results from previous experiment run.`));
 
     testWithResult = cachedResult;
@@ -337,7 +345,7 @@ const runSingleTest = async (
       additionalTestParametersTokenCount +
       test.engineConfig.limits.baselineTokenUsage;
 
-    if (experiment.verbose)
+    if (experiment.verbose === 2)
       console.log(chalk.blue(`Starting test: ${name}. Awaiting rate limit. Requested additional ${additionalTestParametersTokenCount} tokens beyond the baselineTokenUsage (${test.engineConfig.limits.baselineTokenUsage})`));
 
     await requestLimiter.removeTokens(1);
@@ -348,7 +356,7 @@ const runSingleTest = async (
     );
     const instance = new engine.default();
 
-    if (experiment.verbose)
+    if (experiment.verbose === 2)
       console.log(
         chalk.blue(`Rate limit passed ${name}, awaiting engine response`)
       );
@@ -361,7 +369,7 @@ const runSingleTest = async (
       ...test.testParams.additionalParameters,
     };
 
-    if (experiment.verbose) {
+    if (experiment.verbose === 2) {
       console.log(additionalParameters)
     }
 
@@ -376,7 +384,7 @@ const runSingleTest = async (
     testWithResult["duration"] = Date.now() - startTime;
     testWithResult["generatedResponse"] = generateResponse || {};
 
-    if (experiment.verbose) {
+    if (experiment.verbose === 2) {
       console.log(
         chalk.blue(
           `Response returned: ${name}, awaiting evaluation of the generated response:`
@@ -406,7 +414,7 @@ const runSingleTest = async (
     );
     testWithResult["pass"] = testWithResult["failures"].length == 0;
 
-    if (experiment.verbose) {
+    if (experiment.verbose > 0) {
       console.log(
         chalk.blue(
           `Finished evaluation in ${Math.round(
