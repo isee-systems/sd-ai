@@ -22245,7 +22245,7 @@
                 "units": "Person/Week"
             },
             {
-                "equation": "SMTH1(Asymptomatic_infectious/Measurement_period, Estimation_period)+SMTH1(Symptomatic_infectious*(1-Testing_grade), Estimation_period)",
+                "equation": "DELAY1(Asymptomatic_infectious/Measurement_period, Estimation_period)+DELAY1(Symptomatic_infectious*(1-Testing_grade), Estimation_period)",
                 "name": "Additional case estimates",
                 "type": "flow",
                 "units": "Person/Week"

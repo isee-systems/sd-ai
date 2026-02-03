@@ -269,32 +269,48 @@ export const evaluate = async function(generatedResponse, groundTruth) {
 };
 
 export const groups = {
-    "covidModelErrors": [
-        generateCovidTest("COVID-19 model with errors 1", "covid_err1.json",
+    "covidDelayErrors": [
+        generateCovidTest("COVID-19 delay error 1", "COVID_delay_err1.json",
             [
-                { name: "total_incubation", problem: "Should use DELAY3 with the 'Infection' flow as input, not the 'Exposed population' stock divided by a time constant."},
-                { name: "influx_of_presymptomatic_infectious_people_from_abroad", problem: "The graphical function should use TIME as an input, not DT (DT)."},
+                { name: "total_incubation", problem: "Should use DELAY3 with the 'Infection' flow as input, not the 'Exposed population' stock divided by a time constant."}
+            ]
+        ),
+        generateCovidTest("COVID-19 delay error 2", "COVID_delay_err2.json",
+            [
+                { name: "developing_symptoms", problem: "Should use the flows 'Incubation + Influx of presymptomatic infectious people from abroad' as input to DELAY3, not the stock 'Presymptomatic infectious' divided by a time constant."}
+            ]
+        ),
+        generateCovidTest("COVID-19 delay error 3", "COVID_delay_err3.json",
+            [
+                { name: "additional_case_estimates", problem: "Should use SMOOTH function to calculate the average over the estimation period, not DELAY1 which only delays the value."}
+            ]
+        ),
+        generateCovidTest("COVID-19 delay error 4", "COVID_delay_err4.json",
+            [
+                { name: "recovery_without_symptoms", problem: "Should use DELAY3 with the 'Asymptomatic incubation' flow as input, not the 'Asymptomatic infectious' stock divided by a time constant."}
+            ]
+        )
+    ],
+    "covidLookupErrors": [
+        generateCovidTest("COVID-19 lookup error 1", "COVID_lookup_err1.json",
+            [
+                { name: "influx_of_presymptomatic_infectious_people_from_abroad", problem: "The graphical function should use TIME as an input, not DT (DT)."}
+            ]
+        ),
+        generateCovidTest("COVID-19 lookup error 2", "COVID_lookup_err2.json",
+            [
+                { name: "social_distancing_measures", problem: "The graphical function should use TIME as an input, not DT (DT)."}
+            ]
+        )
+    ],
+    "covidSumErrors": [
+        generateCovidTest("COVID-19 sum error 1", "COVID_sum_err1.json",
+            [
                 { name: "total_population", problem: "Total population should be an auxiliary/converter variable that sums the population stocks, not a stock."}
             ]
         ),
-        generateCovidTest("COVID-19 model with errors 2", "covid_err2.json",
+        generateCovidTest("COVID-19 sum error 2", "COVID_sum_err2.json",
             [
-                { name: "developing_symptoms", problem: "Should use the flows 'Incubation + Influx of presymptomatic infectious people from abroad' as input to DELAY3, not the stock 'Presymptomatic infectious' divided by a time constant."},
-                { name: "influx_of_presymptomatic_infectious_people_from_abroad", problem: "The graphical function should use TIME as an input, not DT (DT)."},
-                { name: "infectious_population", problem: "Infectious population should be an auxiliary/converter variable that sums the three infectious stocks, not a stock."}
-            ]
-        ),
-        generateCovidTest("COVID-19 model with errors 3", "covid_err3.json",
-            [
-                { name: "additional_case_estimates", problem: "Should use SMOOTH function to calculate the average over the estimation period, not DELAY1 which only delays the value."},
-                { name: "social_distancing_measures", problem: "The graphical function should use TIME as an input, not DT (DT)."},
-                { name: "total_population", problem: "Total population should be an auxiliary/converter variable that sums the population stocks, not a stock with an integral (INTEG) function."}
-            ]
-        ),
-        generateCovidTest("COVID-19 model with errors 4", "covid_err4.json",
-            [
-                { name: "recovery_without_symptoms", problem: "Should use DELAY3 with the 'Asymptomatic incubation' flow as input, not the 'Asymptomatic infectious' stock divided by a time constant."},
-                { name: "social_distancing_measures", problem: "The graphical function should use TIME as an input, not DT (DT)."},
                 { name: "infectious_population", problem: "Infectious population should be an auxiliary/converter variable that sums the three infectious stocks, not a stock."}
             ]
         )
