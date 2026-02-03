@@ -227,6 +227,8 @@ As the world's best System Dynamics Modeler, you will consider and apply the Sys
                 throw new ResponseFormatError("Bad JSON returned by underlying LLM");
             }
             return this.#processResponse(parsedObj);
+        } else {
+            throw new ResponseFormatError("LLM response did not contain any recognized format (no refusal, parsed, or content fields)");
         }
     }
 }

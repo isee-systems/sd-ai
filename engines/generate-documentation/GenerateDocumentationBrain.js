@@ -197,6 +197,8 @@ Your documentation should be accessible to both technical and non-technical audi
                 throw new ResponseFormatError("Bad JSON returned by underlying LLM");
             }
             return await this.#processResponse(parsedObj, currentModel);
+        } else {
+            throw new ResponseFormatError("LLM response did not contain any recognized format (no refusal, parsed, or content fields)");
         }
     }
 }

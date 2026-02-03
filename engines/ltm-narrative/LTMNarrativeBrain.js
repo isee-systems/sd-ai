@@ -190,6 +190,8 @@ You can only use the information given to you by the user in your work. Any info
                 throw new ResponseFormatError("Bad JSON returned by underlying LLM");
             }
             return await this.#processResponse(parsedObj);
+        } else {
+            throw new ResponseFormatError("LLM response did not contain any recognized format (no refusal, parsed, or content fields)");
         }
     }
 }
