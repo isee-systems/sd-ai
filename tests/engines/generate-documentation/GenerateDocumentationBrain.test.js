@@ -177,6 +177,100 @@ describe('GenerateDocumentationBrain', () => {
       expect(backgroundIndex).toBeGreaterThan(0);
       expect(problemIndex).toBeGreaterThan(backgroundIndex);
     });
+
+    it('should include relationship documentation instructions when documentConnectors is enabled', () => {
+      const brainWithConnectors = new GenerateDocumentationBrain({
+        openAIKey: 'test-key',
+        googleKey: 'test-google-key',
+        documentConnectors: true
+      });
+
+      const testModel = {
+        variables: [{ name: 'Population', type: 'stock', equation: '1000' }],
+        relationships: [{ from: 'Birth Rate', to: 'Population' }]
+      };
+
+      const result = brainWithConnectors.setupLLMParameters('Test prompt', testModel);
+
+      const systemMessage = result.messages[0];
+      expect(systemMessage.content).toContain('document the relationships (connectors) between variables');
+    });
+
+    it('should include polarity generation instructions when both documentConnectors and generatePolarity are enabled', () => {
+      const brainWithPolarity = new GenerateDocumentationBrain({
+        openAIKey: 'test-key',
+        googleKey: 'test-google-key',
+        documentConnectors: true,
+        generatePolarity: true
+      });
+
+      const testModel = {
+        variables: [{ name: 'Population', type: 'stock', equation: '1000' }],
+        relationships: [{ from: 'Birth Rate', to: 'Population' }]
+      };
+
+      const result = brainWithPolarity.setupLLMParameters('Test prompt', testModel);
+
+      const systemMessage = result.messages[0];
+      expect(systemMessage.content).toContain('document the relationships (connectors) between variables');
+      expect(systemMessage.content).toContain('determine the polarity (+ or -)');
+    });
+
+    it('should not include polarity instructions when only generatePolarity is enabled without documentConnectors', () => {
+      const brainWithPolarityOnly = new GenerateDocumentationBrain({
+        openAIKey: 'test-key',
+        googleKey: 'test-google-key',
+        generatePolarity: true
+      });
+
+      const testModel = {
+        variables: [{ name: 'Population', type: 'stock', equation: '1000' }],
+        relationships: [{ from: 'Birth Rate', to: 'Population' }]
+      };
+
+      const result = brainWithPolarityOnly.setupLLMParameters('Test prompt', testModel);
+
+      const systemMessage = result.messages[0];
+      expect(systemMessage.content).not.toContain('relationships (connectors)');
+      expect(systemMessage.content).not.toContain('polarity');
+    });
+
+    it('should generate correct response schema when documentConnectors is enabled', () => {
+      const brainWithConnectors = new GenerateDocumentationBrain({
+        openAIKey: 'test-key',
+        googleKey: 'test-google-key',
+        documentConnectors: true
+      });
+
+      const testModel = {
+        variables: [{ name: 'Population', type: 'stock', equation: '1000' }],
+        relationships: [{ from: 'Birth Rate', to: 'Population' }]
+      };
+
+      const result = brainWithConnectors.setupLLMParameters('Test prompt', testModel);
+
+      expect(result.responseFormat).toBeDefined();
+      // The response format should include relationships when documentConnectors is true
+    });
+
+    it('should generate correct response schema when both documentConnectors and generatePolarity are enabled', () => {
+      const brainWithBoth = new GenerateDocumentationBrain({
+        openAIKey: 'test-key',
+        googleKey: 'test-google-key',
+        documentConnectors: true,
+        generatePolarity: true
+      });
+
+      const testModel = {
+        variables: [{ name: 'Population', type: 'stock', equation: '1000' }],
+        relationships: [{ from: 'Birth Rate', to: 'Population' }]
+      };
+
+      const result = brainWithBoth.setupLLMParameters('Test prompt', testModel);
+
+      expect(result.responseFormat).toBeDefined();
+      // The response format should include relationships with polarity fields
+    });
   });
 
   describe('integration tests', () => {

@@ -236,7 +236,7 @@ export class LLMWrapper {
       return LTMToolResponse;
   }
 
-  generateDocumentationResponseSchema(removeDescription = false) {
+  generateDocumentationResponseSchema(includeRelationships, includePolarity, removeDescription = false) {
       // Conditionally adds a description to a Zod schema object.
       // If removeDescription is true, it returns the schema without the description.
       const withDescription = (schema, description) => {
@@ -250,10 +250,38 @@ export class LLMWrapper {
 
       const DocumentedVariableList = withDescription(z.array(DocumentedVariable), LLMWrapper.SCHEMA_STRINGS.documentedVariables);
 
-      const DocumentationResponse = z.object({
+      const responseObject = {
         variables: DocumentedVariableList,
         summary: withDescription(z.string(), LLMWrapper.SCHEMA_STRINGS.documentationSummary)
-      });
+      };
+
+      // Optionally include relationships with reasoning
+      if (includeRelationships) {
+        const PolarityEnum = withDescription(z.enum(["+", "-"]), LLMWrapper.SCHEMA_STRINGS.polarity);
+
+        const relationshipFields = {
+          from: withDescription(z.string(), LLMWrapper.SCHEMA_STRINGS.from),
+          to: withDescription(z.string(), LLMWrapper.SCHEMA_STRINGS.to),
+          reasoning: withDescription(z.string(), LLMWrapper.SCHEMA_STRINGS.reasoning)
+        };
+
+        // Add polarity fields if requested
+        if (includePolarity) {
+          relationshipFields.polarity = PolarityEnum;
+          relationshipFields.polarityReasoning = withDescription(z.string(), LLMWrapper.SCHEMA_STRINGS.polarityReasoning);
+        }
+
+        const DocumentedRelationship = z.object(relationshipFields);
+
+        const DocumentedRelationshipList = withDescription(
+          z.array(DocumentedRelationship),
+          "A list of relationships with reasoning explaining why each connection exists in the model"
+        );
+
+        responseObject.relationships = DocumentedRelationshipList;
+      }
+
+      const DocumentationResponse = z.object(responseObject);
 
       return DocumentationResponse;
   }

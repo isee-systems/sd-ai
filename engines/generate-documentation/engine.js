@@ -18,8 +18,24 @@ class Engine {
 
     additionalParameters()  {
         let parameters = LLMWrapper.additionalParameters();
-
+        
         return parameters.concat([{
+            name: "documentConnectors",
+            type: "boolean",
+            required: false,
+            uiElement: "checkbox",
+            saveForUser: "local",
+            label: "Document Connectors",
+            description: "Whether or not you want to generate documentation for connectors",
+        },{
+            name: "generatePolarity",
+            type: "boolean",
+            required: false,
+            uiElement: "checkbox",
+            saveForUser: "local",
+            label: "Update Polarity",
+            description: "Whether or not you want to generate polarity symbols for connectors",
+        },{
             name: "problemStatement",
             type: "string",
             required: false,

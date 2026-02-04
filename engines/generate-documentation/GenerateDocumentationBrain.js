@@ -38,6 +38,8 @@ Your documentation should be accessible to both technical and non-technical audi
         modelContext: null,
         openAIKey: null,
         googleKey: null,
+        generatePolarity: false,
+        documentConnectors: false,
         underlyingModel: LLMWrapper.DEFAULT_MODEL,
         systemPrompt: GenerateDocumentationBrain.DEFAULT_SYSTEM_PROMPT,
         backgroundPrompt: GenerateDocumentationBrain.DEFAULT_BACKGROUND_PROMPT,
@@ -104,8 +106,38 @@ Your documentation should be accessible to both technical and non-technical audi
             });
         }
 
+        // Process relationship documentation if present
+        if (originalResponse.relationships && updatedModel.relationships) {
+            // Create a map for relationships using from-to pair as key
+            const relationshipMap = new Map();
+            originalResponse.relationships.forEach(relationship => {
+                const key = `${relationship.from}:${relationship.to}`;
+                relationshipMap.set(key, relationship);
+            });
+
+            updatedModel.relationships.forEach(relationship => {
+                const key = `${relationship.from}:${relationship.to}`;
+                if (relationshipMap.has(key)) {
+                    const docRelationship = relationshipMap.get(key);
+                    relationship.reasoning = docRelationship.reasoning;
+
+                    // Update polarity if it was generated
+                    if (docRelationship.polarity) {
+                        relationship.polarity = docRelationship.polarity;
+                    }
+                    if (docRelationship.polarityReasoning) {
+                        relationship.polarityReasoning = docRelationship.polarityReasoning;
+                    }
+                }
+            });
+        }
+
         // Convert summary markdown to HTML if needed
-        let summaryHtml = "I have documented all< model variables and connectors.<br/><br/>" + originalResponse.summary;
+        let introMessage = "I have documented all model variables.";
+        if (originalResponse.relationships && updatedModel.relationships) {
+            introMessage = "I have documented all model variables and relationships.";
+        }
+        let summaryHtml = introMessage + "<br/><br/>" + originalResponse.summary;
         if (summaryHtml && !this.#containsHtmlTags(summaryHtml)) {
             summaryHtml = await marked.parse(summaryHtml);
         }
@@ -131,8 +163,21 @@ Your documentation should be accessible to both technical and non-technical audi
 
         // Start with the system prompt
         const { underlyingModel, systemRole, temperature, reasoningEffort } = this.#llmWrapper.getLLMParameters();
-        let responseFormat = this.#llmWrapper.generateDocumentationResponseSchema();
+        let responseFormat = this.#llmWrapper.generateDocumentationResponseSchema(
+            this.#data.documentConnectors,
+            this.#data.generatePolarity
+        );
         let systemPrompt = this.#data.systemPrompt;
+
+        // If documenting connectors, update the system prompt to include relationship documentation
+        if (this.#data.documentConnectors) {
+            systemPrompt += "\n\nIn addition to documenting variables, you should also document the relationships (connectors) between variables. For each relationship, provide a clear reasoning explaining why this connection exists and how the variables influence each other.";
+
+            // Add polarity generation instructions if requested
+            if (this.#data.generatePolarity) {
+                systemPrompt += " For each relationship, also determine the polarity (+ or -) and provide reasoning for why that polarity was chosen.";
+            }
+        }
 
         let messages = [{
             role: systemRole,
