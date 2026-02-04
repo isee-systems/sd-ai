@@ -105,7 +105,7 @@ Your documentation should be accessible to both technical and non-technical audi
         }
 
         // Convert summary markdown to HTML if needed
-        let summaryHtml = originalResponse.summary;
+        let summaryHtml = "I have documented all< model variables and connectors.<br/><br/>" + originalResponse.summary;
         if (summaryHtml && !this.#containsHtmlTags(summaryHtml)) {
             summaryHtml = await marked.parse(summaryHtml);
         }
@@ -113,7 +113,7 @@ Your documentation should be accessible to both technical and non-technical audi
         return {
             model: updatedModel,
             explanation: summaryHtml,
-            title: "Generated Documentation"
+            title: "Documentation Summary"
         };
     }
 
