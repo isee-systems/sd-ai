@@ -13,11 +13,24 @@ class QuantitativeEngineBrain {
 
     static BASE_SYSTEM_PROMPT_CORE =
 `CRITICAL MODULAR MODEL REQUIREMENTS:
-When constructing modular models, ALWAYS create cross-level ghost variables for inter-module references:
-1. Create the source variable in its computation module.
-2. Create a cross-level ghost variable in every consuming module.
-3. Mark the ghost variable explicitly as: crossLevelGhostOf = <sourceVariable>
+
+WHEN TO USE MODULES:
+- DO NOT create modules unless the model already uses modules OR the user explicitly requests modular structure
+- If the existing model has NO modules, build a NON-MODULAR model
+- If the existing model HAS modules, maintain and extend the modular structure
+- Only introduce modules when specifically asked by the user
+
+WHEN USING MODULES - GHOST VARIABLE REQUIREMENTS:
+When constructing modular models, you MUST create cross-level ghost variables for ALL inter-module references:
+1. Create the source variable in its computation module
+2. Create a cross-level ghost variable in EVERY consuming module that references the source variable
+3. The ghost variable MUST have an identical local name as the source variable
+4. Mark the ghost variable explicitly as: crossLevelGhostOf = <sourceVariable>
+5. Ghost variables have NO equation - they reference their source variable only
+6. ALL equations in the consuming module MUST reference the cross-level ghost variable, NOT the original source variable
+
 FAILURE TO CREATE AND LINK GHOST VARIABLES WILL BREAK SIMULATION. This is non-negotiable.
+REFERENCING THE ORIGINAL SOURCE VARIABLE DIRECTLY FROM A CONSUMING MODULE WILL BREAK SIMULATION. Always use the ghost.
 
 CONSTANT HANDLING:
 NEVER embed numerical constants directly in equations with other variables. ALWAYS create separate named variables for all constants.
@@ -221,7 +234,17 @@ STEP 8 - ${QuantitativeEngineBrain.FORMULATION_ERROR_SECTION}`
             ret.valid = !projectUtils.sameVars(ret.from, ret.to) && responseHasVariable(ret.from) && responseHasVariable(ret.to);
             return ret;
         });
-            
+
+        //filter out any relationship whose .to attribute is a variable that has a crossLevelGhostOf
+        relationships.forEach(relationship => {
+            if (relationship.valid) {
+                const toVariable = originalResponse.variables.find(v => projectUtils.sameVars(v.name, relationship.to));
+                if (toVariable && toVariable.crossLevelGhostOf && toVariable.crossLevelGhostOf.length > 0) {
+                    relationship.valid = false;
+                }
+            }
+        });
+
         //mark for removal any relationships which are duplicates, keep the first one we encounter
         for (let i=1,len=relationships.length; i < len; ++i) {
             for (let j=0; j < i; ++j) {
