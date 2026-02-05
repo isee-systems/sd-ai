@@ -177,7 +177,7 @@ export class LLMWrapper {
 
     "type": "There are three types of variables, stock, flow, and variable. A stock is an accumulation of its flows, it is an integral.  A stock can only change because of its flows. A flow is the derivative of a stock.  A plain variable is used for algebraic expressions.",
     "name": "The name of a variable",
-
+    "crossLevelGhostOf": "The module qualified name of the variable that this variable is representing from another module",
     "inflows": "Only used on variables that are of type stock.  It is an array of variable names representing flows that add to this stock.",
     "outflows": "Only used on variables that are of type stock.  It is an array of variable names representing flows that subtract from this stock.",
     "documentation": "Documentation for the variable including the reason why it was chosen, what it represents, and a simple explanation why it is calculated this way",
@@ -342,6 +342,7 @@ export class LLMWrapper {
         outflows: z.array(z.string()).optional().describe(LLMWrapper.SCHEMA_STRINGS.outflows),
         graphicalFunction: GF.optional().describe(LLMWrapper.SCHEMA_STRINGS.gfEquation),
         type: TypeEnum,
+        crossLevelGhostOf: z.string().optional().describe(LLMWrapper.SCHEMA_STRINGS.crossLevelGhostOf),
         documentation: z.string().describe(LLMWrapper.SCHEMA_STRINGS.documentation),
         units: z.string().describe(LLMWrapper.SCHEMA_STRINGS.units)
       });
