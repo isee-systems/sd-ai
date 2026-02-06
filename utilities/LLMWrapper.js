@@ -204,7 +204,17 @@ export class LLMWrapper {
     "variableName": "The name of the variable being documented",
     "variableDocumentation": "Clear, comprehensive documentation for this variable describing what it represents, its role within the model, and how it relates to other elements. Should be 2-4 sentences that are informative without being overly verbose.",
     "documentedVariables": "A list of variables with their generated documentation",
-    "documentationSummary": "A markdown formatted summary that provides an overview of the documentation generated, highlights key variables in the model, and is helpful for understanding the structure of the model."
+    "documentationSummary": "A markdown formatted summary that provides an overview of the documentation generated, highlights key variables in the model, and is helpful for understanding the structure of the model.",
+
+    "dimensionName": "The XMILE name for an array dimension. Must be singular (never pluralized), containing only alphanumeric characters (letters and numbers), no punctuation or special symbols allowed.",
+    "dimensionSize": "The total count of elements in this array dimension. Must be a positive integer representing how many elements exist along this dimension. Each element will be named with an string based on its index.",
+    "dimensionElements": "An array of names for each element within this dimension. Each element name must contain only alphanumeric characters (letters and numbers), with no punctuation or special symbols.",
+    "dimension": "A definition of an XMILE array dimension that defines a set of indices over which variables can be arrayed. Can be either a numeric dimension (with name, size, and type='numeric') or a label dimension (with name, elements, and type='label'). Variables can be subscripted by one or more dimensions to create multi-dimensional arrays.",
+    "arrayDimensions": "The complete list of all array dimension definitions used anywhere in this model. Each dimension must be defined here in the simulation specs before it can be referenced by variables in their 'dimensions' field.",
+    "variableDimensions": "An ordered list of dimension names that define the subscript structure for this arrayed variable. The order matters: each element in the forElements arrays must correspond positionally to the dimensions listed here (first element matches first dimension, second element matches second dimension, etc.). If empty or omitted, this is a scalar (non-arrayed) variable.",
+    "arrayElementEquation": "Specifies the equation for a specific subset of array elements in an arrayed variable. The 'equation' field contains the XMILE equation, and the 'forElements' field specifies which array elements this equation applies to (ordered to match the variable's dimensions list).",
+    "arrayEquationForElements": "An ordered list of array element names that identifies which specific array element(s) use this equation. Each element name in this list corresponds positionally to the dimensions in the variable's 'dimensions' field (first element name matches first dimension, second matches second, etc.). For single-dimension arrays, this list has one element name. For multi-dimensional arrays, this list has multiple element names in the same order as the dimensions.",
+    "variableArrayEquation": "Only used for arrayed variables when different array elements need different equations. This is a list of equation objects, where each object specifies an equation and the array elements it applies to (via the forElements field). You must provide equations that cover every valid combination of array elements across all dimensions specified in the variable's 'dimensions' field. If all array elements use the identical equation, omit this field entirely and instead specify the single shared equation in the 'equation' attribute."
   };
 
   generateSeldonResponseSchema() {
@@ -316,6 +326,21 @@ export class LLMWrapper {
       const TypeEnum = z.enum(["stock", "flow", "variable"]).describe(LLMWrapper.SCHEMA_STRINGS.type);
       const PolarityEnum = z.enum(["+", "-"]).describe(LLMWrapper.SCHEMA_STRINGS.polarity);
 
+      const NumberDimension = z.object({
+        name: z.string().describe(LLMWrapper.SCHEMA_STRINGS.dimensionName),
+        size: z.number().describe(LLMWrapper.SCHEMA_STRINGS.dimensionSize),
+        type: z.literal("numeric")
+      });
+
+      const LabelDimension = z.object({
+        name: z.string().describe(LLMWrapper.SCHEMA_STRINGS.dimensionName),
+        elements: z.array(z.string()).describe(LLMWrapper.SCHEMA_STRINGS.dimensionElements),
+        type: z.literal("label")
+      });
+
+      const Dimension = z.union([NumberDimension, LabelDimension]).describe(LLMWrapper.SCHEMA_STRINGS.dimension);
+
+
       const GFPoint = z.object({
         x: z.number().describe(LLMWrapper.SCHEMA_STRINGS.gfPointX),
         y: z.number().describe(LLMWrapper.SCHEMA_STRINGS.gfPointY)
@@ -335,16 +360,23 @@ export class LLMWrapper {
 
       const Relationships = z.array(Relationship).describe(LLMWrapper.SCHEMA_STRINGS.relationships);
 
+      const ArrayElementEquation = z.object({
+        equation: z.string().describe(LLMWrapper.SCHEMA_STRINGS.equation),
+        forElements: z.array(z.string()).describe(LLMWrapper.SCHEMA_STRINGS.arrayEquationForElements)
+      }).describe(LLMWrapper.SCHEMA_STRINGS.arrayElementEquation);
+
       const Variable = z.object({
         name: z.string().describe(LLMWrapper.SCHEMA_STRINGS.name),
-        equation: z.string().describe(LLMWrapper.SCHEMA_STRINGS.equation),
+        equation: z.string().optional().describe(LLMWrapper.SCHEMA_STRINGS.equation),
         inflows: z.array(z.string()).optional().describe(LLMWrapper.SCHEMA_STRINGS.inflows),
         outflows: z.array(z.string()).optional().describe(LLMWrapper.SCHEMA_STRINGS.outflows),
         graphicalFunction: GF.optional().describe(LLMWrapper.SCHEMA_STRINGS.gfEquation),
         type: TypeEnum,
         crossLevelGhostOf: z.string().optional().describe(LLMWrapper.SCHEMA_STRINGS.crossLevelGhostOf),
         documentation: z.string().describe(LLMWrapper.SCHEMA_STRINGS.documentation),
-        units: z.string().describe(LLMWrapper.SCHEMA_STRINGS.units)
+        units: z.string().describe(LLMWrapper.SCHEMA_STRINGS.units),
+        dimensions: z.array(z.string()).optional().describe(LLMWrapper.SCHEMA_STRINGS.variableDimensions),
+        arrayEquations: z.array(ArrayElementEquation).optional().describe(LLMWrapper.SCHEMA_STRINGS.variableArrayEquation)
       });
 
       const Variables = z.array(Variable).describe(LLMWrapper.SCHEMA_STRINGS.variables);
@@ -353,7 +385,8 @@ export class LLMWrapper {
         startTime: z.number().describe(LLMWrapper.SCHEMA_STRINGS.startTime),
         stopTime: z.number().describe(LLMWrapper.SCHEMA_STRINGS.stopTime),
         dt: z.number().describe(LLMWrapper.SCHEMA_STRINGS.dt),
-        timeUnits: z.string().describe(LLMWrapper.SCHEMA_STRINGS.timeUnits)
+        timeUnits: z.string().describe(LLMWrapper.SCHEMA_STRINGS.timeUnits),
+        arrayDimensions: z.array(Dimension).describe(LLMWrapper.SCHEMA_STRINGS.arrayDimensions)
       }).describe(LLMWrapper.SCHEMA_STRINGS.simSpecs);
 
       const Model = z.object({

@@ -32,6 +32,28 @@ When constructing modular models, you MUST create cross-level ghost variables fo
 FAILURE TO CREATE AND LINK GHOST VARIABLES WILL BREAK SIMULATION. This is non-negotiable.
 REFERENCING THE ORIGINAL SOURCE VARIABLE DIRECTLY FROM A CONSUMING MODULE WILL BREAK SIMULATION. Always use the ghost.
 
+CRITICAL ARRAY REQUIREMENTS:
+
+WHEN TO USE ARRAYS:
+- DO NOT create arrays or array dimensions unless the model already uses arrays OR the user explicitly requests arrayed variables
+- If the existing model has NO arrays, build a NON-ARRAYED model with scalar variables only
+- If the existing model HAS arrays, maintain and extend the array structure consistently
+- Only introduce arrays when specifically asked by the user
+- Arrays add significant complexity - use them ONLY when necessary
+
+WHEN USING ARRAYS - DIMENSION AND EQUATION REQUIREMENTS:
+When constructing models with arrayed variables, you MUST follow these rules:
+1. ALL array dimensions MUST be defined in the specs.arrayDimensions list before being referenced
+2. Each dimension MUST have a unique name (singular, alphanumeric only)
+3. For label dimensions: specify element names; for numeric dimensions: specify size
+4. Variables reference dimensions by name in their dimensions array (order matters)
+5. Arrayed variables MUST have equations for ALL element combinations, specified either as:
+   - A single equation in the 'equation' field (if all elements use the same formula)
+   - Element-specific equations in the 'arrayEquations' dictionary (if elements differ)
+6. Array element keys use comma-separated dimension element names (e.g., "elem1,elem2")
+
+FAILURE TO PROPERLY DEFINE DIMENSIONS AND EQUATIONS WILL BREAK SIMULATION. This is non-negotiable.
+
 CONSTANT HANDLING:
 NEVER embed numerical constants directly in equations with other variables. ALWAYS create separate named variables for all constants.
 
@@ -230,6 +252,16 @@ STEP 8 - ${QuantitativeEngineBrain.FORMULATION_ERROR_SECTION}`
             if (relationship.valid) {
                 const toVariable = originalResponse.variables.find(v => projectUtils.sameVars(v.name, relationship.to));
                 if (toVariable && toVariable.crossLevelGhostOf && toVariable.crossLevelGhostOf.length > 0) {
+                    relationship.valid = false;
+                }
+            }
+        });
+
+        //filter out any relationships that reference array elements with bracket notation
+        relationships.forEach(relationship => {
+            if (relationship.valid) {
+                //if the to or from has a [ in the name mark it invalid (array element references)
+                if (relationship.from.includes('[') || relationship.to.includes('[')) {
                     relationship.valid = false;
                 }
             }
