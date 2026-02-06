@@ -206,11 +206,12 @@ export class LLMWrapper {
     "documentedVariables": "A list of variables with their generated documentation",
     "documentationSummary": "A markdown formatted summary that provides an overview of the documentation generated, highlights key variables in the model, and is helpful for understanding the structure of the model.",
 
+    "dimensionType": "The type of this dimension: either 'numeric' or 'label'. For numeric dimensions, the element names are automatically generated as strings based on indices (e.g., '1', '2', '3'). For label dimensions, element names are explicitly defined by the user with meaningful names.",
     "dimensionName": "The XMILE name for an array dimension. Must be singular (never pluralized), containing only alphanumeric characters (letters and numbers), no punctuation or special symbols allowed.",
-    "dimensionSize": "The total count of elements in this array dimension. Must be a positive integer representing how many elements exist along this dimension. Each element will be named with an string based on its index.",
-    "dimensionElements": "An array of names for each element within this dimension. Each element name must contain only alphanumeric characters (letters and numbers), with no punctuation or special symbols.",
-    "dimension": "A definition of an XMILE array dimension that defines a set of indices over which variables can be arrayed. Can be either a numeric dimension (with name, size, and type='numeric') or a label dimension (with name, elements, and type='label'). Variables can be subscripted by one or more dimensions to create multi-dimensional arrays.",
-    "arrayDimensions": "The complete list of all array dimension definitions used anywhere in this model. Each dimension must be defined here in the simulation specs before it can be referenced by variables in their 'dimensions' field.",
+    "dimensionSize": "The total count of elements in this array dimension. Must be a positive integer. For numeric dimensions, this determines how many auto-generated numeric element names to create. For label dimensions, this should match the length of the elements array.",
+    "dimensionElements": "An array of names for each element within this dimension. Each element name must contain only alphanumeric characters (letters and numbers), with no punctuation or special symbols. For numeric dimensions, this will be auto-generated as string numbers (e.g., ['1', '2', '3']). For label dimensions, provide meaningful names that describe each element (e.g., ['North', 'South', 'East', 'West']).",
+    "dimension": "A definition of an XMILE array dimension that defines a set of indices over which variables can be arrayed. Every dimension must specify: type ('numeric' or 'label'), name (singular, alphanumeric), size (positive integer), and elements (array of element names). For numeric dimensions, elements are auto-generated numeric strings. For label dimensions, elements are user-defined meaningful names. Variables can be subscripted by one or more dimensions to create multi-dimensional arrays.",
+    "arrayDimensions": "The complete list of all array dimension definitions used anywhere in this model. Each dimension must be fully defined here in the simulation specs before it can be referenced by variables in their 'dimensions' field. All dimensions must have all four required fields: type, name, size, and elements.",
     "variableDimensions": "An ordered list of dimension names that define the subscript structure for this arrayed variable. The order matters: each element in the forElements arrays must correspond positionally to the dimensions listed here (first element matches first dimension, second element matches second dimension, etc.). If empty or omitted, this is a scalar (non-arrayed) variable.",
     "arrayElementEquation": "Specifies the equation for a specific subset of array elements in an arrayed variable. The 'equation' field contains the XMILE equation, and the 'forElements' field specifies which array elements this equation applies to (ordered to match the variable's dimensions list).",
     "arrayEquationForElements": "An ordered list of array element names that identifies which specific array element(s) use this equation. Each element name in this list corresponds positionally to the dimensions in the variable's 'dimensions' field (first element name matches first dimension, second matches second, etc.). For single-dimension arrays, this list has one element name. For multi-dimensional arrays, this list has multiple element names in the same order as the dimensions.",
@@ -326,19 +327,12 @@ export class LLMWrapper {
       const TypeEnum = z.enum(["stock", "flow", "variable"]).describe(LLMWrapper.SCHEMA_STRINGS.type);
       const PolarityEnum = z.enum(["+", "-"]).describe(LLMWrapper.SCHEMA_STRINGS.polarity);
 
-      const NumberDimension = z.object({
+      const Dimension = z.object({
+        type: z.enum(["label", "numeric"]).describe(LLMWrapper.SCHEMA_STRINGS.dimensionType),
         name: z.string().describe(LLMWrapper.SCHEMA_STRINGS.dimensionName),
         size: z.number().describe(LLMWrapper.SCHEMA_STRINGS.dimensionSize),
-        type: z.literal("numeric")
-      });
-
-      const LabelDimension = z.object({
-        name: z.string().describe(LLMWrapper.SCHEMA_STRINGS.dimensionName),
-        elements: z.array(z.string()).describe(LLMWrapper.SCHEMA_STRINGS.dimensionElements),
-        type: z.literal("label")
-      });
-
-      const Dimension = z.union([NumberDimension, LabelDimension]).describe(LLMWrapper.SCHEMA_STRINGS.dimension);
+        elements: z.array(z.string()).describe(LLMWrapper.SCHEMA_STRINGS.dimensionElements)
+      }).describe(LLMWrapper.SCHEMA_STRINGS.dimension);
 
 
       const GFPoint = z.object({
