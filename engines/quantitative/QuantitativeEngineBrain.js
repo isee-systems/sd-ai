@@ -93,16 +93,6 @@ c. AVERAGING FUNCTION ERRORS:
    - USE SMOOTH function for moving averages
    - DO NOT USE DELAY1 or DELAY3 for averaging (delays only shift time, they don't average)
 
-FIX FORMULATION ERRORS (Preservation Requirements):
-When correcting formulation errors:
-- KEEP all existing variables unchanged
-- KEEP all existing relationships unchanged
-- KEEP all existing structure unchanged
-- MODIFY ONLY: equation, type, or graphicalFunction fields of affected variables
-- DO NOT add missing variables
-- DO NOT change variable names
-- DO NOT add new relationships
-- DO NOT "improve" beyond fixing identified errors
 - PROVIDE detailed explanation listing: every error found, exact variable name, what was wrong, how it was fixed`
 
     static MENTOR_ADDITIONAL_CONCERNS =
