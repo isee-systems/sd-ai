@@ -55,6 +55,7 @@ When constructing models with arrayed variables, you MUST follow these rules:
 6. Array element references in 'forElements' use individual dimension element names (e.g., ["North", "Q1"])
 7. SUM function syntax - CRITICAL:
    - ALWAYS use asterisk (*) to represent the dimension being summed - NEVER use the dimension name
+   - MANDATORY: Every SUM equation MUST contain at least one asterisk (*) - without it, the SUM is invalid
    - WRONG: SUM(Revenue[region]) or SUM(Sales[product])
    - CORRECT: SUM(Revenue[*]) to sum across all elements of a single dimension
    - CORRECT: SUM(Sales[product,*]) to sum across the second dimension of a 2D array
@@ -94,12 +95,16 @@ Provide equations for every variable:
 - Write all equations in XMILE format
 - NEVER embed numbers directly in equations
 - Every variable referenced in an equation MUST have its own equation, type, and appear in the relationships list
-- For ARRAYED variables:
-  * If all elements use the same formula: provide the 'equation' field only
-  * If elements differ provide 'arrayEquations' with entries for ALL elements (omit 'equation'). 
-  * For arrayed STOCKS with numeric initialization: ALWAYS use 'arrayEquations' to specify initial values for each element individually
+- CRITICAL EQUATION REQUIREMENT: Every variable MUST have EITHER 'equation' OR 'arrayEquations' populated (never both, never neither)
+  * Exception: Cross-level ghost variables (with crossLevelGhostOf set) have NO equation
+  * For SCALAR (non-arrayed) variables: ALWAYS provide 'equation'
+  * For ARRAYED variables where all elements use the SAME formula: provide 'equation' only
+  * For ARRAYED variables where elements have DIFFERENT formulas: provide 'arrayEquations' with entries for ALL elements (omit 'equation')
+  * For arrayed STOCKS with numeric initialization: ALWAYS use 'arrayEquations' to specify initial values for each element individually (omit 'equation')
 - In SUM functions: ALWAYS use asterisk (*) for the dimension to sum, NEVER the dimension name
+  * CRITICAL: Every SUM equation MUST contain at least one asterisk (*) - this is mandatory
   * Example: SUM(Revenue[*]) NOT SUM(Revenue[region])
+  * The asterisk (*) represents "sum over all elements of this dimension"
 
 STEP 5 - VERIFY MODEL VALIDITY:
 Continuously verify the model produces correct results for correct reasons. Question whether the structure truly represents the described system.`
