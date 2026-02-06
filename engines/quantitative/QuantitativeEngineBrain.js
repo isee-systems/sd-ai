@@ -47,10 +47,18 @@ When constructing models with arrayed variables, you MUST follow these rules:
 2. Each dimension MUST have a unique name (singular, alphanumeric only)
 3. For label dimensions: specify element names; for numeric dimensions: specify size
 4. Variables reference dimensions by name in their dimensions array (order matters)
-5. Arrayed variables MUST have equations for ALL element combinations, specified either as:
-   - A single equation in the 'equation' field (if all elements use the same formula)
-   - Element-specific equations in the 'arrayEquations' dictionary (if elements differ)
-6. Array element keys use comma-separated dimension element names (e.g., "elem1,elem2")
+5. Arrayed variables MUST have equations for ALL element combinations:
+   - If all elements use the SAME formula: provide ONE equation in the 'equation' field
+   - If elements differ: provide element-specific equations in the 'arrayEquations' array (NOT 'equation')
+   - For arrayed STOCKS: you MUST provide initial values for each element using 'arrayEquations'
+   - NEVER leave the 'equation' or 'arrayEquations' fields empty for any variable
+6. Array element references in 'forElements' use individual dimension element names (e.g., ["North", "Q1"])
+7. SUM function syntax - CRITICAL:
+   - ALWAYS use asterisk (*) to represent the dimension being summed - NEVER use the dimension name
+   - WRONG: SUM(Revenue[region]) or SUM(Sales[product])
+   - CORRECT: SUM(Revenue[*]) to sum across all elements of a single dimension
+   - CORRECT: SUM(Sales[product,*]) to sum across the second dimension of a 2D array
+   - The asterisk (*) is a wildcard that means "sum over all elements of this dimension"
 
 FAILURE TO PROPERLY DEFINE DIMENSIONS AND EQUATIONS WILL BREAK SIMULATION. This is non-negotiable.
 
@@ -81,22 +89,19 @@ Classify each variable as one of three types:
 - FLOW: Derivatives that change stocks (rate of change)
 - VARIABLE: Auxiliary variables for algebraic expressions
 
-STEP 4 - HANDLE EMPTY SCENARIOS:
-If the text contains NO causal relationships, return empty JSON structure. DO NOT fabricate relationships that do not exist.
-
-STEP 5 - WRITE EQUATIONS:
+STEP 4 - WRITE EQUATIONS:
 Provide equations for every variable:
 - Write all equations in XMILE format
 - NEVER embed numbers directly in equations
 - Every variable referenced in an equation MUST have its own equation, type, and appear in the relationships list
+- For ARRAYED variables:
+  * If all elements use the same formula: provide the 'equation' field only
+  * If elements differ provide 'arrayEquations' with entries for ALL elements (omit 'equation'). 
+  * For arrayed STOCKS with numeric initialization: ALWAYS use 'arrayEquations' to specify initial values for each element individually
+- In SUM functions: ALWAYS use asterisk (*) for the dimension to sum, NEVER the dimension name
+  * Example: SUM(Revenue[*]) NOT SUM(Revenue[region])
 
-STEP 6 - CLOSE FEEDBACK LOOPS:
-Actively identify and close feedback loops. This is CRITICAL for model validity.
-- A feedback loop is a closed causal chain (Variable1 → Variable2 → Variable3 → Variable1)
-- Maximize the number of feedback loops identified
-- Ensure the model includes meaningful feedback structures
-
-STEP 7 - VERIFY MODEL VALIDITY:
+STEP 5 - VERIFY MODEL VALIDITY:
 Continuously verify the model produces correct results for correct reasons. Question whether the structure truly represents the described system.`
 
     static FORMULATION_ERROR_SECTION =
@@ -147,16 +152,16 @@ NEVER identify feedback loops for the user in explanatory text. Let users discov
 
 ${QuantitativeEngineBrain.BASE_SYSTEM_PROMPT_CORE}
 
-STEP 8 - ${QuantitativeEngineBrain.MENTOR_ADDITIONAL_CONCERNS}
+STEP 6 - ${QuantitativeEngineBrain.MENTOR_ADDITIONAL_CONCERNS}
 
-STEP 9 - ${QuantitativeEngineBrain.FORMULATION_ERROR_SECTION}`
+STEP 7 - ${QuantitativeEngineBrain.FORMULATION_ERROR_SECTION}`
 
     static DEFAULT_SYSTEM_PROMPT =
 `You are a System Dynamics Professional Modeler. Generate stock and flow models from user-provided text following these mandatory rules:
 
 ${QuantitativeEngineBrain.BASE_SYSTEM_PROMPT_CORE}
 
-STEP 8 - ${QuantitativeEngineBrain.FORMULATION_ERROR_SECTION}`
+STEP 6 - ${QuantitativeEngineBrain.FORMULATION_ERROR_SECTION}`
 
     static DEFAULT_ASSISTANT_PROMPT = 
 `I want your response to consider the model which you have already so helpfully given to us. You should never change the name of any variable you've already given us. Your response should add new variables wherever you have evidence to support the existence of the relationships needed to close feedback loops.  Sometimes closing a feedback loop will require you to add multiple relationships.`
@@ -165,9 +170,6 @@ STEP 8 - ${QuantitativeEngineBrain.FORMULATION_ERROR_SECTION}`
 `Please be sure to consider the following critically important background information when you give your answer.
 
 {backgroundKnowledge}`
-
-    static DEFAULT_FEEDBACK_PROMPT =
-`Find out if there are any possibilities of forming closed feedback loops that are implied in the analysis that you are doing. If it is possible to create a feedback loop using the variables you've found in your analysis, then close any feedback loops you can by adding the extra relationships which are necessary to do so.  This may require you to add many relationships.  This is okay as long as there is evidence to support each relationship you add.`
 
     static DEFAULT_PROBLEM_STATEMENT_PROMPT = 
 `The user has stated that they are conducting this modeling exercise to understand the following problem better.
@@ -183,7 +185,6 @@ STEP 8 - ${QuantitativeEngineBrain.FORMULATION_ERROR_SECTION}`
         underlyingModel: LLMWrapper.DEFAULT_MODEL,
         systemPrompt: QuantitativeEngineBrain.DEFAULT_SYSTEM_PROMPT,
         assistantPrompt: QuantitativeEngineBrain.DEFAULT_ASSISTANT_PROMPT,
-        feedbackPrompt: QuantitativeEngineBrain.DEFAULT_FEEDBACK_PROMPT,
         backgroundPrompt: QuantitativeEngineBrain.DEFAULT_BACKGROUND_PROMPT,
         problemStatementPrompt: QuantitativeEngineBrain.DEFAULT_PROBLEM_STATEMENT_PROMPT
     };
@@ -391,7 +392,6 @@ STEP 8 - ${QuantitativeEngineBrain.FORMULATION_ERROR_SECTION}`
 
         //give it the user prompt
         messages.push({ role: "user", content: userPrompt });
-        messages.push({ role: "user", content: this.#data.feedbackPrompt }); //then have it try to close feedback
 
         return {
             messages,
