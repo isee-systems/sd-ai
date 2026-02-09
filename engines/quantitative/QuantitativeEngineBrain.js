@@ -47,13 +47,14 @@ When constructing models with arrayed variables, you MUST follow these rules:
 2. Each dimension MUST have a unique name (singular, alphanumeric only)
 3. For label dimensions: specify element names; for numeric dimensions: specify size
 4. Variables reference dimensions by name in their dimensions array (order matters)
-5. Arrayed variables MUST have equations for ALL element combinations:
+5. NEVER remove dimensions from existing arrayed variables unless explicitly directed to do so by the end user
+6. Arrayed variables MUST have equations for ALL element combinations:
    - If all elements use the SAME formula: provide ONE equation in the 'equation' field
    - If elements differ: provide element-specific equations in the 'arrayEquations' array (NOT 'equation')
    - For arrayed STOCKS: you MUST provide initial values for each element using 'arrayEquations'
    - NEVER leave the 'equation' or 'arrayEquations' fields empty for any variable
-6. Array element references in 'forElements' use individual dimension element names (e.g., ["North", "Q1"])
-7. SUM function syntax - CRITICAL:
+7. Array element references in 'forElements' use individual dimension element names (e.g., ["North", "Q1"])
+8. SUM function syntax - CRITICAL:
    - ALWAYS use asterisk (*) to represent the dimension being summed - NEVER use the dimension name
    - MANDATORY: Every SUM equation MUST contain at least one asterisk (*) - without it, the SUM is invalid
    - WRONG: SUM(Revenue[region]) or SUM(Sales[product])
@@ -109,6 +110,256 @@ Provide equations for every variable:
 STEP 5 - VERIFY MODEL VALIDITY:
 Continuously verify the model produces correct results for correct reasons. Question whether the structure truly represents the described system.`
 
+    static EXAMPLES_SECTION = 
+`EXAMPLE - COMPLETE ARRAY MODEL:
+Here is a complete example of a properly structured array model with two dimensions (Product and Location):
+
+{
+    "specs": {
+        "arrayDimensions": [
+            {
+                "elements": ["BGO", "NYC"],
+                "name": "Location",
+                "type": "label"
+            },
+            {
+                "elements": ["Pizza", "Kebab", "Sandwich"],
+                "name": "Product",
+                "type": "label"
+            }
+        ],
+        "dt": 0.25,
+        "startTime": 1,
+        "stopTime": 13,
+        "timeUnits": "Month"
+    },
+    "variables": [
+        {
+            "name": "price",
+            "type": "variable",
+            "dimensions": ["Product", "Location"],
+            "equation": "IF Product = Product.Pizza THEN 250 ELSE IF Product = Product.Kebab THEN 150 ELSE 125",
+            "units": "Nok/Product"
+        },
+        {
+            "name": "sales",
+            "type": "variable",
+            "dimensions": ["Product", "Location"],
+            "arrayEquations": [
+                { "forElements": ["Pizza", "BGO"], "equation": "1000" },
+                { "forElements": ["Pizza", "NYC"], "equation": "2000" },
+                { "forElements": ["Kebab", "BGO"], "equation": "2000" },
+                { "forElements": ["Kebab", "NYC"], "equation": "800" },
+                { "forElements": ["Sandwich", "BGO"], "equation": "1500" },
+                { "forElements": ["Sandwich", "NYC"], "equation": "1500" }
+            ],
+            "units": "Product/Month"
+        },
+        {
+            "name": "revenue",
+            "type": "variable",
+            "dimensions": ["Product", "Location"],
+            "equation": "price*sales",
+            "units": "Nok/Months"
+        },
+        {
+            "name": "total revenue",
+            "type": "variable",
+            "equation": "SUM(revenue)",
+            "units": "Nok/Months"
+        },
+        {
+            "name": "revenue by product",
+            "type": "variable",
+            "dimensions": ["Product"],
+            "equation": "SUM(revenue[Product,*])",
+            "units": "Nok/Months"
+        },
+        {
+            "name": "revenue by location",
+            "type": "variable",
+            "dimensions": ["Location"],
+            "equation": "SUM(revenue[*, Location])",
+            "units": "Nok/Months"
+        }
+    ],
+    "relationships": [
+        { "from": "price", "to": "revenue", "polarity": "+" },
+        { "from": "sales", "to": "revenue", "polarity": "+" },
+        { "from": "revenue", "to": "total revenue", "polarity": "+" },
+        { "from": "revenue", "to": "revenue by product", "polarity": "+" },
+        { "from": "revenue", "to": "revenue by location", "polarity": "+" }
+    ]
+}
+
+Key lessons from this example:
+- Dimensions are defined first in specs.arrayDimensions with all elements listed
+- Variables with same formula for all elements use 'equation' field (e.g., price, revenue)
+- Variables with different values per element use 'arrayEquations' (e.g., sales)
+- SUM(revenue) sums across ALL dimensions to produce a scalar
+- SUM(revenue[Product,*]) sums across second dimension, preserving first dimension
+- SUM(revenue[*, Location]) sums across first dimension, preserving second dimension
+- The asterisk (*) indicates which dimension to sum over
+
+EXAMPLE - COMPLETE MODULAR MODEL WITH GHOST VARIABLES:
+Here is a complete example of a properly structured modular model (Lynx-Hare predator-prey system):
+
+{
+    "specs": {
+        "arrayDimensions": [],
+        "dt": 0.03125,
+        "startTime": 0,
+        "stopTime": 100,
+        "timeUnits": "year"
+    },
+    "variables": [
+        {
+            "name": "Hares.area",
+            "type": "variable",
+            "equation": "1E3",
+            "units": "arce"
+        },
+        {
+            "name": "Hares.Hares",
+            "type": "stock",
+            "equation": "5E4",
+            "inflows": ["Hares.hare births"],
+            "outflows": ["Hares.hare deaths"],
+            "units": "hares"
+        },
+        {
+            "name": "Hares.hare births",
+            "type": "flow",
+            "equation": "Hares*hare_birth_fraction",
+            "units": "hares/year"
+        },
+        {
+            "name": "Hares.hare deaths",
+            "type": "flow",
+            "equation": "Lynx*hares_killed_per_lynx",
+            "units": "hares/year"
+        },
+        {
+            "name": "Hares.hare birth fraction",
+            "type": "variable",
+            "equation": "1.25",
+            "units": "per year"
+        },
+        {
+            "name": "Hares.hare density",
+            "type": "variable",
+            "equation": "Hares/area",
+            "units": "hares/arce"
+        },
+        {
+            "name": "Hares.hares killed per lynx",
+            "type": "variable",
+            "equation": "hare_density",
+            "units": "hares/lynx/year",
+            "graphicalFunction": [
+                { "x": 0, "y": 0 },
+                { "x": 50, "y": 50 },
+                { "x": 100, "y": 100 },
+                { "x": 150, "y": 150 },
+                { "x": 200, "y": 200 },
+                { "x": 250, "y": 250 },
+                { "x": 300, "y": 300 },
+                { "x": 350, "y": 350 },
+                { "x": 400, "y": 400 },
+                { "x": 450, "y": 450 },
+                { "x": 500, "y": 500 }
+            ]
+        },
+        {
+            "name": "Hares.Lynx",
+            "type": "variable",
+            "crossLevelGhostOf": "Lynx.Lynx",
+            "equation": "",
+            "units": "lynx"
+        },
+        {
+            "name": "Lynx.Lynx",
+            "type": "stock",
+            "equation": "1250",
+            "inflows": ["Lynx.lynx births"],
+            "outflows": ["Lynx.lynx deaths"],
+            "units": "lynx"
+        },
+        {
+            "name": "Lynx.lynx births",
+            "type": "flow",
+            "equation": "Lynx*lynx_birth_fraction",
+            "units": "lynx/year"
+        },
+        {
+            "name": "Lynx.lynx deaths",
+            "type": "flow",
+            "equation": "Lynx*lynx_death_fraction",
+            "units": "lynx/year"
+        },
+        {
+            "name": "Lynx.lynx birth fraction",
+            "type": "variable",
+            "equation": ".25",
+            "units": "per year"
+        },
+        {
+            "name": "Lynx.lynx death fraction",
+            "type": "variable",
+            "equation": "hare_density",
+            "units": "per year",
+            "graphicalFunction": [
+                { "x": 0, "y": 0.94 },
+                { "x": 10, "y": 0.66 },
+                { "x": 20, "y": 0.4 },
+                { "x": 30, "y": 0.35 },
+                { "x": 40, "y": 0.3 },
+                { "x": 50, "y": 0.25 },
+                { "x": 60, "y": 0.2 },
+                { "x": 70, "y": 0.15 },
+                { "x": 80, "y": 0.1 },
+                { "x": 90, "y": 0.07 },
+                { "x": 100, "y": 0.05 }
+            ]
+        },
+        {
+            "name": "Lynx.hare density",
+            "type": "variable",
+            "crossLevelGhostOf": "Hares.hare density",
+            "equation": "",
+            "units": "hares/arce"
+        }
+    ],
+    "relationships": [
+        { "from": "Hares.Hares", "to": "Hares.hare births" },
+        { "from": "Hares.hare birth fraction", "to": "Hares.hare births" },
+        { "from": "Hares.Hares", "to": "Hares.hare density" },
+        { "from": "Hares.hare density", "to": "Hares.hares killed per lynx" },
+        { "from": "Hares.hares killed per lynx", "to": "Hares.hare deaths" },
+        { "from": "Hares.area", "to": "Hares.hare density" },
+        { "from": "Hares.hare births", "to": "Hares.Hares", "polarity": "+" },
+        { "from": "Hares.hare deaths", "to": "Hares.Hares", "polarity": "-" },
+        { "from": "Hares.Lynx", "to": "Hares.hare deaths" },
+        { "from": "Lynx.Lynx", "to": "Lynx.lynx births" },
+        { "from": "Lynx.lynx birth fraction", "to": "Lynx.lynx births" },
+        { "from": "Lynx.Lynx", "to": "Lynx.lynx deaths" },
+        { "from": "Lynx.lynx death fraction", "to": "Lynx.lynx deaths" },
+        { "from": "Lynx.lynx births", "to": "Lynx.Lynx", "polarity": "+" },
+        { "from": "Lynx.lynx deaths", "to": "Lynx.Lynx", "polarity": "-" },
+        { "from": "Lynx.hare density", "to": "Lynx.lynx death fraction" }
+    ]
+}
+
+Key lessons from this modular example:
+- Module names use dot notation: "ModuleName.variableName"
+- Cross-level ghost variables are created for inter-module references
+- Ghost variable "Hares.Lynx" references source "Lynx.Lynx" (allows Hares module to use Lynx population)
+- Ghost variable "Lynx.hare density" references source "Hares.hare density" (allows Lynx module to use hare density)
+- Ghost variables have crossLevelGhostOf set to the source variable's full name
+- Ghost variables have empty equation field (equation = "")
+- All equations in a module reference the ghost variable, NOT the original source variable
+- This creates proper module encapsulation while allowing cross-module dependencies`
+
     static FORMULATION_ERROR_SECTION =
 `IDENTIFY FORMULATION ERRORS:
 When reviewing or fixing models, detect and correct these common errors:
@@ -159,14 +410,18 @@ ${QuantitativeEngineBrain.BASE_SYSTEM_PROMPT_CORE}
 
 STEP 6 - ${QuantitativeEngineBrain.MENTOR_ADDITIONAL_CONCERNS}
 
-STEP 7 - ${QuantitativeEngineBrain.FORMULATION_ERROR_SECTION}`
+STEP 7 - ${QuantitativeEngineBrain.FORMULATION_ERROR_SECTION}
+
+${QuantitativeEngineBrain.EXAMPLES_SECTION}`
 
     static DEFAULT_SYSTEM_PROMPT =
 `You are a System Dynamics Professional Modeler. Generate stock and flow models from user-provided text following these mandatory rules:
 
 ${QuantitativeEngineBrain.BASE_SYSTEM_PROMPT_CORE}
 
-STEP 6 - ${QuantitativeEngineBrain.FORMULATION_ERROR_SECTION}`
+STEP 6 - ${QuantitativeEngineBrain.FORMULATION_ERROR_SECTION}
+
+${QuantitativeEngineBrain.EXAMPLES_SECTION}`
 
     static DEFAULT_ASSISTANT_PROMPT = 
 `I want your response to consider the model which you have already so helpfully given to us. You should never change the name of any variable you've already given us. Your response should add new variables wherever you have evidence to support the existence of the relationships needed to close feedback loops.  Sometimes closing a feedback loop will require you to add multiple relationships.`
@@ -252,7 +507,7 @@ STEP 6 - ${QuantitativeEngineBrain.FORMULATION_ERROR_SECTION}`
             ret.valid = !projectUtils.sameVars(ret.from, ret.to) && responseHasVariable(ret.from) && responseHasVariable(ret.to);
             return ret;
         });
-
+        
         //filter out any relationship whose .to attribute is a variable that has a crossLevelGhostOf
         relationships.forEach(relationship => {
             if (relationship.valid) {
@@ -300,6 +555,37 @@ STEP 6 - ${QuantitativeEngineBrain.FORMULATION_ERROR_SECTION}`
         
         originalResponse.relationships = relationships;
         originalResponse.variables = originalResponse.variables || [];
+
+        //go through all variables -- for any stock with inflows/outflows remove dimensions from inflow/outflow names
+        //also remove empty entries or references to non-existent variables
+        originalResponse.variables.forEach((v) => {
+            if (v.type === "stock") {
+                if (v.inflows && Array.isArray(v.inflows)) {
+                    v.inflows = v.inflows
+                        .map(flowName => flowName.replace(/\[.*?\]/g, '').trim())
+                        .filter(flowName => {
+                            // Remove empty strings
+                            if (!flowName || flowName.length === 0) {
+                                return false;
+                            }
+                            // Check if the variable exists
+                            return responseHasVariable(flowName);
+                        });
+                }
+                if (v.outflows && Array.isArray(v.outflows)) {
+                    v.outflows = v.outflows
+                        .map(flowName => flowName.replace(/\[.*?\]/g, '').trim())
+                        .filter(flowName => {
+                            // Remove empty strings
+                            if (!flowName || flowName.length === 0) {
+                                return false;
+                            }
+                            // Check if the variable exists
+                            return responseHasVariable(flowName);
+                        });
+                }
+            }
+        });
 
         //LLMs like gemini-3-flash-preview (before I made it so that all properties are required, but nullable) 
         //does not like to generate the inflow and outflow lists for stocks.
@@ -427,6 +713,7 @@ STEP 6 - ${QuantitativeEngineBrain.FORMULATION_ERROR_SECTION}`
             try {
                 parsedObj = JSON.parse(originalResponse.content);
             } catch (err) {
+                console.log(originalResponse);
                 throw new ResponseFormatError("Bad JSON returned by underlying LLM");
             }
             return this.processResponse(parsedObj);
