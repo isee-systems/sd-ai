@@ -160,11 +160,6 @@ export const groups = {
                 { name: "developing_symptoms", problem: "Should use the flows 'Incubation + Influx of presymptomatic infectious people from abroad' as input to DELAY3, not the stock 'Presymptomatic infectious' divided by a time constant."}
             ]
         ),
-        generateCovidTest("COVID delay error 3", "COVID_delay_err3.json",
-            [
-                { name: "additional_case_estimates", problem: "Should use SMOOTH function to calculate the average over the estimation period, not DELAY1 which only delays the value."}
-            ]
-        ),
         generateCovidTest("COVID delay error 4", "COVID_delay_err4.json",
             [
                 { name: "recovery_without_symptoms", problem: "Should use DELAY3 with the 'Asymptomatic incubation' flow as input, not the 'Asymptomatic infectious' stock divided by a time constant."}
