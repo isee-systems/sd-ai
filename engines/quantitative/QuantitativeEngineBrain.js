@@ -417,67 +417,60 @@ NEVER identify feedback loops for the user in explanatory text. Let users discov
     static PROFESSIONAL_MODE_INTRO =
 `You are a System Dynamics Professional Modeler. Generate stock and flow models from user-provided text following these mandatory rules:`
 
-    static generateBaseSystemPromptCore(supportsArrays) {
-        if (supportsArrays) {
-            return QuantitativeEngineBrain.MODULE_REQUIREMENTS_SECTION + "\n\n" +
-                    QuantitativeEngineBrain.ARRAY_REQUIREMENTS_SECTION + "\n\n" +
-                    QuantitativeEngineBrain.MANDATORY_PROCESS_SECTION + "\n\n" +
-                    QuantitativeEngineBrain.ARRAY_SPECIFIC_EQUATION_REQUIREMENTS + "\n\n" +
-                    QuantitativeEngineBrain.VERIFY_MODEL_SECTION
-        } else {
-            return QuantitativeEngineBrain.MODULE_REQUIREMENTS_SECTION + "\n\n" +
-                    QuantitativeEngineBrain.MANDATORY_PROCESS_SECTION + "\n\n" +
-                    QuantitativeEngineBrain.VERIFY_MODEL_SECTION;
-        }
-    }
+    static generateSystemPrompt(mentorMode, supportsArrays, supportsModules) {
+        let prompt = "";
 
-    static generateSystemPrompt(mentorMode, supportsArrays) {
+        // Add intro based on mode
         if (mentorMode) {
-            if (supportsArrays) {
-                return QuantitativeEngineBrain.MENTOR_MODE_INTRO + "\n\n" +
-                       QuantitativeEngineBrain.generateBaseSystemPromptCore(true) +
-                       "\n\nSTEP 6 - " +
-                       QuantitativeEngineBrain.MENTOR_ADDITIONAL_CONCERNS +
-                       "\n\nSTEP 7 - " +
-                       QuantitativeEngineBrain.FORMULATION_ERROR_SECTION +
-                       "\n\n" +
-                       QuantitativeEngineBrain.ARRAY_EXAMPLE +
-                       "\n\n" +
-                       QuantitativeEngineBrain.MODULE_EXAMPLE;
-            } else {
-                return QuantitativeEngineBrain.MENTOR_MODE_INTRO + "\n\n" +
-                       QuantitativeEngineBrain.generateBaseSystemPromptCore(false) +
-                       "\n\nSTEP 6 - " +
-                       QuantitativeEngineBrain.MENTOR_ADDITIONAL_CONCERNS +
-                       "\n\nSTEP 7 - " +
-                       QuantitativeEngineBrain.FORMULATION_ERROR_SECTION +
-                       "\n\n" +
-                       QuantitativeEngineBrain.MODULE_EXAMPLE;
-            }
+            prompt += QuantitativeEngineBrain.MENTOR_MODE_INTRO + "\n\n";
         } else {
-            if (supportsArrays) {
-                return QuantitativeEngineBrain.PROFESSIONAL_MODE_INTRO + "\n\n" +
-                       QuantitativeEngineBrain.generateBaseSystemPromptCore(true) +
-                       "\n\nSTEP 6 - " +
-                       QuantitativeEngineBrain.FORMULATION_ERROR_SECTION +
-                       "\n\n" +
-                       QuantitativeEngineBrain.ARRAY_EXAMPLE +
-                       "\n\n" +
-                       QuantitativeEngineBrain.MODULE_EXAMPLE;
-            } else {
-                return QuantitativeEngineBrain.PROFESSIONAL_MODE_INTRO + "\n\n" +
-                       QuantitativeEngineBrain.generateBaseSystemPromptCore(false) +
-                       "\n\nSTEP 6 - " +
-                       QuantitativeEngineBrain.FORMULATION_ERROR_SECTION +
-                       "\n\n" +
-                       QuantitativeEngineBrain.MODULE_EXAMPLE;
-            }
+            prompt += QuantitativeEngineBrain.PROFESSIONAL_MODE_INTRO + "\n\n";
         }
+
+        // Add module requirements if modules are supported
+        if (supportsModules) {
+            prompt += QuantitativeEngineBrain.MODULE_REQUIREMENTS_SECTION + "\n\n";
+        }
+
+        // Add array requirements if arrays are supported
+        if (supportsArrays) {
+            prompt += QuantitativeEngineBrain.ARRAY_REQUIREMENTS_SECTION + "\n\n";
+        }
+
+        // Always add mandatory process section
+        prompt += QuantitativeEngineBrain.MANDATORY_PROCESS_SECTION + "\n\n";
+
+        // Add array-specific equation requirements if arrays are supported
+        if (supportsArrays) {
+            prompt += QuantitativeEngineBrain.ARRAY_SPECIFIC_EQUATION_REQUIREMENTS + "\n\n";
+        }
+
+        // Always add verify model section
+        prompt += QuantitativeEngineBrain.VERIFY_MODEL_SECTION;
+
+        // Add mentor-specific concerns if in mentor mode
+        if (mentorMode) {
+            prompt += "\n\nSTEP 6 - " + QuantitativeEngineBrain.MENTOR_ADDITIONAL_CONCERNS;
+            prompt += "\n\nSTEP 7 - " + QuantitativeEngineBrain.FORMULATION_ERROR_SECTION;
+        } else {
+            prompt += "\n\nSTEP 6 - " + QuantitativeEngineBrain.FORMULATION_ERROR_SECTION;
+        }
+
+        // Add examples based on what's supported
+        if (supportsArrays) {
+            prompt += "\n\n" + QuantitativeEngineBrain.ARRAY_EXAMPLE;
+        }
+
+        if (supportsModules) {
+            prompt += "\n\n" + QuantitativeEngineBrain.MODULE_EXAMPLE;
+        }
+
+        return prompt;
     }
 
-    static MENTOR_SYSTEM_PROMPT = QuantitativeEngineBrain.generateSystemPrompt(true, true)
+    static MENTOR_SYSTEM_PROMPT = QuantitativeEngineBrain.generateSystemPrompt(true, true, true)
 
-    static DEFAULT_SYSTEM_PROMPT = QuantitativeEngineBrain.generateSystemPrompt(false, true)
+    static DEFAULT_SYSTEM_PROMPT = QuantitativeEngineBrain.generateSystemPrompt(false, true, true)
 
     static DEFAULT_ASSISTANT_PROMPT = 
 `I want your response to consider the model which you have already so helpfully given to us. You should never change the name of any variable you've already given us. Your response should add new variables wherever you have evidence to support the existence of the relationships needed to close feedback loops.  Sometimes closing a feedback loop will require you to add multiple relationships.`
@@ -503,7 +496,8 @@ NEVER identify feedback loops for the user in explanatory text. Let users discov
         assistantPrompt: QuantitativeEngineBrain.DEFAULT_ASSISTANT_PROMPT,
         backgroundPrompt: QuantitativeEngineBrain.DEFAULT_BACKGROUND_PROMPT,
         problemStatementPrompt: QuantitativeEngineBrain.DEFAULT_PROBLEM_STATEMENT_PROMPT,
-        supportsArrays: true
+        supportsArrays: false,
+        supportsModules: false
     };
 
     #llmWrapper;
@@ -511,11 +505,12 @@ NEVER identify feedback loops for the user in explanatory text. Let users discov
     constructor(params) {
         Object.assign(this.#data, params);
 
-        // Generate system prompt based on mentor mode and array support if not explicitly provided
+        // Generate system prompt based on mentor mode, array support, and module support if not explicitly provided
         if (!this.#data.systemPrompt) {
             this.#data.systemPrompt = QuantitativeEngineBrain.generateSystemPrompt(
                 this.#data.mentorMode,
-                this.#data.supportsArrays
+                this.#data.supportsArrays,
+                this.#data.supportsModules
             );
         }
 
@@ -719,7 +714,11 @@ NEVER identify feedback loops for the user in explanatory text. Let users discov
 
     mentor() {
         this.#data.mentorMode = true;
-        this.#data.systemPrompt = QuantitativeEngineBrain.generateSystemPrompt(this.#data.mentorMode, this.#data.supportsArrays);
+        this.#data.systemPrompt = QuantitativeEngineBrain.generateSystemPrompt(
+            this.#data.mentorMode,
+            this.#data.supportsArrays,
+            this.#data.supportsModules
+        );
     }
 
     setupLLMParameters(userPrompt, lastModel) {
