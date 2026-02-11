@@ -98,6 +98,18 @@ to experiment with the specific prompts passed to the LLM.`;
                 label: "Background Knowledge",
                 description: "Background information you want the underlying model to consider when generating a diagram for you",
                 minHeight: 100
+            },{
+                name: "supportsArrays",
+                type: "boolean",
+                required: false,
+                uiElement: "hidden",
+                description: "Whether or not your client can handle arrayed models"
+            },{
+                name: "supportsModules",
+                type: "boolean",
+                required: false,
+                uiElement: "hidden",
+                description: "Whether or not your client can handle models with modules"
             }
         ]);
     }
