@@ -11,7 +11,7 @@ class ResponseFormatError extends Error {
 
 class QuantitativeEngineBrain {
 
-    static BASE_SYSTEM_PROMPT_CORE =
+    static MODULE_REQUIREMENTS_SECTION =
 `CRITICAL MODULAR MODEL REQUIREMENTS:
 
 WHEN TO USE MODULES:
@@ -30,9 +30,10 @@ When constructing modular models, you MUST create cross-level ghost variables fo
 6. ALL equations in the consuming module MUST reference the cross-level ghost variable, NOT the original source variable
 
 FAILURE TO CREATE AND LINK GHOST VARIABLES WILL BREAK SIMULATION. This is non-negotiable.
-REFERENCING THE ORIGINAL SOURCE VARIABLE DIRECTLY FROM A CONSUMING MODULE WILL BREAK SIMULATION. Always use the ghost.
+REFERENCING THE ORIGINAL SOURCE VARIABLE DIRECTLY FROM A CONSUMING MODULE WILL BREAK SIMULATION. Always use the ghost.`
 
-CRITICAL ARRAY REQUIREMENTS:
+    static ARRAY_REQUIREMENTS_SECTION =
+`CRITICAL ARRAY REQUIREMENTS:
 
 WHEN TO USE ARRAYS:
 - DO NOT create arrays or array dimensions unless the model already uses arrays OR the user explicitly requests arrayed variables
@@ -62,19 +63,17 @@ When constructing models with arrayed variables, you MUST follow these rules:
    - CORRECT: SUM(Sales[product,*]) to sum across the second dimension of a 2D array
    - The asterisk (*) is a wildcard that means "sum over all elements of this dimension"
 
-FAILURE TO PROPERLY DEFINE DIMENSIONS AND EQUATIONS WILL BREAK SIMULATION. This is non-negotiable.
+FAILURE TO PROPERLY DEFINE DIMENSIONS AND EQUATIONS WILL BREAK SIMULATION. This is non-negotiable.`
 
-CONSTANT HANDLING:
-NEVER embed numerical constants directly in equations with other variables. ALWAYS create separate named variables for all constants.
-
-MANDATORY PROCESS - Execute these steps in order:
+    static MANDATORY_PROCESS_SECTION =
+`MANDATORY PROCESS - Execute these steps in order:
 
 STEP 1 - IDENTIFY VARIABLES:
 Identify all entities with cause-and-effect relationships. Name variables using these rules:
 - Maximum 5 words per name
 - Minimize total variable count
 - Use neutral terminology (no positive/negative connotations)
-- Use ONLY letters and spaces (NO symbols, dashes, or punctuation)
+- Use ONLY letters and spaces (NO symbols, NO dashes, NO arthemtic operators and NO punctuation)
 
 STEP 2 - DEFINE CAUSAL RELATIONSHIPS:
 Assign polarity to each causal relationship:
@@ -94,28 +93,35 @@ Classify each variable as one of three types:
 STEP 4 - WRITE EQUATIONS:
 Provide equations for every variable:
 - Write all equations in XMILE format
-- NEVER embed numbers directly in equations
+- CONSTANT HANDLING: NEVER embed numerical constants directly in equations with other variables. ALWAYS create separate named variables for all constants.
 - Every variable referenced in an equation MUST have its own equation, type, and appear in the relationships list
-- CRITICAL EQUATION REQUIREMENT: Every variable MUST have EITHER 'equation' OR 'arrayEquations' populated (never both, never neither)
-  * Exception: Cross-level ghost variables (with crossLevelGhostOf set) have NO equation
-  * For SCALAR (non-arrayed) variables: ALWAYS provide 'equation'
-  * For ARRAYED variables where all elements use the SAME formula: provide 'equation' only
-  * For ARRAYED variables where elements have DIFFERENT formulas: provide 'arrayEquations' with entries for ALL elements (omit 'equation')
-  * For arrayed STOCKS with numeric initialization: ALWAYS use 'arrayEquations' to specify initial values for each element individually (omit 'equation')
 - GRAPHICAL FUNCTION BEST PRACTICES:
-  * For normalized graphical functions (NOT over time): Design the function so that normal input produces normal output and include the point (1, 1) in your graphical function to ensure that when the input variable equals 1, the output equals 1
+  * For all non-time based graphical functions: Design the function so that normal input produces normal output and include the point (1, 1) in your graphical function to ensure that when the input variable equals 1, the output equals 1
   * This normalization principle allows the function to express deviations from normal behavior in both directions
   * Example: A "productivity multiplier from experience" function should pass through (1, 1) so that normal experience (input=1) yields normal productivity (output=1)
-  * Time-based graphical functions (using TIME as input) do NOT need to follow this normalization rule
-- In SUM functions: ALWAYS use asterisk (*) for the dimension to sum, NEVER the dimension name
-  * CRITICAL: Every SUM equation MUST contain at least one asterisk (*) - this is mandatory
-  * Example: SUM(Revenue[*]) NOT SUM(Revenue[region])
-  * The asterisk (*) represents "sum over all elements of this dimension"
+  * Time-based graphical functions (using TIME as input) do NOT need to follow this normalization rule`
 
-STEP 5 - VERIFY MODEL VALIDITY:
+    static ARRAY_SPECIFIC_EQUATION_REQUIREMENTS =
+`CRITICAL EQUATION REQUIREMENT: Every variable MUST have EITHER 'equation' OR 'arrayEquations' populated (never both, never neither)
+  * For SCALAR (non-arrayed) variables: ALWAYS provide 'equation'
+ARRAY-SPECIFIC EQUATION REQUIREMENTS:
+- For ARRAYED variables where all elements use the SAME formula: provide 'equation' only
+- For ARRAYED variables where elements have DIFFERENT formulas: provide 'arrayEquations' with entries for ALL elements (omit 'equation')
+- For arrayed STOCKS with numeric initialization: ALWAYS use 'arrayEquations' to specify initial values for each element individually (omit 'equation')
+- SUM FUNCTION SYNTAX FOR ARRAYS:
+  * ALWAYS use asterisk (*) for the dimension to sum, NEVER the dimension name
+  * CRITICAL: Every SUM equation MUST contain at least one asterisk (*) - this is mandatory
+  * WRONG: SUM(Revenue[region]) or SUM(Sales[product])
+  * CORRECT: SUM(Revenue[*]) to sum across all elements of a single dimension
+  * CORRECT: SUM(Sales[product,*]) to sum across the second dimension of a 2D array
+  * The asterisk (*) represents "sum over all elements of this dimension"`
+
+    static VERIFY_MODEL_SECTION =
+`STEP 5 - VERIFY MODEL VALIDITY:
 Continuously verify the model produces correct results for correct reasons. Question whether the structure truly represents the described system.`
 
-    static EXAMPLES_SECTION = 
+    
+    static ARRAY_EXAMPLE =
 `EXAMPLE - COMPLETE ARRAY MODEL:
 Here is a complete example of a properly structured array model with two dimensions (Product and Location):
 
@@ -204,9 +210,10 @@ Key lessons from this example:
 - SUM(revenue) sums across ALL dimensions to produce a scalar
 - SUM(revenue[Product,*]) sums across second dimension, preserving first dimension
 - SUM(revenue[*, Location]) sums across first dimension, preserving second dimension
-- The asterisk (*) indicates which dimension to sum over
+- The asterisk (*) indicates which dimension to sum over`
 
-EXAMPLE - COMPLETE MODULAR MODEL WITH GHOST VARIABLES:
+    static MODULE_EXAMPLE =
+`EXAMPLE - COMPLETE MODULAR MODEL WITH GHOST VARIABLES:
 Here is a complete example of a properly structured modular model (Lynx-Hare predator-prey system):
 
 {
@@ -391,7 +398,7 @@ Critically assess model completeness and guide users through questioning:
 EXAMINE STOCK DYNAMICS (Teaching Focus):
 For each stock, help the user consider if there are any missing flows which could drive important dynamics relative to their problem statement.`
 
-    static MENTOR_SYSTEM_PROMPT =
+    static MENTOR_MODE_INTRO =
 `You are a System Dynamics Mentor and Teacher. Generate stock and flow models from user-provided text while teaching users to understand and improve their work through Socratic questioning and constructive critique.
 
 PEDAGOGICAL APPROACH:
@@ -405,24 +412,72 @@ Your role is to facilitate learning, NOT to provide praise. Execute these teachi
 - Add smaller, logically connected pieces of structure incrementally to the model
 
 CRITICAL TEACHING RESTRICTION:
-NEVER identify feedback loops for the user in explanatory text. Let users discover loops themselves through your questioning.
+NEVER identify feedback loops for the user in explanatory text. Let users discover loops themselves through your questioning.`
 
-${QuantitativeEngineBrain.BASE_SYSTEM_PROMPT_CORE}
+    static PROFESSIONAL_MODE_INTRO =
+`You are a System Dynamics Professional Modeler. Generate stock and flow models from user-provided text following these mandatory rules:`
 
-STEP 6 - ${QuantitativeEngineBrain.MENTOR_ADDITIONAL_CONCERNS}
+    static generateBaseSystemPromptCore(supportsArrays) {
+        if (supportsArrays) {
+            return QuantitativeEngineBrain.MODULE_REQUIREMENTS_SECTION + "\n\n" +
+                    QuantitativeEngineBrain.ARRAY_REQUIREMENTS_SECTION + "\n\n" +
+                    QuantitativeEngineBrain.MANDATORY_PROCESS_SECTION + "\n\n" +
+                    QuantitativeEngineBrain.ARRAY_SPECIFIC_EQUATION_REQUIREMENTS + "\n\n" +
+                    QuantitativeEngineBrain.VERIFY_MODEL_SECTION
+        } else {
+            return QuantitativeEngineBrain.MODULE_REQUIREMENTS_SECTION + "\n\n" +
+                    QuantitativeEngineBrain.MANDATORY_PROCESS_SECTION + "\n\n" +
+                    QuantitativeEngineBrain.VERIFY_MODEL_SECTION;
+        }
+    }
 
-STEP 7 - ${QuantitativeEngineBrain.FORMULATION_ERROR_SECTION}
+    static generateSystemPrompt(mentorMode, supportsArrays) {
+        if (mentorMode) {
+            if (supportsArrays) {
+                return QuantitativeEngineBrain.MENTOR_MODE_INTRO + "\n\n" +
+                       QuantitativeEngineBrain.generateBaseSystemPromptCore(true) +
+                       "\n\nSTEP 6 - " +
+                       QuantitativeEngineBrain.MENTOR_ADDITIONAL_CONCERNS +
+                       "\n\nSTEP 7 - " +
+                       QuantitativeEngineBrain.FORMULATION_ERROR_SECTION +
+                       "\n\n" +
+                       QuantitativeEngineBrain.ARRAY_EXAMPLE +
+                       "\n\n" +
+                       QuantitativeEngineBrain.MODULE_EXAMPLE;
+            } else {
+                return QuantitativeEngineBrain.MENTOR_MODE_INTRO + "\n\n" +
+                       QuantitativeEngineBrain.generateBaseSystemPromptCore(false) +
+                       "\n\nSTEP 6 - " +
+                       QuantitativeEngineBrain.MENTOR_ADDITIONAL_CONCERNS +
+                       "\n\nSTEP 7 - " +
+                       QuantitativeEngineBrain.FORMULATION_ERROR_SECTION +
+                       "\n\n" +
+                       QuantitativeEngineBrain.MODULE_EXAMPLE;
+            }
+        } else {
+            if (supportsArrays) {
+                return QuantitativeEngineBrain.PROFESSIONAL_MODE_INTRO + "\n\n" +
+                       QuantitativeEngineBrain.generateBaseSystemPromptCore(true) +
+                       "\n\nSTEP 6 - " +
+                       QuantitativeEngineBrain.FORMULATION_ERROR_SECTION +
+                       "\n\n" +
+                       QuantitativeEngineBrain.ARRAY_EXAMPLE +
+                       "\n\n" +
+                       QuantitativeEngineBrain.MODULE_EXAMPLE;
+            } else {
+                return QuantitativeEngineBrain.PROFESSIONAL_MODE_INTRO + "\n\n" +
+                       QuantitativeEngineBrain.generateBaseSystemPromptCore(false) +
+                       "\n\nSTEP 6 - " +
+                       QuantitativeEngineBrain.FORMULATION_ERROR_SECTION +
+                       "\n\n" +
+                       QuantitativeEngineBrain.MODULE_EXAMPLE;
+            }
+        }
+    }
 
-${QuantitativeEngineBrain.EXAMPLES_SECTION}`
+    static MENTOR_SYSTEM_PROMPT = QuantitativeEngineBrain.generateSystemPrompt(true, true)
 
-    static DEFAULT_SYSTEM_PROMPT =
-`You are a System Dynamics Professional Modeler. Generate stock and flow models from user-provided text following these mandatory rules:
-
-${QuantitativeEngineBrain.BASE_SYSTEM_PROMPT_CORE}
-
-STEP 6 - ${QuantitativeEngineBrain.FORMULATION_ERROR_SECTION}
-
-${QuantitativeEngineBrain.EXAMPLES_SECTION}`
+    static DEFAULT_SYSTEM_PROMPT = QuantitativeEngineBrain.generateSystemPrompt(false, true)
 
     static DEFAULT_ASSISTANT_PROMPT = 
 `I want your response to consider the model which you have already so helpfully given to us. You should never change the name of any variable you've already given us. Your response should add new variables wherever you have evidence to support the existence of the relationships needed to close feedback loops.  Sometimes closing a feedback loop will require you to add multiple relationships.`
@@ -444,16 +499,25 @@ ${QuantitativeEngineBrain.EXAMPLES_SECTION}`
         googleKey: null,
         mentorMode: false,
         underlyingModel: LLMWrapper.DEFAULT_MODEL,
-        systemPrompt: QuantitativeEngineBrain.DEFAULT_SYSTEM_PROMPT,
+        systemPrompt: null, // Will be generated in constructor based on mentorMode and supportsArrays
         assistantPrompt: QuantitativeEngineBrain.DEFAULT_ASSISTANT_PROMPT,
         backgroundPrompt: QuantitativeEngineBrain.DEFAULT_BACKGROUND_PROMPT,
-        problemStatementPrompt: QuantitativeEngineBrain.DEFAULT_PROBLEM_STATEMENT_PROMPT
+        problemStatementPrompt: QuantitativeEngineBrain.DEFAULT_PROBLEM_STATEMENT_PROMPT,
+        supportsArrays: true
     };
 
     #llmWrapper;
 
     constructor(params) {
         Object.assign(this.#data, params);
+
+        // Generate system prompt based on mentor mode and array support if not explicitly provided
+        if (!this.#data.systemPrompt) {
+            this.#data.systemPrompt = QuantitativeEngineBrain.generateSystemPrompt(
+                this.#data.mentorMode,
+                this.#data.supportsArrays
+            );
+        }
 
         if (!this.#data.problemStatementPrompt.includes('{problemStatement')) {
             this.#data.problemStatementPrompt = this.#data.problemStatementPrompt.trim() + "\n\n{problemStatement}";
@@ -464,7 +528,7 @@ ${QuantitativeEngineBrain.EXAMPLES_SECTION}`
         }
 
         this.#llmWrapper = new LLMWrapper(params);
-       
+
     }
 
     #isFlowUsed(flow, response) {
@@ -654,15 +718,15 @@ ${QuantitativeEngineBrain.EXAMPLES_SECTION}`
     }
 
     mentor() {
-        this.#data.systemPrompt = QuantitativeEngineBrain.MENTOR_SYSTEM_PROMPT;
         this.#data.mentorMode = true;
+        this.#data.systemPrompt = QuantitativeEngineBrain.generateSystemPrompt(this.#data.mentorMode, this.#data.supportsArrays);
     }
 
     setupLLMParameters(userPrompt, lastModel) {
         //start with the system prompt
         const { underlyingModel, systemRole, temperature, reasoningEffort } = this.#llmWrapper.getLLMParameters();
         let systemPrompt = this.#data.systemPrompt;
-        let responseFormat = this.#llmWrapper.generateQuantitativeSDJSONResponseSchema(this.#data.mentorMode);
+        let responseFormat = this.#llmWrapper.generateQuantitativeSDJSONResponseSchema(this.#data.mentorMode, this.#data.supportsArrays);
 
         if (!this.#llmWrapper.model.hasStructuredOutput) {
             throw new Error("Unsupported LLM " + this.#data.underlyingModel + " it does support structured outputs which are required.");

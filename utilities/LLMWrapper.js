@@ -323,7 +323,7 @@ export class LLMWrapper {
       return Relationships;
   }
 
-  generateQuantitativeSDJSONResponseSchema(mentorMode) {
+  generateQuantitativeSDJSONResponseSchema(mentorMode, supportsArrays) {
       const TypeEnum = z.enum(["stock", "flow", "variable"]).describe(LLMWrapper.SCHEMA_STRINGS.type);
       const PolarityEnum = z.enum(["+", "-"]).describe(LLMWrapper.SCHEMA_STRINGS.polarity);
 
@@ -359,7 +359,7 @@ export class LLMWrapper {
         forElements: z.array(z.string()).describe(LLMWrapper.SCHEMA_STRINGS.arrayEquationForElements)
       }).describe(LLMWrapper.SCHEMA_STRINGS.arrayElementEquation);
 
-      const Variable = z.object({
+      const variableObj = {
         name: z.string().describe(LLMWrapper.SCHEMA_STRINGS.name),
         equation: z.string().describe(LLMWrapper.SCHEMA_STRINGS.equation),
         inflows: z.array(z.string()).optional().describe(LLMWrapper.SCHEMA_STRINGS.inflows),
@@ -368,20 +368,29 @@ export class LLMWrapper {
         type: TypeEnum,
         crossLevelGhostOf: z.string().optional().describe(LLMWrapper.SCHEMA_STRINGS.crossLevelGhostOf),
         documentation: z.string().describe(LLMWrapper.SCHEMA_STRINGS.documentation),
-        units: z.string().describe(LLMWrapper.SCHEMA_STRINGS.units),
-        dimensions: z.array(z.string()).optional().describe(LLMWrapper.SCHEMA_STRINGS.variableDimensions),
-        arrayEquations: z.array(ArrayElementEquation).optional().describe(LLMWrapper.SCHEMA_STRINGS.variableArrayEquation)
-      });
+        units: z.string().describe(LLMWrapper.SCHEMA_STRINGS.units)
+      };
+      
+      if (supportsArrays) {
+        variableObj.dimensions = z.array(z.string()).optional().describe(LLMWrapper.SCHEMA_STRINGS.variableDimensions);
+        variableObj.arrayEquations = z.array(ArrayElementEquation).optional().describe(LLMWrapper.SCHEMA_STRINGS.variableArrayEquation);
+      }
 
+      const Variable = z.object(variableObj);
       const Variables = z.array(Variable).describe(LLMWrapper.SCHEMA_STRINGS.variables);
 
-      const SimSpecs = z.object({
+      const simSpecsObj = {
         startTime: z.number().describe(LLMWrapper.SCHEMA_STRINGS.startTime),
         stopTime: z.number().describe(LLMWrapper.SCHEMA_STRINGS.stopTime),
         dt: z.number().describe(LLMWrapper.SCHEMA_STRINGS.dt),
-        timeUnits: z.string().describe(LLMWrapper.SCHEMA_STRINGS.timeUnits),
-        arrayDimensions: z.array(Dimension).describe(LLMWrapper.SCHEMA_STRINGS.arrayDimensions)
-      }).describe(LLMWrapper.SCHEMA_STRINGS.simSpecs);
+        timeUnits: z.string().describe(LLMWrapper.SCHEMA_STRINGS.timeUnits)
+      };
+
+      if (supportsArrays) {
+        simSpecsObj.arrayDimensions = z.array(Dimension).describe(LLMWrapper.SCHEMA_STRINGS.arrayDimensions);
+      }
+      
+      const SimSpecs = z.object(simSpecsObj).describe(LLMWrapper.SCHEMA_STRINGS.simSpecs);
 
       const Model = z.object({
         variables: Variables,
