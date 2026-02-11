@@ -102,6 +102,11 @@ Provide equations for every variable:
   * For ARRAYED variables where all elements use the SAME formula: provide 'equation' only
   * For ARRAYED variables where elements have DIFFERENT formulas: provide 'arrayEquations' with entries for ALL elements (omit 'equation')
   * For arrayed STOCKS with numeric initialization: ALWAYS use 'arrayEquations' to specify initial values for each element individually (omit 'equation')
+- GRAPHICAL FUNCTION BEST PRACTICES:
+  * For normalized graphical functions (NOT over time): Design the function so that normal input produces normal output and include the point (1, 1) in your graphical function to ensure that when the input variable equals 1, the output equals 1
+  * This normalization principle allows the function to express deviations from normal behavior in both directions
+  * Example: A "productivity multiplier from experience" function should pass through (1, 1) so that normal experience (input=1) yields normal productivity (output=1)
+  * Time-based graphical functions (using TIME as input) do NOT need to follow this normalization rule
 - In SUM functions: ALWAYS use asterisk (*) for the dimension to sum, NEVER the dimension name
   * CRITICAL: Every SUM equation MUST contain at least one asterisk (*) - this is mandatory
   * Example: SUM(Revenue[*]) NOT SUM(Revenue[region])
