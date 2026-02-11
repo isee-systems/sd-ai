@@ -364,15 +364,11 @@ Key lessons from this modular example:
 `IDENTIFY FORMULATION ERRORS:
 When reviewing or fixing models, detect and correct these common errors:
 
-a. GRAPHICAL FUNCTION INPUT ERRORS:
-   - Graphical functions MUST NEVER use DT as input (DT is constant)
-   - USE TIME instead of DT for graphical functions
-
-b. VARIABLE TYPE ERRORS FOR AGGREGATIONS:
+a. VARIABLE TYPE ERRORS FOR AGGREGATIONS:
    - Simple sums (e.g., total population) MUST be auxiliaries (type "variable"), NOT stocks
    - Stocks represent accumulations via flows; sums are algebraic calculations
 
-c. AVERAGING FUNCTION ERRORS:
+b. AVERAGING FUNCTION ERRORS:
    - USE SMOOTH function for moving averages
    - DO NOT USE DELAY1 or DELAY3 for averaging (delays only shift time, they don't average)
 
@@ -626,13 +622,24 @@ ${QuantitativeEngineBrain.EXAMPLES_SECTION}`
         });
 
         //this fixes generating flows that are not connected to stocks
+        //fix graphical functions that use DT instead of TIME in their equations
+
         originalResponse.variables.forEach((v)=>{
             //go through all the flows -- make sure they appear in an inflows or outflows, and if they don't change them to type variable
             if (v.type === "flow" && !this.#isFlowUsed(v, originalResponse)) {
                 v.type = "variable";
                 //logger.log("Changing type from flow to variable for... " + v.name);
                 //logger.log(v);
+            } else if (v?.graphicalFunction?.points?.length > 0 && v.equation) {
+                //check if equation is "DT" (case insensitive)
+                if (v.equation.trim().toLowerCase() === 'dt') {
+                    v.equation = 'TIME';
+                }
             }
+        });
+
+        originalResponse.variables.forEach((v) => {
+            
         });
 
         if (originalResponse.explanation)
