@@ -181,9 +181,7 @@ export class LLMWrapper {
     "outflows": "Only used on variables that are of type stock.  It is an array of variable names representing flows that subtract from this stock.",
     "documentation": "Documentation for the variable including the reason why it was chosen, what it represents, and a simple explanation why it is calculated this way",
     "units": "The units of measure for this variable",
-    "gfEquation": "Only used on variables which contain a table function, lookup function, or graphical function.",
-
-    "gf": "This object represents a table function, lookup function or graphical function.  It is a list of value pairs or points.  The value computed by the equation is looked up in this list of points using the \"x\" value, and the \"y\" value is returned.",
+    "gfEquation": "Only used on variables which contain a table function, lookup function, or graphical function. This is an array of point objects with x and y values.",
     "gfPoint": "This object represents a single value pair used in a table function, lookup function, or graphical function.",
     "gfPointX": "This is the \"x\" value in the x,y value pair, or graphical function point. This is the value used for the lookup.",
     "gfPointY": "This is the \"y\" value in the x,y value pair, or graphical function point. This is the value returned by the lookup.",
@@ -213,7 +211,7 @@ export class LLMWrapper {
     "arrayDimensions": "The complete list of all array dimension definitions used anywhere in this model. Each dimension must be fully defined here in the simulation specs before it can be referenced by variables in their 'dimensions' field. All dimensions must have all four required fields: type, name, size, and elements.",
     "variableDimensions": "An ordered list of dimension names that define the subscript structure for this arrayed variable. The order matters: each element in the forElements arrays must correspond positionally to the dimensions listed here (first element matches first dimension, second element matches second dimension, etc.). If empty or omitted, this is a scalar (non-arrayed) variable.",
     "arrayElementEquation": "Specifies the equation for a specific subset of array elements in an arrayed variable. The 'equation' field contains the XMILE equation, and the 'forElements' field specifies which array elements this equation applies to (ordered to match the variable's dimensions list).",
-    "arrayEquationForElements": "An ordered list of array element names that identifies which specific array element(s) use this equation. Each element name in this list corresponds positionally to the dimensions in the variable's 'dimensions' field (first element name matches first dimension, second matches second, etc.). For single-dimension arrays, this list has one element name. For multi-dimensional arrays, this list has multiple element names in the same order as the dimensions.",
+    "arrayEquationForElements": "A comma-separated string of array element names that identifies which specific array element(s) use this equation. Each element name corresponds positionally to the dimensions in the variable's 'dimensions' field (first element name matches first dimension, second matches second, etc.). For single-dimension arrays, this has one element name. For multi-dimensional arrays, this has multiple element names separated by commas in the same order as the dimensions. Example: 'North,Q1' or 'South,Q2'.",
     "variableArrayEquation": "CRITICAL: Used for arrayed variables when elements need different equations OR for arrayed stocks to specify initial values. Every variable MUST have either this array non-empty OR the 'equation' field non-empty - never both non-empty, never both empty. For arrayed variables: if elements have DIFFERENT formulas, you MUST populate this array with equation objects and leave 'equation' empty (empty string). This is a list of equation objects, where each object specifies an equation and the array elements it applies to (via the forElements field). You MUST provide equations that cover EVERY valid combination of array elements across all dimensions. For arrayed STOCKS, you MUST use this field to provide initial values for each stock element."
   };
 
@@ -339,10 +337,6 @@ export class LLMWrapper {
         y: z.number().describe(LLMWrapper.SCHEMA_STRINGS.gfPointY)
       }).describe(LLMWrapper.SCHEMA_STRINGS.gfPoint);
 
-      const GF = z.object({
-        points: z.array(GFPoint)
-      }).describe(LLMWrapper.SCHEMA_STRINGS.gf);
-
       const Relationship = z.object({
           from: z.string().describe(LLMWrapper.SCHEMA_STRINGS.from),
           to: z.string().describe(LLMWrapper.SCHEMA_STRINGS.to),
@@ -353,9 +347,11 @@ export class LLMWrapper {
 
       const Relationships = z.array(Relationship).describe(LLMWrapper.SCHEMA_STRINGS.relationships);
 
+      // Flattened: forElements is a comma-separated string instead of array of strings
+      // This reduces nesting depth from 6 to 5 levels for array support
       const ArrayElementEquation = z.object({
         equation: z.string().describe(LLMWrapper.SCHEMA_STRINGS.equation),
-        forElements: z.array(z.string()).describe(LLMWrapper.SCHEMA_STRINGS.arrayEquationForElements)
+        forElements: z.string().describe(LLMWrapper.SCHEMA_STRINGS.arrayEquationForElements)
       }).describe(LLMWrapper.SCHEMA_STRINGS.arrayElementEquation);
 
       const variableObj = {
@@ -363,7 +359,7 @@ export class LLMWrapper {
         equation: z.string().describe(LLMWrapper.SCHEMA_STRINGS.equation),
         inflows: z.array(z.string()).optional().describe(LLMWrapper.SCHEMA_STRINGS.inflows),
         outflows: z.array(z.string()).optional().describe(LLMWrapper.SCHEMA_STRINGS.outflows),
-        graphicalFunction: GF.optional().describe(LLMWrapper.SCHEMA_STRINGS.gfEquation),
+        graphicalFunction: z.array(GFPoint).optional().describe(LLMWrapper.SCHEMA_STRINGS.gfEquation),
         type: TypeEnum,
         crossLevelGhostOf: z.string().optional().describe(LLMWrapper.SCHEMA_STRINGS.crossLevelGhostOf),
         documentation: z.string().describe(LLMWrapper.SCHEMA_STRINGS.documentation),
@@ -486,13 +482,14 @@ export class LLMWrapper {
       contents: geminiMessages.contents
     };
 
-    // Add system instruction if present
-    if (geminiMessages.systemInstruction) {
-      requestConfig.systemInstruction = { parts: [{ text: geminiMessages.systemInstruction }] };
-    }
-
     // Set up generation config
     const config = {};
+
+    // Add system instruction if present (as array of strings in config)
+    if (geminiMessages.systemInstruction) {
+      config.systemInstruction = [geminiMessages.systemInstruction];
+    }
+
     if (temperature !== null && temperature !== undefined) {
       config.temperature = temperature;
     }
@@ -503,7 +500,7 @@ export class LLMWrapper {
       });
 
       config.responseMimeType = "application/json";
-      config.responseSchema = this.#zodToStructuredOutputConverter.convert(zodSchema);
+      config.responseJsonSchema = this.#zodToStructuredOutputConverter.convert(zodSchema);
     }
 
     if (Object.keys(config).length > 0) {

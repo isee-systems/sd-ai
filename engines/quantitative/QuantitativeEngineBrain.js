@@ -54,7 +54,7 @@ When constructing models with arrayed variables, you MUST follow these rules:
    - If elements differ: provide element-specific equations in the 'arrayEquations' array (NOT 'equation')
    - For arrayed STOCKS: you MUST provide initial values for each element using 'arrayEquations'
    - NEVER leave the 'equation' or 'arrayEquations' fields empty for any variable
-7. Array element references in 'forElements' use individual dimension element names (e.g., ["North", "Q1"])
+7. Array element references in 'forElements' are comma-separated dimension element names (e.g., "North,Q1")
 8. SUM function syntax - CRITICAL:
    - ALWAYS use asterisk (*) to represent the dimension being summed - NEVER use the dimension name
    - MANDATORY: Every SUM equation MUST contain at least one asterisk (*) - without it, the SUM is invalid
@@ -157,12 +157,12 @@ Here is a complete example of a properly structured array model with two dimensi
             "type": "variable",
             "dimensions": ["Product", "Location"],
             "arrayEquations": [
-                { "forElements": ["Pizza", "BGO"], "equation": "1000" },
-                { "forElements": ["Pizza", "NYC"], "equation": "2000" },
-                { "forElements": ["Kebab", "BGO"], "equation": "2000" },
-                { "forElements": ["Kebab", "NYC"], "equation": "800" },
-                { "forElements": ["Sandwich", "BGO"], "equation": "1500" },
-                { "forElements": ["Sandwich", "NYC"], "equation": "1500" }
+                { "forElements": "Pizza,BGO", "equation": "1000" },
+                { "forElements": "Pizza,NYC", "equation": "2000" },
+                { "forElements": "Kebab,BGO", "equation": "2000" },
+                { "forElements": "Kebab,NYC", "equation": "800" },
+                { "forElements": "Sandwich,BGO", "equation": "1500" },
+                { "forElements": "Sandwich,NYC", "equation": "1500" }
             ],
             "units": "Product/Month"
         },
@@ -616,6 +616,28 @@ NEVER identify feedback loops for the user in explanatory text. Let users discov
         originalResponse.relationships = relationships;
         originalResponse.variables = originalResponse.variables || [];
 
+        // Re-expand flattened graphicalFunction format from LLM
+        // LLM sends: graphicalFunction: [{x, y}, ...]
+        // We need: graphicalFunction: {points: [{x, y}, ...]}
+        originalResponse.variables.forEach((v) => {
+            if (v.graphicalFunction && Array.isArray(v.graphicalFunction) && v.graphicalFunction.length > 0) {
+                v.graphicalFunction = {
+                    points: v.graphicalFunction
+                };
+            }
+
+            // Re-expand flattened arrayEquations forElements from comma-separated string to array
+            // LLM sends: forElements: "North,Q1"
+            // We need: forElements: ["North", "Q1"]
+            if (v.arrayEquations && Array.isArray(v.arrayEquations)) {
+                v.arrayEquations.forEach((eq) => {
+                    if (eq.forElements && typeof eq.forElements === 'string') {
+                        eq.forElements = eq.forElements.split(',').map(s => s.trim());
+                    }
+                });
+            }
+        });
+
         //go through all variables -- for any stock with inflows/outflows remove dimensions from inflow/outflow names
         //also remove empty entries or references to non-existent variables
         originalResponse.variables.forEach((v) => {
@@ -750,7 +772,31 @@ NEVER identify feedback loops for the user in explanatory text. Let users discov
         }
 
         if (lastModel) {
-            messages.push({ role: "assistant", content: JSON.stringify(lastModel, null, 2) });
+            // Flatten graphicalFunction and arrayEquations for LLM schema compatibility
+            // Convert: graphicalFunction: {points: [{x, y}, ...]}
+            // To: graphicalFunction: [{x, y}, ...]
+            // Convert: forElements: ["North", "Q1"]
+            // To: forElements: "North,Q1"
+            const flattenedModel = JSON.parse(JSON.stringify(lastModel)); // deep clone
+            if (flattenedModel.variables) {
+                flattenedModel.variables.forEach((v) => {
+                    // Flatten graphicalFunction
+                    if (v.graphicalFunction && v.graphicalFunction.points && Array.isArray(v.graphicalFunction.points)) {
+                        v.graphicalFunction = v.graphicalFunction.points;
+                    }
+
+                    // Flatten arrayEquations forElements from array to comma-separated string
+                    if (v.arrayEquations && Array.isArray(v.arrayEquations)) {
+                        v.arrayEquations.forEach((eq) => {
+                            if (eq.forElements && Array.isArray(eq.forElements)) {
+                                eq.forElements = eq.forElements.join(',');
+                            }
+                        });
+                    }
+                });
+            }
+
+            messages.push({ role: "assistant", content: JSON.stringify(flattenedModel, null, 2) });
 
             if (this.#data.assistantPrompt)
                 messages.push({ role: "user", content: this.#data.assistantPrompt });
