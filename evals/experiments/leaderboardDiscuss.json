@@ -60,17 +60,6 @@
                 "tokensPerMinute": 90000,
                 "requestsPerMinute": 10
             }
-        },
-
-        "Seldon-gemini-2.5-flash-preview-09-2025": {
-            "engine": "Seldon",
-            "additionalParameters": {
-                "underlyingModel": "gemini-2.5-flash-preview-09-2025"
-            },
-            "limits": {
-                "tokensPerMinute": 90000,
-                "requestsPerMinute": 10
-            }
         }
     },
     "categories": {

@@ -62,17 +62,6 @@
                 "tokensPerMinute": 90000,
                 "requestsPerMinute": 10
             }
-        },
-
-        "quantitative-gemini-2.5-flash-preview-09-2025": {
-            "engine": "quantitative",
-            "additionalParameters": {
-                "underlyingModel": "gemini-2.5-flash-preview-09-2025"
-            },
-            "limits": {
-                "tokensPerMinute": 90000,
-                "requestsPerMinute": 10
-            }
         }
     },
     "categories": {

@@ -105,9 +105,9 @@ export const evaluate = async function(generatedResponse, expectations) {
     const failures = [];
     const groundTruthSteps = expectations;
 
-    // Create LLMWrapper instance configured for gemini-2.5-flash-preview-09-2025
+    // Create LLMWrapper instance configured for gemini-2.5-flash
     const llm = new LLMWrapper({
-        underlyingModel: 'gemini-2.5-flash-preview-09-2025'
+        underlyingModel: 'gemini-2.5-flash'
     });
 
     // Extract the text content from the generated response
