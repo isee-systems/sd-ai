@@ -40,7 +40,7 @@ Your documentation should be accessible to both technical and non-technical audi
         googleKey: null,
         generatePolarity: false,
         documentConnectors: false,
-        underlyingModel: LLMWrapper.DEFAULT_MODEL,
+        underlyingModel: LLMWrapper.NON_BUILD_DEFAULT_MODEL,
         systemPrompt: GenerateDocumentationBrain.DEFAULT_SYSTEM_PROMPT,
         backgroundPrompt: GenerateDocumentationBrain.DEFAULT_BACKGROUND_PROMPT,
         problemStatementPrompt: GenerateDocumentationBrain.DEFAULT_PROBLEM_STATEMENT_PROMPT

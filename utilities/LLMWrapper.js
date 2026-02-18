@@ -131,7 +131,7 @@ export class LLMWrapper {
       {label: "GPT-4.1-mini", value: 'gpt-4.1-mini'},
       {label: "GPT-4.1-nano", value: 'gpt-4.1-nano'},
       {label: "Gemini 3-pro-preview", value: 'gemini-3-pro-preview'},
-      {label: "Gemini 3-flash-preview", value: 'gemini-3-flash-preview'},
+      {label: "Gemini 3-flash-preview", value: 'gemini-3-flash-preview medium'},
       {label: "Gemini 2.5-flash", value: 'gemini-2.5-flash'},
       {label: "Gemini 2.5-flash-lite", value: 'gemini-2.5-flash-lite'},
       {label: "Gemini 2.5-pro", value: 'gemini-2.5-pro'},
@@ -148,7 +148,8 @@ export class LLMWrapper {
       {label: "o4-mini", value: 'o4-mini'}
   ];
 
-  static DEFAULT_MODEL = 'gemini-3-flash-preview';
+  static DEFAULT_MODEL = 'gemini-2.5-flash';
+  static NON_BUILD_DEFAULT_MODEL = 'gemini-3-flash-preview medium';
 
   static SCHEMA_STRINGS = {
     "from": "This is a variable which causes the to variable in this relationship that is between two variables, from and to.  The from variable is the equivalent of a cause.  The to variable is the equivalent of an effect",
@@ -473,9 +474,19 @@ export class LLMWrapper {
   async #createGeminiChatCompletion(messages, model, zodSchema = null, temperature = null) {
     const geminiMessages = this.convertMessagesToGeminiFormat(messages);
 
+    // Parse model string for thinking level
+    let actualModel = model;
+    let thinkingLevel = null;
+
+    if (model.includes(' ')) {
+      const parts = model.split(' ');
+      actualModel = parts[0];
+      thinkingLevel = parts.slice(1).join(' '); // Join remaining parts in case level has multiple words
+    }
+
     // Set up request config
     const requestConfig = {
-      model: model,
+      model: actualModel,
       contents: geminiMessages.contents
     };
 
@@ -489,6 +500,11 @@ export class LLMWrapper {
 
     if (temperature !== null && temperature !== undefined) {
       config.temperature = temperature;
+    }
+
+    // Set thinking level if present
+    if (thinkingLevel) {
+      config.thinkingConfig = { thinkingLevel: thinkingLevel };
     }
 
     if (zodSchema) {
@@ -628,7 +644,7 @@ export class LLMWrapper {
     return claudeMessages;
   }
 
-  static additionalParameters() {
+  static additionalParameters(defaultModel = LLMWrapper.DEFAULT_MODEL) {
     return [{
             name: "openAIKey",
             type: "string",
@@ -656,7 +672,7 @@ export class LLMWrapper {
         },{
             name: "underlyingModel",
             type: "string",
-            defaultValue: LLMWrapper.DEFAULT_MODEL,
+            defaultValue: defaultModel,
             required: false,
             options: LLMWrapper.MODELS,
             uiElement: "combobox",

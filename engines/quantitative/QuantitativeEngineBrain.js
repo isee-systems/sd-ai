@@ -541,17 +541,9 @@ NEVER identify feedback loops for the user in explanatory text. Let users discov
             return false;
         }) >= 0;
     }
-
-    #containsHtmlTags(str) {
-        // This regex looks for patterns like <tag>, </tag>, or <tag attribute="value">
-        const htmlTagRegex = /<[a-z/][^>]*>/i; 
-        return htmlTagRegex.test(str);
-    }
-
     async processResponse(originalResponse) {
 
-        //logger.log(JSON.stringify(originalResponse));
-        //logger.log(originalResponse);
+        console.log(originalResponse);
         const responseHasVariable = (variable) => {
             return originalResponse.variables.findIndex((v) => {
                 return projectUtils.sameVars(v.name, variable);
@@ -724,13 +716,10 @@ NEVER identify feedback loops for the user in explanatory text. Let users discov
             }
         });
 
-        originalResponse.variables.forEach((v) => {
-            
-        });
-
         if (originalResponse.explanation)
             originalResponse.explanation = await marked.parse(originalResponse.explanation);
 
+        console.log(originalResponse);
         return originalResponse;
     }
 

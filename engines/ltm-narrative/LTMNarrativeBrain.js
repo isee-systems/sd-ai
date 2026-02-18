@@ -48,7 +48,7 @@ You can only use the information given to you by the user in your work. Any info
         googleKey: null,
         behaviorContent: null,
         feedbackContent: null,
-        underlyingModel: LLMWrapper.DEFAULT_MODEL,
+        underlyingModel: LLMWrapper.NON_BUILD_DEFAULT_MODEL,
         systemPrompt: LTMNarrativeBrain.DEFAULT_SYSTEM_PROMPT,
         behaviorPrompt: LTMNarrativeBrain.DEFAULT_BEHAVIOR_PROMPT,
         feedbackPrompt: LTMNarrativeBrain.DEFAULT_FEEDBACK_PROMPT,

@@ -34,7 +34,7 @@ wants to experiment with the specific prompts passed to the LLM.`;
     }
 
     additionalParameters()  {
-        const additionalParameters = LLMWrapper.additionalParameters();
+        const additionalParameters = LLMWrapper.additionalParameters(LLMWrapper.NON_BUILD_DEFAULT_MODEL);
         return additionalParameters.concat([{
             name: "systemPrompt",
             type: "string",

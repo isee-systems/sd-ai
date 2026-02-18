@@ -21,7 +21,7 @@ class Engine {
     }
 
     additionalParameters()  {
-        let parameters = LLMWrapper.additionalParameters();
+        let parameters = LLMWrapper.additionalParameters(LLMWrapper.NON_BUILD_DEFAULT_MODEL);
 
         return parameters.concat([{
             name: "problemStatement",

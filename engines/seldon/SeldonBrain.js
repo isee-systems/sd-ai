@@ -91,7 +91,7 @@ As the world's best System Dynamics Modeler, you will consider and apply the Sys
         googleKey: null,
         behaviorContent: null,
         feedbackContent: null,
-        underlyingModel: LLMWrapper.DEFAULT_MODEL,
+        underlyingModel: LLMWrapper.NON_BUILD_DEFAULT_MODEL,
         systemPrompt: SeldonEngineBrain.DEFAULT_SYSTEM_PROMPT,
         structurePrompt: SeldonEngineBrain.DEFAULT_STRUCTURE_PROMPT,
         behaviorPrompt: SeldonEngineBrain.DEFAULT_BEHAVIOR_PROMPT,
