@@ -92,7 +92,7 @@ Classify each variable as one of three types:
 
 STEP 4 - WRITE EQUATIONS:
 Provide equations for every variable:
-- Write all equations in XMILE format
+- Write all equations in XMILE format, meaning variable names NEVER have spaces and ALWAYS use underscores
 - CONSTANT HANDLING: NEVER embed numerical constants directly in equations with other variables. ALWAYS create separate named variables for all constants.
 - Every variable referenced in an equation MUST have its own equation, type, and appear in the relationships list
 - GRAPHICAL FUNCTION BEST PRACTICES:
@@ -530,10 +530,10 @@ NEVER identify feedback loops for the user in explanatory text. Let users discov
         return response.variables.findIndex((v)=> {
             if (v.type === "stock") {
                 const inflowMatch = (v.inflows || []).findIndex((f) => {
-                    return flow.name === f;
+                    return projectUtils.sameVars(flow.name, f);
                 }) >= 0;
                 const outflowMatch = (v.outflows || []).findIndex((f) => {
-                    return flow.name === f;
+                    return projectUtils.sameVars(flow.name, f);
                 }) >= 0;
                 return inflowMatch || outflowMatch;
             }
@@ -611,10 +611,14 @@ NEVER identify feedback loops for the user in explanatory text. Let users discov
         // LLM sends: graphicalFunction: [{x, y}, ...]
         // We need: graphicalFunction: {points: [{x, y}, ...]}
         originalResponse.variables.forEach((v) => {
-            if (v.graphicalFunction && Array.isArray(v.graphicalFunction) && v.graphicalFunction.length > 0) {
-                v.graphicalFunction = {
-                    points: v.graphicalFunction
-                };
+            if (v.graphicalFunction && Array.isArray(v.graphicalFunction)) {
+                if (v.graphicalFunction.length > 0) {
+                    v.graphicalFunction = {
+                        points: v.graphicalFunction
+                    };
+                } else {
+                    delete v.graphicalFunction;
+                }
             }
 
             // Re-expand flattened arrayEquations forElements from comma-separated string to array

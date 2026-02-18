@@ -172,7 +172,7 @@ export class LLMWrapper {
 
     "variables": "The list of variables you think are appropriate to satisfy my request based on all of the information I have given you",
 
-    "equation": "The XMILE equation for this variable. CRITICAL: Every variable MUST have either this 'equation' field non-empty OR the 'arrayEquations' array non-empty (never both, never neither - exception: cross-level ghost variables with crossLevelGhostOf set have both empty). For scalar (non-arrayed) variables: ALWAYS provide a non-empty equation here and leave arrayEquations empty. For arrayed variables where all elements use the SAME formula: provide the equation here and leave arrayEquations empty. For arrayed variables where elements have DIFFERENT formulas: leave this field EMPTY (empty string) and use arrayEquations instead. This equation can be a number, or an algebraic expression of other variables. Make sure that whenever you include a variable name with spaces that you replace those spaces with underscores. If the type for this variable is a stock, then the equation is its initial value, do not use INTEG for the equation of a stock, only its initial value. NEVER use IF THEN ELSE or conditional functions inside of equations. If you want to check for division by zero use the operator //. If this variable is a table function, lookup function or graphical function, the equation should be an algebraic expression containing only the inputs to the function! If a variable is making use of a graphical function only the name of the variable with the graphical function should appear in the equation.",
+    "equation": "The XMILE equation for this variable. CRITICAL: Every variable MUST have either this 'equation' field non-empty OR the 'arrayEquations' array non-empty (never both, never neither). For scalar (non-arrayed) variables: ALWAYS provide a non-empty equation here and leave arrayEquations empty. For arrayed variables where all elements use the SAME formula: provide the equation here and leave arrayEquations empty. For arrayed variables where elements have DIFFERENT formulas: leave this field EMPTY (empty string) and use arrayEquations instead. This equation can be a number, or an algebraic expression of other variables. Make sure that whenever you include a variable name with spaces that you replace those spaces with underscores. If the type for this variable is a stock, then the equation is its initial value, do not use INTEG for the equation of a stock, only its initial value. NEVER use IF THEN ELSE or conditional functions inside of equations. If you want to check for division by zero use the operator //. If this variable is a table function, lookup function or graphical function, the equation should be an algebraic expression containing only the inputs to the function! If a variable is making use of a graphical function only the name of the variable with the graphical function should appear in the equation.",
 
     "type": "There are three types of variables, stock, flow, and variable. A stock is an accumulation of its flows, it is an integral.  A stock can only change because of its flows. A flow is the derivative of a stock.  A plain variable is used for algebraic expressions.",
     "name": "The name of a variable",
@@ -357,18 +357,18 @@ export class LLMWrapper {
       const variableObj = {
         name: z.string().describe(LLMWrapper.SCHEMA_STRINGS.name),
         equation: z.string().describe(LLMWrapper.SCHEMA_STRINGS.equation),
-        inflows: z.array(z.string()).optional().describe(LLMWrapper.SCHEMA_STRINGS.inflows),
-        outflows: z.array(z.string()).optional().describe(LLMWrapper.SCHEMA_STRINGS.outflows),
-        graphicalFunction: z.array(GFPoint).optional().describe(LLMWrapper.SCHEMA_STRINGS.gfEquation),
+        inflows: z.array(z.string()).describe(LLMWrapper.SCHEMA_STRINGS.inflows),
+        outflows: z.array(z.string()).describe(LLMWrapper.SCHEMA_STRINGS.outflows),
+        graphicalFunction: z.array(GFPoint).describe(LLMWrapper.SCHEMA_STRINGS.gfEquation),
         type: TypeEnum,
-        crossLevelGhostOf: z.string().optional().describe(LLMWrapper.SCHEMA_STRINGS.crossLevelGhostOf),
+        crossLevelGhostOf: z.string().describe(LLMWrapper.SCHEMA_STRINGS.crossLevelGhostOf),
         documentation: z.string().describe(LLMWrapper.SCHEMA_STRINGS.documentation),
         units: z.string().describe(LLMWrapper.SCHEMA_STRINGS.units)
       };
       
       if (supportsArrays) {
-        variableObj.dimensions = z.array(z.string()).optional().describe(LLMWrapper.SCHEMA_STRINGS.variableDimensions);
-        variableObj.arrayEquations = z.array(ArrayElementEquation).optional().describe(LLMWrapper.SCHEMA_STRINGS.variableArrayEquation);
+        variableObj.dimensions = z.array(z.string()).describe(LLMWrapper.SCHEMA_STRINGS.variableDimensions);
+        variableObj.arrayEquations = z.array(ArrayElementEquation).describe(LLMWrapper.SCHEMA_STRINGS.variableArrayEquation);
       }
 
       const Variable = z.object(variableObj);
