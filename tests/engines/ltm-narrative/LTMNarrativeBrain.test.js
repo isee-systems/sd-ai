@@ -52,7 +52,7 @@ describe('LTMNarrativeBrain', () => {
 
       const result = brainWithFeedback.setupLLMParameters('Test prompt', null);
 
-      expect(result.model).toBe(LLMWrapper.DEFAULT_MODEL);
+      expect(result.model).toBe(LLMWrapper.NON_BUILD_DEFAULT_MODEL);
       expect(result.temperature).toBe(0);
       expect(result.reasoningEffort).toBeUndefined();
       expect(result.messages).toBeInstanceOf(Array);

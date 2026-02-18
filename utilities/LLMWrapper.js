@@ -59,7 +59,7 @@ export class LLMWrapper {
   #anthropicAPI = null;
   #zodToStructuredOutputConverter = new ZodToStructuredOutputConverter();
 
-  model = new ModelCapabilities(LLMWrapper.DEFAULT_MODEL);
+  model = new ModelCapabilities(LLMWrapper.BUILD_DEFAULT_MODEL);
 
   constructor(parameters) {
     if (!parameters.openAIKey) {
@@ -135,9 +135,11 @@ export class LLMWrapper {
       {label: "Gemini 2.5-flash", value: 'gemini-2.5-flash'},
       {label: "Gemini 2.5-flash-lite", value: 'gemini-2.5-flash-lite'},
       {label: "Gemini 2.5-pro", value: 'gemini-2.5-pro'},
-      {label: "Claude Haiku 4.5", value: 'claude-haiku-4-5-20251001'},
-      {label: "Claude Opus 4.5", value: 'claude-sonnet-4-5-20250929'},
-      {label: "Claude Sonnet 4.5", value: 'claude-opus-4-5-20251101'},
+      {label: "Claude Opus 4.6", value: 'claude-opus-4-6'},
+      {label: "Claude Sonnet 4.6", value: 'claude-sonnet-4-6'},
+      {label: "Claude Haiku 4.5", value: 'claude-haiku-4-5'},
+      {label: "Claude Opus 4.5", value: 'claude-sonnet-4-5'},
+      {label: "Claude Sonnet 4.5", value: 'claude-opus-4-5'},
       {label: "Claude Opus 4.1", value: 'claude-opus-4-1-20250805'},
       {label: "Claude Sonnet 4", value: 'claude-sonnet-4-20250514'},
       {label: "o1", value: 'o1'},
@@ -148,8 +150,8 @@ export class LLMWrapper {
       {label: "o4-mini", value: 'o4-mini'}
   ];
 
-  static DEFAULT_MODEL = 'gemini-2.5-flash';
-  static NON_BUILD_DEFAULT_MODEL = 'gemini-3-flash-preview medium';
+  static BUILD_DEFAULT_MODEL = 'gemini-2.5-flash'; //'claude-opus-4-6';
+  static NON_BUILD_DEFAULT_MODEL = 'gemini-3-flash-preview medium'; //'claude-opus-4-6';
 
   static SCHEMA_STRINGS = {
     "from": "This is a variable which causes the to variable in this relationship that is between two variables, from and to.  The from variable is the equivalent of a cause.  The to variable is the equivalent of an effect",

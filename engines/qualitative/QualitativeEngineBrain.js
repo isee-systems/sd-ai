@@ -122,7 +122,7 @@ You will conduct a multistep process:
         problemStatement: null,
         openAIKey: null,
         googleKey: null,
-        underlyingModel: LLMWrapper.DEFAULT_MODEL,
+        underlyingModel: LLMWrapper.BUILD_DEFAULT_MODEL,
         descriptionlessStructuredOutput: false,
         systemPrompt: QualitativeEngineBrain.DEFAULT_SYSTEM_PROMPT,
         assistantPrompt: QualitativeEngineBrain.DEFAULT_ASSISTANT_PROMPT,

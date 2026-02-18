@@ -423,7 +423,7 @@ describe('QuantitativeEngineBrain', () => {
       const userPrompt = 'Test prompt';
       const result = quantitativeEngine.setupLLMParameters(userPrompt);
 
-      expect(result.model).toBe(LLMWrapper.DEFAULT_MODEL);
+      expect(result.model).toBe(LLMWrapper.BUILD_DEFAULT_MODEL);
       expect(result.temperature).toBe(0);
       expect(result.reasoningEffort).toBeUndefined();
       expect(result.responseFormat).toBeDefined();

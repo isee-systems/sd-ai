@@ -19,13 +19,15 @@ router.post("/:engine/generate", async (req, res) => {
     }
 
     const authenticationKey = process.env.AUTHENTICATION_KEY;
-    const underlyingModel = req.body.underlyingModel || LLMWrapper.DEFAULT_MODEL;
+    const underlyingModel = req.body.underlyingModel || LLMWrapper.BUILD_DEFAULT_MODEL;
     const capabilities = new ModelCapabilities(underlyingModel);
 
     let hasApiKey = false;
     if (req.body.openAIKey && capabilities.kind === ModelType.OPEN_AI) {
       hasApiKey = true;
     } else if (req.body.googleKey && capabilities.kind === ModelType.GEMINI) {
+      hasApiKey = true;
+    } else if (req.body.anthropicKey && capabilities.kind == ModelType.CLAUDE) {
       hasApiKey = true;
     }
 

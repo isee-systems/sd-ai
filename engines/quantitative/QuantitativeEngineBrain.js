@@ -491,7 +491,7 @@ NEVER identify feedback loops for the user in explanatory text. Let users discov
         openAIKey: null,
         googleKey: null,
         mentorMode: false,
-        underlyingModel: LLMWrapper.DEFAULT_MODEL,
+        underlyingModel: LLMWrapper.BUILD_DEFAULT_MODEL,
         systemPrompt: null, // Will be generated in constructor based on mentorMode and supportsArrays
         assistantPrompt: QuantitativeEngineBrain.DEFAULT_ASSISTANT_PROMPT,
         backgroundPrompt: QuantitativeEngineBrain.DEFAULT_BACKGROUND_PROMPT,
