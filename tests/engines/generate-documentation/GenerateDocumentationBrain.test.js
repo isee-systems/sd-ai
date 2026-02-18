@@ -7,6 +7,7 @@ describe('GenerateDocumentationBrain', () => {
   beforeEach(() => {
     docBrain = new GenerateDocumentationBrain({
       openAIKey: 'test-key',
+      anthropicKey: 'test-claude-key',
       googleKey: 'test-google-key'
     });
   });
@@ -35,9 +36,14 @@ describe('GenerateDocumentationBrain', () => {
 
       const result = docBrain.setupLLMParameters('Generate documentation', testModel);
 
-      expect(result.model).toBe(LLMWrapper.NON_BUILD_DEFAULT_MODEL);
+      // Parse the default model to extract base model and reasoning effort
+      const parts = LLMWrapper.NON_BUILD_DEFAULT_MODEL.split(' ');
+      const expectedModel = parts[0];
+      const expectedReasoningEffort = parts.length > 1 ? parts[1] : undefined;
+
+      expect(result.model).toBe(expectedModel);
       expect(result.temperature).toBe(0);
-      expect(result.reasoningEffort).toBeUndefined();
+      expect(result.reasoningEffort).toBe(expectedReasoningEffort);
       expect(result.messages).toBeInstanceOf(Array);
       expect(result.messages.length).toBeGreaterThan(0);
       expect(result.messages[result.messages.length - 1].content).toBe('Generate documentation');
@@ -46,6 +52,7 @@ describe('GenerateDocumentationBrain', () => {
     it('should include background knowledge in messages when provided', () => {
       const brainWithBackground = new GenerateDocumentationBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         backgroundKnowledge: 'This is a population dynamics model'
       });
@@ -64,6 +71,7 @@ describe('GenerateDocumentationBrain', () => {
     it('should include problem statement in messages when provided', () => {
       const brainWithProblem = new GenerateDocumentationBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         problemStatement: 'Understanding population growth'
       });
@@ -125,6 +133,7 @@ describe('GenerateDocumentationBrain', () => {
     it('should handle custom prompts', () => {
       const brainWithCustomPrompts = new GenerateDocumentationBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         systemPrompt: 'Custom system prompt for documentation',
         backgroundPrompt: 'Custom background: {backgroundKnowledge}',
@@ -156,6 +165,7 @@ describe('GenerateDocumentationBrain', () => {
     it('should properly order messages in the conversation', () => {
       const brainWithAll = new GenerateDocumentationBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         backgroundKnowledge: 'Background info',
         problemStatement: 'Problem to solve'
@@ -181,6 +191,7 @@ describe('GenerateDocumentationBrain', () => {
     it('should include relationship documentation instructions when documentConnectors is enabled', () => {
       const brainWithConnectors = new GenerateDocumentationBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         documentConnectors: true
       });
@@ -199,6 +210,7 @@ describe('GenerateDocumentationBrain', () => {
     it('should include polarity generation instructions when both documentConnectors and generatePolarity are enabled', () => {
       const brainWithPolarity = new GenerateDocumentationBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         documentConnectors: true,
         generatePolarity: true
@@ -219,6 +231,7 @@ describe('GenerateDocumentationBrain', () => {
     it('should not include polarity instructions when only generatePolarity is enabled without documentConnectors', () => {
       const brainWithPolarityOnly = new GenerateDocumentationBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         generatePolarity: true
       });
@@ -238,6 +251,7 @@ describe('GenerateDocumentationBrain', () => {
     it('should generate correct response schema when documentConnectors is enabled', () => {
       const brainWithConnectors = new GenerateDocumentationBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         documentConnectors: true
       });
@@ -256,6 +270,7 @@ describe('GenerateDocumentationBrain', () => {
     it('should generate correct response schema when both documentConnectors and generatePolarity are enabled', () => {
       const brainWithBoth = new GenerateDocumentationBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         documentConnectors: true,
         generatePolarity: true
@@ -278,7 +293,8 @@ describe('GenerateDocumentationBrain', () => {
       expect(() => {
         new GenerateDocumentationBrain({
           openAIKey: 'test-key',
-          googleKey: 'test-google-key'
+          googleKey: 'test-google-key',
+          anthropicKey: 'test-claude-key'
         });
       }).not.toThrow();
     });
@@ -286,6 +302,7 @@ describe('GenerateDocumentationBrain', () => {
     it('should handle constructor parameter validation', () => {
       const brain = new GenerateDocumentationBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         problemStatementPrompt: 'Custom prompt',
         backgroundPrompt: 'Custom background'

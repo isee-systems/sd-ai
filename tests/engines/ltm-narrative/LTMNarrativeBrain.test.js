@@ -7,6 +7,7 @@ describe('LTMNarrativeBrain', () => {
   beforeEach(() => {
     ltmBrain = new LTMNarrativeBrain({
       openAIKey: 'test-key',
+      anthropicKey: 'test-claude-key',
       googleKey: 'test-google-key'
     });
   });
@@ -21,6 +22,7 @@ describe('LTMNarrativeBrain', () => {
     it('should throw error when feedbackContent is invalid', () => {
       const brainWithInvalidFeedback = new LTMNarrativeBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         feedbackContent: { valid: false }
       });
@@ -34,6 +36,7 @@ describe('LTMNarrativeBrain', () => {
     it('should throw error when feedbackContent is empty', () => {
       const brainWithEmptyFeedback = new LTMNarrativeBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         feedbackContent: []
       });
@@ -46,15 +49,21 @@ describe('LTMNarrativeBrain', () => {
     it('should setup basic LLM parameters with default model', () => {
       const brainWithFeedback = new LTMNarrativeBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         feedbackContent: { valid: true, loops: [{ loop: 'test loop', polarity: 'reinforcing' }] }
       });
 
       const result = brainWithFeedback.setupLLMParameters('Test prompt', null);
 
-      expect(result.model).toBe(LLMWrapper.NON_BUILD_DEFAULT_MODEL);
+      // Parse the default model to extract base model and reasoning effort
+      const parts = LLMWrapper.NON_BUILD_DEFAULT_MODEL.split(' ');
+      const expectedModel = parts[0];
+      const expectedReasoningEffort = parts.length > 1 ? parts[1] : undefined;
+
+      expect(result.model).toBe(expectedModel);
       expect(result.temperature).toBe(0);
-      expect(result.reasoningEffort).toBeUndefined();
+      expect(result.reasoningEffort).toBe(expectedReasoningEffort);
       expect(result.messages).toBeInstanceOf(Array);
       expect(result.messages.length).toBeGreaterThan(0);
       expect(result.messages[result.messages.length - 1].content).toBe('Test prompt');
@@ -63,6 +72,7 @@ describe('LTMNarrativeBrain', () => {
     it('should handle o3-mini model with reasoning effort', () => {
       const brainWithO3Mini = new LTMNarrativeBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         underlyingModel: 'o3-mini high',
         feedbackContent: { valid: true, loops: [{ loop: 'test loop', polarity: 'reinforcing' }] }
@@ -77,6 +87,7 @@ describe('LTMNarrativeBrain', () => {
     it('should handle o3 model with reasoning effort', () => {
       const brainWithO3 = new LTMNarrativeBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         underlyingModel: 'o3 low',
         feedbackContent: { valid: true, loops: [{ loop: 'test loop', polarity: 'reinforcing' }] }
@@ -91,6 +102,7 @@ describe('LTMNarrativeBrain', () => {
     it('should set system role to user and temperature to 1 when model lacks system mode', () => {
       const brainWithoutSystemMode = new LTMNarrativeBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         underlyingModel: 'llama',
         feedbackContent: { valid: true, loops: [{ loop: 'test loop', polarity: 'reinforcing' }] }
@@ -105,6 +117,7 @@ describe('LTMNarrativeBrain', () => {
     it('should set temperature to undefined when model lacks temperature support', () => {
       const brainWithO3 = new LTMNarrativeBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         underlyingModel: 'o3',
         feedbackContent: { valid: true, loops: [{ loop: 'test loop', polarity: 'reinforcing' }] }
@@ -118,6 +131,7 @@ describe('LTMNarrativeBrain', () => {
     it('should include background knowledge in messages when provided', () => {
       const brainWithBackground = new LTMNarrativeBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         backgroundKnowledge: 'Important context information',
         feedbackContent: { valid: true, loops: [{ loop: 'test loop', polarity: 'reinforcing' }] }
@@ -133,6 +147,7 @@ describe('LTMNarrativeBrain', () => {
     it('should include problem statement in messages when provided', () => {
       const brainWithProblem = new LTMNarrativeBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         problemStatement: 'Analyze system behavior',
         feedbackContent: { valid: true, loops: [{ loop: 'test loop', polarity: 'reinforcing' }] }
@@ -147,6 +162,7 @@ describe('LTMNarrativeBrain', () => {
     it('should include feedback content in messages', () => {
       const brainWithFeedback = new LTMNarrativeBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         feedbackContent: { valid: true, loops: [{ loop: 'test loop', polarity: 'reinforcing' }] }
       });
@@ -166,6 +182,7 @@ describe('LTMNarrativeBrain', () => {
     it('should include behavior prompt when behaviorContent is provided', () => {
       const brainWithBehavior = new LTMNarrativeBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         behaviorContent: 'Population grows exponentially',
         feedbackContent: { valid: true, loops: [{ loop: 'test loop', polarity: 'reinforcing' }] }
@@ -188,6 +205,7 @@ describe('LTMNarrativeBrain', () => {
       
       const brainWithFeedback = new LTMNarrativeBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         feedbackContent: feedbackData
       });
@@ -209,6 +227,7 @@ describe('LTMNarrativeBrain', () => {
     it('should handle custom prompts', () => {
       const brainWithCustomPrompts = new LTMNarrativeBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         systemPrompt: 'Custom system prompt for analysis',
         behaviorPrompt: 'Custom behavior: {behaviorContent}',
@@ -250,6 +269,7 @@ describe('LTMNarrativeBrain', () => {
     it('should properly order messages in the conversation', () => {
       const brainWithAll = new LTMNarrativeBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         backgroundKnowledge: 'Background info',
         problemStatement: 'Problem to solve',
@@ -273,6 +293,7 @@ describe('LTMNarrativeBrain', () => {
     it('should return all required parameters for OpenAI API call', () => {
       const brainWithFeedback = new LTMNarrativeBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         feedbackContent: { valid: true, loops: [{ loop: 'test loop', polarity: 'reinforcing' }] }
       });
@@ -292,6 +313,7 @@ describe('LTMNarrativeBrain', () => {
     it('should not include behavior prompt when behaviorContent is not provided', () => {
       const brainWithoutBehavior = new LTMNarrativeBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         behaviorPrompt: 'Behavior: {behaviorContent}',
         feedbackContent: { valid: true, loops: [{ loop: 'test loop', polarity: 'reinforcing' }] }
@@ -308,6 +330,7 @@ describe('LTMNarrativeBrain', () => {
     it('should handle feedbackPrompt being null', () => {
       const brainNoFeedbackPrompt = new LTMNarrativeBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         feedbackPrompt: null,
         feedbackContent: { valid: true, loops: [{ loop: 'test loop', polarity: 'reinforcing' }] }
@@ -469,7 +492,8 @@ describe('LTMNarrativeBrain', () => {
       expect(() => {
         new LTMNarrativeBrain({
           openAIKey: 'test-key',
-          googleKey: 'test-google-key'
+          googleKey: 'test-google-key',
+          anthropicKey: 'test-claude-key'
         });
       }).not.toThrow();
     });
@@ -477,6 +501,7 @@ describe('LTMNarrativeBrain', () => {
     it('should handle constructor parameter validation', () => {
       const brain = new LTMNarrativeBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         problemStatementPrompt: 'Custom prompt',
         backgroundPrompt: 'Custom background'

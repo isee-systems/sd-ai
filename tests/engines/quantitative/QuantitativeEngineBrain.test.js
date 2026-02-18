@@ -7,6 +7,7 @@ describe('QuantitativeEngineBrain', () => {
   beforeEach(() => {
     quantitativeEngine = new QuantitativeEngineBrain({
       openAIKey: 'test-key',
+      anthropicKey: 'test-claude-key',
       googleKey: 'test-google-key'
     });
   });
@@ -435,6 +436,7 @@ describe('QuantitativeEngineBrain', () => {
     it('should handle o3-mini model with reasoning effort', () => {
       const engineWithO3Mini = new QuantitativeEngineBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         underlyingModel: 'o3-mini low'
       });
@@ -448,6 +450,7 @@ describe('QuantitativeEngineBrain', () => {
     it('should handle o3 model with reasoning effort', () => {
       const engineWithO3 = new QuantitativeEngineBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         underlyingModel: 'o3 high'
       });
@@ -461,6 +464,7 @@ describe('QuantitativeEngineBrain', () => {
     it('should throw error when model lacks structured output support', () => {
       const engineWithoutStructured = new QuantitativeEngineBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         underlyingModel: 'o1-mini'
       });
@@ -473,6 +477,7 @@ describe('QuantitativeEngineBrain', () => {
     it('should set system role to user and temperature to 1 when model lacks system mode', () => {
       const engineWithoutSystemMode = new QuantitativeEngineBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         underlyingModel: 'llama'
       });
@@ -486,6 +491,7 @@ describe('QuantitativeEngineBrain', () => {
     it('should set temperature to undefined when model lacks temperature support', () => {
       const engineWithO3 = new QuantitativeEngineBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         underlyingModel: 'o3'  // o3 model doesn't support temperature
       });
@@ -498,6 +504,7 @@ describe('QuantitativeEngineBrain', () => {
     it('should include background knowledge in messages when provided', () => {
       const engineWithBackground = new QuantitativeEngineBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         backgroundKnowledge: 'Important context information'
       });
@@ -512,6 +519,7 @@ describe('QuantitativeEngineBrain', () => {
     it('should include problem statement in messages when provided', () => {
       const engineWithProblem = new QuantitativeEngineBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         problemStatement: 'Create population dynamics model'
       });
@@ -567,6 +575,7 @@ describe('QuantitativeEngineBrain', () => {
     it('should handle custom prompts', () => {
       const engineWithCustomPrompts = new QuantitativeEngineBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         systemPrompt: 'Custom quantitative system prompt',
         assistantPrompt: 'Custom quantitative assistant prompt'
@@ -590,6 +599,7 @@ describe('QuantitativeEngineBrain', () => {
     it('should properly order messages in the conversation', () => {
       const engineWithAll = new QuantitativeEngineBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         backgroundKnowledge: 'Background info',
         problemStatement: 'Problem to solve'

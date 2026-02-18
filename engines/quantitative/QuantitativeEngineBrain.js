@@ -522,7 +522,7 @@ NEVER identify feedback loops for the user in explanatory text. Let users discov
             this.#data.backgroundPrompt = this.#data.backgroundPrompt.trim() + "\n\n{backgroundKnowledge}";
         }
 
-        this.#llmWrapper = new LLMWrapper(params);
+        this.#llmWrapper = new LLMWrapper(this.#data);
 
     }
 

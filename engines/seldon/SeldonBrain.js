@@ -113,7 +113,7 @@ As the world's best System Dynamics Modeler, you will consider and apply the Sys
             this.#data.backgroundPrompt = this.#data.backgroundPrompt.trim() + "\n\n{backgroundKnowledge}";
         }
 
-        this.#llmWrapper = new LLMWrapper(params);
+        this.#llmWrapper = new LLMWrapper(this.#data);
     }
 
     #containsHtmlTags(str) {

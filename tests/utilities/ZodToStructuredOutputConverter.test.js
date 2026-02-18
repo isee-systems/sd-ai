@@ -11,6 +11,7 @@ describe('ZodToStructuredOutputConverter', () => {
     // Still need LLMWrapper for testing actual schema generation
     llmWrapper = new LLMWrapper({
       openAIKey: 'test-key',
+      anthropicKey: 'test-claude-key',
       googleKey: 'test-google-key'
     });
   });

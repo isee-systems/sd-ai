@@ -7,6 +7,7 @@ describe('SeldonEngineBrain', () => {
   beforeEach(() => {
     seldonEngine = new SeldonEngineBrain({
       openAIKey: 'test-key',
+      anthropicKey: 'test-claude-key',
       googleKey: 'test-google-key'
     });
   });
@@ -16,9 +17,14 @@ describe('SeldonEngineBrain', () => {
       const userPrompt = 'Test prompt';
       const result = seldonEngine.setupLLMParameters(userPrompt);
 
-      expect(result.model).toBe(LLMWrapper.NON_BUILD_DEFAULT_MODEL);
+      // Parse the default model to extract base model and reasoning effort
+      const parts = LLMWrapper.NON_BUILD_DEFAULT_MODEL.split(' ');
+      const expectedModel = parts[0];
+      const expectedReasoningEffort = parts.length > 1 ? parts[1] : undefined;
+
+      expect(result.model).toBe(expectedModel);
       expect(result.temperature).toBe(0);
-      expect(result.reasoningEffort).toBeUndefined();
+      expect(result.reasoningEffort).toBe(expectedReasoningEffort);
       expect(result.messages).toBeInstanceOf(Array);
       expect(result.messages.length).toBeGreaterThan(0);
       expect(result.messages[result.messages.length - 1].content).toBe(userPrompt);
@@ -27,6 +33,7 @@ describe('SeldonEngineBrain', () => {
     it('should handle o3-mini model with reasoning effort', () => {
       const engineWithO3Mini = new SeldonEngineBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         underlyingModel: 'o3-mini high'
       });
@@ -40,6 +47,7 @@ describe('SeldonEngineBrain', () => {
     it('should handle o3 model with reasoning effort', () => {
       const engineWithO3 = new SeldonEngineBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         underlyingModel: 'o3 low'
       });
@@ -53,6 +61,7 @@ describe('SeldonEngineBrain', () => {
     it('should set system role to user and temperature to 1 when model lacks system mode', () => {
       const engineWithoutSystemMode = new SeldonEngineBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         underlyingModel: 'llama'
       });
@@ -66,6 +75,7 @@ describe('SeldonEngineBrain', () => {
     it('should set temperature to undefined when model lacks temperature support', () => {
       const engineWithO3 = new SeldonEngineBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         underlyingModel: 'o3'  // o3 model doesn't support temperature
       });
@@ -78,6 +88,7 @@ describe('SeldonEngineBrain', () => {
     it('should include background knowledge in messages when provided', () => {
       const engineWithBackground = new SeldonEngineBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         backgroundKnowledge: 'Important context information'
       });
@@ -92,6 +103,7 @@ describe('SeldonEngineBrain', () => {
     it('should include problem statement in messages when provided', () => {
       const engineWithProblem = new SeldonEngineBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         problemStatement: 'Analyze system behavior'
       });
@@ -105,6 +117,7 @@ describe('SeldonEngineBrain', () => {
     it('should include lastModel and structure prompt when lastModel has variables', () => {
       const engineWithFeedback = new SeldonEngineBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         feedbackContent: { valid: true, loops: [{ loop: 'test loop', polarity: 'reinforcing' }] }
       });
@@ -133,6 +146,7 @@ describe('SeldonEngineBrain', () => {
     it('should include behavior prompt when behaviorContent is provided and lastModel has variables', () => {
       const engineWithBehavior = new SeldonEngineBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         behaviorContent: 'Population grows exponentially',
         feedbackContent: { valid: true, loops: [{ loop: 'test loop', polarity: 'reinforcing' }] }
@@ -158,6 +172,7 @@ describe('SeldonEngineBrain', () => {
       
       const engineWithFeedback = new SeldonEngineBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         feedbackContent: feedbackData
       });
@@ -178,6 +193,7 @@ describe('SeldonEngineBrain', () => {
     it('should include behavior prompt even without lastModel when behaviorContent is provided', () => {
       const engineWithBehavior = new SeldonEngineBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         behaviorContent: 'System oscillates over time'
       });
@@ -205,6 +221,7 @@ describe('SeldonEngineBrain', () => {
     it('should handle custom prompts', () => {
       const engineWithCustomPrompts = new SeldonEngineBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         systemPrompt: 'Custom system prompt for analysis',
         structurePrompt: 'Custom structure prompt',
@@ -241,6 +258,7 @@ describe('SeldonEngineBrain', () => {
     it('should properly order messages in the conversation', () => {
       const engineWithAll = new SeldonEngineBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         backgroundKnowledge: 'Background info',
         problemStatement: 'Problem to solve',
@@ -296,6 +314,7 @@ describe('SeldonEngineBrain', () => {
     it('should handle lastModel with variables but no structure prompt', () => {
       const engineNoStructure = new SeldonEngineBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         structurePrompt: null,
         feedbackContent: { valid: true, loops: [{ loop: 'test loop', polarity: 'reinforcing' }] }
@@ -319,6 +338,7 @@ describe('SeldonEngineBrain', () => {
     it('should include feedback prompt but not behavior prompt when only feedbackContent is provided', () => {
       const engineWithPrompts = new SeldonEngineBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         behaviorPrompt: 'Behavior: {behaviorContent}',
         feedbackPrompt: 'Feedback: {feedbackContent}',

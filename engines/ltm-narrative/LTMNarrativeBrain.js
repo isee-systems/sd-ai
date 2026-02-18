@@ -69,7 +69,7 @@ You can only use the information given to you by the user in your work. Any info
             this.#data.backgroundPrompt = this.#data.backgroundPrompt.trim() + "\n\n{backgroundKnowledge}";
         }
 
-        this.#llmWrapper = new LLMWrapper(params);
+        this.#llmWrapper = new LLMWrapper(this.#data);
     }
 
     #isValidFeedbackContent() {

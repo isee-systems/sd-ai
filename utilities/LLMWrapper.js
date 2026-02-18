@@ -424,6 +424,11 @@ export class LLMWrapper {
       const parts = underlyingModel.split(' ');
       underlyingModel = 'gpt-5.2';
       reasoningEffort = parts[1].trim();
+    } else if (underlyingModel.includes('gemini') && underlyingModel.includes(' ')) {
+      // Parse gemini models with thinking levels (e.g., 'gemini-3-flash-preview medium')
+      const parts = underlyingModel.split(' ');
+      underlyingModel = parts[0];
+      reasoningEffort = parts[1].trim();
     }
 
     // Determine system role
@@ -443,7 +448,7 @@ export class LLMWrapper {
 
   async createChatCompletion(messages, model, zodSchema = null, temperature = null, reasoningEffort = null) {
     if (this.model.kind === ModelType.GEMINI) {
-      return await this.#createGeminiChatCompletion(messages, model, zodSchema, temperature);
+      return await this.#createGeminiChatCompletion(messages, model, zodSchema, temperature, reasoningEffort);
     } else if (this.model.kind === ModelType.CLAUDE) {
       return await this.#createClaudeChatCompletion(messages, model, zodSchema, temperature);
     }
@@ -473,22 +478,12 @@ export class LLMWrapper {
     return completion.choices[0].message;
   }
 
-  async #createGeminiChatCompletion(messages, model, zodSchema = null, temperature = null) {
+  async #createGeminiChatCompletion(messages, model, zodSchema = null, temperature = null, reasoningEffort = null) {
     const geminiMessages = this.convertMessagesToGeminiFormat(messages);
-
-    // Parse model string for thinking level
-    let actualModel = model;
-    let thinkingLevel = null;
-
-    if (model.includes(' ')) {
-      const parts = model.split(' ');
-      actualModel = parts[0];
-      thinkingLevel = parts.slice(1).join(' '); // Join remaining parts in case level has multiple words
-    }
 
     // Set up request config
     const requestConfig = {
-      model: actualModel,
+      model: model,
       contents: geminiMessages.contents
     };
 
@@ -504,9 +499,9 @@ export class LLMWrapper {
       config.temperature = temperature;
     }
 
-    // Set thinking level if present
-    if (thinkingLevel) {
-      config.thinkingConfig = { thinkingLevel: thinkingLevel };
+    // Set thinking level if present (reasoningEffort is the thinking level for Gemini)
+    if (reasoningEffort) {
+      config.thinkingConfig = { thinkingLevel: reasoningEffort };
     }
 
     if (zodSchema) {
@@ -646,7 +641,7 @@ export class LLMWrapper {
     return claudeMessages;
   }
 
-  static additionalParameters(defaultModel = LLMWrapper.DEFAULT_MODEL) {
+  static additionalParameters(defaultModel) {
     return [{
             name: "openAIKey",
             type: "string",
