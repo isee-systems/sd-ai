@@ -543,7 +543,6 @@ NEVER identify feedback loops for the user in explanatory text. Let users discov
     }
     async processResponse(originalResponse) {
 
-        console.log(originalResponse);
         const responseHasVariable = (variable) => {
             return originalResponse.variables.findIndex((v) => {
                 return projectUtils.sameVars(v.name, variable);
@@ -719,7 +718,6 @@ NEVER identify feedback loops for the user in explanatory text. Let users discov
         if (originalResponse.explanation)
             originalResponse.explanation = await marked.parse(originalResponse.explanation);
 
-        console.log(originalResponse);
         return originalResponse;
     }
 
