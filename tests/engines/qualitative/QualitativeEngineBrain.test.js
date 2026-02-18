@@ -238,9 +238,14 @@ describe('QualitativeEngineBrain', () => {
       const userPrompt = 'Test prompt';
       const result = qualitativeEngine.setupLLMParameters(userPrompt);
 
-      expect(result.model).toBe(LLMWrapper.BUILD_DEFAULT_MODEL);
+      // Parse the default model to extract base model and reasoning effort
+      const parts = LLMWrapper.BUILD_DEFAULT_MODEL.split(' ');
+      const expectedModel = parts[0];
+      const expectedReasoningEffort = parts.length > 1 ? parts[1] : undefined;
+
+      expect(result.model).toBe(expectedModel);
       expect(result.temperature).toBe(0);
-      expect(result.reasoningEffort).toBeUndefined();
+      expect(result.reasoningEffort).toBe(expectedReasoningEffort);
       expect(result.responseFormat).toBeDefined();
       expect(result.messages).toBeInstanceOf(Array);
       expect(result.messages.length).toBeGreaterThan(0);
