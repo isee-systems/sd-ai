@@ -11954,24 +11954,26 @@
             },
             {
                 "equation": "TIME",
-                "graphicalFunction": [
-                    {
-                        "x": 0,
-                        "y": 20
-                    },
-                    {
-                        "x": 1,
-                        "y": 20
-                    },
-                    {
-                        "x": 2,
-                        "y": 25
-                    },
-                    {
-                        "x": 3,
-                        "y": 25
-                    }
-                ],
+                "graphicalFunction": {
+                    "points": [
+                        {
+                            "x": 0,
+                            "y": 20
+                        },
+                        {
+                            "x": 1,
+                            "y": 20
+                        },
+                        {
+                            "x": 2,
+                            "y": 25
+                        },
+                        {
+                            "x": 3,
+                            "y": 25
+                        }
+                    ]
+                },
                 "name": "demand",
                 "type": "variable",
                 "units": "widget/mo"

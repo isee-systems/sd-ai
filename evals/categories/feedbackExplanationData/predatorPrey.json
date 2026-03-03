@@ -2902,52 +2902,54 @@
             {
                 "documentation": "The number of hares killed per lynx (per year) increases with the density of hares in the ecosystem. Note that when density is 0 (there are no hares), kills per lynx per year must be 0.",
                 "equation": "hare_density",
-                "graphicalFunction": [
-                    {
-                        "x": 0,
-                        "y": 0
-                    },
-                    {
-                        "x": 50,
-                        "y": 50
-                    },
-                    {
-                        "x": 100,
-                        "y": 100
-                    },
-                    {
-                        "x": 150,
-                        "y": 150
-                    },
-                    {
-                        "x": 200,
-                        "y": 200
-                    },
-                    {
-                        "x": 250,
-                        "y": 250
-                    },
-                    {
-                        "x": 300,
-                        "y": 300
-                    },
-                    {
-                        "x": 350,
-                        "y": 350
-                    },
-                    {
-                        "x": 400,
-                        "y": 400
-                    },
-                    {
-                        "x": 450,
-                        "y": 450
-                    },
-                    {
-                        "x": 500,
-                        "y": 500
-                    }
-                ],
+                "graphicalFunction": {
+                    "points": [
+                        {
+                            "x": 0,
+                            "y": 0
+                        },
+                        {
+                            "x": 50,
+                            "y": 50
+                        },
+                        {
+                            "x": 100,
+                            "y": 100
+                        },
+                        {
+                            "x": 150,
+                            "y": 150
+                        },
+                        {
+                            "x": 200,
+                            "y": 200
+                        },
+                        {
+                            "x": 250,
+                            "y": 250
+                        },
+                        {
+                            "x": 300,
+                            "y": 300
+                        },
+                        {
+                            "x": 350,
+                            "y": 350
+                        },
+                        {
+                            "x": 400,
+                            "y": 400
+                        },
+                        {
+                            "x": 450,
+                            "y": 450
+                        },
+                        {
+                            "x": 500,
+                            "y": 500
+                        }
+                    ]
+                },
                 "name": "hares killed per lynx",
                 "type": "variable",
                 "units": "hares/lynx/year"
@@ -2955,52 +2957,54 @@
             {
                 "documentation": "Lynx mortality -- the fraction of the lynx population that dies each year, is assumed to depend on hare density. With fewer hares, a greater fraction of the lynx population will starve.",
                 "equation": "hare_density",
-                "graphicalFunction": [
-                    {
-                        "x": 0,
-                        "y": 0.94
-                    },
-                    {
-                        "x": 10,
-                        "y": 0.66
-                    },
-                    {
-                        "x": 20,
-                        "y": 0.4
-                    },
-                    {
-                        "x": 30,
-                        "y": 0.35
-                    },
-                    {
-                        "x": 40,
-                        "y": 0.3
-                    },
-                    {
-                        "x": 50,
-                        "y": 0.25
-                    },
-                    {
-                        "x": 60,
-                        "y": 0.2
-                    },
-                    {
-                        "x": 70,
-                        "y": 0.15
-                    },
-                    {
-                        "x": 80,
-                        "y": 0.1
-                    },
-                    {
-                        "x": 90,
-                        "y": 0.07
-                    },
-                    {
-                        "x": 100,
-                        "y": 0.05
-                    }
-                ],
+                "graphicalFunction": {
+                    "points": [
+                        {
+                            "x": 0,
+                            "y": 0.94
+                        },
+                        {
+                            "x": 10,
+                            "y": 0.66
+                        },
+                        {
+                            "x": 20,
+                            "y": 0.4
+                        },
+                        {
+                            "x": 30,
+                            "y": 0.35
+                        },
+                        {
+                            "x": 40,
+                            "y": 0.3
+                        },
+                        {
+                            "x": 50,
+                            "y": 0.25
+                        },
+                        {
+                            "x": 60,
+                            "y": 0.2
+                        },
+                        {
+                            "x": 70,
+                            "y": 0.15
+                        },
+                        {
+                            "x": 80,
+                            "y": 0.1
+                        },
+                        {
+                            "x": 90,
+                            "y": 0.07
+                        },
+                        {
+                            "x": 100,
+                            "y": 0.05
+                        }
+                    ]
+                },
                 "name": "lynx death fraction",
                 "type": "variable",
                 "units": "per year"
