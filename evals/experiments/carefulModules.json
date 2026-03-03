@@ -1,0 +1,17 @@
+{
+    "sequential": true,
+    "verbose": true,
+    "engineConfigs": {
+        "quantitative-experimental": {
+            "engine": "quantitative-experimental",
+            "additionalParameters": {
+                "underlyingModel": "gemini-2.5-flash-lite",
+                "supportsArrays": true,
+                "supportsModules": true
+            }
+        }
+    },
+    "categories": {
+        "quantitativeModularReasoning": true
+    }
+}
