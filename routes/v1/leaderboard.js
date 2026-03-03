@@ -13,7 +13,7 @@ router.get('/:mode', async (req, res) => {
   try {
     const { mode } = req.params
     
-    const filename = `leaderboard${mode.toUpperCase()}_full_results.json`
+    const filename = `leaderboard_${mode.toLowerCase()}_full_results.json`
     const filePath = path.join(__dirname, '../../evals/results', filename)
     
     // Check if file exists
