@@ -13,15 +13,7 @@ router.get('/:mode', async (req, res) => {
   try {
     const { mode } = req.params
     
-    // Validate mode
-    if (!['cld', 'sfd'].includes(mode)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid mode. Must be either "cld" or "sfd"'
-      })
-    }
-    
-    const filename = `leaderboard${mode.toUpperCase()}_full_results.json`
+    const filename = `leaderboard_${mode.toLowerCase()}_full_results.json`
     const filePath = path.join(__dirname, '../../evals/results', filename)
     
     // Check if file exists
