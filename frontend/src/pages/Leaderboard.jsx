@@ -15,7 +15,7 @@ const leaderboardConfig = {
   },
   'discussion': {
     title: 'Discussion',
-    description: 'Billy filly.'
+    description: 'The leaderboard evaluates engines\' ability to engage in meaningful discussion about models. It tests performance across three key areas: feedback explanation, which measures how well engines can explain the purpose and behavior of feedback loops in models; model building steps, which assesses the engine\'s ability to articulate the reasoning and steps involved in constructing models; and error fixing suggestions, which evaluates how effectively engines can identify issues in models and propose actionable fixes. Each engine\'s results display its individual scores on all three tests, an overall combined score reflecting total performance, and a speed ranking to highlight efficiency.'
   }
 };
 
