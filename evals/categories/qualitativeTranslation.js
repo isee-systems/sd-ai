@@ -12,6 +12,7 @@
 
 import pluralize from 'pluralize';
 import utils from '../../utilities/utils.js';
+import { validateEvaluationResult } from '../evaluationSchema.js';
 
 /**  generic prompt used for all tests */
 const prompt = "Please find all causal relationships in the background information.";
@@ -259,31 +260,26 @@ export const evaluate = function(generatedResponse, groundTruth) {
         return 0;
     };
 
-    const relationshipEqualityComparatorGenerator = function(a) {
-        return (b) => {
-            return (a.from.toLowerCase() === b.from.toLowerCase() && 
-                a.to.toLowerCase() === b.to.toLowerCase()); 
-        };
+    const relationshipMatches = function(a, b) {
+        return (a.from.toLowerCase() === b.from.toLowerCase() &&
+            a.to.toLowerCase() === b.to.toLowerCase());
     };
 
-    const cleanedSortedAI = fromAI.map((r)=> {
-        delete r.reasoning; //these attributes aren't in ground truth
-        delete r.polarityReasoning; //these attributes aren't in ground truth
-        r.textRepresentation = stringifyRelationship(r);
-        return r;
+    const cleanedSortedAI = fromAI.map((relationship) => {
+        const { reasoning, polarityReasoning, ...rest } = relationship;
+        return { ...rest, textRepresentation: stringifyRelationship(relationship) };
     }).sort(comparator);
 
-    const sortedGroundTruth = groundTruth.map((r)=> {
-        r.textRepresentation = stringifyRelationship(r);
-        return r;
+    const sortedGroundTruth = groundTruth.map((relationship) => {
+        return { ...relationship, textRepresentation: stringifyRelationship(relationship) };
     }).sort(comparator);
 
-    const removed = sortedGroundTruth.filter((element) => { return !cleanedSortedAI.some(relationshipEqualityComparatorGenerator(element))});
-    const added = cleanedSortedAI.filter((element) => { return !sortedGroundTruth.some(relationshipEqualityComparatorGenerator(element))});
+    const removed = sortedGroundTruth.filter((element) => { return !cleanedSortedAI.some((ai) => relationshipMatches(element, ai))});
+    const added = cleanedSortedAI.filter((element) => { return !sortedGroundTruth.some((gt) => relationshipMatches(element, gt))});
 
-    const addedStr = added.map((r)=>{return r.textRepresentation}).join(", ");
-    const removedStr = removed.map((r)=>{return r.textRepresentation}).join(", ");
-    const groundTruthStr = sortedGroundTruth.map((r)=>{return r.textRepresentation}).join(", ");
+    const addedStr = added.map((relationship) => { return relationship.textRepresentation }).join(", ");
+    const removedStr = removed.map((relationship) => { return relationship.textRepresentation }).join(", ");
+    const groundTruthStr = sortedGroundTruth.map((relationship) => { return relationship.textRepresentation }).join(", ");
 
     if (added.length > 0) {
         failures.push({
@@ -300,7 +296,7 @@ export const evaluate = function(generatedResponse, groundTruth) {
     }
 
     for (const groundTruthRelationship of sortedGroundTruth) {
-        let aiRelationship = cleanedSortedAI.find(relationshipEqualityComparatorGenerator(groundTruthRelationship));
+        let aiRelationship = cleanedSortedAI.find((ai) => relationshipMatches(groundTruthRelationship, ai));
         if (aiRelationship && aiRelationship.polarity !== groundTruthRelationship.polarity) {
             failures.push({
                 type: "Incorrect polarity discovered",
@@ -309,7 +305,7 @@ export const evaluate = function(generatedResponse, groundTruth) {
         }
     }
 
-    return failures 
+    return validateEvaluationResult(failures);
 };
 
 /**

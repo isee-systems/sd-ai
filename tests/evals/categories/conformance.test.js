@@ -545,4 +545,48 @@ describe('Conformance Evaluate', () => {
       expect(failures).toEqual([]);
     });
   });
+
+  describe('input mutation safety', () => {
+    it('should not mutate requirements.variables with mixed case', () => {
+      const generatedResponse = {
+        model: {
+          relationships: [
+            { from: 'temperature', to: 'pressure' },
+            { from: 'pressure', to: 'temperature' }
+          ]
+        }
+      };
+
+      const requirements = {
+        variables: ['Temperature', 'Pressure']
+      };
+
+      const originalVariables = [...requirements.variables];
+
+      const failures = evaluate(generatedResponse, requirements);
+
+      expect(requirements.variables).toEqual(originalVariables);
+      expect(requirements.variables).toEqual(['Temperature', 'Pressure']);
+    });
+
+    it('should produce identical results when called twice with the same input objects', () => {
+      const generatedResponse = {
+        model: {
+          relationships: [
+            { from: 'temperature', to: 'pressure' },
+            { from: 'pressure', to: 'temperature' }
+          ]
+        }
+      };
+
+      const requirements = {
+        variables: ['Temperature', 'Pressure']
+      };
+
+      const firstResult = evaluate(generatedResponse, requirements);
+      const secondResult = evaluate(generatedResponse, requirements);
+
+      expect(firstResult).toEqual(secondResult);
+    });
+  });
 });

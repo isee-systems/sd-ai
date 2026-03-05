@@ -30,7 +30,7 @@ It uses the "Brain" from the qualitative engine in a recursive fashion making th
   }
 
   additionalParameters() {
-    let parameters = LLMWrapper.additionalParameters();
+    let parameters = LLMWrapper.additionalParameters(LLMWrapper.BUILD_DEFAULT_MODEL);
     return parameters.concat([
       {
         name: "problemStatement",

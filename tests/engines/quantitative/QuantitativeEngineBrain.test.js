@@ -7,6 +7,7 @@ describe('QuantitativeEngineBrain', () => {
   beforeEach(() => {
     quantitativeEngine = new QuantitativeEngineBrain({
       openAIKey: 'test-key',
+      anthropicKey: 'test-claude-key',
       googleKey: 'test-google-key'
     });
   });
@@ -416,6 +417,186 @@ describe('QuantitativeEngineBrain', () => {
       const flowA = result.variables.find(v => v.name === 'Flow A');
       expect(flowA.type).toBe('variable'); // Should be converted since not used
     });
+
+    it('should create modules array from variable names with module prefixes', async () => {
+      const originalResponse = {
+        variables: [
+          { name: 'Hares.population', type: 'stock', equation: '5000', inflows: [], outflows: [] },
+          { name: 'Hares.birth_rate', type: 'variable', equation: '0.1' },
+          { name: 'Lynx.population', type: 'stock', equation: '100', inflows: [], outflows: [] },
+          { name: 'Lynx.death_rate', type: 'variable', equation: '0.05' }
+        ],
+        relationships: []
+      };
+
+      const result = await quantitativeEngine.processResponse(originalResponse);
+
+      expect(result.modules).toBeDefined();
+      expect(result.modules).toHaveLength(2);
+
+      const haresModule = result.modules.find(m => m.name === 'Hares');
+      const lynxModule = result.modules.find(m => m.name === 'Lynx');
+
+      expect(haresModule).toBeDefined();
+      expect(haresModule.parentModule).toBe('');
+      expect(lynxModule).toBeDefined();
+      expect(lynxModule.parentModule).toBe('');
+    });
+
+    it('should remove unused modules from modules array', async () => {
+      const originalResponse = {
+        variables: [
+          { name: 'Hares.population', type: 'stock', equation: '5000', inflows: [], outflows: [] }
+        ],
+        modules: [
+          { name: 'Hares', parentModule: '' },
+          { name: 'Lynx', parentModule: '' }, // Not used
+          { name: 'Wolves', parentModule: '' } // Not used
+        ],
+        relationships: []
+      };
+
+      const result = await quantitativeEngine.processResponse(originalResponse);
+
+      expect(result.modules).toHaveLength(1);
+      expect(result.modules[0].name).toBe('Hares');
+      expect(result.modules[0].parentModule).toBe('');
+    });
+
+    it('should preserve existing module parentModule values', async () => {
+      const originalResponse = {
+        variables: [
+          { name: 'Child.variable', type: 'variable', equation: '10' },
+          { name: 'parent.variable', type: 'variable', equation: '11'}
+        ],
+        modules: [
+          { name: 'Parent', parentModule: '' },
+          { name: 'Child', parentModule: 'Parent' }
+        ],
+        relationships: []
+      };
+
+      const result = await quantitativeEngine.processResponse(originalResponse);
+
+      expect(result.modules).toHaveLength(2);
+
+      const parentModule = result.modules.find(m => m.name === 'Parent');
+      const childModule = result.modules.find(m => m.name === 'Child');
+
+      expect(parentModule.parentModule).toBe('');
+      expect(childModule.parentModule).toBe('Parent');
+    });
+
+    it('should handle case-insensitive module name matching', async () => {
+      const originalResponse = {
+        variables: [
+          { name: 'Hares.population', type: 'stock', equation: '5000', inflows: [], outflows: [] },
+          { name: 'HARES.birth_rate', type: 'variable', equation: '0.1' },
+          { name: 'hares.death_rate', type: 'variable', equation: '0.05' }
+        ],
+        modules: [
+          { name: 'Hares', parentModule: '' }
+        ],
+        relationships: []
+      };
+
+      const result = await quantitativeEngine.processResponse(originalResponse);
+
+      expect(result.modules).toHaveLength(1);
+      expect(result.modules[0].name).toBe('Hares'); // Preserves original capitalization
+    });
+
+    it('should add missing modules while preserving existing ones', async () => {
+      const originalResponse = {
+        variables: [
+          { name: 'Hares.population', type: 'stock', equation: '5000', inflows: [], outflows: [] },
+          { name: 'Lynx.population', type: 'stock', equation: '100', inflows: [], outflows: [] }
+        ],
+        modules: [
+          { name: 'Hares', parentModule: '' }
+        ],
+        relationships: []
+      };
+
+      const result = await quantitativeEngine.processResponse(originalResponse);
+
+      expect(result.modules).toHaveLength(2);
+
+      const haresModule = result.modules.find(m => m.name === 'Hares');
+      const lynxModule = result.modules.find(m => m.name === 'Lynx');
+
+      expect(haresModule).toBeDefined();
+      expect(haresModule.parentModule).toBe('');
+      expect(lynxModule).toBeDefined();
+      expect(lynxModule.parentModule).toBe('');
+    });
+
+    it('should use canonical capitalization from first variable reference for new modules', async () => {
+      const originalResponse = {
+        variables: [
+          { name: 'MyModule.var1', type: 'variable', equation: '10' },
+          { name: 'MYMODULE.var2', type: 'variable', equation: '20' },
+          { name: 'mymodule.var3', type: 'variable', equation: '30' }
+        ],
+        relationships: []
+      };
+
+      const result = await quantitativeEngine.processResponse(originalResponse);
+
+      expect(result.modules).toHaveLength(1);
+      expect(result.modules[0].name).toBe('MyModule'); // Uses first occurrence capitalization
+    });
+
+    it('should handle variables without module prefixes', async () => {
+      const originalResponse = {
+        variables: [
+          { name: 'population', type: 'stock', equation: '1000', inflows: [], outflows: [] },
+          { name: 'birth_rate', type: 'variable', equation: '0.05' }
+        ],
+        relationships: []
+      };
+
+      const result = await quantitativeEngine.processResponse(originalResponse);
+
+      expect(result.modules).toBeDefined();
+      expect(result.modules).toHaveLength(0);
+    });
+
+    it('should handle mix of modular and non-modular variables', async () => {
+      const originalResponse = {
+        variables: [
+          { name: 'Hares.population', type: 'stock', equation: '5000', inflows: [], outflows: [] },
+          { name: 'global_parameter', type: 'variable', equation: '10' },
+          { name: 'Lynx.population', type: 'stock', equation: '100', inflows: [], outflows: [] }
+        ],
+        relationships: []
+      };
+
+      const result = await quantitativeEngine.processResponse(originalResponse);
+
+      expect(result.modules).toHaveLength(2);
+
+      const haresModule = result.modules.find(m => m.name === 'Hares');
+      const lynxModule = result.modules.find(m => m.name === 'Lynx');
+
+      expect(haresModule).toBeDefined();
+      expect(lynxModule).toBeDefined();
+    });
+
+    it('should initialize empty modules array if not present', async () => {
+      const originalResponse = {
+        variables: [
+          { name: 'simple_variable', type: 'variable', equation: '10' }
+        ],
+        relationships: []
+      };
+
+      const result = await quantitativeEngine.processResponse(originalResponse);
+
+      expect(result.modules).toBeDefined();
+      expect(Array.isArray(result.modules)).toBe(true);
+      expect(result.modules).toHaveLength(0);
+    });
   });
 
   describe('setupLLMParameters', () => {
@@ -423,18 +604,24 @@ describe('QuantitativeEngineBrain', () => {
       const userPrompt = 'Test prompt';
       const result = quantitativeEngine.setupLLMParameters(userPrompt);
 
-      expect(result.model).toBe(LLMWrapper.DEFAULT_MODEL);
+      // Parse the default model to extract base model and reasoning effort
+      const parts = LLMWrapper.BUILD_DEFAULT_MODEL.split(' ');
+      const expectedModel = parts[0];
+      const expectedReasoningEffort = parts.length > 1 ? parts[1] : undefined;
+
+      expect(result.model).toBe(expectedModel);
       expect(result.temperature).toBe(0);
-      expect(result.reasoningEffort).toBeUndefined();
+      expect(result.reasoningEffort).toBe(expectedReasoningEffort);
       expect(result.responseFormat).toBeDefined();
       expect(result.messages).toBeInstanceOf(Array);
       expect(result.messages.length).toBeGreaterThan(0);
-      expect(result.messages[result.messages.length - 2].content).toBe(userPrompt);
+      expect(result.messages[result.messages.length - 1].content).toBe(userPrompt);
     });
 
     it('should handle o3-mini model with reasoning effort', () => {
       const engineWithO3Mini = new QuantitativeEngineBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         underlyingModel: 'o3-mini low'
       });
@@ -448,6 +635,7 @@ describe('QuantitativeEngineBrain', () => {
     it('should handle o3 model with reasoning effort', () => {
       const engineWithO3 = new QuantitativeEngineBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         underlyingModel: 'o3 high'
       });
@@ -461,6 +649,7 @@ describe('QuantitativeEngineBrain', () => {
     it('should throw error when model lacks structured output support', () => {
       const engineWithoutStructured = new QuantitativeEngineBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         underlyingModel: 'o1-mini'
       });
@@ -473,6 +662,7 @@ describe('QuantitativeEngineBrain', () => {
     it('should set system role to user and temperature to 1 when model lacks system mode', () => {
       const engineWithoutSystemMode = new QuantitativeEngineBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         underlyingModel: 'llama'
       });
@@ -486,6 +676,7 @@ describe('QuantitativeEngineBrain', () => {
     it('should set temperature to undefined when model lacks temperature support', () => {
       const engineWithO3 = new QuantitativeEngineBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         underlyingModel: 'o3'  // o3 model doesn't support temperature
       });
@@ -498,6 +689,7 @@ describe('QuantitativeEngineBrain', () => {
     it('should include background knowledge in messages when provided', () => {
       const engineWithBackground = new QuantitativeEngineBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         backgroundKnowledge: 'Important context information'
       });
@@ -512,6 +704,7 @@ describe('QuantitativeEngineBrain', () => {
     it('should include problem statement in messages when provided', () => {
       const engineWithProblem = new QuantitativeEngineBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         problemStatement: 'Create population dynamics model'
       });
@@ -556,56 +749,50 @@ describe('QuantitativeEngineBrain', () => {
       expect(assistantPromptMessage).toBeUndefined();
     });
 
-    it('should always include feedback prompt in messages', () => {
+    it('should include user prompt as last message', () => {
       const result = quantitativeEngine.setupLLMParameters('Test prompt');
 
-      const feedbackMessage = result.messages.find(m => 
-        m.content.includes('closed feedback loops')
-      );
-      expect(feedbackMessage).toBeDefined();
-      expect(feedbackMessage.role).toBe('user');
+      const lastMessage = result.messages[result.messages.length - 1];
+      expect(lastMessage.content).toBe('Test prompt');
+      expect(lastMessage.role).toBe('user');
     });
 
     it('should handle custom prompts', () => {
       const engineWithCustomPrompts = new QuantitativeEngineBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         systemPrompt: 'Custom quantitative system prompt',
-        assistantPrompt: 'Custom quantitative assistant prompt',
-        feedbackPrompt: 'Custom quantitative feedback prompt'
+        assistantPrompt: 'Custom quantitative assistant prompt'
       });
 
-      const lastModel = { 
+      const lastModel = {
         variables: [{ name: 'Test', type: 'variable', equation: '10' }],
-        relationships: [{ from: 'X', to: 'Y', polarity: '+' }] 
+        relationships: [{ from: 'X', to: 'Y', polarity: '+' }]
       };
       const result = engineWithCustomPrompts.setupLLMParameters('Test prompt', lastModel);
 
       const systemMessage = result.messages[0];
       expect(systemMessage.content).toBe('Custom quantitative system prompt');
 
-      const assistantPromptMessage = result.messages.find(m => 
+      const assistantPromptMessage = result.messages.find(m =>
         m.content === 'Custom quantitative assistant prompt'
       );
       expect(assistantPromptMessage).toBeDefined();
-
-      const feedbackMessage = result.messages.find(m => 
-        m.content === 'Custom quantitative feedback prompt'
-      );
-      expect(feedbackMessage).toBeDefined();
     });
 
     it('should properly order messages in the conversation', () => {
       const engineWithAll = new QuantitativeEngineBrain({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         backgroundKnowledge: 'Background info',
         problemStatement: 'Problem to solve'
       });
 
-      const lastModel = { 
+      const lastModel = {
         variables: [{ name: 'Test', type: 'variable', equation: '10' }],
-        relationships: [{ from: 'A', to: 'B', polarity: '+' }] 
+        relationships: [{ from: 'A', to: 'B', polarity: '+' }]
       };
       const result = engineWithAll.setupLLMParameters('User prompt', lastModel);
 
@@ -617,7 +804,7 @@ describe('QuantitativeEngineBrain', () => {
       expect(result.messages[3].role).toBe('assistant');
       expect(result.messages[4].role).toBe('user');
       expect(result.messages[5].content).toBe('User prompt');
-      expect(result.messages[6].content).toContain('closed feedback loops');
+      expect(result.messages.length).toBe(6);
     });
 
     it('should handle edge case with null lastModel', () => {
@@ -625,7 +812,7 @@ describe('QuantitativeEngineBrain', () => {
 
       const assistantMessage = result.messages.find(m => m.role === 'assistant');
       expect(assistantMessage).toBeUndefined();
-      expect(result.messages[result.messages.length - 2].content).toBe('Test prompt');
+      expect(result.messages[result.messages.length - 1].content).toBe('Test prompt');
     });
 
     it('should handle edge case with undefined lastModel', () => {
@@ -633,7 +820,7 @@ describe('QuantitativeEngineBrain', () => {
 
       const assistantMessage = result.messages.find(m => m.role === 'assistant');
       expect(assistantMessage).toBeUndefined();
-      expect(result.messages[result.messages.length - 2].content).toBe('Test prompt');
+      expect(result.messages[result.messages.length - 1].content).toBe('Test prompt');
     });
 
     it('should return all required parameters for OpenAI API call', () => {

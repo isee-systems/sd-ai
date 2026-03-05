@@ -11,17 +11,6 @@
             }
         },
 
-        "qualitative-gemini-2.5-flash-preview-09-2025": {
-            "engine": "qualitative",
-            "additionalParameters": {
-                "underlyingModel": "gemini-2.5-flash-preview-09-2025"
-            },
-            "limits": {
-                "tokensPerMinute": 90000,
-                "requestsPerMinute": 10
-            }
-        },
-
         "causal-chains-o4-mini": {
             "engine": "causal-chains",
             "additionalParameters": {
@@ -118,17 +107,6 @@
             "engine": "qualitative-zero",
             "additionalParameters": {
                 "underlyingModel": "gemini-2.5-flash"
-            },
-            "limits": {
-                "tokensPerMinute": 90000,
-                "requestsPerMinute": 10
-            }
-        },
-
-        "qualitative-zero-gemini-2.5-flash-preview-09-2025": {
-            "engine": "qualitative-zero",
-            "additionalParameters": {
-                "underlyingModel": "gemini-2.5-flash-preview-09-2025"
             },
             "limits": {
                 "tokensPerMinute": 90000,

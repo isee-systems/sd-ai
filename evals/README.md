@@ -46,7 +46,7 @@ CLI (command line interface) app that runs within sd-ai project to measure outpu
     - merging several methodically generated `careful` results into a larger result set
     - filtering down an experiment that ran many parameter combinations or LLMs to just the best or most interesting results
 - the easiest method is with the CLI JSON processing tool [JQ](https://jqlang.org/):
-    - `jq -c '.results[]' docs/leaderboardCLD_full_results.json > 123_careful_in_progress.jsonl`
+    - `jq -c '.results[]' evals/results/leaderboard_cld_full_results.json > 123_careful_in_progress.jsonl`
         - Replace `careful` with the name of the experiment you plan to run.
         - Replace `123` with any 3-character experiment ID of your choice.
 

@@ -1,0 +1,491 @@
+<?xml version="1.0" encoding="utf-8"?>
+<xmile version="1.0" xmlns="http://docs.oasis-open.org/xmile/ns/XMILE/v1.0" xmlns:isee="http://iseesystems.com/XMILE">
+	<header>
+		<smile version="1.0" namespace="std, isee"/>
+		<name>inventory_workforce</name>
+		<uuid>e5656504-8610-41af-aa70-89d4932fd8be</uuid>
+		<vendor>isee systems, inc.</vendor>
+		<product version="4.0" isee:build_number="3710" isee:saved_by_v1="true" lang="en">Stella Architect</product>
+	</header>
+	<ai_information>
+		<status verified="false" trusted="true" tampered="false" uses="false" analyzed="true" log_truncated="false" timestamp="1754331739" algorithm="ed25519" keyurl="https://iseesystems.com/keys/stella01.txt" want_var_info="true" want_var_status="false" want_log="false" sampling="1" signature="7/JAt/CjpG/T+cz3JcjHyzNL7u0K9EHfi6ZlEhxsnvNSEw2eUhfunnEa0SaXSNW/WjETKByXWxnIra3y3JtECQ=="/>
+		<log>&lt;h3&gt;You asked me...&lt;/h3&gt;Why does this model oscillate? Please reply as if you were speaking to a CEO.  I want a short summary.&lt;br/&gt;&lt;h3&gt;My reply...&lt;/h3&gt;&lt;h4&gt;Summary for the CEO:&lt;/h4&gt;
+&lt;p&gt;Our model oscillates because it&apos;s constantly trying to hit targets, but there are built-in delays in how quickly it can react. When demand shifts, the system overshoots its ideal state, then corrects too far in the other direction, creating a continuous wave-like pattern in inventory, production, and workforce levels. This is a classic dynamic in systems where corrective actions are delayed.&lt;/p&gt;
+
+&lt;h6&gt;Step-by-Step Explanation:&lt;/h6&gt;
+&lt;p&gt;The oscillatory behavior observed in your model is a fundamental characteristic of System Dynamics models that contain two key elements:&lt;/p&gt;
+&lt;ol&gt;
+  &lt;li&gt;&lt;b&gt;Negative (Balancing) Feedback Loops:&lt;/b&gt; These are loops that work to bring a system back to a desired state or equilibrium. They are goal-seeking.&lt;/li&gt;
+  &lt;li&gt;&lt;b&gt;Delays:&lt;/b&gt; These are time lags in the flow of information, decisions, or materials within the system. Stocks in a System Dynamics model are the primary sources of these delays.&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;Let&apos;s break down how these elements contribute to the oscillation in your specific model:&lt;/p&gt;
+&lt;ol&gt;
+  &lt;li&gt;
+    &lt;b&gt;The Initial Disturbance:&lt;/b&gt;
+    &lt;ul&gt;
+      &lt;li&gt;The model begins in a stable state. However, at time = 2, the &lt;i&gt;demand&lt;/i&gt; for widgets suddenly increases from 20 to 25 widgets/month. This is a step change, which acts as a perturbation to the system.&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;b&gt;The System&apos;s Response (Negative Feedback Loops):&lt;/b&gt;
+    &lt;p&gt;Your model contains several interconnected negative feedback loops, each attempting to bring a specific variable back to its desired state:&lt;/p&gt;
+    &lt;ul&gt;
+      &lt;li&gt;
+        &lt;b&gt;The Inventory Adjustment Loop (identified as &quot;B1 2 stocks 9 variables&quot; in your data):&lt;/b&gt;
+        &lt;ul&gt;
+          &lt;li&gt;When &lt;i&gt;demand&lt;/i&gt; increases, &lt;i&gt;shipping&lt;/i&gt; rises, causing &lt;i&gt;Inventory&lt;/i&gt; to fall below the &lt;i&gt;Desired Inventory&lt;/i&gt;.&lt;/li&gt;
+          &lt;li&gt;This creates an &lt;i&gt;inventory gap&lt;/i&gt;, which signals the need for increased &lt;i&gt;producing&lt;/i&gt;.&lt;/li&gt;
+          &lt;li&gt;Increased &lt;i&gt;producing&lt;/i&gt; requires more &lt;i&gt;Workers&lt;/i&gt;, which in turn increases &lt;i&gt;producing&lt;/i&gt;, aiming to close the &lt;i&gt;inventory gap&lt;/i&gt;.&lt;/li&gt;
+        &lt;/ul&gt;
+      &lt;/li&gt;
+      &lt;li&gt;
+        &lt;b&gt;The Workforce Adjustment Loop (identified as &quot;B2 1 stock 3 variables&quot; in your data):&lt;/b&gt;
+        &lt;ul&gt;
+          &lt;li&gt;As &lt;i&gt;desired production&lt;/i&gt; increases (influenced by both &lt;i&gt;Expected Demand&lt;/i&gt; and the &lt;i&gt;desired change in inventory&lt;/i&gt;), the &lt;i&gt;desired workers&lt;/i&gt; also increase.&lt;/li&gt;
+          &lt;li&gt;This creates a &lt;i&gt;workers gap&lt;/i&gt;, prompting &lt;i&gt;hiring or firing&lt;/i&gt; to adjust the actual &lt;i&gt;Workers&lt;/i&gt; level.&lt;/li&gt;
+        &lt;/ul&gt;
+      &lt;/li&gt;
+      &lt;li&gt;
+        &lt;b&gt;The Expected Demand Adjustment Loop (identified as &quot;B1 1 stock 2 variables&quot; under &quot;Feedback Loop Set 2&quot; in your data):&lt;/b&gt;
+        &lt;ul&gt;
+          &lt;li&gt;This loop continuously compares the actual &lt;i&gt;demand&lt;/i&gt; with the &lt;i&gt;Expected Demand&lt;/i&gt;.&lt;/li&gt;
+          &lt;li&gt;Any difference triggers a &lt;i&gt;changing expected&lt;/i&gt; flow, which adjusts the &lt;i&gt;Expected Demand&lt;/i&gt; over time to match the actual &lt;i&gt;demand&lt;/i&gt;.&lt;/li&gt;
+          &lt;li&gt;This updated &lt;i&gt;Expected Demand&lt;/i&gt; then directly influences the &lt;i&gt;desired production&lt;/i&gt;, linking back to the inventory and workforce adjustments.&lt;/li&gt;
+        &lt;/ul&gt;
+      &lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;b&gt;The Crucial Role of Delays:&lt;/b&gt;
+    &lt;p&gt;The reason these goal-seeking loops lead to oscillation, rather than smooth adjustment, is the presence of significant delays:&lt;/p&gt;
+    &lt;ul&gt;
+      &lt;li&gt;The &lt;i&gt;time to hire or fire&lt;/i&gt; is 6 months. This means that even if the model immediately recognizes a need for more workers, it takes a substantial amount of time for those workers to be hired and become productive.&lt;/li&gt;
+      &lt;li&gt;The &lt;i&gt;time to adjust expectations&lt;/i&gt; is also 6 months. This means that &lt;i&gt;Expected Demand&lt;/i&gt; lags behind actual &lt;i&gt;demand&lt;/i&gt;, causing a delayed and potentially over-reactive adjustment in production plans.&lt;/li&gt;
+      &lt;li&gt;While &lt;i&gt;inventory adjustment time&lt;/i&gt; is shorter (1 month), the longer delays in workforce and expectation adjustments dominate the system&apos;s overall response.&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;b&gt;How Delays Cause Oscillation (Overshooting):&lt;/b&gt;
+    &lt;p&gt;When &lt;i&gt;demand&lt;/i&gt; suddenly increases, the system begins to react. However, because of the delays:&lt;/p&gt;
+    &lt;ol&gt;
+      &lt;li&gt;&lt;i&gt;Inventory&lt;/i&gt; drops significantly before production can fully ramp up due to the hiring and expectation adjustment delays.&lt;/li&gt;
+      &lt;li&gt;By the time the increased production (driven by both the inventory gap and the rising expected demand) finally takes effect, it often overshoots the new equilibrium point. This means &lt;i&gt;Inventory&lt;/i&gt; might rise above the desired level, and &lt;i&gt;Workers&lt;/i&gt; might exceed the newly required level.&lt;/li&gt;
+      &lt;li&gt;This overshoot then triggers a reverse correction (e.g., reducing production, firing workers).&lt;/li&gt;
+      &lt;li&gt;Again, due to the same delays, this correction also overshoots, causing the system to swing too far in the opposite direction.&lt;/li&gt;
+      &lt;li&gt;This continuous pattern of overshooting and undershooting the target values creates the observed oscillations in variables like &lt;i&gt;Inventory&lt;/i&gt;, &lt;i&gt;Workers&lt;/i&gt;, &lt;i&gt;producing&lt;/i&gt;, and &lt;i&gt;Expected Demand&lt;/i&gt;.&lt;/li&gt;
+    &lt;/ol&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;b&gt;Dominant Feedback Loops:&lt;/b&gt;
+    &lt;p&gt;The dominance data you provided confirms that all identified loops are negative (balancing) and contribute to the model&apos;s behavior. While the percentages for the inventory and workforce loops fluctuate, the &lt;i&gt;Expected Demand Adjustment Loop&lt;/i&gt; consistently explains 100% of its own set&apos;s behavior. This highlights its critical role, as changes in &lt;i&gt;Expected Demand&lt;/i&gt; directly propagate through to influence production and workforce decisions. The delays within all these loops, particularly the 6-month delays in adjusting workforce and expectations, are the root cause of the sustained oscillations.&lt;/p&gt;
+  &lt;/li&gt;
+&lt;/ol&gt;</log>
+		<settings>
+			<isee:setting key="seldon/backgroundKnowledge" value=""/>
+			<isee:setting key="seldon/problemStatement" value=""/>
+		</settings>
+	</ai_information>
+	<sim_specs isee:sim_duration="0" isee:run_prefix="Run" isee:simulation_delay="0" isee:restore_on_start="false" method="RK4" time_units="Months" isee:instantaneous_flows="false" isee:ignore_module_errors="false" isee:strict_units="false" isee:loop_scores="true" isee:loop_exhaustive_allowed="1000">
+		<start>0</start>
+		<stop>60</stop>
+		<dt reciprocal="true">16</dt>
+	</sim_specs>
+	<isee:prefs saved_runs="5" keep="true" show_module_prefix="true" live_update_on_drag="true" show_restore_buttons="false" layer="model" isee:design="" isee:design_custom="false" interface_scale_ui="true" interface_max_page_width="10000" interface_max_page_height="10000" interface_min_page_width="0" interface_min_page_height="0" rifp="false"/>
+	<isee:multiplayer_settings include_chat="true" allow_observers="false" advance_time_increment="1" max_advance_time_in_ms="0" model_stops_when_players_drop="false" observer_start_page="home_page" enabled="false"/>
+	<isee:time_formats default_format="Builtin">
+		<isee:time_format name="Builtin" type="adaptive"/>
+	</isee:time_formats>
+	<isee:number_format_extenders/>
+	<default_format/>
+	<model_units>
+		<unit name="People">
+			<eqn/>
+			<alias>person</alias>
+			<alias>persons</alias>
+		</unit>
+		<unit name="Widgets">
+			<eqn/>
+			<alias>widget</alias>
+		</unit>
+		<unit name="Months">
+			<eqn/>
+			<alias>mo</alias>
+			<alias>month</alias>
+		</unit>
+		<unit name="widgets per person per month">
+			<eqn>widget/(person-mo)</eqn>
+		</unit>
+		<unit name="people per person per year">
+			<eqn>people/person/yr</eqn>
+		</unit>
+		<unit name="per US dollar">
+			<eqn>1/USD</eqn>
+		</unit>
+		<unit name="US dollars per widget">
+			<eqn>USD/widget</eqn>
+		</unit>
+		<unit name="widgets per customer">
+			<eqn>widget/customer</eqn>
+		</unit>
+		<unit name="widgets per year">
+			<eqn>widget/yr</eqn>
+		</unit>
+		<unit name="customers per customer per year">
+			<eqn>customers/customer/yr</eqn>
+		</unit>
+	</model_units>
+	<model>
+		<isee:extra_collection_variables>
+			<isee:extra_collection_variable name="demand"/>
+			<isee:extra_collection_variable name="desired_change_in_inventory"/>
+			<isee:extra_collection_variable name="Inventory"/>
+			<isee:extra_collection_variable name="producing"/>
+		</isee:extra_collection_variables>
+		<variables>
+			<stock name="Inventory">
+				<eqn>Desired_Inventory</eqn>
+				<inflow>producing</inflow>
+				<outflow>shipping</outflow>
+				<non_negative/>
+				<units>widgets</units>
+			</stock>
+			<flow name="producing">
+				<eqn>Workers*productivity_per_worker</eqn>
+				<non_negative/>
+				<units>widget/mo</units>
+			</flow>
+			<stock name="Workers">
+				<eqn>desired_workers</eqn>
+				<inflow>hiring_or_firing</inflow>
+				<non_negative/>
+				<units>people</units>
+			</stock>
+			<flow name="shipping">
+				<eqn>demand</eqn>
+				<non_negative/>
+				<units>widget/mo</units>
+			</flow>
+			<flow name="hiring or firing">
+				<eqn>workers_gap/time_to_hire_or_fire</eqn>
+				<units>person/mo</units>
+			</flow>
+			<aux name="productivity\nper worker">
+				<eqn>2</eqn>
+				<units>widgets per person per month</units>
+			</aux>
+			<aux name="Desired\nInventory">
+				<eqn>100</eqn>
+				<units>widgets</units>
+			</aux>
+			<aux name="inventory gap">
+				<eqn>Desired_Inventory - Inventory</eqn>
+				<units>widgets</units>
+			</aux>
+			<aux name="desired\nworkers">
+				<eqn>desired_production/productivity_per_worker</eqn>
+				<units>people</units>
+			</aux>
+			<aux name="time to\nhire or fire">
+				<eqn>6</eqn>
+				<units>months</units>
+			</aux>
+			<aux name="inventory\nadjustment time">
+				<eqn>1</eqn>
+				<units>months</units>
+			</aux>
+			<aux name="desired change\nin inventory">
+				<eqn>inventory_gap/inventory_adjustment_time</eqn>
+				<units>widget/mo</units>
+			</aux>
+			<aux name="demand">
+				<eqn>TIME</eqn>
+				<gf>
+					<xscale min="0" max="3"/>
+					<yscale min="0" max="100"/>
+					<ypts>20,20,25,25</ypts>
+				</gf>
+				<units>widget/mo</units>
+			</aux>
+			<aux name="time to adjust\nexpectations">
+				<eqn>6</eqn>
+				<units>months</units>
+			</aux>
+			<aux name="desired\nproduction">
+				<eqn>Expected_Demand + desired_change_in_inventory</eqn>
+				<units>widget/mo</units>
+			</aux>
+			<aux name="workers gap">
+				<eqn>desired_workers - Workers</eqn>
+				<units>people</units>
+			</aux>
+			<stock name="Expected\nDemand">
+				<eqn>demand</eqn>
+				<inflow>changing_expected</inflow>
+				<non_negative/>
+				<units>widget/mo</units>
+			</stock>
+			<flow name="changing\nexpected">
+				<eqn>(demand - Expected_Demand)/time_to_adjust_expectations</eqn>
+				<units>widget/mo/Months</units>
+			</flow>
+		</variables>
+		<views>
+			<style color="black" background="white" font_style="normal" font_weight="normal" text_decoration="none" text_align="center" vertical_text_align="center" font_color="black" font_family="Arial" font_size="10pt" padding="2" border_color="black" border_width="thin" border_style="none">
+				<text_box color="black" background="white" text_align="left" vertical_text_align="top" font_size="12pt"/>
+				<isee:loop_indicator color="black" background="white" vertical_text_align="top" font_size="12pt"/>
+				<numeric_display color="white" background="white" font_size="12pt" border_width="thin" border_style="solid" isee:transparent="false" isee:show_divider="true" isee:show_bounding_box="true" label_side="left"/>
+				<graph color="black" background="white" font_size="12pt" axis_color="#666666" grid_color="#C8C8C8" isee:graph_area_color="white" legend_position="bottom" isee:transparent="false" isee:hide_border="false" axis_title_font_style="normal" axis_title_font_weight="normal" axis_title_text_decoration="none" axis_title_text_align="center" axis_title_vertical_text_align="center" axis_title_font_color="black" axis_title_font_family="Arial" axis_title_font_size="12pt" axis_title_text_padding="2" axis_title_text_border_color="black" axis_title_text_border_width="thin" axis_title_text_border_style="none" axis_label_font_style="normal" axis_label_font_weight="normal" axis_label_text_decoration="none" axis_label_text_align="center" axis_label_vertical_text_align="center" axis_label_font_color="black" axis_label_font_family="Arial" axis_label_font_size="9pt" axis_label_text_padding="2" axis_label_text_border_color="black" axis_label_text_border_width="thin" axis_label_text_border_style="none">
+					<isee:series_styles>
+						<isee:series_style color="blue" thickness="1"/>
+						<isee:series_style color="red" thickness="1" pen_style="dot_dashed"/>
+						<isee:series_style color="fuchsia" thickness="1" pen_style="dotted"/>
+						<isee:series_style color="#008F44" thickness="1" pen_style="dashed"/>
+						<isee:series_style color="#FF7F00" thickness="1"/>
+						<isee:series_style color="#7F00FF" thickness="1" pen_style="dot_dashed"/>
+						<isee:series_style color="#0CA0FF" thickness="1" pen_style="dotted"/>
+						<isee:series_style color="lime" thickness="1" pen_style="dashed"/>
+						<isee:series_style color="#FF007F" thickness="1"/>
+						<isee:series_style color="aqua" thickness="1" pen_style="dot_dashed"/>
+						<isee:series_style color="#F586FF" thickness="1" pen_style="dotted"/>
+						<isee:series_style color="black" thickness="1" pen_style="dashed"/>
+						<isee:series_style color="#C8C8C8" thickness="1"/>
+					</isee:series_styles>
+				</graph>
+				<table color="black" background="#E0E0E0" text_align="right" font_size="12pt" orientation="vertical" wrap_text="false" isee:auto_fit="true" isee:use_alternate_row_colors="false" isee:unlimited_table_length="false" blank_column_width="80" column_width="160" interval="1" report_balances="beginning" report_flows="instantaneous" header_font_style="normal" header_font_weight="normal" header_text_decoration="none" header_text_align="center" header_vertical_text_align="center" header_font_color="black" header_font_family="Arial" header_font_size="12pt" header_text_padding="2" header_text_border_color="black" header_text_border_width="thin" header_text_border_style="none"/>
+				<button color="black" background="#E0E0E0" font_size="12pt" border_width="thin" border_style="solid" transparent="false" corner_radius="0" isee:flat="false" icon_side="top" isee:highlight_on_hover="false" isee:highlight_color="#959595"/>
+				<isee:annotation color="black" background="#E0E0E0" font_size="12pt" border_width="thin" border_style="solid" transparent="false" corner_radius="0" isee:flat="false" icon_side="top" isee:highlight_on_hover="false" isee:highlight_color="#959595" popup_corner_radius="0" popup_background_color="#FFFECF"/>
+				<slider color="#0075FF" background="#E0E0E0" font_size="12pt" num_ticks="3" label_side="top" wrap_title="true" vertical="false" isee:fancy_appearance="false" isee:show_hover_tip="when_deciding" input_expands="true" input_width="100"/>
+				<isee:stacked_container color="black" background="white" text_align="left" vertical_text_align="top" font_size="12pt" padding="6 8" border_color="#999999" border_width="thin" border_style="solid" item_spacing="0" corner_radius="4" selected_item_color="black" selected_item_background="white" item_background="#DDDDDD" transparent_bg="false"/>
+				<isee:dual_slider color="#66CC66" background="silver" font_size="12pt" num_ticks="3" label_side="top" wrap_title="true" isee:show_hover_tip="when_deciding" input_expands="true" input_width="100"/>
+				<isee:sim_speed_slider color="black" background="white"/>
+				<isee:time_slider color="#E95F74" background="silver"/>
+				<isee:pie_input color="black" background="white" font_size="12pt" legend_position="bottom" isee:transparent="false"/>
+				<knob color="#66CC66" background="#E0E0E0" font_size="12pt" label_side="bottom" wrap_title="true"/>
+				<numeric_input color="black" background="#E0E0E0" font_size="12pt" label_side="left" wrap_title="true" input_expands="false" input_width="100"/>
+				<isee:dropdown_input color="black" background="#E0E0E0" font_size="12pt" label_side="left" wrap_title="true" input_expands="false" input_width="100"/>
+				<switch color="black" background="#E0E0E0" font_size="12pt" label_side="top" wrap_title="true" isee:appearance="switch" isee:on_color="green"/>
+				<options color="black" background="white" appearance="radio-buttons" arrangement="vertical"/>
+				<graphical_input color="black" background="#E0E0E0" font_size="12pt" isee:show_hover_tip="true"/>
+				<group_input color="black" background="#E0E0E0" font_size="12pt"/>
+				<lamp color="black" background="white" font_size="9pt"/>
+				<gauge color="black" background="white" font_size="9pt" needle_color="#F09F72" bar_color="#EEEEEE" bar_progress_color="black" appearance="radial" num_major_ticks="11" num_minor_ticks="1" show_numeric_value="true"/>
+				<isee:spatial_map color="black" background="white" font_size="12pt"/>
+				<isee:animation_object color="black" background="white" font_size="12pt"/>
+				<isee:navigation_widget color="black" background="white" text_align="left" vertical_text_align="top" font_size="12pt" padding="6 8" border_color="#999999" border_width="thin" border_style="solid" item_spacing="6" appearance="tabs" corner_radius="4" selected_item_color="black" selected_item_background="white" item_background="#DDDDDD" transparent_bg="false"/>
+				<isee:shape color="black" background="white" text_align="left" vertical_text_align="top" font_size="12pt" border_width="thin" border_style="solid" opacity="1" transparent_background="true" corner_radius="1"/>
+				<isee:selector color="black" background="white" text_align="left" vertical_text_align="top" font_size="12pt"/>
+				<isee:iframe color="black" background="white" text_align="left" vertical_text_align="top" font_size="12pt" border_width="thin" border_style="solid"/>
+				<isee:financial_table color="black" background="#E0E0E0" text_align="right" font_size="12pt" hide_border="false" auto_fit="true" first_column_width="250" other_column_width="100" header_font_style="normal" header_font_weight="bold" header_text_decoration="none" header_text_align="center" header_vertical_text_align="center" header_font_color="black" header_font_family="Arial" header_font_size="14pt" header_text_padding="2" header_text_border_color="black" header_text_border_width="thin" header_text_border_style="none"/>
+			</style>
+			<view isee:show_pages="false" background="white" page_width="768" page_height="588" isee:page_cols="2" isee:page_rows="2" zoom="120" isee:popup_graphs_are_comparative="true" isee:enable_non_negative_highlights="false" type="stock_flow">
+				<style color="black" background="white" font_style="normal" font_weight="normal" text_decoration="none" text_align="center" vertical_text_align="center" font_color="black" font_family="Arial" font_size="10pt" padding="2" border_color="black" border_width="thin" border_style="none">
+					<stock color="blue" background="white" font_color="blue" font_size="9pt" label_side="top">
+						<shape type="rectangle" width="45" height="35"/>
+					</stock>
+					<flow color="blue" background="white" font_color="blue" font_size="9pt" label_side="bottom">
+						<shape type="circle" radius="18"/>
+					</flow>
+					<isee:placeholder color="#228B22" background="white" font_color="#228B22" font_size="9pt" label_side="bottom"/>
+					<module color="blue" background="white" font_color="blue" font_size="9pt" label_side="top">
+						<shape type="rectangle" width="55" height="45"/>
+					</module>
+					<aux color="blue" background="white" font_color="blue" font_size="9pt" label_side="bottom">
+						<shape type="circle" radius="18"/>
+					</aux>
+					<group color="red" background="white" font_color="red" font_size="9pt"/>
+					<connector color="#FF007F" background="white" font_color="#FF007F" font_size="9pt" isee:thickness="1"/>
+					<text_box color="black" background="white" text_align="left" vertical_text_align="top" font_size="12pt"/>
+					<isee:loop_indicator color="black" background="white" vertical_text_align="top" font_size="12pt"/>
+					<numeric_display color="white" background="white" font_size="12pt" border_width="thin" border_style="solid" isee:transparent="false" isee:show_divider="true" isee:show_bounding_box="true" label_side="left"/>
+					<graph color="black" background="white" font_size="12pt" axis_color="#666666" grid_color="#C8C8C8" isee:graph_area_color="white" legend_position="bottom" isee:transparent="false" isee:hide_border="false" axis_title_font_style="normal" axis_title_font_weight="normal" axis_title_text_decoration="none" axis_title_text_align="center" axis_title_vertical_text_align="center" axis_title_font_color="black" axis_title_font_family="Arial" axis_title_font_size="12pt" axis_title_text_padding="2" axis_title_text_border_color="black" axis_title_text_border_width="thin" axis_title_text_border_style="none" axis_label_font_style="normal" axis_label_font_weight="normal" axis_label_text_decoration="none" axis_label_text_align="center" axis_label_vertical_text_align="center" axis_label_font_color="black" axis_label_font_family="Arial" axis_label_font_size="9pt" axis_label_text_padding="2" axis_label_text_border_color="black" axis_label_text_border_width="thin" axis_label_text_border_style="none">
+						<isee:series_styles>
+							<isee:series_style color="blue" thickness="1"/>
+							<isee:series_style color="red" thickness="1" pen_style="dot_dashed"/>
+							<isee:series_style color="fuchsia" thickness="1" pen_style="dotted"/>
+							<isee:series_style color="#008F44" thickness="1" pen_style="dashed"/>
+							<isee:series_style color="#FF7F00" thickness="1"/>
+							<isee:series_style color="#7F00FF" thickness="1" pen_style="dot_dashed"/>
+							<isee:series_style color="#0CA0FF" thickness="1" pen_style="dotted"/>
+							<isee:series_style color="lime" thickness="1" pen_style="dashed"/>
+							<isee:series_style color="#FF007F" thickness="1"/>
+							<isee:series_style color="aqua" thickness="1" pen_style="dot_dashed"/>
+							<isee:series_style color="#F586FF" thickness="1" pen_style="dotted"/>
+							<isee:series_style color="black" thickness="1" pen_style="dashed"/>
+							<isee:series_style color="#C8C8C8" thickness="1"/>
+						</isee:series_styles>
+					</graph>
+					<table color="black" background="#E0E0E0" text_align="right" font_size="12pt" orientation="vertical" wrap_text="false" isee:auto_fit="true" isee:use_alternate_row_colors="false" isee:unlimited_table_length="false" blank_column_width="80" column_width="160" interval="1" report_balances="beginning" report_flows="instantaneous" header_font_style="normal" header_font_weight="normal" header_text_decoration="none" header_text_align="center" header_vertical_text_align="center" header_font_color="black" header_font_family="Arial" header_font_size="12pt" header_text_padding="2" header_text_border_color="black" header_text_border_width="thin" header_text_border_style="none"/>
+				</style>
+				<connector uid="1" isee:thickness="1" angle="115.201">
+					<from>Workers</from>
+					<to>producing</to>
+				</connector>
+				<connector uid="2" isee:thickness="1" polarity="-" isee:polarity_placement="outside" angle="345.041">
+					<from>Inventory</from>
+					<to>inventory_gap</to>
+				</connector>
+				<connector uid="3" isee:thickness="1" angle="184.399">
+					<from>Desired_Inventory</from>
+					<to>inventory_gap</to>
+				</connector>
+				<connector uid="4" isee:thickness="1" angle="310.601">
+					<from>inventory_gap</from>
+					<to>desired_change_in_inventory</to>
+				</connector>
+				<connector uid="5" isee:thickness="1" angle="352.214">
+					<from>time_to_hire_or_fire</from>
+					<to>hiring_or_firing</to>
+				</connector>
+				<connector uid="6" isee:thickness="1" angle="107.354">
+					<from>productivity_per_worker</from>
+					<to>producing</to>
+				</connector>
+				<connector uid="7" isee:thickness="1" angle="330.001">
+					<from>productivity_per_worker</from>
+					<to>desired_workers</to>
+				</connector>
+				<connector uid="8" isee:thickness="1" angle="180">
+					<from>inventory_adjustment_time</from>
+					<to>desired_change_in_inventory</to>
+				</connector>
+				<connector uid="10" isee:thickness="1" angle="134.485">
+					<from>demand</from>
+					<to>shipping</to>
+				</connector>
+				<connector uid="11" isee:thickness="1" angle="312.709">
+					<from>desired_change_in_inventory</from>
+					<to>desired_production</to>
+				</connector>
+				<connector uid="12" isee:thickness="1" angle="208.113">
+					<from>desired_production</from>
+					<to>desired_workers</to>
+				</connector>
+				<connector uid="13" isee:thickness="1" angle="211.405">
+					<from>desired_workers</from>
+					<to>workers_gap</to>
+				</connector>
+				<connector uid="14" isee:thickness="1" angle="264.964">
+					<from>Workers</from>
+					<to>workers_gap</to>
+				</connector>
+				<connector uid="15" isee:thickness="1" angle="102.529">
+					<from>workers_gap</from>
+					<to>hiring_or_firing</to>
+				</connector>
+				<stacked_container uid="17" x="497.73" y="36.5004" width="485.707" height="342.5">
+					<graph isee:graph_area_color="white" width="485.707" height="342.5" type="time_series" show_grid="false" isee:tick_type="none" include_units_in_legend="false" plot_numbers="false" isee:label_pie_slices="false" isee:show_pie_borders="true" num_x_grid_lines="0" num_y_grid_lines="0" num_x_labels="5" num_y_labels="3" isee:fill_intensity="0.1" isee:allow_zero_axis="true" left_axis_multi_scale="true" left_axis_auto_scale="true" left_include_units="true" right_axis_multi_scale="false" right_axis_auto_scale="true" right_include_units="true">
+						<plot color="blue" isee:keep_zero_visible="false" pen_width="2" index="0" show_y_axis="true">
+							<entity name="Workers"/>
+						</plot>
+						<plot color="red" pen_style="dotted" isee:keep_zero_visible="false" pen_width="2.5" index="1" show_y_axis="true">
+							<entity name="Inventory"/>
+							<scale min="86" max="114"/>
+						</plot>
+					</graph>
+					<graph isee:graph_area_color="white" width="485.707" height="342.5" type="time_series" show_grid="false" isee:tick_type="none" include_units_in_legend="false" plot_numbers="false" isee:label_pie_slices="false" isee:show_pie_borders="true" num_x_grid_lines="0" num_y_grid_lines="0" num_x_labels="5" num_y_labels="3" isee:fill_intensity="0.1" isee:allow_zero_axis="true" left_axis_multi_scale="true" left_axis_auto_scale="true" left_include_units="true" right_axis_multi_scale="false" right_axis_auto_scale="true" right_include_units="true">
+						<plot color="blue" isee:keep_zero_visible="false" pen_width="2" index="0" show_y_axis="true">
+							<entity name="demand"/>
+							<scale min="10" max="40"/>
+						</plot>
+						<plot color="red" isee:keep_zero_visible="false" pen_width="2" index="1" show_y_axis="true">
+							<entity name="Inventory"/>
+							<scale min="86" max="114"/>
+						</plot>
+						<plot color="fuchsia" isee:keep_zero_visible="false" pen_width="2" index="2" show_y_axis="true">
+							<entity name="desired_change_in_inventory"/>
+							<scale min="-13" max="13"/>
+						</plot>
+						<plot color="#008F44" isee:keep_zero_visible="false" pen_width="2" index="3" show_y_axis="true">
+							<entity name="Workers"/>
+						</plot>
+						<plot color="#FF7F00" isee:keep_zero_visible="false" pen_width="2" index="4" show_y_axis="true">
+							<entity name="producing"/>
+							<scale min="10" max="40"/>
+						</plot>
+					</graph>
+				</stacked_container>
+				<connector uid="18" isee:thickness="1" angle="326.05">
+					<from>Expected_Demand</from>
+					<to>changing_expected</to>
+				</connector>
+				<connector uid="19" isee:thickness="1" angle="202.266">
+					<from>Expected_Demand</from>
+					<to>desired_production</to>
+				</connector>
+				<connector uid="20" isee:thickness="1" angle="314.998">
+					<from>demand</from>
+					<to>changing_expected</to>
+				</connector>
+				<connector uid="21" isee:thickness="1" angle="78.6517">
+					<from>time_to_adjust_expectations</from>
+					<to>changing_expected</to>
+				</connector>
+				<stock label_side="center" x="169" y="80" name="Inventory"/>
+				<flow label_side="top" x="106.75" y="80" name="producing">
+					<pts>
+						<pt x="67" y="80"/>
+						<pt x="146.5" y="80"/>
+					</pts>
+				</flow>
+				<stock label_side="center" x="50.6667" y="227.167" name="Workers"/>
+				<flow label_side="top" x="218.75" y="80" name="shipping">
+					<pts>
+						<pt x="191.5" y="80"/>
+						<pt x="270" y="80"/>
+					</pts>
+				</flow>
+				<flow x="112.917" y="227.167" name="hiring or firing">
+					<pts>
+						<pt x="164.667" y="227.167"/>
+						<pt x="73.1667" y="227.167"/>
+					</pts>
+				</flow>
+				<aux x="165.375" y="155.5" name="productivity\nper worker"/>
+				<aux label_side="right" x="313.083" y="105" name="Desired\nInventory"/>
+				<aux label_side="right" x="253" y="124" name="inventory gap"/>
+				<aux label_angle="289.272" x="231" y="257.667" name="desired\nworkers"/>
+				<aux x="68.1663" y="165.667" name="time to\nhire or fire"/>
+				<aux label_side="right" x="343.417" y="140" name="inventory\nadjustment time"/>
+				<aux label_side="right" x="269" y="171" name="desired change\nin inventory"/>
+				<aux x="416.813" y="69.1667" name="demand"/>
+				<aux x="441.833" y="249.167" name="time to adjust\nexpectations"/>
+				<aux x="297.834" y="234.333" name="desired\nproduction"/>
+				<aux x="158.167" y="276.667" name="workers gap"/>
+				<stock label_side="center" x="353.125" y="189.167" name="Expected\nDemand"/>
+				<flow x="416.813" y="189.167" name="changing\nexpected">
+					<pts>
+						<pt x="470" y="189.167"/>
+						<pt x="375.625" y="189.167"/>
+					</pts>
+				</flow>
+				<stacked_container uid="22" x="441.833" y="521.579">
+					<table width="350" height="250">
+						<item type="time"/>
+						<item>
+							<entity name="Expected_Demand"/>
+						</item>
+						<item>
+							<entity name="Inventory"/>
+						</item>
+						<item>
+							<entity name="Workers"/>
+						</item>
+						<item>
+							<entity name="changing_expected"/>
+						</item>
+						<item>
+							<entity name="hiring_or_firing"/>
+						</item>
+						<item>
+							<entity name="producing"/>
+						</item>
+						<item>
+							<entity name="shipping"/>
+						</item>
+					</table>
+				</stacked_container>
+			</view>
+		</views>
+	</model>
+</xmile>
+

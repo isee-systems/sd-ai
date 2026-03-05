@@ -48,7 +48,7 @@ You can only use the information given to you by the user in your work. Any info
         googleKey: null,
         behaviorContent: null,
         feedbackContent: null,
-        underlyingModel: LLMWrapper.DEFAULT_MODEL,
+        underlyingModel: LLMWrapper.NON_BUILD_DEFAULT_MODEL,
         systemPrompt: LTMNarrativeBrain.DEFAULT_SYSTEM_PROMPT,
         behaviorPrompt: LTMNarrativeBrain.DEFAULT_BEHAVIOR_PROMPT,
         feedbackPrompt: LTMNarrativeBrain.DEFAULT_FEEDBACK_PROMPT,
@@ -69,7 +69,7 @@ You can only use the information given to you by the user in your work. Any info
             this.#data.backgroundPrompt = this.#data.backgroundPrompt.trim() + "\n\n{backgroundKnowledge}";
         }
 
-        this.#llmWrapper = new LLMWrapper(params);
+        this.#llmWrapper = new LLMWrapper(this.#data);
     }
 
     #isValidFeedbackContent() {
@@ -190,6 +190,8 @@ You can only use the information given to you by the user in your work. Any info
                 throw new ResponseFormatError("Bad JSON returned by underlying LLM");
             }
             return await this.#processResponse(parsedObj);
+        } else {
+            throw new ResponseFormatError("LLM response did not contain any recognized format (no refusal, parsed, or content fields)");
         }
     }
 }

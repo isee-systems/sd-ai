@@ -5,6 +5,7 @@
 
 const config = {
     "port": 3000,
+    "reporterURL": process.env.REPORTER_URL || null, // Optional URL to POST engine usage metrics
 };
 
 export default config

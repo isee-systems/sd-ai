@@ -35,7 +35,7 @@ It ensures the AI’s responses align with the intended user experience, such as
     }
 
     additionalParameters()  {
-        let parameters = LLMWrapper.additionalParameters();
+        let parameters = LLMWrapper.additionalParameters(LLMWrapper.BUILD_DEFAULT_MODEL);
 
         return parameters.concat([{
                 name: "systemPrompt",

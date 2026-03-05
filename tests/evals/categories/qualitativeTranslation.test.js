@@ -177,4 +177,114 @@ describe('CausalTranslation Evaluate', () => {
       expect(failures[0].type).toBe('Real relationships not found');
     });
   });
+
+  describe('input mutation safety', () => {
+    it('should not mutate generatedResponse objects (AC5.1)', () => {
+      const generatedResponse = {
+        model: {
+          relationships: [
+            {
+              from: 'frimbulators',
+              to: 'whatajigs',
+              polarity: '+',
+              reasoning: 'This is why this relationship exists',
+              polarityReasoning: 'This is why the polarity is positive'
+            }
+          ]
+        }
+      };
+
+      const groundTruth = [
+        { from: 'frimbulators', to: 'whatajigs', polarity: '+' }
+      ];
+
+      const beforeSnapshot = structuredClone(generatedResponse);
+
+      evaluate(generatedResponse, groundTruth);
+
+      expect(generatedResponse).toEqual(beforeSnapshot);
+      expect(generatedResponse.model.relationships[0]).toHaveProperty('reasoning');
+      expect(generatedResponse.model.relationships[0]).toHaveProperty('polarityReasoning');
+    });
+
+    it('should not mutate groundTruth objects (AC5.1)', () => {
+      const generatedResponse = {
+        model: {
+          relationships: [
+            { from: 'frimbulators', to: 'whatajigs', polarity: '+' }
+          ]
+        }
+      };
+
+      const groundTruth = [
+        { from: 'frimbulators', to: 'whatajigs', polarity: '+' },
+        { from: 'whatajigs', to: 'balacks', polarity: '-' }
+      ];
+
+      const beforeSnapshot = structuredClone(groundTruth);
+
+      evaluate(generatedResponse, groundTruth);
+
+      expect(groundTruth).toEqual(beforeSnapshot);
+      expect(groundTruth[0]).not.toHaveProperty('textRepresentation');
+      expect(groundTruth[1]).not.toHaveProperty('textRepresentation');
+    });
+
+    it('should return identical results when called twice with same inputs (AC5.4)', () => {
+      const generatedResponse = {
+        model: {
+          relationships: [
+            { from: 'frimbulators', to: 'whatajigs', polarity: '+' },
+            { from: 'fake', to: 'relationship', polarity: '-' }
+          ]
+        }
+      };
+
+      const groundTruth = [
+        { from: 'frimbulators', to: 'whatajigs', polarity: '+' },
+        { from: 'whatajigs', to: 'balacks', polarity: '-' }
+      ];
+
+      const firstResult = evaluate(generatedResponse, groundTruth);
+      const secondResult = evaluate(generatedResponse, groundTruth);
+
+      expect(firstResult).toEqual(secondResult);
+    });
+
+    it('should preserve both reasoning fields and not add textRepresentation in complex scenario', () => {
+      const generatedResponse = {
+        model: {
+          relationships: [
+            {
+              from: 'alpha',
+              to: 'beta',
+              polarity: '+',
+              reasoning: 'correlation observed',
+              polarityReasoning: 'increases together'
+            },
+            {
+              from: 'gamma',
+              to: 'delta',
+              polarity: '-',
+              reasoning: 'inverse pattern',
+              polarityReasoning: 'one decreases when other increases'
+            }
+          ]
+        }
+      };
+
+      const groundTruth = [
+        { from: 'alpha', to: 'beta', polarity: '+' },
+        { from: 'gamma', to: 'delta', polarity: '-' }
+      ];
+
+      const beforeGeneratedResponse = structuredClone(generatedResponse);
+      const beforeGroundTruth = structuredClone(groundTruth);
+
+      evaluate(generatedResponse, groundTruth);
+
+      expect(generatedResponse).toEqual(beforeGeneratedResponse);
+      expect(groundTruth).toEqual(beforeGroundTruth);
+    });
+  });
 });

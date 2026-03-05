@@ -12,6 +12,10 @@ const leaderboardConfig = {
   'sfd': {
     title: 'Stock & Flow Diagrams',
     description: 'The leaderboard showcases engines\' performance across two tests: quantitative-causal-translation, which tests the engine\'s ability to translate quantitative stock-and-flow model descriptions with gibberish variables into simulating models by identifying causal relationships involving fixed, proportional, and interdependent flows; and quantitative-causal-reasoning, which measures the engine\'s capacity to generate simulating stock and flow models in complex contexts by evaluating its outputs against key expert-specified concepts. Each engine\'s results display its individual scores on all four tests, an overall combined score reflecting total performance, and a speed ranking that highlights how efficiently it completed the evaluations. This comprehensive leaderboard enables direct comparison of accuracy, reasoning, and execution speed to drive improvements in modeling capability and efficiency.'
+  },
+  'discussion': {
+    title: 'Discussion',
+    description: 'The leaderboard evaluates engines\' ability to engage in meaningful discussion about models. It tests performance across three key areas: feedback explanation, which measures how well engines can explain the purpose and behavior of feedback loops in models; model building steps, which assesses the engine\'s ability to articulate the reasoning and steps involved in constructing models; and error fixing suggestions, which evaluates how effectively engines can identify issues in models and propose actionable fixes. Each engine\'s results display its individual scores on all three tests, an overall combined score reflecting total performance, and a speed ranking to highlight efficiency.'
   }
 };
 

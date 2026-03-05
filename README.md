@@ -75,35 +75,72 @@ Contains the engines used by [Stella](https://www.iseesystems.com/store/products
 {
     variables: [{
         name: <string>,
-        type: <string - stock|flow|variable>,
+        type: <string>, # stock|flow|variable
         equation?: <string>,
         documentation?: <string>,
         units?: <string>,
         inflows?: Array<string>,
         outflows?: Array<string>,
+        dimensions?: Array<string>, # Array of dimension names for arrayed variables
+        arrayEquations?: [{ # Used for arrayed variables with element-specific equations
+            equation: <string>,
+            forElements: Array<string> # Array element names matching dimensions
+        }],
+        crossLevelGhostOf?: <string>, # For modular models: references source variable
         graphicalFunction?: {
             points: [
                 {x: <number>, y: <number>}
                 ...
             ]
         }
-    }], 
+    }],
     relationships: [{
-        "reasoning?": <string, explanation for why this relationship is here> 
-        "from": <string, the variable the connection starts wtih>,
-        "to": <string, the variable the connection ends with>,  
-        "polarity": <string "+" or "-" or "" >, 
-        "polarityReasoning?": <string explanation for why this polarity was chosen> 
+        reasoning?: <string>, # Explanation for why this relationship is here
+        from: <string>, # The variable the connection starts with
+        to: <string>, # The variable the connection ends with
+        polarity: <string>, # "+" or "-" or ""
+        polarityReasoning?: <string> # Explanation for why this polarity was chosen
+    }],
+    modules?: [{ # Module definitions for hierarchical model organization
+        name: <string>, # Simple module name (alphanumeric + underscores only)
+        parentModule: <string> # Parent module name (empty string if top-level)
     }],
     specs?: {
         startTime: <number>,
         stopTime: <number>,
         dt?: <number>,
-        timeUnits?: <string>
+        timeUnits?: <string>,
+        arrayDimensions?: [{ # Array dimension definitions
+            name: <string>, # Singular, alphanumeric dimension name
+            type: <string>, # "labels" or "numeric"
+            size: <number>, # Number of elements in dimension
+            elements: Array<string> # Element names for this dimension
+        }]
     }
 }
-```  
+```
 ? denotes an optional attribute
+
+### Arrays in SD-JSON
+Variables can be arrayed over one or more dimensions to create multi-dimensional arrays:
+- **Dimensions**: Defined in `specs.arrayDimensions` with name, type (labels/numeric), size, and elements
+- **Arrayed Variables**: Reference dimensions by name in their `dimensions` array (order matters)
+- **Array Equations**:
+  - If all elements use the SAME formula: uses `equation` field only
+  - If elements have DIFFERENT formulas: uses `arrayEquations` array with element-specific equations
+
+### Modules in SD-JSON
+Models can be organized into modules for better structure and encapsulation:
+- **Module Definition**: Modules are defined in the top-level `modules` array:
+  - `name`: Simple module name (alphanumeric + underscores, no spaces, never module-qualified)
+  - `parentModule`: Name of containing module (empty string for top-level modules)
+  - Modules can be nested to create hierarchical structures
+- **Module Naming in Variables**: Use dot notation: `ModuleName.variableName` (e.g., `Hares.population`, `Lynx.births`)
+- **Ghost Variables**: For inter-module references, create cross-level ghost variables:
+  - Set `crossLevelGhostOf` to the fully qualified source variable name
+  - Leave `equation` field empty (empty string)
+  - Ghost variable has same local name as source but exists in consuming module
+  - All equations in consuming module reference the ghost, not the original source
 
 ## Discussion Engine JSON response
 ```
@@ -140,12 +177,13 @@ Contains the engines used by [Stella](https://www.iseesystems.com/store/products
 ```
 
 # Setup
-1. fork this repo and git clone your fork locally 
+1. fork this repo and git clone your fork locally
 2. create an `.env` file at the top level which has the following keys:
 ```
-OPENAI_API_KEY="sk-asdjkshd" # if you're doing work with engines that use the LLMWrapper class in utils.js (quantitative, qualitative, seldon, etc.) 
-GOOGLE_API_KEY="asdjkshd" # if you're doing work with engines using Gemini models (causal-chains, seldon, quantitative, qualitative) 
+OPENAI_API_KEY="sk-asdjkshd" # if you're doing work with engines that use the LLMWrapper class in utils.js (quantitative, qualitative, seldon, etc.)
+GOOGLE_API_KEY="asdjkshd" # if you're doing work with engines using Gemini models (causal-chains, seldon, quantitative, qualitative)
 AUTHENTICATION_KEY="my_secret_key" # only needed for securing publically accessible deployments. Requires client pass an Authentication header matching this value. e.g. `curl -H "Authentication: my_super_secret_value_in_env_file"` to the engine generate request only
+REPORTER_URL="https://your-metrics-server.com/api/metrics" # optional URL to POST engine usage metrics to. If not set, metrics reporting is disabled.
 ```
 3. npm install 
 4. npm start
@@ -156,6 +194,36 @@ AUTHENTICATION_KEY="my_secret_key" # only needed for securing publically accessi
 We recommend VSCode using a launch.json for the Node type applications (you get a debugger, and hot-reloading)
 
 If you wish to run using the causal-chains engine you'll need to install the [Go toolchain](https://go.dev/doc/install) onto your PATH.
+
+## Metrics Reporting
+SD-AI includes optional metrics reporting via the `GenerateMetricsReporter` class. When enabled, it automatically tracks and reports usage data for every engine generation request.
+
+### Configuration
+Set the `REPORTER_URL` environment variable in your `.env` file to enable metrics reporting:
+```
+REPORTER_URL="https://your-metrics-server.com/api/metrics"
+```
+
+If `REPORTER_URL` is not set or is empty, metrics reporting is disabled and no HTTP requests are made.
+
+### Reported Metrics
+For each call to `/api/v1/:engine/generate`, the following JSON data is posted to the configured URL:
+```json
+{
+  "engine": "quantitative",
+  "underlyingModel": "gpt-4o-mini",
+  "duration": 1234,
+  "timestamp": "2024-01-15T10:30:00.000Z"
+}
+```
+
+**Fields:**
+- `engine` (string): The name of the engine used (e.g., "quantitative", "qualitative", "seldon")
+- `underlyingModel` (string|null): The underlying LLM model specified in the request body, or null if not provided
+- `duration` (number): Time in milliseconds for the generate call to complete
+- `timestamp` (string): ISO 8601 timestamp of when the report was generated
+
+The reporter sends metrics asynchronously and will not block or affect the engine response, even if the reporting endpoint is unavailable.
 
 ## Testing
 ### Unit Tests

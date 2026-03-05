@@ -6,6 +6,8 @@ describe('LLMWrapper', () => {
 
     beforeEach(() => {
       llmWrapper = new LLMWrapper({
+        openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         underlyingModel: 'gemini-2.5-flash'
       });
@@ -232,6 +234,8 @@ describe('LLMWrapper', () => {
   describe('ModelCapabilities', () => {
     it('should identify Gemini models correctly', () => {
       const wrapper = new LLMWrapper({
+        openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-key',
         underlyingModel: 'gemini-2.5-flash'
       });
@@ -251,6 +255,7 @@ describe('LLMWrapper', () => {
     it('should identify OpenAI models correctly', () => {
       const wrapper = new LLMWrapper({
         openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         underlyingModel: 'gpt-4o'
       });
 
@@ -261,6 +266,8 @@ describe('LLMWrapper', () => {
   describe('Cross-model empty content handling', () => {
     it('should ensure Gemini never receives messages with no content', () => {
       const llmWrapper = new LLMWrapper({
+        openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
         underlyingModel: 'gemini-2.5-flash'
       });
@@ -321,6 +328,7 @@ describe('LLMWrapper', () => {
       it('should parse o3-mini with low reasoning effort', () => {
         const wrapper = new LLMWrapper({
           openAIKey: 'test-key',
+          anthropicKey: 'test-claude-key',
           underlyingModel: 'o3-mini low'
         });
 
@@ -335,6 +343,7 @@ describe('LLMWrapper', () => {
       it('should parse o3-mini with medium reasoning effort', () => {
         const wrapper = new LLMWrapper({
           openAIKey: 'test-key',
+          anthropicKey: 'test-claude-key',
           underlyingModel: 'o3-mini medium'
         });
 
@@ -347,6 +356,7 @@ describe('LLMWrapper', () => {
       it('should parse o3-mini with high reasoning effort', () => {
         const wrapper = new LLMWrapper({
           openAIKey: 'test-key',
+          anthropicKey: 'test-claude-key',
           underlyingModel: 'o3-mini high'
         });
 
@@ -361,6 +371,7 @@ describe('LLMWrapper', () => {
       it('should parse o3 with low reasoning effort', () => {
         const wrapper = new LLMWrapper({
           openAIKey: 'test-key',
+          anthropicKey: 'test-claude-key',
           underlyingModel: 'o3 low'
         });
 
@@ -375,6 +386,7 @@ describe('LLMWrapper', () => {
       it('should parse o3 with medium reasoning effort', () => {
         const wrapper = new LLMWrapper({
           openAIKey: 'test-key',
+          anthropicKey: 'test-claude-key',
           underlyingModel: 'o3 medium'
         });
 
@@ -387,6 +399,7 @@ describe('LLMWrapper', () => {
       it('should parse o3 with high reasoning effort', () => {
         const wrapper = new LLMWrapper({
           openAIKey: 'test-key',
+          anthropicKey: 'test-claude-key',
           underlyingModel: 'o3 high'
         });
 
@@ -401,6 +414,7 @@ describe('LLMWrapper', () => {
       it('should parse gpt-5.1 with medium reasoning effort', () => {
         const wrapper = new LLMWrapper({
           openAIKey: 'test-key',
+          anthropicKey: 'test-claude-key',
           underlyingModel: 'gpt-5.1 medium'
         });
 
@@ -415,6 +429,7 @@ describe('LLMWrapper', () => {
       it('should parse gpt-5.1 with low reasoning effort', () => {
         const wrapper = new LLMWrapper({
           openAIKey: 'test-key',
+          anthropicKey: 'test-claude-key',
           underlyingModel: 'gpt-5.1 low'
         });
 
@@ -429,6 +444,7 @@ describe('LLMWrapper', () => {
       it('should handle gpt-4o without parsing', () => {
         const wrapper = new LLMWrapper({
           openAIKey: 'test-key',
+          anthropicKey: 'test-claude-key',
           underlyingModel: 'gpt-4o'
         });
 
@@ -442,6 +458,8 @@ describe('LLMWrapper', () => {
 
       it('should handle gemini models', () => {
         const wrapper = new LLMWrapper({
+          openAIKey: 'test-key',
+          anthropicKey: 'test-claude-key',
           googleKey: 'test-key',
           underlyingModel: 'gemini-2.5-flash'
         });
@@ -473,6 +491,7 @@ describe('LLMWrapper', () => {
       it('should use "developer" for OpenAI models with system mode', () => {
         const wrapper = new LLMWrapper({
           openAIKey: 'test-key',
+          anthropicKey: 'test-claude-key',
           underlyingModel: 'gpt-4o'
         });
 
@@ -482,6 +501,8 @@ describe('LLMWrapper', () => {
 
       it('should use "system" for Gemini models', () => {
         const wrapper = new LLMWrapper({
+          openAIKey: 'test-key',
+          anthropicKey: 'test-claude-key',
           googleKey: 'test-key',
           underlyingModel: 'gemini-2.5-flash'
         });
@@ -503,6 +524,7 @@ describe('LLMWrapper', () => {
       it('should use "user" for o1-mini which does not have system mode', () => {
         const wrapper = new LLMWrapper({
           openAIKey: 'test-key',
+          anthropicKey: 'test-claude-key',
           underlyingModel: 'o1-mini'
         });
 
@@ -515,6 +537,7 @@ describe('LLMWrapper', () => {
       it('should return default temperature of 0 for models with temperature support', () => {
         const wrapper = new LLMWrapper({
           openAIKey: 'test-key',
+          anthropicKey: 'test-claude-key',
           underlyingModel: 'gpt-4o'
         });
 
@@ -525,6 +548,7 @@ describe('LLMWrapper', () => {
       it('should return custom default temperature when specified', () => {
         const wrapper = new LLMWrapper({
           openAIKey: 'test-key',
+          anthropicKey: 'test-claude-key',
           underlyingModel: 'gpt-4o'
         });
 
@@ -535,6 +559,7 @@ describe('LLMWrapper', () => {
       it('should return undefined for models without temperature support', () => {
         const wrapper = new LLMWrapper({
           openAIKey: 'test-key',
+          anthropicKey: 'test-claude-key',
           underlyingModel: 'o3-mini low'
         });
 
@@ -552,6 +577,7 @@ describe('LLMWrapper', () => {
         // it returns undefined instead.
         const wrapper = new LLMWrapper({
           openAIKey: 'test-key',
+          anthropicKey: 'test-claude-key',
           underlyingModel: 'o1-mini'
         });
 
@@ -565,6 +591,7 @@ describe('LLMWrapper', () => {
       it('should return undefined for models without temperature support even if no system mode', () => {
         const wrapper = new LLMWrapper({
           openAIKey: 'test-key',
+          anthropicKey: 'test-claude-key',
           underlyingModel: 'o3 high'
         });
 
@@ -579,6 +606,7 @@ describe('LLMWrapper', () => {
       it('should return all four required parameters', () => {
         const wrapper = new LLMWrapper({
           openAIKey: 'test-key',
+          anthropicKey: 'test-claude-key',
           underlyingModel: 'gpt-4o'
         });
 
@@ -593,6 +621,7 @@ describe('LLMWrapper', () => {
       it('should have exactly 4 properties', () => {
         const wrapper = new LLMWrapper({
           openAIKey: 'test-key',
+          anthropicKey: 'test-claude-key',
           underlyingModel: 'o3-mini medium'
         });
 

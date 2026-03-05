@@ -27,6 +27,8 @@
  * @module categories/conformance
  */
 
+import { validateEvaluationResult } from '../evaluationSchema.js';
+
 /**
  * Returns the description for this category
  * @returns {string} The description describing this category
@@ -283,9 +285,9 @@ export const evaluate = function(generatedResponse, requirements) {
   const fails = [];
 
   if (requirements.variables) {
-    requirements.variables = requirements.variables.map((v) => { return v.toLowerCase() });
-    
-    for (const v of requirements.variables) {
+    const lowerCaseVariables = requirements.variables.map((v) => { return v.toLowerCase() });
+
+    for (const v of lowerCaseVariables) {
       if (!vars.has(v)) {
         fails.push({
           type: "Missing required variable",
@@ -323,7 +325,7 @@ export const evaluate = function(generatedResponse, requirements) {
     });
   }
 
-  return fails;
+  return validateEvaluationResult(fails);
 };
 
 /**

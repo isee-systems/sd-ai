@@ -1,0 +1,372 @@
+<?xml version="1.0" encoding="utf-8"?>
+<xmile version="1.0" xmlns="http://docs.oasis-open.org/xmile/ns/XMILE/v1.0" xmlns:isee="http://iseesystems.com/XMILE">
+	<header>
+		<smile version="1.0" namespace="std, isee" uses_arrays="1"/>
+		<name>bass_diffusion</name>
+		<uuid>e5656504-8610-41af-aa70-89d4932fd8be</uuid>
+		<vendor>isee systems, inc.</vendor>
+		<product version="4.1.2" isee:build_number="development" isee:saved_by_v1="true" lang="en">Stella Architect</product>
+	</header>
+	<ai_information>
+		<status verified="false"/>
+		<settings>
+			<isee:setting key="problemStatement" value=""/>
+			<isee:setting key="quantitative/backgroundKnowledge" value=""/>
+		</settings>
+	</ai_information>
+	<sim_specs isee:sim_duration="0" isee:run_prefix="Run" isee:simulation_delay="0" isee:restore_on_start="false" method="Euler" time_units="Years" isee:instantaneous_flows="false" isee:ignore_module_errors="false" isee:strict_units="false" isee:loop_scores="true" isee:loop_exhaustive_allowed="1000">
+		<start>0</start>
+		<stop>15</stop>
+		<dt reciprocal="true">16</dt>
+	</sim_specs>
+	<dimensions>
+		<dim name="Dim_Name_1" size="1"/>
+	</dimensions>
+	<isee:prefs saved_runs="5" keep="false" show_module_prefix="false" live_update_on_drag="false" show_restore_buttons="false" layer="model" isee:design="Deluxe Prev-Next Blue Green Pastel" isee:design_custom="false" interface_scale_ui="true" interface_max_page_width="10000" interface_max_page_height="10000" interface_min_page_width="0" interface_min_page_height="0" rifp="false"/>
+	<isee:multiplayer_settings include_chat="true" allow_observers="false" advance_time_increment="1" max_advance_time_in_ms="0" model_stops_when_players_drop="false" observer_start_page="home_page" enabled="false"/>
+	<isee:time_formats default_format="Builtin">
+		<isee:time_format name="Builtin" type="adaptive"/>
+		<isee:time_format name="Number Not Scaled With Precision of 0.1" precision="0.1" scale_by="1" type="number"/>
+	</isee:time_formats>
+	<isee:number_format_extenders/>
+	<default_format scale_by="1"/>
+	<model_units>
+		<unit name="Customers">
+			<eqn/>
+			<alias>customer</alias>
+		</unit>
+		<unit name="Dimensionless">
+			<eqn>1</eqn>
+			<alias>dmnl</alias>
+			<alias>unitless</alias>
+			<alias>fraction</alias>
+		</unit>
+		<unit name="Years">
+			<eqn/>
+			<alias>yr</alias>
+			<alias>year</alias>
+		</unit>
+		<unit name="people per person per year">
+			<eqn>people/person/yr</eqn>
+		</unit>
+		<unit name="per US dollar">
+			<eqn>1/USD</eqn>
+		</unit>
+		<unit name="US dollars per widget">
+			<eqn>USD/widget</eqn>
+		</unit>
+		<unit name="widgets per customer">
+			<eqn>widget/customer</eqn>
+		</unit>
+		<unit name="widgets per year">
+			<eqn>widget/yr</eqn>
+		</unit>
+		<unit name="customers per customer per year">
+			<eqn>customers/customer/yr</eqn>
+		</unit>
+	</model_units>
+	<model>
+		<isee:extra_collection_variables>
+			<isee:extra_collection_variable name="Adopters"/>
+			<isee:extra_collection_variable name="adopting"/>
+			<isee:extra_collection_variable name="adoption_from_word_of_mouth"/>
+			<isee:extra_collection_variable name="Potential_Adopters"/>
+		</isee:extra_collection_variables>
+		<variables>
+			<stock name="Potential\nAdopters">
+				<eqn>Market_Size - Adopters</eqn>
+				<outflow>adopting</outflow>
+				<non_negative/>
+				<units>customers</units>
+			</stock>
+			<stock name="Adopters">
+				<eqn>1</eqn>
+				<inflow>adopting</inflow>
+				<non_negative/>
+				<units>customers</units>
+			</stock>
+			<flow name="adopting">
+				<eqn>adoption_from_word_of_mouth</eqn>
+				<non_negative/>
+				<units>customer/yr</units>
+			</flow>
+			<aux name="Market Size">
+				<eqn>1000000</eqn>
+				<units>customers</units>
+			</aux>
+			<aux name="contact rate">
+				<eqn>100</eqn>
+				<units>people per person per year</units>
+			</aux>
+			<aux name="adoption\nfraction">
+				<doc>the probability that an adopter contact converts a potential adopter (the conversion rate)</doc>
+				<eqn>0.015</eqn>
+				<units>dimensionless</units>
+			</aux>
+			<aux name="probability of\ncontact with potentials">
+				<eqn>Potential_Adopters/Market_Size</eqn>
+				<units>dimensionless</units>
+			</aux>
+			<aux name="adopter\ncontacts">
+				<eqn>contact_rate*Adopters</eqn>
+				<units>customer/yr</units>
+			</aux>
+			<aux name="potentials contacts\nwith adopters">
+				<eqn>probability_of_contact_with_potentials*adopter_contacts</eqn>
+				<units>customer/yr</units>
+			</aux>
+			<aux name="adoption from\nword of mouth">
+				<doc>(people contacted by adopters)*(probability of each of those people being a potential adopter)*(fraction that adopt as a result of that contact)</doc>
+				<eqn>adoption_fraction*potentials_contacts_with_adopters</eqn>
+				<units>customer/yr</units>
+			</aux>
+		</variables>
+		<views>
+			<style color="black" background="white" font_style="normal" font_weight="normal" text_decoration="none" text_align="center" vertical_text_align="center" font_color="black" font_family="Arial" font_size="10pt" padding="2" border_color="black" border_width="thin" border_style="none">
+				<text_box color="black" background="white" text_align="left" vertical_text_align="top" font_size="12pt"/>
+				<isee:loop_indicator color="black" background="white" text_align="left" vertical_text_align="top" font_size="12pt"/>
+				<numeric_display color="blue" background="white" font_size="9pt" border_width="thin" border_style="solid" isee:transparent="false" isee:show_divider="true" isee:show_bounding_box="true" label_side="left"/>
+				<graph color="black" background="white" font_size="12pt" axis_color="#666666" grid_color="#C8C8C8" isee:graph_area_color="white" legend_position="bottom" isee:transparent="false" isee:hide_border="false" axis_title_font_style="normal" axis_title_font_weight="normal" axis_title_text_decoration="none" axis_title_text_align="center" axis_title_vertical_text_align="center" axis_title_font_color="black" axis_title_font_family="Arial" axis_title_font_size="12pt" axis_title_text_padding="2" axis_title_text_border_color="black" axis_title_text_border_width="thin" axis_title_text_border_style="none" axis_label_font_style="normal" axis_label_font_weight="normal" axis_label_text_decoration="none" axis_label_text_align="center" axis_label_vertical_text_align="center" axis_label_font_color="black" axis_label_font_family="Arial" axis_label_font_size="9pt" axis_label_text_padding="2" axis_label_text_border_color="black" axis_label_text_border_width="thin" axis_label_text_border_style="none">
+					<isee:series_styles>
+						<isee:series_style color="blue" thickness="1"/>
+						<isee:series_style color="red" thickness="1" pen_style="dot_dashed"/>
+						<isee:series_style color="fuchsia" thickness="1" pen_style="dotted"/>
+						<isee:series_style color="#008F44" thickness="1" pen_style="dashed"/>
+						<isee:series_style color="#FF7F00" thickness="1"/>
+						<isee:series_style color="#7F00FF" thickness="1" pen_style="dot_dashed"/>
+						<isee:series_style color="#0CA0FF" thickness="1" pen_style="dotted"/>
+						<isee:series_style color="lime" thickness="1" pen_style="dashed"/>
+						<isee:series_style color="#FF007F" thickness="1"/>
+						<isee:series_style color="aqua" thickness="1" pen_style="dot_dashed"/>
+						<isee:series_style color="#F586FF" thickness="1" pen_style="dotted"/>
+						<isee:series_style color="black" thickness="1" pen_style="dashed"/>
+						<isee:series_style color="#C8C8C8" thickness="1"/>
+					</isee:series_styles>
+				</graph>
+				<table color="black" background="#E0E0E0" text_align="right" font_size="12pt" orientation="vertical" wrap_text="false" isee:auto_fit="true" isee:use_alternate_row_colors="false" isee:unlimited_table_length="false" blank_column_width="80" column_width="160" interval="1" report_balances="beginning" report_flows="instantaneous" header_font_style="normal" header_font_weight="normal" header_text_decoration="none" header_text_align="center" header_vertical_text_align="center" header_font_color="black" header_font_family="Arial" header_font_size="12pt" header_text_padding="2" header_text_border_color="black" header_text_border_width="thin" header_text_border_style="none"/>
+				<button color="black" background="#E0E0E0" font_size="12pt" border_width="thin" border_style="solid" transparent="false" corner_radius="0" isee:flat="false" icon_side="top" isee:highlight_on_hover="false" isee:highlight_color="#959595"/>
+				<isee:annotation color="black" background="#E0E0E0" font_size="12pt" border_width="thin" border_style="solid" transparent="false" corner_radius="0" isee:flat="false" icon_side="top" isee:highlight_on_hover="false" isee:highlight_color="#959595" popup_corner_radius="0" popup_background_color="#FFFECF" highlight_on_open="false"/>
+				<slider color="#0075FF" background="#E0E0E0" font_size="12pt" num_ticks="3" label_side="top" wrap_title="true" vertical="false" isee:fancy_appearance="false" isee:show_hover_tip="when_deciding" input_expands="true" input_width="100"/>
+				<isee:stacked_container color="black" background="white" text_align="left" vertical_text_align="top" font_size="12pt" padding="6 8" border_color="#999999" border_width="thin" border_style="solid" item_spacing="0" corner_radius="4" selected_item_color="black" selected_item_background="white" item_background="#DDDDDD" transparent_bg="false"/>
+				<isee:dual_slider color="black" background="white" font_size="12pt" num_ticks="3" label_side="top" wrap_title="true" isee:show_hover_tip="when_deciding" input_expands="true" input_width="100"/>
+				<isee:sim_speed_slider color="black" background="white"/>
+				<isee:time_slider color="black" background="white"/>
+				<isee:pie_input color="black" background="white" font_size="12pt" legend_position="bottom" isee:transparent="false"/>
+				<knob color="#66CC66" background="#E0E0E0" font_size="12pt" label_side="bottom" wrap_title="true"/>
+				<numeric_input color="black" background="#E0E0E0" font_size="12pt" label_side="left" wrap_title="true" input_expands="false" input_width="100"/>
+				<isee:dropdown_input color="black" background="white" font_size="12pt" label_side="left" wrap_title="true" input_expands="false" input_width="100"/>
+				<switch color="black" background="#E0E0E0" font_size="12pt" label_side="top" wrap_title="true" isee:appearance="switch" isee:on_color="green"/>
+				<options color="black" background="white" appearance="radio-buttons" arrangement="vertical"/>
+				<graphical_input color="black" background="#E0E0E0" font_size="12pt" isee:show_hover_tip="true"/>
+				<group_input color="black" background="#E0E0E0" font_size="12pt" isee:highlight_backgrounds="true"/>
+				<lamp color="black" background="white" font_size="9pt"/>
+				<gauge color="black" background="white" font_size="9pt" needle_color="#F09F72" bar_color="#EEEEEE" bar_progress_color="black" appearance="radial" num_major_ticks="11" num_minor_ticks="11" show_numeric_value="true"/>
+				<isee:spatial_map color="black" background="white" font_size="12pt"/>
+				<isee:animation_object color="black" background="white" font_size="12pt"/>
+				<isee:navigation_widget color="black" background="white" text_align="left" vertical_text_align="top" font_size="12pt" padding="6 8" border_color="#999999" border_width="thin" border_style="solid" item_spacing="6" appearance="tabs" corner_radius="4" selected_item_color="black" selected_item_background="white" item_background="#DDDDDD" transparent_bg="false"/>
+				<isee:shape color="black" background="white" text_align="left" vertical_text_align="top" font_size="12pt" border_width="thin" border_style="solid" opacity="1" transparent_background="true" corner_radius="1"/>
+				<isee:selector color="black" background="white" text_align="left" vertical_text_align="top" font_size="12pt"/>
+				<isee:iframe color="black" background="white" text_align="left" vertical_text_align="top" font_size="12pt" border_width="thin" border_style="solid"/>
+				<isee:financial_table color="black" background="white" text_align="right" font_size="12pt" hide_border="false" auto_fit="true" first_column_width="250" other_column_width="100" header_font_style="normal" header_font_weight="bold" header_text_decoration="none" header_text_align="center" header_vertical_text_align="center" header_font_color="black" header_font_family="Arial" header_font_size="14pt" header_text_padding="2" header_text_border_color="black" header_text_border_width="thin" header_text_border_style="none"/>
+			</style>
+			<view isee:show_pages="false" background="white" page_width="768" page_height="588" isee:page_cols="2" isee:page_rows="2" zoom="120" isee:popup_graphs_are_comparative="true" isee:enable_non_negative_highlights="false" type="stock_flow">
+				<style color="black" background="white" font_style="normal" font_weight="normal" text_decoration="none" text_align="center" vertical_text_align="center" font_color="black" font_family="Arial" font_size="10pt" padding="2" border_color="black" border_width="thin" border_style="none">
+					<stock color="blue" background="white" font_color="blue" font_size="9pt" label_side="top">
+						<shape type="rectangle" width="45" height="35"/>
+					</stock>
+					<flow color="blue" background="white" font_color="blue" font_size="9pt" label_side="bottom">
+						<shape type="circle" radius="18"/>
+					</flow>
+					<isee:placeholder color="#228B22" background="white" font_color="#228B22" font_size="9pt" label_side="bottom"/>
+					<module color="blue" background="white" font_color="blue" font_size="9pt" label_side="top">
+						<shape type="rectangle" width="55" height="45"/>
+					</module>
+					<aux color="blue" background="white" font_color="blue" font_size="9pt" label_side="bottom">
+						<shape type="circle" radius="18"/>
+					</aux>
+					<group color="red" background="white" font_color="red" font_size="9pt"/>
+					<connector color="#FF007F" background="white" font_color="#FF007F" font_size="9pt" isee:thickness="1"/>
+					<text_box color="blue" background="white" text_align="left" vertical_text_align="top" font_size="9pt"/>
+					<isee:loop_indicator color="blue" background="white" font_color="blue" font_size="9pt"/>
+					<numeric_display color="blue" background="white" text_align="left" vertical_text_align="top" font_size="9pt" border_width="thin" border_style="solid" isee:transparent="false" isee:show_divider="true" isee:show_bounding_box="true" label_side="left"/>
+					<graph color="black" background="white" font_size="12pt" axis_color="#666666" grid_color="#C8C8C8" isee:graph_area_color="white" legend_position="bottom" isee:transparent="false" isee:hide_border="false" axis_title_font_style="normal" axis_title_font_weight="normal" axis_title_text_decoration="none" axis_title_text_align="center" axis_title_vertical_text_align="center" axis_title_font_color="black" axis_title_font_family="Arial" axis_title_font_size="12pt" axis_title_text_padding="2" axis_title_text_border_color="black" axis_title_text_border_width="thin" axis_title_text_border_style="none" axis_label_font_style="normal" axis_label_font_weight="normal" axis_label_text_decoration="none" axis_label_text_align="center" axis_label_vertical_text_align="center" axis_label_font_color="black" axis_label_font_family="Arial" axis_label_font_size="9pt" axis_label_text_padding="2" axis_label_text_border_color="black" axis_label_text_border_width="thin" axis_label_text_border_style="none">
+						<isee:series_styles>
+							<isee:series_style color="blue" thickness="1"/>
+							<isee:series_style color="red" thickness="1" pen_style="dot_dashed"/>
+							<isee:series_style color="fuchsia" thickness="1" pen_style="dotted"/>
+							<isee:series_style color="#008F44" thickness="1" pen_style="dashed"/>
+							<isee:series_style color="#FF7F00" thickness="1"/>
+							<isee:series_style color="#7F00FF" thickness="1" pen_style="dot_dashed"/>
+							<isee:series_style color="#0CA0FF" thickness="1" pen_style="dotted"/>
+							<isee:series_style color="lime" thickness="1" pen_style="dashed"/>
+							<isee:series_style color="#FF007F" thickness="1"/>
+							<isee:series_style color="aqua" thickness="1" pen_style="dot_dashed"/>
+							<isee:series_style color="#F586FF" thickness="1" pen_style="dotted"/>
+							<isee:series_style color="black" thickness="1" pen_style="dashed"/>
+							<isee:series_style color="#C8C8C8" thickness="1"/>
+						</isee:series_styles>
+					</graph>
+					<table color="black" background="#E0E0E0" text_align="right" font_size="12pt" orientation="vertical" wrap_text="false" isee:auto_fit="true" isee:use_alternate_row_colors="false" isee:unlimited_table_length="false" blank_column_width="80" column_width="160" interval="1" report_balances="beginning" report_flows="instantaneous" header_font_style="normal" header_font_weight="normal" header_text_decoration="none" header_text_align="center" header_vertical_text_align="center" header_font_color="black" header_font_family="Arial" header_font_size="12pt" header_text_padding="2" header_text_border_color="black" header_text_border_width="thin" header_text_border_style="none"/>
+				</style>
+				<stacked_container uid="1" x="36.9993" y="308.001" width="414.333" height="297.5">
+					<graph width="414.333" height="297.5" type="time_series" isee:time_format_id="Number Not Scaled With Precision of 0.1" isee:time_precision="0.1" isee:time_scale_by="1" show_grid="false" isee:tick_type="none" include_units_in_legend="false" plot_numbers="false" isee:label_pie_slices="false" isee:show_pie_borders="true" num_x_grid_lines="5" num_y_grid_lines="5" num_x_labels="6" num_y_labels="3" title="Potential Adopters vs. Adopters" isee:fill_intensity="0.1" isee:allow_zero_axis="true" left_axis_multi_scale="false" left_axis_auto_scale="true" left_include_units="true" right_axis_multi_scale="true" right_axis_auto_scale="true" right_include_units="true">
+						<plot color="blue" isee:keep_zero_visible="false" pen_width="2" index="0" show_y_axis="true">
+							<format/>
+							<entity name="Potential_Adopters"/>
+						</plot>
+						<plot color="red" pen_style="dashed" isee:keep_zero_visible="false" pen_width="2" index="1" show_y_axis="true">
+							<format/>
+							<entity name="Adopters"/>
+						</plot>
+					</graph>
+					<graph width="414.333" height="297.5" type="time_series" isee:time_format_id="Number Not Scaled With Precision of 0.1" isee:time_precision="0.1" isee:time_scale_by="1" show_grid="false" isee:tick_type="none" include_units_in_legend="false" plot_numbers="false" isee:label_pie_slices="false" isee:show_pie_borders="true" num_x_grid_lines="5" num_y_grid_lines="5" num_x_labels="5" num_y_labels="3" isee:fill_intensity="0.1" isee:allow_zero_axis="true" left_axis_multi_scale="false" left_axis_auto_scale="false" left_include_units="true" right_axis_multi_scale="true" right_axis_auto_scale="true" right_include_units="true">
+						<plot color="blue" isee:keep_zero_visible="false" pen_width="2" index="0" show_y_axis="true">
+							<format scale_by="1"/>
+							<entity name="adopting"/>
+							<scale min="0" max="400000"/>
+						</plot>
+					</graph>
+				</stacked_container>
+				<connector uid="2" angle="265.406">
+					<from>Potential_Adopters</from>
+					<to>probability_of_contact_with_potentials</to>
+				</connector>
+				<connector uid="3" angle="298.575">
+					<from>Adopters</from>
+					<to>adopter_contacts</to>
+				</connector>
+				<connector uid="4" angle="235.713">
+					<from>adopter_contacts</from>
+					<to>potentials_contacts_with_adopters</to>
+				</connector>
+				<connector uid="5" angle="352.237">
+					<from>probability_of_contact_with_potentials</from>
+					<to>potentials_contacts_with_adopters</to>
+				</connector>
+				<connector uid="6" angle="23.4318">
+					<from>Market_Size</from>
+					<to>probability_of_contact_with_potentials</to>
+				</connector>
+				<connector uid="7" angle="249.326">
+					<from>contact_rate</from>
+					<to>adopter_contacts</to>
+				</connector>
+				<connector uid="8" angle="111.592">
+					<from>adoption_from_word_of_mouth</from>
+					<to>adopting</to>
+				</connector>
+				<connector uid="9" angle="196.858">
+					<from>adoption_fraction</from>
+					<to>adoption_from_word_of_mouth</to>
+				</connector>
+				<connector uid="10" angle="158.359">
+					<from>potentials_contacts_with_adopters</from>
+					<to>adoption_from_word_of_mouth</to>
+				</connector>
+				<stock label_side="center" x="134" y="90.5" name="Potential\nAdopters"/>
+				<stock label_side="center" x="359" y="90.5" name="Adopters"/>
+				<flow label_side="top" x="240.5" y="90.5" name="adopting">
+					<pts>
+						<pt x="156.5" y="90.5"/>
+						<pt x="336.5" y="90.5"/>
+					</pts>
+				</flow>
+				<aux label_side="top" x="130.833" y="229.334" name="Market Size"/>
+				<aux label_side="top" x="418.333" y="133.833" name="contact rate"/>
+				<aux label_side="right" x="294.917" y="177.5" name="adoption\nfraction"/>
+				<aux x="189.5" y="216.334" name="probability of\ncontact with potentials"/>
+				<aux label_side="right" label_angle="315" x="373.75" y="163.333" name="adopter\ncontacts"/>
+				<aux x="294.917" y="211.334" name="potentials contacts\nwith adopters"/>
+				<aux label_side="left" label_angle="225" x="235.5" y="163.333" name="adoption from\nword of mouth"/>
+				<isee:loop_indicator color="black" font_color="black" text="R1" orientation="clockwise" uid="11" x="279.917" y="108" width="30" height="30">
+					<name>WOM effect</name>
+					<isee:entities>
+						<item uid="3"/>
+						<item uid="4"/>
+						<item uid="10"/>
+						<item uid="8"/>
+						<entity name="Adopters"/>
+						<entity name="adopter_contacts"/>
+						<entity name="potentials_contacts_with_adopters"/>
+						<entity name="adoption_from_word_of_mouth"/>
+						<entity name="adopting"/>
+					</isee:entities>
+				</isee:loop_indicator>
+				<isee:loop_indicator color="black" font_color="black" text="B1" orientation="counter_clockwise" uid="12" x="171.167" y="111.333" width="30" height="30">
+					<name>Exhausting effect</name>
+					<isee:entities>
+						<item uid="2"/>
+						<item uid="5"/>
+						<item uid="10"/>
+						<item uid="8"/>
+						<entity name="Potential_Adopters"/>
+						<entity name="probability_of_contact_with_potentials"/>
+						<entity name="potentials_contacts_with_adopters"/>
+						<entity name="adoption_from_word_of_mouth"/>
+						<entity name="adopting"/>
+					</isee:entities>
+				</isee:loop_indicator>
+			</view>
+			<view background="white" page_width="800" page_height="600" isee:scroll_x="420.506" isee:scroll_y="266.835" zoom="395" home_view="true" type="interface">
+				<style>
+					<isee:stacked_container item_spacing="0" corner_radius="4" selected_item_color="black" selected_item_background="white" item_background="#DDDDDD" transparent_bg="false"/>
+				</style>
+				<stacked_container x="140" y="96" width="525" height="383">
+					<graph width="525" height="383" type="time_series" show_grid="false" isee:tick_type="none" include_units_in_legend="false" plot_numbers="true" isee:label_pie_slices="false" isee:show_pie_borders="true" num_x_grid_lines="0" num_y_grid_lines="0" num_x_labels="5" num_y_labels="3" isee:fill_intensity="0.1" isee:allow_zero_axis="true" left_axis_multi_scale="false" left_axis_auto_scale="true" left_include_units="true" right_axis_multi_scale="false" right_axis_auto_scale="true" right_include_units="true">
+						<plot isee:immediately_update_on_user_input="true" color="blue" isee:keep_zero_visible="true" pen_width="1" index="0" show_y_axis="true">
+							<entity name="Adopters"/>
+						</plot>
+						<plot isee:immediately_update_on_user_input="true" color="red" pen_style="dot_dashed" isee:keep_zero_visible="true" pen_width="1" index="1" show_y_axis="true">
+							<entity name="Potential_Adopters"/>
+						</plot>
+						<plot color="fuchsia" pen_style="dotted" isee:keep_zero_visible="true" pen_width="1" index="2" show_y_axis="true">
+							<entity name="adopting"/>
+						</plot>
+					</graph>
+				</stacked_container>
+			</view>
+			<isee:templates>
+				<view background="white" page_width="800" page_height="600" type="template">
+					<style>
+						<isee:stacked_container item_spacing="0" corner_radius="4" selected_item_color="black" selected_item_background="white" item_background="#DDDDDD" transparent_bg="false"/>
+					</style>
+				</view>
+			</isee:templates>
+			<isee:stories>
+				<isee:story uid="15" name="Story 1">
+					<view background="white" page_width="800" page_height="600" type="interface">
+						<style>
+							<isee:stacked_container item_spacing="0" corner_radius="4" selected_item_color="black" selected_item_background="white" item_background="#DDDDDD" transparent_bg="false"/>
+						</style>
+						<isee:model_view x="0" y="0" width="800" height="600" isee:locked="true" zoom="1" center_x="400" center_y="300" locked_view="true" transparent="true" use_visible_list="true" show_ltm_table="false">
+							<model name="Top-Level"/>
+							<isee:visible_list>
+								<item uid="1"/>
+								<entity name="Market_Size"/>
+								<entity name="adopting"/>
+								<entity name="Adopters"/>
+								<entity name="Potential_Adopters"/>
+								<entity name="adoption_fraction"/>
+								<entity name="contact_rate"/>
+							</isee:visible_list>
+							<isee:highlight_list>
+								<entity name="adopting"/>
+								<entity name="Market_Size"/>
+								<entity name="Adopters"/>
+								<entity name="Potential_Adopters"/>
+								<entity name="adoption_fraction"/>
+								<entity name="contact_rate"/>
+							</isee:highlight_list>
+						</isee:model_view>
+						<button label="Back" isee:tooltip="" x="52" y="565">
+							<actions>
+								<action target="back_page">navigate</action>
+							</actions>
+						</button>
+					</view>
+				</isee:story>
+			</isee:stories>
+		</views>
+	</model>
+</xmile>
+

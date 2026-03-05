@@ -11,12 +11,12 @@ class Engine {
     }
 
     static description() {
-        return `Based on SD-AI's original and most popular engine for generating simulating Stock Flow Diagrams (SFDs).  Quantitative-Mentor doesn't actually build the whole model for you.  It gives you enough to work with and encourages you to build the rest. 
-Works by sending Google's Gemini Flash 2.5 LLM the user's request along with a set of systems thinking process descriptions and tips.`
+        return `Based on SD-AI's original and most popular engine for generating simulating Stock Flow Diagrams (SFDs).  Quantitative-Mentor doesn't actually build the whole model for you.  It gives you enough to work with and encourages you to build the rest.
+Works by sending an LLM the user's request along with a set of systems thinking process descriptions and tips.`
     }
 
     static link() {
-        return "";
+        return "https://onlinelibrary.wiley.com/doi/abs/10.1002/sdr.70019";
     }
 
     additionalParameters()  {
@@ -47,6 +47,18 @@ Works by sending Google's Gemini Flash 2.5 LLM the user's request along with a s
             label: "Background Knowledge",
             description: "Background information you want the LLM model to consider when generating a diagram for you",
             minHeight: 100
+        },{
+            name: "supportsArrays",
+            type: "boolean",
+            required: false,
+            uiElement: "hidden",
+            description: "Whether or not your client can handle arrayed models"
+        },{
+            name: "supportsModules",
+            type: "boolean",
+            required: false,
+            uiElement: "hidden",
+            description: "Whether or not your client can handle models with modules"
         }];
     }
 

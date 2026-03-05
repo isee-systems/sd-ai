@@ -11,6 +11,7 @@ involving fixed, proportional, and interdependent flows.`;
 import pluralize from 'pluralize';
 import numberToWords from 'number-to-words';
 import utils from '../../utilities/utils.js';
+import { validateEvaluationResult } from '../evaluationSchema.js';
 
 //generic prompt and problem statement used for all tests
 const prompt = "Please add the following to my model...";
@@ -122,7 +123,7 @@ const extractFlow = function(flowSpec, possibleNames,  generatedModel) {
 
         let foundName = false;
         for (const possibleName of possibleNames) {
-            if (possibleName.toLowerCase() === variable.name.toLowerCase()) {
+            if (utils.sameVars(possibleName, variable.name)) {
                 foundName = true;
                 break;
             }
@@ -146,29 +147,38 @@ const extractFlow = function(flowSpec, possibleNames,  generatedModel) {
             // check if any of the causes have an equation equal to the rate
             if (hasMultiplication && !hasRate) {
                 //filter all of the relationships to find the relationships where the to is the current variable
-                const causeVariableNames = (generatedModel.relationships || []).filter(r => 
-                    r.to === variable.name
+                const causeVariableNames = (generatedModel.relationships || []).filter(r =>
+                    utils.sameVars(r.to, variable.name)
                 ).map(r => r.from); //map those relationships into an array of from variable names (these are the causes)
                 
                 //take the cause variable names and turn them into full causeVariables
                 const causeVariables = causeVariableNames.map(name => {
-                    return (generatedModel.variables || []).find(v => v.name === name);
+                    return (generatedModel.variables || []).find(v => utils.sameVars(v.name, name));
                 }).filter(v => v !== undefined); // Filter out any undefined variables
                 
                 //check that one of the cause variables has an equation which is the rate
-                return causeVariables.some(cause => cause && cause.equation === rateString);
+                return causeVariables.some(cause => cause && parseFloat(cause.equation) === flowSpec.rate);
             }
             
             return false;
         } else { //then its fixed!
-            return variable.equation.includes(flowSpec.fixed.toString()); //otherwise look for the number in the equation
+            
+            if (parseFloat(variable.equation) === flowSpec.fixed)
+                return true;
+
+            //if the variable doesn't have the fixed number in its equation
+            // Check if the equation references a variable with the correct value
+            const referencedVariable = (generatedModel.variables || []).find((v) =>
+                utils.sameVars(v.name, variable.equation)
+            );
+
+            if (referencedVariable && parseFloat(referencedVariable.equation) === flowSpec.fixed) {
+                return true;
+            } 
+
+            return false;
         }
     })
-};
-
-const compareNames = function(aiName, groundTruthName) {
-    const value =  aiName.toLowerCase().includes(groundTruthName.toLowerCase());
-    return value;
 };
 
 export const evaluate = function(generatedResponse, groundTruth) {
@@ -186,43 +196,33 @@ export const evaluate = function(generatedResponse, groundTruth) {
         return 0;
     };
 
-    const stockEqualityGTComparatorGenerator = function(groundTruth) {
-        return (ai) => {
-            return compareNames(ai.name, groundTruth.name);
-        };
-    };
-
-    const stockEqualityAIComparatorGenerator = function(ai) {
-        return (groundTruth) => {
-            return compareNames(ai.name, groundTruth.name);
-        };
+    const stockNameMatches = function(a, b) {
+        return utils.evalsVariableNameMatches(a.name, b.name);
     };
 
     const failures = []; //type, details
     const stocks = extractStocks(generatedModel); //get all the stocks
 
-    const sortedAIStocks = stocks.sort(comparator); //sort for comparison purposes by name
-    const sortedTruthStocks = groundTruthStocks.sort(comparator);
-    const sortedCurrentModelStocks = currentModelStocks.sort(comparator);
+    const sortedAIStocks = [...stocks].sort(comparator);
+    const sortedTruthStocks = [...groundTruthStocks].sort(comparator);
+    const sortedCurrentModelStocks = [...currentModelStocks].sort(comparator);
 
-    const removed = sortedTruthStocks.filter((element) => { return !sortedAIStocks.some(stockEqualityGTComparatorGenerator(element))});
+    const removed = sortedTruthStocks.filter((element) => { return !sortedAIStocks.some((aiStock) => stockNameMatches(aiStock, element))});
 
-    // Filter out currentModel stocks from "added" check - they are legitimate pre-existing stocks
     const added = sortedAIStocks.filter((element) => {
-        const isNotInGroundTruth = !sortedTruthStocks.some(stockEqualityAIComparatorGenerator(element));
-        const isNotInCurrentModel = !sortedCurrentModelStocks.some(stockEqualityAIComparatorGenerator(element));
+        const isNotInGroundTruth = !sortedTruthStocks.some((gtStock) => stockNameMatches(element, gtStock));
+        const isNotInCurrentModel = !sortedCurrentModelStocks.some((cmStock) => stockNameMatches(element, cmStock));
         return isNotInGroundTruth && isNotInCurrentModel;
     });
 
-    // Check if pre-existing model structure is preserved
     const missingCurrentModelStocks = sortedCurrentModelStocks.filter((element) => {
-        return !sortedAIStocks.some(stockEqualityGTComparatorGenerator(element));
+        return !sortedAIStocks.some((aiStock) => stockNameMatches(aiStock, element));
     });
 
-    const addedStr = added.map((r)=>{return r.name}).join(", ");
-    const removedStr = removed.map((r)=>{return r.name}).join(", ");
-    const groundTruthStr = sortedTruthStocks.map((r)=>{return r.name}).join(", ");
-    const missingCurrentModelStr = missingCurrentModelStocks.map((r)=>{return r.name}).join(", ");
+    const addedStr = added.map((stock) => { return stock.name }).join(", ");
+    const removedStr = removed.map((stock) => { return stock.name }).join(", ");
+    const groundTruthStr = sortedTruthStocks.map((stock) => { return stock.name }).join(", ");
+    const missingCurrentModelStr = missingCurrentModelStocks.map((stock) => { return stock.name }).join(", ");
 
     // Check that pre-existing model structure is preserved
     if (missingCurrentModelStocks.length > 0) {
@@ -232,7 +232,7 @@ export const evaluate = function(generatedResponse, groundTruth) {
         });
     }
 
-    if (!generatedModel.specs?.timeUnits || !compareNames(generatedModel.specs.timeUnits, groundTruth.timeUnit)) {
+    if (!generatedModel.specs?.timeUnits || !utils.sameVars(generatedModel.specs.timeUnits, groundTruth.timeUnit)) {
         failures.push({
             type: "Incorrect time unit discovered",
             details: "Incorrect time unit discovered. Expected " + (generatedModel.specs?.timeUnits || "undefined") + " to be " + groundTruth.timeUnit
@@ -255,7 +255,7 @@ export const evaluate = function(generatedResponse, groundTruth) {
 
     // Validate current model stocks are preserved with correct properties
     for (const currentModelStock of sortedCurrentModelStocks) {
-        let aiStock = sortedAIStocks.find(stockEqualityGTComparatorGenerator(currentModelStock));
+        let aiStock = sortedAIStocks.find((aiStock) => stockNameMatches(aiStock, currentModelStock));
         if (!aiStock) {
             failures.push({
                 type: "Pre-existing stock missing",
@@ -264,11 +264,18 @@ export const evaluate = function(generatedResponse, groundTruth) {
             continue;
         }
 
-        if (aiStock.equation !== currentModelStock.equation) {
-            failures.push({
-                type: "Pre-existing stock initial value changed",
-                details: "Pre-existing stock initial value changed. Expected " + aiStock.equation + " to be " + currentModelStock.equation
-            });
+        if (parseFloat(aiStock.equation) !== parseFloat(currentModelStock.equation)) {
+            // Check if the equation references a variable with the correct value
+            const referencedVariable = (generatedModel.variables || []).find((v) =>
+                utils.sameVars(v.name, aiStock.equation)
+            );
+
+            if (!referencedVariable || parseFloat(referencedVariable.equation) !== parseFloat(currentModelStock.equation)) {
+                failures.push({
+                    type: "Pre-existing stock initial value changed",
+                    details: "Pre-existing stock initial value changed. Expected " + aiStock.equation + " to be " + currentModelStock.equation
+                });
+            }
         }
 
         // Validate inflows are preserved
@@ -293,15 +300,22 @@ export const evaluate = function(generatedResponse, groundTruth) {
     }
 
     for (const groundTruthStock of sortedTruthStocks) {
-        let aiStock = sortedAIStocks.find(stockEqualityGTComparatorGenerator(groundTruthStock));
+        let aiStock = sortedAIStocks.find((aiStock) => stockNameMatches(aiStock, groundTruthStock));
         if (!aiStock)
             continue; //some error in the test itself
 
-        if (aiStock.equation !== groundTruthStock.initialValue.toString()) {
-            failures.push({
-                type: "Incorrect initial value discovered",
-                details: "Incorrect initial value discovered. Expected " + aiStock.equation + " to be " + groundTruthStock.initialValue.toString()
-            });
+        if (parseFloat(aiStock.equation) !== groundTruthStock.initialValue) {
+            // Check if the equation references a variable with the correct value
+            const referencedVariable = (generatedModel.variables || []).find((v) =>
+                utils.sameVars(v.name, aiStock.equation)
+            );
+
+            if (!referencedVariable || parseFloat(referencedVariable.equation) !== groundTruthStock.initialValue) {
+                failures.push({
+                    type: "Incorrect initial value discovered",
+                    details: "Incorrect initial value discovered. Expected " + aiStock.equation + " to be " + groundTruthStock.initialValue.toString()
+                });
+            }
         }
 
         if (groundTruthStock.inflows) {
@@ -343,7 +357,7 @@ export const evaluate = function(generatedResponse, groundTruth) {
         }
     }
 
-    return failures 
+    return validateEvaluationResult(failures);
 };
 
 export const groups = {

@@ -17,6 +17,14 @@ import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 
 import { printTable, pivotAndUnstack, uniqueFileId } from "./helpers.js";
+import {
+  BASELINE_TOKEN_USAGE,
+  TOKENS_PER_MINUTE,
+  REQUESTS_PER_MINUTE,
+  applyDefaultLimits,
+  loadCategoryTests,
+  loadTestsForEngine,
+} from "./runHelpers.js";
 
 import "dotenv/config";
 
@@ -31,6 +39,14 @@ const argv = yargs(hideBin(process.argv))
 
 const experiment = JSON.parse(fs.readFileSync(argv.experiment, "utf8"));
 const experimentName = path.basename(path.resolve(argv.experiment)).split(".")[0];
+
+// Normalize verbose flag to integer levels
+// false or undefined -> 0, true -> 2, otherwise use the integer value
+if (experiment.verbose === false || experiment.verbose === undefined) {
+  experiment.verbose = 0;
+} else if (experiment.verbose === true) {
+  experiment.verbose = 2;
+}
 
 const files = fs.readdirSync('.');
 const inProgressFileSuffix = "_in_progress.jsonl"
@@ -75,85 +91,39 @@ if (isContinuing) {
 }
 
 
-// See commentary in readme about rate limiting
-// 3k was max total tokens used by causual translation on a standard non-reasoning openai model at teir 1
-const BASELINE_TOKEN_USAGE = 3000;
-const TOKENS_PER_MINUTE = 30_000;
-// openai typically allows 500 requests per minute, so 400 is safe bet
-const REQUESTS_PER_MINUTE = 400;
-
 // goal of tests is to create a pretty flat denormaized structure
 // but all keyed on engine name so that we can easily rate limit by engine
 const tests = Object.fromEntries(
-    (await Promise.all(
+  (await Promise.all(
     Object.entries(experiment.engineConfigs)
-      .map(async ([engineConfigName, engineConfig]) => {
-        // return all the map of all tests in a group if filter is true
-        // return only the tests in the groups specified by filter if list is provided
-        // return nothing if criteria isn't mentioned
-
-        engineConfig.limits = engineConfig.limits || {};
-        engineConfig.limits.tokensPerMinute =
-          engineConfig.limits.tokensPerMinute || TOKENS_PER_MINUTE;
-        engineConfig.limits.requestsPerMinute =
-          engineConfig.limits.requestsPerMinute || REQUESTS_PER_MINUTE;
-        engineConfig.limits.baselineTokenUsage =
-          engineConfig.limits.baselineTokenUsage || BASELINE_TOKEN_USAGE;
+      .map(async ([engineConfigName, rawEngineConfig]) => {
+        const engineConfig = applyDefaultLimits(rawEngineConfig);
 
         const allTests = Object.fromEntries(
           await Promise.all(
-            Object.entries(experiment.categories).map(async ([c, filter]) => {
-              const { groups } = await import(`./categories/${c}.js`);
-              if (filter === true) return [c, groups];
-              if (filter === false) return [c, []];
-              return [
-                c,
-                Object.fromEntries(
-                  Object.entries(groups).filter(([groupName, _]) => {
-                    // only include groups that are specified
-                    return filter.indexOf(groupName) > -1;
-                  })
-                ),
-              ];
+            Object.entries(experiment.categories).map(async ([categoryName, filter]) => {
+              const { groups } = await import(`./categories/${categoryName}.js`);
+              return [categoryName, loadCategoryTests(groups, filter)];
             })
           )
         );
 
         const engine = await import(`./../engines/${engineConfig.engine}/engine.js`);
 
-        // jam the details of the engine and the category and group into the test itself
-        const fullTests = Object.entries(allTests).map(([category, groups]) => {
-          return Object.entries(groups).map(([groupName, tests]) => {
-            return tests.map((test) => {
-              const testObj = {};
-              // also have a look at additionalParameters parsing when we run
-              // the engine, changes here might require changes there too
-              testObj["engineConfig"] = engineConfig;
-              testObj["engineConfigName"] = engineConfigName;
-              testObj["category"] = category;
-              testObj["group"] = groupName;
-              testObj["testParams"] = test;
-              return testObj;
-            });
-          });
-        });
-
-        return [engineConfigName, fullTests.flat(2)];
-      }
-    )
+        return [engineConfigName, loadTestsForEngine(allTests, engineConfig, engineConfigName)];
+      })
   ))
-  .filter(entry => {
-    return entry[0] !== undefined;
-  })
+  .filter(entry => entry[0] !== undefined)
 );
 
 console.log(chalk.blue("Experiment Configuration:"));
 console.log("Experiment Name: " + experimentResultsName);
 if (isContinuing) {
-  console.log(`  will attempt to use ${previousResults.length} previously saved test results`); 
+  console.log(`  will attempt to use ${previousResults.length} previously saved test results`);
 }
 console.log("Sequential: " + (experiment.sequential || "false"));
-console.log("Verbose: " + (experiment.verbose || "false"));
+console.log("Verbose: " + experiment.verbose);
+console.log("Break on Error: " + experiment.breakOnError || "false");
 console.log();
 
 console.log(chalk.blue("Engine Configurations:"));
@@ -219,7 +189,7 @@ const progress = new cliProgress.MultiBar(
     hideCursor: true,
     format:
       "{bar} | ETA: {eta}s | {earlyResults} = {value} of {total} | {engineConfigName} | {inProgress}",
-    stream: experiment.verbose
+    stream: experiment.verbose > 0
     ? fs.createWriteStream(process.platform === "win32" ? "NULL" : "/dev/null")
     : process.stderr,
 
@@ -254,12 +224,13 @@ const runEngineTests = async ([engineConfigName, engineTests]) => {
 
   const inProgress = new Set();
   const earlyResults = { true: 0, false: 0 };
+  const errorTracker = { lastError: null, retryCount: 0, errorHistory: [] }; // Track last error, retry count, and all errors
   const engineBar = progress.create(engineTests.length, 0, {
     engineConfigName,
     earlyResults: printEarlyResults(earlyResults),
     inProgress: printProgress(inProgress),
   });
-  if (experiment.verbose)
+  if (experiment.verbose > 0)
     console.log(chalk.blue(`Running tests for: ${engineConfigName}`));
 
   let testRuns = [];
@@ -272,7 +243,8 @@ const runEngineTests = async ([engineConfigName, engineTests]) => {
         tokenLimiter,
         inProgress,
         earlyResults,
-        engineBar
+        engineBar,
+        errorTracker
       );
 
       return [...acc, result];
@@ -286,14 +258,15 @@ const runEngineTests = async ([engineConfigName, engineTests]) => {
           tokenLimiter,
           inProgress,
           earlyResults,
-          engineBar
+          engineBar,
+          errorTracker
         )
       )
     );
   }
 
   engineBar.update({ inProgress: "[Done]" });
-  if (experiment.verbose)
+  if (experiment.verbose > 0)
     console.log(chalk.blue(`Finished all tests for: ${engineConfigName}`));
 
   return testRuns;
@@ -305,7 +278,8 @@ const runSingleTest = async (
   tokenLimiter,
   inProgress,
   earlyResults,
-  engineBar
+  engineBar,
+  errorTracker
 ) => {
   const name = test.testParams["name"];
   const cachedResult = previousResults.find(r => {
@@ -319,7 +293,7 @@ const runSingleTest = async (
 
   let testWithResult;
   if (cachedResult) {
-    if (experiment.verbose)
+    if (experiment.verbose > 0)
       console.log(chalk.blue(`No need to run "${name}" test, we already have results from previous experiment run.`));
 
     testWithResult = cachedResult;
@@ -337,7 +311,7 @@ const runSingleTest = async (
       additionalTestParametersTokenCount +
       test.engineConfig.limits.baselineTokenUsage;
 
-    if (experiment.verbose)
+    if (experiment.verbose === 2)
       console.log(chalk.blue(`Starting test: ${name}. Awaiting rate limit. Requested additional ${additionalTestParametersTokenCount} tokens beyond the baselineTokenUsage (${test.engineConfig.limits.baselineTokenUsage})`));
 
     await requestLimiter.removeTokens(1);
@@ -348,7 +322,7 @@ const runSingleTest = async (
     );
     const instance = new engine.default();
 
-    if (experiment.verbose)
+    if (experiment.verbose === 2)
       console.log(
         chalk.blue(`Rate limit passed ${name}, awaiting engine response`)
       );
@@ -361,7 +335,7 @@ const runSingleTest = async (
       ...test.testParams.additionalParameters,
     };
 
-    if (experiment.verbose) {
+    if (experiment.verbose === 2) {
       console.log(additionalParameters)
     }
 
@@ -372,11 +346,87 @@ const runSingleTest = async (
       additionalParameters
     );
 
+    // Check for errors in the response
+    if (experiment.breakOnError && generateResponse && generateResponse.err) {
+      const currentErrorStr = JSON.stringify(generateResponse.err);
+
+      // Increment retry count and add error to history
+      errorTracker.retryCount++;
+      errorTracker.errorHistory.push({
+        attempt: errorTracker.retryCount,
+        error: generateResponse.err,
+        errorStr: currentErrorStr
+      });
+
+      // Check if this is the same error as the last one (two in a row)
+      if (errorTracker.lastError === currentErrorStr) {
+        // Same error occurred twice in a row - exit immediately
+        progress.stop();
+        console.clear();
+        console.error(chalk.red(chalk.bold("\n\nERROR: Same error occurred twice in a row")));
+        console.error(chalk.red(`Test name: ${name}`));
+        console.error(chalk.red(`Engine: ${test.engineConfig.engine}`));
+        console.error(chalk.red(`\nAll errors encountered:`));
+
+        // Print all errors from history
+        errorTracker.errorHistory.forEach((entry) => {
+          console.error(chalk.red(`\nAttempt ${entry.attempt}:`));
+          console.error(entry.error);
+        });
+
+        process.exit(1);
+      }
+
+      // Check if we've hit the maximum retry limit (3 retries)
+      if (errorTracker.retryCount >= 3) {
+        progress.stop();
+        console.clear();
+        console.error(chalk.red(chalk.bold("\n\nERROR: Maximum retry limit (3) reached")));
+        console.error(chalk.red(`Test name: ${name}`));
+        console.error(chalk.red(`Engine: ${test.engineConfig.engine}`));
+        console.error(chalk.red(`\nAll errors encountered:`));
+
+        // Print all errors from history
+        errorTracker.errorHistory.forEach((entry) => {
+          console.error(chalk.red(`\nAttempt ${entry.attempt}:`));
+          console.error(entry.error);
+        });
+
+        process.exit(1);
+      }
+
+      // Different error - store it and retry
+      errorTracker.lastError = currentErrorStr;
+      if (experiment.verbose > 0) {
+        console.log(chalk.yellow(`\nWarning: Error occurred for test "${name}" (retry ${errorTracker.retryCount}/3), retrying...`));
+        console.log(chalk.yellow(`Error: ${currentErrorStr}`));
+      }
+
+      // Wait a bit before retrying
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Retry the same test recursively
+      return runSingleTest(
+        test,
+        requestLimiter,
+        tokenLimiter,
+        inProgress,
+        earlyResults,
+        engineBar,
+        errorTracker
+      );
+    }
+
+    // Success - clear error tracker
+    errorTracker.lastError = null;
+    errorTracker.retryCount = 0;
+    errorTracker.errorHistory = [];
+
     testWithResult = structuredClone(test);
     testWithResult["duration"] = Date.now() - startTime;
     testWithResult["generatedResponse"] = generateResponse || {};
 
-    if (experiment.verbose) {
+    if (experiment.verbose === 2) {
       console.log(
         chalk.blue(
           `Response returned: ${name}, awaiting evaluation of the generated response:`
@@ -392,7 +442,7 @@ const runSingleTest = async (
     }
 
     const { evaluate } = await import(`./categories/${test.category}.js`);
-    testWithResult["failures"] = evaluate(
+    testWithResult["failures"] = await evaluate(
       testWithResult["generatedResponse"],
       test.testParams["expectations"]
     );
@@ -406,7 +456,7 @@ const runSingleTest = async (
     );
     testWithResult["pass"] = testWithResult["failures"].length == 0;
 
-    if (experiment.verbose) {
+    if (experiment.verbose > 0) {
       console.log(
         chalk.blue(
           `Finished evaluation in ${Math.round(

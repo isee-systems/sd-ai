@@ -17,7 +17,7 @@ class Engine {
     }
 
     static link() {
-        return "https://papers.ssrn.com/sol3/papers.cfm?abstract_id=5341966";
+        return "https://onlinelibrary.wiley.com/doi/abs/10.1002/sdr.70019";
     }
 
     additionalParameters()  {

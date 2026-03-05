@@ -17,6 +17,7 @@
  */
 
 import utils from '../../utilities/utils.js';
+import { validateEvaluationResult } from '../evaluationSchema.js';
 
 // Note: pluralize import removed as it's not used in this evaluation
 
@@ -226,7 +227,7 @@ export const evaluate = function(generatedResponse, expectations) {
         }
     }
 
-    return failures;
+    return validateEvaluationResult(failures);
 };
 
 /**

@@ -33,8 +33,12 @@ select underlying LLM service and bring your own API key. This engine is designe
 wants to experiment with the specific prompts passed to the LLM.`;
     }
 
+    static link() {
+        return "https://onlinelibrary.wiley.com/doi/abs/10.1002/sdr.70019";
+    }
+
     additionalParameters()  {
-        const additionalParameters = LLMWrapper.additionalParameters();
+        const additionalParameters = LLMWrapper.additionalParameters(LLMWrapper.NON_BUILD_DEFAULT_MODEL);
         return additionalParameters.concat([{
             name: "systemPrompt",
             type: "string",

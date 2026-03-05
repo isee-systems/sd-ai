@@ -1,7 +1,7 @@
 {
   "dependencies": {
     "@anthropic-ai/sdk": "^0.62.0",
-    "@google/genai": "^1.2.0",
+    "@google/genai": "^1.41.0",
     "async": "^3.2.6",
     "chalk": "^5.4.1",
     "cli-progress": "^3.12.0",

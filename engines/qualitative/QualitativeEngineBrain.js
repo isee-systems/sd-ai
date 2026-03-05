@@ -122,7 +122,7 @@ You will conduct a multistep process:
         problemStatement: null,
         openAIKey: null,
         googleKey: null,
-        underlyingModel: LLMWrapper.DEFAULT_MODEL,
+        underlyingModel: LLMWrapper.BUILD_DEFAULT_MODEL,
         descriptionlessStructuredOutput: false,
         systemPrompt: QualitativeEngineBrain.DEFAULT_SYSTEM_PROMPT,
         assistantPrompt: QualitativeEngineBrain.DEFAULT_ASSISTANT_PROMPT,
@@ -144,7 +144,7 @@ You will conduct a multistep process:
             this.#data.backgroundPrompt = this.#data.backgroundPrompt.trim() + "\n\n{backgroundKnowledge}";
         }
 
-        this.#llmWrapper = new LLMWrapper(params);
+        this.#llmWrapper = new LLMWrapper(this.#data);
        
     }
 
@@ -261,6 +261,8 @@ You will conduct a multistep process:
                 throw new ResponseFormatError("Bad JSON returned by underlying LLM");
             }
             return this.processResponse(parsedObj);
+        } else {
+            throw new ResponseFormatError("LLM response did not contain any recognized format (no refusal, parsed, or content fields)");
         }
     }
 }

@@ -10,6 +10,7 @@ specific numerical values, focusing on directional relationships and their polar
 
 import pluralize from 'pluralize';
 import utils from '../../utilities/utils.js';
+import { validateEvaluationResult } from '../evaluationSchema.js';
 
 //generic prompt and problem statement used for all tests
 const prompt = "Please add the following to my model...";
@@ -140,59 +141,41 @@ export const evaluate = function(generatedResponse, groundTruth) {
         return 0;
     };
 
-    const relationshipEqualityGTComparatorGenerator = function(groundTruth) {
-        return (ai) => {
-            return (compareNames(ai.from, groundTruth.from) && compareNames(ai.to, groundTruth.to));
-        };
+    const relationshipMatches = function(a, b) {
+        return (compareNames(a.from, b.from) && compareNames(a.to, b.to));
     };
 
-    const relationshipEqualityAIComparatorGenerator = function(ai) {
-        return (groundTruth) => {
-            return (compareNames(ai.from, groundTruth.from) && compareNames(ai.to, groundTruth.to));
-        };
-    };
-
-    // Clean and sort AI relationships
-    const cleanedSortedAI = fromAI.map((r)=> {
-        delete r.reasoning;
-        delete r.polarityReasoning;
-        r.textRepresentation = stringifyRelationship(r);
-        return r;
+    const cleanedSortedAI = fromAI.map((relationship) => {
+        const { reasoning, polarityReasoning, ...rest } = relationship;
+        return { ...rest, textRepresentation: stringifyRelationship(relationship) };
     }).sort(comparator);
 
-    // Prepare ground truth relationships
-    const sortedGroundTruth = groundTruthRelationships.map((r)=> {
-        r.textRepresentation = stringifyRelationship(r);
-        return r;
+    const sortedGroundTruth = groundTruthRelationships.map((relationship) => {
+        return { ...relationship, textRepresentation: stringifyRelationship(relationship) };
     }).sort(comparator);
 
-    // Prepare current model relationships for comparison
-    const sortedCurrentModel = currentModelRelationships.map((r)=> {
-        r.textRepresentation = stringifyRelationship(r);
-        return r;
+    const sortedCurrentModel = currentModelRelationships.map((relationship) => {
+        return { ...relationship, textRepresentation: stringifyRelationship(relationship) };
     }).sort(comparator);
 
-    // Check that all ground truth relationships are found
     const removed = sortedGroundTruth.filter((element) => {
-        return !cleanedSortedAI.some(relationshipEqualityGTComparatorGenerator(element))
+        return !cleanedSortedAI.some((ai) => relationshipMatches(ai, element));
     });
 
-    // Check for fake relationships (excluding legitimate pre-existing ones)
     const added = cleanedSortedAI.filter((element) => {
-        const isNotInGroundTruth = !sortedGroundTruth.some(relationshipEqualityAIComparatorGenerator(element));
-        const isNotInCurrentModel = !sortedCurrentModel.some(relationshipEqualityAIComparatorGenerator(element));
+        const isNotInGroundTruth = !sortedGroundTruth.some((gt) => relationshipMatches(element, gt));
+        const isNotInCurrentModel = !sortedCurrentModel.some((cm) => relationshipMatches(element, cm));
         return isNotInGroundTruth && isNotInCurrentModel;
     });
 
-    // Check that pre-existing relationships are preserved
     const missingCurrentModelRels = sortedCurrentModel.filter((element) => {
-        return !cleanedSortedAI.some(relationshipEqualityGTComparatorGenerator(element));
+        return !cleanedSortedAI.some((ai) => relationshipMatches(ai, element));
     });
 
-    const addedStr = added.map((r)=>{return r.textRepresentation}).join(", ");
-    const removedStr = removed.map((r)=>{return r.textRepresentation}).join(", ");
-    const groundTruthStr = sortedGroundTruth.map((r)=>{return r.textRepresentation}).join(", ");
-    const missingCurrentModelStr = missingCurrentModelRels.map((r)=>{return r.textRepresentation}).join(", ");
+    const addedStr = added.map((relationship) => { return relationship.textRepresentation }).join(", ");
+    const removedStr = removed.map((relationship) => { return relationship.textRepresentation }).join(", ");
+    const groundTruthStr = sortedGroundTruth.map((relationship) => { return relationship.textRepresentation }).join(", ");
+    const missingCurrentModelStr = missingCurrentModelRels.map((relationship) => { return relationship.textRepresentation }).join(", ");
 
     // Check that pre-existing model structure is preserved
     if (missingCurrentModelRels.length > 0) {
@@ -218,7 +201,7 @@ export const evaluate = function(generatedResponse, groundTruth) {
 
     // Check polarities of correctly identified relationships
     for (const groundTruthRelationship of sortedGroundTruth) {
-        let aiRelationship = cleanedSortedAI.find(relationshipEqualityGTComparatorGenerator(groundTruthRelationship));
+        let aiRelationship = cleanedSortedAI.find((ai) => relationshipMatches(ai, groundTruthRelationship));
         if (aiRelationship && aiRelationship.polarity !== groundTruthRelationship.polarity) {
             failures.push({
                 type: "Incorrect polarity discovered",
@@ -227,7 +210,7 @@ export const evaluate = function(generatedResponse, groundTruth) {
         }
     }
 
-    return failures;
+    return validateEvaluationResult(failures);
 };
 
 export const groups = {

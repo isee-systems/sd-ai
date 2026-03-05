@@ -121,7 +121,7 @@ function EnginesList() {
                   title: 'Model Discussion Engines',
                   mode: 'discussion',
                   engines: discussionEngines,
-                  hasLeaderboard: false
+                  hasLeaderboard: true 
                 });
               }
               

@@ -477,7 +477,7 @@ describe('QuantitativeTranslation Evaluate', () => {
 
       const failures = evaluate(generatedResponse, groundTruth);
       expect(failures.length).toBeGreaterThan(0);
-      
+
       const failureTypes = failures.map(f => f.type);
       expect(failureTypes).toContain('Incorrect time unit discovered');
       expect(failureTypes).toContain('Real stocks not found');
@@ -580,6 +580,73 @@ describe('QuantitativeTranslation Evaluate', () => {
 
       const failures = evaluate(generatedResponse, groundTruth);
       expect(failures).toEqual([]);
+    });
+  });
+
+  describe('input mutation safety', () => {
+    it('should not sort groundTruth.stocks in-place', () => {
+      const generatedResponse = {
+        model: {
+          specs: { timeUnits: 'day' },
+          variables: [
+            {
+              type: 'stock',
+              name: 'zebras',
+              equation: '100'
+            },
+            {
+              type: 'stock',
+              name: 'apples',
+              equation: '50'
+            }
+          ]
+        }
+      };
+
+      const groundTruth = {
+        timeUnit: 'day',
+        stocks: [
+          { name: 'zebras', initialValue: 100 },
+          { name: 'apples', initialValue: 50 }
+        ]
+      };
+
+      const originalFirstStockName = groundTruth.stocks[0].name;
+      evaluate(generatedResponse, groundTruth);
+      expect(groundTruth.stocks[0].name).toBe(originalFirstStockName);
+      expect(groundTruth.stocks[0].name).toBe('zebras');
+    });
+
+    it('should produce identical results when called twice with the same inputs', () => {
+      const generatedResponse = {
+        model: {
+          specs: { timeUnits: 'day' },
+          variables: [
+            {
+              type: 'stock',
+              name: 'zebras',
+              equation: '100'
+            },
+            {
+              type: 'stock',
+              name: 'apples',
+              equation: '50'
+            }
+          ]
+        }
+      };
+
+      const groundTruth = {
+        timeUnit: 'day',
+        stocks: [
+          { name: 'zebras', initialValue: 100 },
+          { name: 'apples', initialValue: 50 }
+        ]
+      };
+
+      const firstResult = evaluate(generatedResponse, groundTruth);
+      const secondResult = evaluate(generatedResponse, groundTruth);
+      expect(firstResult).toEqual(secondResult);
     });
   });
 });

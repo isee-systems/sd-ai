@@ -17,6 +17,7 @@
  */
 
 import utils from '../../utilities/utils.js';
+import { validateEvaluationResult } from '../evaluationSchema.js';
 
 /** generic prompt used for all tests */
 const prompt = "Please give me a causal loop diagram that captures the key variables and causal processes described in the background information.";
@@ -159,7 +160,7 @@ export const evaluate = function(generatedResponse, expectations) {
         }
     }
 
-    return failures;
+    return validateEvaluationResult(failures);
 };
 
 /**

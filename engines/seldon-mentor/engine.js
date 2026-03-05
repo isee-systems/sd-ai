@@ -17,7 +17,7 @@ class Engine {
     }
 
     static link() {
-        return "";
+        return "https://onlinelibrary.wiley.com/doi/abs/10.1002/sdr.70019";
     }
 
     additionalParameters()  {

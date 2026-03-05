@@ -11,12 +11,12 @@ class Engine {
     }
 
     static description() {
-        return `SD-AI's original and most popular engine for generating simulating Stock Flow Diagrams (SFDs). 
-Works by sending Google's Gemini Flash 2.5 LLM the user's request along with a set of systems thinking process descriptions and tips.`
+        return `SD-AI's original and most popular engine for generating simulating Stock Flow Diagrams (SFDs).
+Works by sending an LLM the user's request along with a set of systems thinking process descriptions and tips.`
     }
 
     static link() {
-        return "https://papers.ssrn.com/sol3/papers.cfm?abstract_id=5341966";
+        return "https://onlinelibrary.wiley.com/doi/abs/10.1002/sdr.70019";
     }
 
     additionalParameters()  {
@@ -47,6 +47,18 @@ Works by sending Google's Gemini Flash 2.5 LLM the user's request along with a s
             label: "Background Knowledge",
             description: "Background information you want the LLM model to consider when generating a diagram for you",
             minHeight: 100
+        },{
+            name: "supportsArrays",
+            type: "boolean",
+            required: false,
+            uiElement: "hidden",
+            description: "Whether or not your client can handle arrayed models"
+        },{
+            name: "supportsModules",
+            type: "boolean",
+            required: false,
+            uiElement: "hidden",
+            description: "Whether or not your client can handle models with modules"
         }];
     }
 
@@ -64,8 +76,13 @@ Works by sending Google's Gemini Flash 2.5 LLM the user's request along with a s
                     variables: response.variables
                 }
             };
+
+            if (response.modules)
+                returnValue.model.modules = response.modules;
+
             if (response.specs)
                 returnValue.model.specs = response.specs;
+
             return returnValue;
         } catch(err) {
             logger.error(err);
