@@ -39,6 +39,7 @@ logs/
 dist/
 out/
 build/
+*.exe
 
 #vscode stuff
 .vscode/
