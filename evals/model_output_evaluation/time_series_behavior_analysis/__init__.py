@@ -184,6 +184,22 @@ def _damped_sine_model(y: np.ndarray, x: np.ndarray, f_grid: np.ndarray, d_grid:
     return best
 
 
+def _log_model(y: np.ndarray, x: np.ndarray, offset_grid: np.ndarray) -> Tuple[float, int]:
+    """
+    y = A * log(x + offset) + C
+    For fixed offset, solve A, C linearly.
+    Logarithmic growth: fast early growth that continuously decelerates but never plateaus.
+    """
+    best = (np.inf, 3)  # A, offset, C (offset via grid)
+    for offset in offset_grid:
+        log_x = np.log(x + offset)
+        X = np.column_stack([log_x, np.ones_like(x)])
+        _, sse = _ols_fit(X, y)
+        if sse < best[0]:
+            best = (sse, 3)
+    return best
+
+
 def _overshoot_model(y: np.ndarray, x: np.ndarray, peak_pos_grid: np.ndarray, decay_rate_grid: np.ndarray, steady_state_grid: np.ndarray) -> Tuple[float, int]:
     """
     Climate overshoot model: S-curve rise to peak, then exponential decay to steady state.
@@ -344,6 +360,9 @@ def classify_timeseries_shape_and_scale(
     peak_pos_grid = np.linspace(0.2, 0.5, 8)       # Where the peak occurs (0-1)
     overshoot_decay_grid = np.linspace(2.0, 8.0, 7)  # Decay rate after peak
     steady_state_grid = np.linspace(0.3, 0.7, 7)   # Final steady state as fraction of peak
+    
+    # Logarithmic model grid
+    offset_grid = np.linspace(0.01, 0.5, 25)  # Offset to avoid log(0)
 
     fits: Dict[str, Tuple[float, int]] = {}
 
@@ -355,6 +374,7 @@ def classify_timeseries_shape_and_scale(
 
     # Nonlinear-but-fast families (via grid + linear inner solve)
     fits["exponential"] = _exp_model(y_shape, x, b_grid=b_grid)
+    fits["logarithmic"] = _log_model(y_shape, x, offset_grid=offset_grid)
     fits["s_curve"] = _logistic_model(y_shape, x, k_grid=k_grid, x0_grid=x0_grid)
     fits["bump"] = _gaussian_bump(y_shape, x, mu_grid=mu_grid, sig_grid=sig_grid)
     fits["step"] = _step_change(y_shape, x, t_grid=t_grid, allow_trend=False)

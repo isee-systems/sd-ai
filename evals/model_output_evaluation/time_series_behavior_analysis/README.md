@@ -174,10 +174,138 @@ Example use cases:
 - Oscillations with trend: `_trending_up`, `_trending_down`
 - Overshoot: `_up` (overshoots high), `_down` (overshoots low)
 
+## Directory Structure
+
+```
+time_series_behavior_analysis/
+├── README.md                 # This file
+├── requirements.txt          # Python dependencies
+├── build.py                  # Build script for creating executable
+├── __init__.py               # Core classification module
+├── classify_behavior.py      # CLI wrapper for classification
+├── test_time_series_behavior_analysis.py  # Unit tests
+│
+├── sample_data/              # Example time series data
+│   ├── exponential_growth.csv
+│   ├── logarithmic_growth.csv
+│   ├── s_curve_growth.csv
+│   ├── oscillation.csv
+│   └── overshoot.csv
+│
+└── dist_examples/            # Distributable folder with exe and examples
+    ├── README.md             # Quick-start guide for exe users
+    └── classify_behavior.exe # Standalone executable (after building)
+```
+
+## Command Line Interface
+
+### Basic Usage
+
+```bash
+# Classify a CSV file
+python classify_behavior.py data.csv
+
+# Specify output format
+python classify_behavior.py data.csv --format json
+
+# Save results to file
+python classify_behavior.py data.csv --output results.json
+
+# List all available patterns
+python classify_behavior.py --list-patterns
+
+# Show help
+python classify_behavior.py --help
+```
+
+### CLI Options
+
+| Option | Description |
+|--------|-------------|
+| `input` | Input file (CSV or JSON) |
+| `-c, --column` | Column name or index for CSV files |
+| `-o, --output` | Output file path |
+| `-f, --format` | Output format: `text`, `json`, or `csv` |
+| `--top N` | Number of top matches to show (default: 5) |
+| `--list-patterns` | List all available pattern labels |
+| `--version` | Show version |
+
+### Example Output
+
+```
+======================================================================
+TIME SERIES BEHAVIOR CLASSIFICATION RESULT
+======================================================================
+Best Label:        exponential_growth
+Description:       Exponential Growth - rapid accelerating increase
+Base Shape:        exponential
+Direction:         increasing
+Shape RMSE:        0.0312
+Possibly Complex:  No
+
+Scale Metadata:
+  Start Value:     5.2400
+  End Value:       32133.4800
+  Delta:           32128.2400 (613076.3%)
+  Range:           32128.2400
+  Mean:            5842.1523
+  Std Dev:         8234.5621
+
+Top Matches:
+  1. exponential (0.892) - Exponential Growth - rapid accelerating increase
+  2. accelerating (0.056) - Accelerating Growth - increasing rate of growth
+  3. s_curve (0.031) - S-Curve Growth - sigmoid/logistic growth to plateau
+  4. linear (0.012) - Linear Growth - steady positive increase
+  5. inflecting (0.006) - Inflecting Growth - cubic curve trending upward
+======================================================================
+```
+
+## Standalone Executable
+
+Build a standalone executable that works without Python installed:
+
+### Building
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Build executable
+python build.py
+
+# Or with options
+python build.py --clean          # Clean and rebuild
+python build.py --onedir         # Create directory bundle instead of single file
+```
+
+### Using the Executable
+
+```bash
+# After building, the exe is in dist/
+cd dist
+
+# List patterns
+classify_behavior.exe --list-patterns
+
+# Classify data
+classify_behavior.exe ..\sample_data\exponential_growth.csv --format json
+classify_behavior.exe ..\sample_data\s_curve_growth.csv
+classify_behavior.exe ..\sample_data\oscillation.csv --format text
+```
+
+The executable bundles all dependencies and can be distributed to users who don't have Python installed.
+
 ## Requirements
 
 - Python 3.8+
 - NumPy
+- PyInstaller (for building executable)
+
+## Installation
+
+```bash
+pip install -r requirements.txt
+```
 
 ## Testing
 
