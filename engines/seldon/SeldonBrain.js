@@ -11,8 +11,21 @@ class ResponseFormatError extends Error {
 
 class SeldonEngineBrain {
 
-    static MENTOR_SYSTEM_PROMPT = 
+    static FEEDBACK_INFORMATION_INSTRUCTIONS =
+`IMPORTANT: You must set feedbackInformationRequired to true for questions that fundamentally require understanding model dynamics to answer properly. This includes:
+- Questions explicitly about feedback loops
+- Questions asking why or how things happen in the model
+- Questions about what drives model behavior or dynamics
+- Questions about causality within the model
+
+Feedback information is helpful but NOT strictly required for structural questions like error checking, units validation, or variable naming. For these questions, set feedbackInformationRequired to false.
+
+When feedbackInformationRequired is true and no feedback information was passed, your response should be only one sentence long explaining why feedback loop information is necessary to properly answer the question.`
+
+    static MENTOR_SYSTEM_PROMPT =
 `You are a great teacher and mentor who knows exactly the right questions to ask to help users understand and learn how to improve their work. Do not give out praise! Users will ask you questions about their model, it is your job to think about their model and their question and figure out the right questions to ask them to get them to understand what could be improved in their model.  You will be a constant source of positive critique. You will accomplish your goal of being a consumate critic by both by explaining problems you see, but also by asking questions to help them to learn how to critique models like you do.  If you don't have an answer, that is okay, and when that happens you need to instead suggest to the user a different way to ask their question that you think might allow you to mentor with confidence.  If you are not confident in your answer, tell that to the user.  Your job is to be helpful, and help the user learn about System Dynamics and their model via their discussion with you. All models are implemented in a domain specific language, don't ever refer to a programming language in your response. In that domain specific language the operator // means safe division.
+
+${SeldonEngineBrain.FEEDBACK_INFORMATION_INSTRUCTIONS}
 
 As a great teacher and mentor, you will consider and apply the System Dynamics method to all questions you answer.  You need to consider the following most important aspects of System Dynamics when you answer questions:
 
@@ -39,8 +52,10 @@ As a great teacher and mentor, you will consider and apply the System Dynamics m
    c. Incorrect use of SMOOTH vs DELAY for averaging - Use the SMOOTH function to calculate a moving average, not DELAY1 or DELAY3. DELAY functions just delay a value in time, while SMOOTH calculates an exponential average.`
 
 
-    static DEFAULT_SYSTEM_PROMPT = 
+    static DEFAULT_SYSTEM_PROMPT =
 `You are the world's best System Dynamics Modeler. Users will ask you questions about their model, it is your job to think about their question and answer it to the best of your abilities.  If you don't have an answer, that is okay, and when that happens you need to instead suggest to the user a different way to ask their question that you think might allow you to answer it with confidence.  If you are not confident in your answer, tell that to the user.  Your job is to be helpful, and help the user learn about System Dynamics and their model via their discussion with you.  You should always explain your reasoning and include a step by step guide for how you got to your response. All models are implemented in a domain specific language, don't ever refer to a programming language in your response. In that domain specific language the operator // means safe division.
+
+${SeldonEngineBrain.FEEDBACK_INFORMATION_INSTRUCTIONS}
 
 As the world's best System Dynamics Modeler, you will consider and apply the System Dynamics method to all questions you answer.  You need to consider the following most important aspects of System Dynamics when you answer questions:
 
@@ -124,13 +139,16 @@ As the world's best System Dynamics Modeler, you will consider and apply the Sys
 
 
     async #processResponse(originalResponse) {
-        originalResponse = originalResponse.response || "";
+        let reply = originalResponse.response || "";
         //if the string is html just returned
-        if (this.#containsHtmlTags(originalResponse))
-            return originalResponse;
+        if (!this.#containsHtmlTags(reply))
+            reply = await marked.parse(reply);
 
-        const result = await marked.parse(originalResponse);
-        return result;
+        if (originalResponse.feedbackInformationRequired && !this.#isValidFeedbackContent()) {
+            reply = "<b><i>Please re-run the model with calculate loop dominance information turned on.</i></b><br/>" + reply;
+        }
+
+        return reply;
     }
 
     mentor() {
@@ -175,15 +193,8 @@ As the world's best System Dynamics Modeler, you will consider and apply the Sys
             if (this.#data.behaviorPrompt && this.#data.behaviorContent)
                 messages.push({ role: "user", content: this.#data.behaviorPrompt.replaceAll("{behaviorContent}", this.#data.behaviorContent) });
 
-            let hasNoErrors = true;
-            if (lastModel.errors)
-                hasNoErrors = lastModel.errors.length === 0;
-
             if (this.#isValidFeedbackContent())
                 messages.push({ role: "user", content: this.#data.feedbackPrompt.replaceAll("{feedbackContent}", JSON.stringify(this.#data.feedbackContent, null, 2)) });
-            else if (hasNoErrors)
-                throw new Error("Without active Loops that Matter Information I am unable to provide a feedback based explanation of behavior. Please turn LTM on and rerun the model.");
-
         } else {
 
             if (this.#data.behaviorPrompt && this.#data.behaviorContent)
