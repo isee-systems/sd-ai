@@ -63,6 +63,16 @@ utils.evalsNormalizeVariableName = function(name) {
 };
 
 /**
+ * Fetches and normalizes the name of a component's module (if it exists)
+ * @param {string} name The component name to check
+ * @returns {string} The name of the module this component is in; empty string if none
+ */
+utils.evalsGetModuleName = function(name) {
+    if (!name.includes(".")) return ""; // no module
+    return utils.evalsNormalizeVariableName(name.split(".").slice(0, -1).join("."));
+}
+
+/**
  * Checks if a variable name matches the expected name using flexible matching
  * Used in evaluation categories to compare generated variable names with expected names
  * @param {string} variableName The variable name from the generated model

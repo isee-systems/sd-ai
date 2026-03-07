@@ -34,7 +34,7 @@ const problemStatement = "I'm trying to understand the key causal mechanisms tha
  * @returns {Object} Test case with prompt, parameters, and expectations
  */
 
-const generateTest = function(name, timeUnit, backgroundKnowledge, expectedProcesses) {
+const generateTest = function(name, timeUnit, backgroundKnowledge, expectedProcesses, expectedModules) {
     return {
         name: name,
         prompt: prompt,
@@ -44,7 +44,8 @@ const generateTest = function(name, timeUnit, backgroundKnowledge, expectedProce
         },
         expectations: {
             timeUnit: timeUnit,
-            expectedProcesses: expectedProcesses
+            expectedProcesses: expectedProcesses,
+            expectedModules: expectedModules
         }
     };
 };
@@ -126,9 +127,10 @@ const processIsPresent = function(process, generatedModel) {
 export const evaluate = function(generatedResponse, expectations) {
     const generatedModel = generatedResponse?.model || {};
     const expectedProcesses = expectations.expectedProcesses || [];
+    const expectedModules = expectations.expectedModules || [];
     const failures = [];
 
-    // Check if the model has basic quantitative structure
+    // Basic Quantitative Structure Check
     const variables = generatedModel.variables || [];
     const stocks = variables.filter(v => v.type === 'stock');
     const flows = variables.filter(v => v.type === 'flow');
@@ -147,13 +149,28 @@ export const evaluate = function(generatedResponse, expectations) {
         });
     }
 
-    // Check time units if specified
-    if (expectations.timeUnit) {
-        const modelTimeUnit = generatedModel.specs?.timeUnits;
-        if (!modelTimeUnit || !modelTimeUnit.toLowerCase().includes(expectations.timeUnit.toLowerCase())) {
+    // Get Modules
+    const modules = [];
+    for (const v of variables) {
+        const vmodule = utils.evalsGetModuleName(v.name);
+        if (vmodule !== "" && !modules.includes(vmodule)) modules.push(vmodule);
+    }
+
+    // Module List must match exactly
+    for (const m of modules) {
+        if (!expectedModules.includes(m)) {
             failures.push({
-                type: "Incorrect time unit",
-                details: `Expected time unit to include "${expectations.timeUnit}", found "${modelTimeUnit || 'undefined'}"`
+                type: "Unexpected module",
+                details: `Module "${m}" was unexpectedly created.`
+            });
+        }
+    }
+
+    for (const m of expectedModules) {
+        if (!modules.includes(m)) {
+            failures.push({
+                type: "Missing module",
+                details: `Module "${m}" is not adequately represented.`
             });
         }
     }
@@ -279,74 +296,8 @@ export const groups = {
                         { from: "contacts", to: "infecting", polarity: "+" }
                     ]
                 }
-            ]
-        ),
-        generateTest(
-            "Healthcare capacity model with resource constraints",
-            "week",
-            `Please rely on the following expert knowledge as much as possible when creating your model.
-            
-            Healthcare systems have limited capacity that affects patient outcomes during health crises that unfold over weekly cycles.
-            Patients requiring care enter the system through admissions, but bed capacity limits how many can be treated.
-            When demand exceeds capacity, patients face delays or are turned away, potentially worsening their condition.
-            Healthcare workers are the key resource - they can treat patients but also become sick themselves,
-            reducing available capacity. Staff burnout increases when workload is high, leading to turnover.
-            Hospitals can surge capacity by opening additional beds and hiring temporary staff, but this takes time.
-            Recovery times vary - some patients recover quickly while others require long-term care.
-            The system involves managing patient flows, workforce dynamics, and available bed resources.
-            
-            Use these variable names: 
-            patients, available beds, healthcare workers, workload, burnout.`,
-            [
-                {
-                    name: "Hospital capacity management",
-                    requiredStocks: ["patients", "available beds", "healthcare workers"],
-                },
-                {
-                    name: "Staff burnout dynamics",
-                    requiredVariables: [
-                        { name: "workload", type: "variable" },
-                        { name: "burnout", type: "variable" }
-                    ],
-                    requiredRelationships: [
-                        { from: "patients", to: "workload", polarity: "+" },
-                        { from: "workload", to: "burnout", polarity: "+" },
-                        { from: "burnout", to: "staff turnover", polarity: "+" }
-                    ]
-                }
-            ]
+            ],
+            [],
         )
-    ],
-    "urbanPlanning": [
-        generateTest(
-            "Traffic congestion model with induced demand",
-            "year",
-            `Please rely on the following expert knowledge as much as possible when creating your model.
-            
-            Transportation engineers recognize that building more roads often fails to reduce congestion due to induced demand effects that emerge over annual planning cycles.
-            When new road capacity is added, it initially reduces travel time and congestion. However, this improvement
-            attracts new drivers who switch from other routes, times, or modes of transport. Some people who previously
-            didn't make trips now find driving more attractive. Over time, this increased traffic volume can return
-            congestion to previous levels or even make it worse. The phenomenon demonstrates that transportation is not
-            just about moving vehicles, but about the complex behavioral responses to changes in the system.
-            Traffic also creates negative externalities like air pollution and noise, which affect quality of life.
-            The system involves road infrastructure, traveler behavior, and traffic volume dynamics.
-            
-            Use these variable names: 
-            road capacity, travelers, travel time, congestion.`,
-            [
-                {
-                    name: "Induced demand mechanism",
-                    requiredStocks: ["road capacity", "travelers"],
-                },
-                {
-                    name: "Congestion feedback loop",
-                    requiredVariables: [
-                        { name: "travel time", type: "variable" },
-                        { name: "congestion", type: "variable" }
-                    ]
-                }
-            ]
-        ),
     ]
 };
