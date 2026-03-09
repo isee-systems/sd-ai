@@ -86,6 +86,19 @@ utils.evalsVariableNameMatches = function(variableName, expectedName) {
 };
 
 /**
+ * Checks if a variable name matches the expected name using strict matching
+ * Used in evaluation categories to compare generated variable names with expected names
+ * @param {string} variableName The variable name from the generated model
+ * @param {string} expectedName The expected variable name
+ * @returns {boolean} True if names match
+ */
+utils.evalsVariableNameMatchesStrict = function(variableName, expectedName) {
+    const normalizedVariable = utils.evalsNormalizeVariableName(variableName);
+    const normalizedExpected = utils.evalsNormalizeVariableName(expectedName);
+    return normalizedVariable.includes(normalizedExpected) == normalizedExpected.includes(normalizedVariable);
+}
+
+/**
  * Standardized array of gibberish nouns for use across evaluation categories
  */
 utils.evalsGibberishNouns = [ "frimbulator",  "whatajig", "balack", "whoziewhat", "funkado", "maxabizer", "marticatene", "reflupper", "exeminte", "oc", "proptimatire", "priary", "houtal", "poval", "auspong", "dominitoxing", "outrance", "illigent", "yelb", "traze", "pablanksill", "posistorather", "crypteral", "oclate", "reveforly", "yoffa", "buwheal", "geyflorrin", "ih", "aferraron", "paffling", "pershipfulty", "copyring", "dickstonyx", "bellignorance", "hashtockle", "succupserva", "relity", "hazmick", "ku", "obvia", "unliescatice", "gissorm", "phildiscals", "loopnova", "hoza", "arinterpord", "burgination", "perstablintome", "memostorer", "baxtoy", "hensologic", "estintant", "perfecton", "raez", "younjuring"];

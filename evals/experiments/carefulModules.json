@@ -5,9 +5,11 @@
         "quantitative-experimental": {
             "engine": "quantitative-experimental",
             "additionalParameters": {
-                "underlyingModel": "gemini-2.5-flash-lite",
-                "supportsArrays": true,
-                "supportsModules": true
+                "underlyingModel": "gemini-2.5-flash"
+            },            
+            "limits": {
+                "tokensPerMinute": 90000,
+                "requestsPerMinute": 10
             }
         }
     },

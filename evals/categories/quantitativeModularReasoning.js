@@ -21,7 +21,11 @@ import utils from '../../utilities/utils.js';
 // Note: pluralize import removed as it's not used in this evaluation
 
 /** generic prompt used for all tests */
-const prompt = "Please give me a quantitative model that captures the key causal processes described in the background information.";
+const prompt = 
+`
+Please give me a quantitative model that captures the key causal processes described in the background information.
+Make sure to create a model with exactly the specified modules; do not add any additional modules beyond what is specified.
+`;
 /** generic problem statement used for all tests */
 const problemStatement = "I'm trying to understand the key causal mechanisms that drive this system's behavior over time.";
 
@@ -31,6 +35,7 @@ const problemStatement = "I'm trying to understand the key causal mechanisms tha
  * @param {string} timeUnit Time units for the model (e.g., "month", "year")
  * @param {string} backgroundKnowledge Expert description of the system
  * @param {Array} expectedProcesses List of key processes that should be present
+ * @param {Array} expectedModules List of key modules that should match the model exactly
  * @returns {Object} Test case with prompt, parameters, and expectations
  */
 
@@ -40,7 +45,10 @@ const generateTest = function(name, timeUnit, backgroundKnowledge, expectedProce
         prompt: prompt,
         additionalParameters: {
             problemStatement: problemStatement,
-            backgroundKnowledge: backgroundKnowledge
+            backgroundKnowledge: 
+            `Please rely on the following expert knowledge as much as possible when creating your model.\n\n${backgroundKnowledge}`,
+            supportsArrays: true,
+            supportsModules: true,
         },
         expectations: {
             timeUnit: timeUnit,
@@ -106,8 +114,9 @@ const processIsPresent = function(process, generatedModel) {
         for (const keyVar of process.requiredVariables) {
             const variable = variables.find(v => {
                 const nameMatches = utils.evalsVariableNameMatches(v.name, keyVar.name);
+                const ghostMatches = utils.evalsVariableNameMatchesStrict(v.crossLevelGhostOf || "", keyVar.crossLevelGhostOf || "");
                 const typeMatches = !keyVar.type || v.type === keyVar.type;
-                return nameMatches && typeMatches;
+                return nameMatches && typeMatches && ghostMatches;
             });
             if (!variable) {
                 return false;
@@ -174,6 +183,18 @@ export const evaluate = function(generatedResponse, expectations) {
             });
         }
     }
+    
+    // Fail if two components from different modules are directly linked (without ghosting)
+    for (const f of generatedModel.relationships || []) {
+        const fromModule = utils.evalsGetModuleName(f.from || "");
+        const toModule = utils.evalsGetModuleName(f.to || "")
+        if (!utils.evalsVariableNameMatches(fromModule, toModule)) {
+            failures.push({
+                type: "Invalid relationship",
+                details: `Relationship between "${f.from}" and "${f.to}" is invalid (different modules without ghosting)`
+            });
+        }
+    }
 
     // Check each expected process
     for (const process of expectedProcesses) {
@@ -221,12 +242,15 @@ export const evaluate = function(generatedResponse, expectations) {
                 const missingVars = process.requiredVariables.filter(keyVar =>
                     !variables.some(v => {
                         const nameMatches = utils.evalsVariableNameMatches(v.name, keyVar.name);
+                        const ghostMatches = utils.evalsVariableNameMatchesStrict(v.crossLevelGhostOf || "", keyVar.crossLevelGhostOf || "");
                         const typeMatches = !keyVar.type || v.type === keyVar.type;
-                        return nameMatches && typeMatches;
+                        return nameMatches && ghostMatches && typeMatches;
                     })
                 );
                 if (missingVars.length > 0) {
-                    missingElements.push(`variables: ${missingVars.map(v => v.name).join(', ')}`);
+                    missingElements.push(`variables: ${missingVars.map(v => 
+                        `${v.name}${v.crossLevelGhostOf ? ' which ghosts ' : ''}${v.crossLevelGhostOf || ''}`
+                    ).join(', ')}`);
                 }
             }
 
@@ -262,42 +286,142 @@ expert-identified stocks, flows, variables, and relationships across domains lik
  * The groups of tests to be evaluated as a part of this category
  */
 export const groups = {
-    "publicHealth": [
+    "noModules": [
         generateTest(
-            "Epidemic spread model with key epidemiological processes",
-            "day",
-            `Please rely on the following expert knowledge as much as possible when creating your model.
-            
-            Epidemiologists understand that infectious disease spread follows well-established patterns that typically evolve over daily intervals. 
-            The susceptible population becomes exposed when they come into contact with infectious individuals. 
-            After an incubation period, exposed individuals become infectious and can transmit the disease. 
-            Infectious individuals then recover and develop immunity, or in some cases may die from the disease.
-            The basic reproduction number (R0) determines how many new infections each infectious person generates.
-            Public health interventions like vaccination can move people directly from susceptible to recovered,
-            while social distancing measures reduce the contact rate between infectious and susceptible individuals.
-            Contact tracing and quarantine can remove exposed individuals from circulation before they become infectious.
-            Disease progression involves distinct compartments of people moving through the infection cycle.
-            
-            Use these variable names: 
-            susceptible, exposed, infectious, recovered, infecting, incubating, recovering, contact rate`,
+            "Consulting Business Model",
+            "year",
+            `
+            At a certain business, employees are sorted in a three-role hierarchy.
+            New hirees start with the "rookie" status.
+            Rookies that perform well are promoted to associates.
+            Associates that perform well are promoted to partners.
+            To keep the hierarchy stable, the business promotes a strict percentage of each role every year.
+            Some employees may also leave the company, whether due to personal reasons or exceptionally poor performance.
+            A stable percentage of employees at each level of the company leave the company each year.
+            The business also onboards a constant number of new hirees every year.
+
+            Use these variable names:
+            rookies, associates, partners, promotion_rate, departure_rate, hire_rate,
+            rookie_promotions, associate_promotions, rookie_hires,
+            rookie_departures, associate_departures, partner_departures
+
+            Do not create any modules in this model.
+            `,
             [
                 {
-                    name: "SEIR disease progression",
-                    requiredStocks: ["susceptible", "exposed", "infectious", "recovered"],
-                    requiredFlows: ["infecting", "incubating", "recovering"],
+                    name: "Business Hierarchy",
+                    requiredStocks: ["rookies", "associates", "partners"]
                 },
                 {
-                    name: "Public health interventions",
+                    name: "Promotion Dynamics",
                     requiredVariables: [
-                        { name: "vaccination" },
-                        { name: "contacts" }
+                        { name: "promotion_rate" },
+                        { name: "hire_rate" }
                     ],
+                    requiredFlows: ["rookie_promotions", "associate_promotions", "rookie_hires"],
                     requiredRelationships: [
-                        { from: "contacts", to: "infecting", polarity: "+" }
+                        { from: "promotion_rate", to: "rookie_promotions", polarity: "+" },
+                        { from: "promotion_rate", to: "associate_promotions", polarity: "+" },
+                        { from: "hire_rate", to: "rookie_hires", polarity: "+" },
+
+                        { from: "rookies", to: "rookie_promotions", polarity: "+" },
+                        { from: "rookie_promotions", to: "associates", polarity: "+" },
+                        { from: "associates", to: "associate_promotions", polarity: "+" },
+                        { from: "associate_promotions", to: "partners", polarity: "+" },
+                    ]
+                },
+                {
+                    name: "Departure Dynamics",
+                    requiredVariables: [
+                        { name: "departure_rate" },
+                    ],
+                    requiredFlows: ["rookie_departures", "associate_departures", "partner_departures"],
+                    requiredRelationships: [
+                        { from: "departure_rate", to: "rookie_departures", polarity: "+" },
+                        { from: "departure_rate", to: "associate_departures", polarity: "+" },
+                        { from: "departure_rate", to: "partner_departures", polarity: "+" },
+
+                        { from: "rookie_departures", to: "rookies", polarity: "-" },
+                        { from: "associate_departures", to: "associates", polarity: "-" },
+                        { from: "partner_departures", to: "partners", polarity: "-" },
                     ]
                 }
             ],
-            [],
+            []
         )
-    ]
+    ],
+    "twoModules": [
+        generateTest(
+            "Predator-Prey System with Two Modules",
+            "day",
+            `
+            In a certain ecosystem, there are two animal populations: foxes and chickens.
+            Initially, chickens significantly outnumber foxes.
+            The chickens reproduce at a steady percentage rate per day.
+            The foxes depend on the chickens for food. Each fox eats one chicken per day.
+            Foxes also reproduce at a steady percentage rate per day, but slower than the chickens.
+            
+            Create two modules named 'fox' and 'chicken'.
+            
+            The fox module should use these variable names:
+            reproductionRate, count,
+            reproduction
+
+            The chicken module should use these variable names:
+            reproductionRate, count,
+            foxCount
+            reproduction, predation
+            `,
+            [
+                {
+                    name: "Ecosystem Dynamics",
+                    requiredStocks: ["fox.count", "chicken.count"]
+                },
+                {
+                    name: "Reproduction Dynamics",
+                    requiredVariables: [
+                        { name: "fox.reproductionRate" },
+                        { name: "chicken.reproductionRate" }
+                    ],
+                    requiredFlows: ["fox.reproduction", "chicken.reproduction"],
+                    requiredRelationships: [
+                        { from: "fox.reproductionRate", to: "fox.reproduction", polarity: "+" },
+                        { from: "fox.reproduction", to: "fox.count", polarity: "+" },
+                        { from: "chicken.reproductionRate", to: "chicken.reproduction", polarity: "+" },
+                        { from: "chicken.reproduction", to: "chicken.count", polarity: "+" }
+                    ]
+                },
+                {
+                    name: "Predation Dynamics",
+                    requiredVariables: [
+                        { name: "chicken.foxCount", crossLevelGhostOf: "fox.count" },
+                    ],
+                    requiredFlows: ["chicken.predation"],
+                    requiredRelationships: [
+                        { from: "chicken.foxCount", to: "chicken.predation", polarity: "+" },
+                        { from: "chicken.predation", to: "chicken.count", polarity: "-" }
+                    ]
+                }
+            ],
+            ["chicken", "fox"],
+        )
+    ],
+    "threeModules": [
+
+    ],
+    "modularize": [
+
+    ],
+    "demodularize": [
+
+    ],
+    "addModule": [
+
+    ],
+    "deleteModule": [
+
+    ],
+    "modifyModule": [
+
+    ],
 };
