@@ -138,7 +138,7 @@ Your documentation should be accessible to both technical and non-technical audi
             introMessage = "I have documented all model variables and relationships.";
         }
         let summaryHtml = introMessage + "<br/><br/>" + originalResponse.summary;
-        if (summaryHtml && !this.#containsHtmlTags(summaryHtml)) {
+        if (summaryHtml && !this.#containsHtmlTags(originalResponse.summary)) {
             summaryHtml = await marked.parse(summaryHtml);
         }
 
