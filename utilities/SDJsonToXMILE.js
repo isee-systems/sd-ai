@@ -188,7 +188,7 @@ function getModulePath(varName, model) {
 
     if (model.modules && model.modules.length > 0) {
         // Find the module with this simple name and return its full path
-        const moduleInfo = model.modules.find(m => m.name === immediateModuleName);
+        const moduleInfo = model.modules.find(m => utils.sameVars(m.name, immediateModuleName));
         if (moduleInfo) {
             return moduleInfo.parentModule ? `${moduleInfo.parentModule}.${moduleInfo.name}` : moduleInfo.name;
         }
@@ -419,7 +419,7 @@ function getAccessAttribute(variable, model) {
     }
 
     // Check if this variable is referenced as a ghost source (output to another module)
-    const isGhostSource = model.variables.some(v => v.crossLevelGhostOf === variable.name);
+    const isGhostSource = model.variables.some(v => v.crossLevelGhostOf && utils.sameVars(v.crossLevelGhostOf, variable.name));
     if (isGhostSource) {
         return ' access="output"';
     }
