@@ -13,50 +13,54 @@
  * to assess not just whether the model is structurally correct, but whether it captures the 
  * essential causal logic that makes it useful for policy analysis and decision-making.
  * 
- * @module categories/quantitativeCausalReasoning
+ * @module categories/quantitativeModularModification
  */
 
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import utils from '../../utilities/utils.js';
 
-// Note: pluralize import removed as it's not used in this evaluation
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 /** generic prompt used for all tests */
-const prompt = 
-`
-Please give me a quantitative model that captures the key causal processes described in the background information.
-Make sure to create a model with exactly the specified modules; do not add any additional modules beyond what is specified.
+const prompt = `
+I've provided a system model that I've been working on.
+Please take into account the current model's formulation, modules (if present), and causal relationships between the model's elements.
+Using the provided model, please modify or create a new model that satisfies my request.
 `;
-/** generic problem statement used for all tests */
-const problemStatement = "I'm trying to understand the key causal mechanisms that drive this system's behavior over time.";
 
 /**
- * Generates a test case with expert knowledge and expected causal processes
- * @param {string} name Test name
- * @param {string} timeUnit Time units for the model (e.g., "month", "year")
- * @param {string} backgroundKnowledge Expert description of the system
+ * Generate a test case
+ * @param {string} name -
+ * @param {string} baseModelName -
+ * @param {string} problemStatement - 
  * @param {Array} expectedProcesses List of key processes that should be present
  * @param {Array} expectedModules List of key modules that should match the model exactly
- * @returns {Object} Test case with prompt, parameters, and expectations
+ * @returns {object} Test case object
  */
+const generateTest = function(name, baseModelName, problemStatement, expectedProcesses, expectedModules) {
+    // Load base model
+    const baseModelPath = path.join(__dirname, 'modularModificationData', baseModelName);
+    const baseModel = JSON.parse(fs.readFileSync(baseModelPath, 'utf8'));
 
-const generateTest = function(name, timeUnit, backgroundKnowledge, expectedProcesses, expectedModules) {
     return {
         name: name,
         prompt: prompt,
+        currentModel: baseModel.model,
         additionalParameters: {
             problemStatement: problemStatement,
-            backgroundKnowledge: 
-            `Please rely on the following expert knowledge as much as possible when creating your model.\n\n${backgroundKnowledge}`,
             supportsArrays: true,
             supportsModules: true,
         },
         expectations: {
-            timeUnit: timeUnit,
             expectedProcesses: expectedProcesses,
-            expectedModules: expectedModules
+            expectedModules: expectedModules  
         }
     };
 };
+
 
 /**
  * Checks if a process is represented in the generated model
@@ -270,6 +274,7 @@ export const evaluate = function(generatedResponse, expectations) {
     return failures;
 };
 
+
 /**
  * Returns the description for this category
  * @returns {string} The description describing this category
@@ -282,131 +287,38 @@ expert-identified stocks, flows, variables, and relationships across domains lik
     return `TODO: Placeholder description. These tests evaluate the modular reasoning capabilities of LLMs.`
 };
 
-/**
- * The groups of tests to be evaluated as a part of this category
- */
+
 export const groups = {
-    "noModules": [
+    "modularize": [
         generateTest(
-            "Consulting Business Model",
-            "year",
+            "Create modules from a non-modular system",
+            "predatorPrey.json",
             `
-            At a certain business, employees are sorted in a three-role hierarchy.
-            New hirees start with the "rookie" status.
-            Rookies that perform well are promoted to associates.
-            Associates that perform well are promoted to partners.
-            To keep the hierarchy stable, the business promotes a strict percentage of each role every year.
-            Some employees may also leave the company, whether due to personal reasons or exceptionally poor performance.
-            A stable percentage of employees at each level of the company leave the company each year.
-            The business also onboards a constant number of new hirees every year.
+            I've created this non-modular model simulating a predator-prey ecosystem.
+            Please recreate the system with two modules.
 
-            Use these variable names:
-            rookies, associates, partners, promotion_rate, departure_rate, hire_rate,
-            rookie_promotions, associate_promotions, rookie_hires,
-            rookie_departures, associate_departures, partner_departures
+            Use the following module names exactly:
+            hare, lynx
 
-            Do not create any modules in this model.
+            Name variables within each module by removing the animal prefix, and changing nothing else.
+            For instance, 'hare density' should be renamed to 'hare.density',
+            and 'lynx births' should be renamed to 'lynx.births'.
+            Any other naming convention is unacceptable and will cause issues in my simulation.
             `,
-            [
-                {
-                    name: "Business Hierarchy",
-                    requiredStocks: ["rookies", "associates", "partners"]
-                },
-                {
-                    name: "Promotion Dynamics",
-                    requiredVariables: [
-                        { name: "promotion_rate" },
-                        { name: "hire_rate" }
-                    ],
-                    requiredFlows: ["rookie_promotions", "associate_promotions", "rookie_hires"],
-                    requiredRelationships: [
-                        { from: "promotion_rate", to: "rookie_promotions", polarity: "+" },
-                        { from: "promotion_rate", to: "associate_promotions", polarity: "+" },
-                        { from: "hire_rate", to: "rookie_hires", polarity: "+" },
-
-                        { from: "rookies", to: "rookie_promotions", polarity: "+" },
-                        { from: "rookie_promotions", to: "associates", polarity: "+" },
-                        { from: "associates", to: "associate_promotions", polarity: "+" },
-                        { from: "associate_promotions", to: "partners", polarity: "+" },
-                    ]
-                },
-                {
-                    name: "Departure Dynamics",
-                    requiredVariables: [
-                        { name: "departure_rate" },
-                    ],
-                    requiredFlows: ["rookie_departures", "associate_departures", "partner_departures"],
-                    requiredRelationships: [
-                        { from: "departure_rate", to: "rookie_departures", polarity: "+" },
-                        { from: "departure_rate", to: "associate_departures", polarity: "+" },
-                        { from: "departure_rate", to: "partner_departures", polarity: "+" },
-
-                        { from: "rookie_departures", to: "rookies", polarity: "-" },
-                        { from: "associate_departures", to: "associates", polarity: "-" },
-                        { from: "partner_departures", to: "partners", polarity: "-" },
-                    ]
-                }
-            ],
-            []
+            [],
+            ["hare", "lynx"],
         )
     ],
-    "twoModules": [
-        generateTest(
-            "Predator-Prey System with Two Modules",
-            "day",
-            `
-            In a certain ecosystem, there are two animal populations: foxes and chickens.
-            Initially, chickens significantly outnumber foxes.
-            The chickens reproduce at a steady percentage rate per day.
-            The foxes depend on the chickens for food. Each fox eats one chicken per day.
-            Foxes also reproduce at a steady percentage rate per day, but slower than the chickens.
-            
-            Create two modules named 'fox' and 'chicken'.
-            
-            The fox module should use these variable names:
-            reproductionRate, count,
-            reproduction
+    "demodularize": [
 
-            The chicken module should use these variable names:
-            reproductionRate, count,
-            foxCount
-            reproduction, predation
-            `,
-            [
-                {
-                    name: "Ecosystem Dynamics",
-                    requiredStocks: ["fox.count", "chicken.count"]
-                },
-                {
-                    name: "Reproduction Dynamics",
-                    requiredVariables: [
-                        { name: "fox.reproductionRate" },
-                        { name: "chicken.reproductionRate" }
-                    ],
-                    requiredFlows: ["fox.reproduction", "chicken.reproduction"],
-                    requiredRelationships: [
-                        { from: "fox.reproductionRate", to: "fox.reproduction", polarity: "+" },
-                        { from: "fox.reproduction", to: "fox.count", polarity: "+" },
-                        { from: "chicken.reproductionRate", to: "chicken.reproduction", polarity: "+" },
-                        { from: "chicken.reproduction", to: "chicken.count", polarity: "+" }
-                    ]
-                },
-                {
-                    name: "Predation Dynamics",
-                    requiredVariables: [
-                        { name: "chicken.foxCount", crossLevelGhostOf: "fox.count" },
-                    ],
-                    requiredFlows: ["chicken.predation"],
-                    requiredRelationships: [
-                        { from: "chicken.foxCount", to: "chicken.predation", polarity: "+" },
-                        { from: "chicken.predation", to: "chicken.count", polarity: "-" }
-                    ]
-                }
-            ],
-            ["chicken", "fox"],
-        )
     ],
-    "threeModules": [
+    "addModule": [
 
-    ]
+    ],
+    "deleteModule": [
+
+    ],
+    "modifyModule": [
+
+    ],
 };
