@@ -39,6 +39,9 @@ utils.isValidFeedbackContent = function(feedbackContent) {
     return false;
   }
 
+  if (feedbackContent.hasOwnProperty("feedbackLoops") && feedbackContent.feedbackLoops.length > 0)
+    return true;
+
   if (feedbackContent.hasOwnProperty('valid') && !feedbackContent.valid) {
     return false;
   }
