@@ -98,6 +98,10 @@ Classify each variable as one of three types:
 - FLOW: Derivatives that change stocks (rate of change)
 - VARIABLE: Auxiliary variables for algebraic expressions
 
+CRITICAL STOCK-FLOW CONSTRAINT:
+- A flow can NEVER appear in BOTH the inflows AND outflows of the same stock
+- Each flow must be classified as EITHER an inflow OR an outflow for any given stock, never both
+
 STEP 4 - WRITE EQUATIONS:
 Provide equations for every variable:
 - Write all equations in XMILE format, meaning variable names NEVER have spaces and ALWAYS use underscores
