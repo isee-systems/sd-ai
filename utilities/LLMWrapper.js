@@ -152,8 +152,8 @@ export class LLMWrapper {
       {label: "o4-mini", value: 'o4-mini'}
   ];
 
-  static BUILD_DEFAULT_MODEL = 'gemini-3-flash-preview medium'; //'claude-opus-4-6';
-  static NON_BUILD_DEFAULT_MODEL = 'gemini-3-flash-preview medium'; //'claude-opus-4-6';
+  static BUILD_DEFAULT_MODEL = 'gemini-3-flash-preview low'; //'claude-opus-4-6';
+  static NON_BUILD_DEFAULT_MODEL = 'gemini-3-flash-preview low'; //'claude-opus-4-6';
   static EVAL_MODEL = 'gemini-2.5-flash';
   
   static SCHEMA_STRINGS = {
