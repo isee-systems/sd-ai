@@ -159,6 +159,23 @@ As the world's best System Dynamics Modeler, you will consider and apply the Sys
         return utils.isValidFeedbackContent(this.#data.feedbackContent);
     }
 
+    #filterModelForErrors(model) {
+        // If no variables have equations, remove the errors field
+        if (!model || !model.variables) {
+            return model;
+        }
+
+        const hasEquations = model.variables.some(variable =>
+            variable.equation && variable.equation.trim() !== ''
+        );
+
+        if (!hasEquations && model.errors) {
+            delete model.errors;
+        }
+
+        return model;
+    }
+
     setupLLMParameters(userPrompt, lastModel) {
         //start with the system prompt
         const { underlyingModel, systemRole, temperature, reasoningEffort } = this.#llmWrapper.getLLMParameters();
@@ -185,7 +202,9 @@ As the world's best System Dynamics Modeler, you will consider and apply the Sys
         }
 
         if (lastModel && lastModel.variables && lastModel.variables.length > 0) {
-            messages.push({ role: "assistant", content: JSON.stringify(lastModel, null, 2) });
+            const filteredModel = this.#filterModelForErrors(lastModel);
+
+            messages.push({ role: "assistant", content: JSON.stringify(filteredModel, null, 2) });
 
             if (this.#data.structurePrompt)
                 messages.push({ role: "user", content: this.#data.structurePrompt });
