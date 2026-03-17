@@ -20,6 +20,8 @@ class SeldonEngineBrain {
 
 Feedback information is helpful but NOT strictly required for structural questions like error checking, units validation, or variable naming. For these questions, set feedbackInformationRequired to false.
 
+VERY IMPORTANT: NEVER mark feedbackInformationRequired to true if the model is empty (has no variables) or if the model has equation or syntax errors that prevent it from simulating. Feedback information is only relevant for valid, populated models.
+
 When feedbackInformationRequired is true and no feedback information was passed, your response should be only one sentence long explaining why feedback loop information is necessary to properly answer the question.`
 
     static MENTOR_SYSTEM_PROMPT =
