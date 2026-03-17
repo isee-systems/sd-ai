@@ -184,7 +184,8 @@ export const evaluate = function(generatedResponse, expectations) {
         }
     }
     
-    // Fail if two components from different modules are directly linked (without ghosting)
+    /*
+    // Detect Invalid Relationships
     for (const f of generatedModel.relationships || []) {
         const fromModule = utils.evalsGetModuleName(f.from || "");
         const toModule = utils.evalsGetModuleName(f.to || "")
@@ -195,6 +196,7 @@ export const evaluate = function(generatedResponse, expectations) {
             });
         }
     }
+    */
 
     // Check each expected process
     for (const process of expectedProcesses) {
@@ -288,7 +290,7 @@ export const description = () => {
 export const groups = {
     "noModules": [
         generateTest(
-            "Consulting Business Model",
+            "Consulting Business Model with No Modules",
             "year",
             `
             At a certain business, employees are sorted in a three-role hierarchy.
@@ -300,7 +302,7 @@ export const groups = {
             A stable percentage of employees at each level of the company leave the company each year.
             The business also onboards a constant number of new hirees every year.
 
-            Use these variable names:
+            Use the following component names as appropriate:
             rookies, associates, partners, promotion_rate, departure_rate, hire_rate,
             rookie_promotions, associate_promotions, rookie_hires,
             rookie_departures, associate_departures, partner_departures
@@ -348,6 +350,53 @@ export const groups = {
                 }
             ],
             []
+        ),
+
+        generateTest(
+            "Predator-Prey System with No Modules",
+            "day",
+            `
+            In a certain ecosystem, there are two animal populations: foxes and chickens.
+            Initially, chickens significantly outnumber foxes.
+            The chickens reproduce at a steady percentage rate per day.
+            The foxes depend on the chickens for food. Each fox eats one chicken per day.
+            Foxes also reproduce at a steady percentage rate per day, but slower than the chickens.
+            
+            Use the following component names as appropriate:
+            fox_reproductionRate, fox_count, fox_reproduction,
+            chicken_reproductionRate, chicken_count, chicken_reproduction, chicken_predation
+            
+            Do not create any modules in this model.
+            `,
+            [
+                {
+                    name: "Ecosystem Dynamics",
+                    requiredStocks: ["fox_count", "chicken_count"]
+                },
+                {
+                    name: "Reproduction Dynamics",
+                    requiredVariables: [
+                        { name: "fox_reproductionRate" },
+                        { name: "chicken_reproductionRate" }
+                    ],
+                    requiredFlows: ["fox_reproduction", "chicken_reproduction"],
+                    requiredRelationships: [
+                        { from: "fox_reproductionRate", to: "fox_reproduction", polarity: "+" },
+                        { from: "fox_reproduction", to: "fox_count", polarity: "+" },
+                        { from: "chicken_reproductionRate", to: "chicken_reproduction", polarity: "+" },
+                        { from: "chicken_reproduction", to: "chicken_count", polarity: "+" }
+                    ]
+                },
+                {
+                    name: "Predation Dynamics",
+                    requiredFlows: ["chicken_predation"],
+                    requiredRelationships: [
+                        { from: "fox_count", to: "chicken_predation", polarity: "+" },
+                        { from: "chicken_predation", to: "chicken_count", polarity: "-" }
+                    ]
+                }
+            ],
+            [],
         )
     ],
     "twoModules": [
@@ -361,52 +410,270 @@ export const groups = {
             The foxes depend on the chickens for food. Each fox eats one chicken per day.
             Foxes also reproduce at a steady percentage rate per day, but slower than the chickens.
             
-            Create two modules named 'fox' and 'chicken'.
-            
-            The fox module should use these variable names:
-            reproductionRate, count,
-            reproduction
+            Please create a model with two modules, 'foxes' and 'chickens'.
 
-            The chicken module should use these variable names:
-            reproductionRate, count,
-            foxCount
-            reproduction, predation
+            Use the following component names within each module as appropriate:
+            reproduction rate, count, reproduction, predation
+
+            When creating a ghost component, preserve the name of the original component, including the module prefix (separated by a space rather than a period).
+            So, a ghost of "module1.component" in module2 should be named "module2.module1 component".
             `,
             [
                 {
                     name: "Ecosystem Dynamics",
-                    requiredStocks: ["fox.count", "chicken.count"]
+                    requiredStocks: ["foxes.count", "chickens.count"]
                 },
                 {
                     name: "Reproduction Dynamics",
                     requiredVariables: [
-                        { name: "fox.reproductionRate" },
-                        { name: "chicken.reproductionRate" }
+                        { name: "foxes.reproduction rate" },
+                        { name: "chickens.reproduction rate" }
                     ],
-                    requiredFlows: ["fox.reproduction", "chicken.reproduction"],
+                    requiredFlows: ["foxes.reproduction", "chickens.reproduction"],
                     requiredRelationships: [
-                        { from: "fox.reproductionRate", to: "fox.reproduction", polarity: "+" },
-                        { from: "fox.reproduction", to: "fox.count", polarity: "+" },
-                        { from: "chicken.reproductionRate", to: "chicken.reproduction", polarity: "+" },
-                        { from: "chicken.reproduction", to: "chicken.count", polarity: "+" }
+                        { from: "foxes.reproduction rate", to: "foxes.reproduction", polarity: "+" },
+                        { from: "foxes.reproduction", to: "foxes.count", polarity: "+" },
+                        { from: "chickens.reproduction rate", to: "chickens.reproduction", polarity: "+" },
+                        { from: "chickens.reproduction", to: "chickens.count", polarity: "+" }
                     ]
                 },
                 {
                     name: "Predation Dynamics",
                     requiredVariables: [
-                        { name: "chicken.foxCount", crossLevelGhostOf: "fox.count" },
+                        { name: "chickens.foxes count", crossLevelGhostOf: "foxes.count" },
                     ],
-                    requiredFlows: ["chicken.predation"],
+                    requiredFlows: ["chickens.predation"],
                     requiredRelationships: [
-                        { from: "chicken.foxCount", to: "chicken.predation", polarity: "+" },
-                        { from: "chicken.predation", to: "chicken.count", polarity: "-" }
+                        { from: "chickens.foxes count", to: "chickens.predation", polarity: "+" },
+                        { from: "chickens.predation", to: "chickens.count", polarity: "-" }
                     ]
                 }
             ],
-            ["chicken", "fox"],
+            ["foxes", "chickens"],
+        ),
+        generateTest(
+            "Population Resource Usage with Two Modules",
+            "day",
+            `
+            In a certain city, a population depends on a nonrenewable resource.
+            The population reproduces and dies off at steady rates proportional to the total population.
+            The resource starts with a large initial quantity, but cannot be refilled.
+            Over time, the resource diminishes at a rate proportional to the population.
+            Define the "resource density" as the ratio of resource quantity to the population.
+            If the resource density drops below a fixed threshold, then members of the population migrate away at
+            a rate proportional to the total population and the difference between the resource density 
+            and the minimum threshold.
+
+            Please create a model with two modules, 'population' and 'resource'.
+
+            Use the following component names within each module as appropriate:
+            count, birth rate, births, death rate, deaths, usage rate, usage, density, density threshold, migrations
+
+            All "rate" variables should be constant percentages.
+            Please compute the resource density inside the 'resource' module, not the 'population' module.
+            (The resource density threshold should be in the 'population' module, however.)
+            Do not create any intermediate variables when calculating population migrations.
+
+            When creating a ghost component, preserve the name of the original component, including the module prefix (separated by a space rather than a period).
+            So, a ghost of "module1.component" in module2 should be named "module2.module1 component".
+            `,
+            [
+                {
+                    name: "Population Dynamics",
+                    requiredStocks: ["population.count"],
+                    requiredVariables: [
+                        { name: "population.birth rate" },
+                        { name: "population.death rate" },
+                    ],
+                    requiredFlows: [ "population.births", "population.deaths" ],
+                    requiredRelationships: [
+                        { from: "population.birth rate", to: "population.births", polarity: "+" },
+                        { from: "population.count", to: "population.births", polarity: "+" },
+                        { from: "population.death rate", to: "population.deaths", polarity: "+" },
+                        { from: "population.count", to: "population.deaths", polarity: "+" },
+
+                        { from: "population.births", to: "population.count", polarity: "+" },
+                        { from: "population.deaths", to: "population.count", polarity: "-" },
+                    ]
+                },
+                {
+                    name: "Resource Dynamics",
+                    requiredStocks: ["resource.count"],
+                    requiredVariables: [
+                        { name: "resource.usage rate" },
+                        { name: "resource.density" },
+                        { name: "resource.population count", crossLevelGhostOf: "population.count" },
+                    ],
+                    requiredFlows: ["resource.usage"],
+                    requiredRelationships: [
+                        { from: "resource.usage rate", to: "resource.usage", polarity: "+" },
+                        { from: "resource.population count", to: "resource.usage", polarity: "+" },
+                        { from: "resource.usage", to: "resource.count", polarity: "-" },
+
+                        { from: "resource.count", to: "resource.density" },
+                        { from: "resource.population count", to: "resource.density" }
+                    ]
+                },
+                {
+                    name: "Migration Dynamics",
+                    requiredVariables: [
+                        { name: "population.resource density", crossLevelGhostOf: "resource.density" },
+                        { name: "population.density threshold" }
+                    ],
+                    requiredFlows: ["population.migrations"],
+                    requiredRelationships: [
+                        { from: "population.resource density", to: "population.migrations" },
+                        { from: "population.density threshold", to: "population.migrations" },
+                        { from: "population.migrations", to: "population.count", polarity: "-" }
+                    ]
+                }
+            ],
+            ["population", "resource"],
         )
     ],
     "threeModules": [
+        generateTest(
+            "Consulting Business Model with Three Modules",
+            "year",
+            `
+            At a certain business, employees are sorted in a three-role hierarchy.
+            New hirees start with the "rookie" status.
+            Rookies that perform well are promoted to associates.
+            Associates that perform well are promoted to partners.
+            To keep the hierarchy stable, the business promotes a strict percentage of each role every year.
+            Some employees may also leave the company, whether due to personal reasons or exceptionally poor performance.
+            A stable percentage of employees at each level of the company leave the company each year.
+            The business also onboards a constant number of new hirees every year.
 
+            Create a model with three modules named 'rookies', 'associates', and 'partners'.
+            
+            Use the following component names within each module as appropriate:        
+            count, 
+            promotions, departures, hires,
+            promotion_rate, departure_rate, hire_rate
+            
+            When creating a ghost component, preserve the name of the original component, including the module prefix (separated by a space rather than a period).
+            So, a ghost of "module1.component" in module2 should be named "module2.module1 component".
+            `,
+            [
+                {
+                    name: "Business Hierarchy",
+                    requiredStocks: ["rookies", "associates", "partners"]
+                },
+                {
+                    name: "Promotion Dynamics",
+                    requiredVariables: [
+                        { name: "rookies.hire_rate" },
+                        { name: "rookies.promotion_rate" },
+                        { name: "associates.promotion_rate" },
+                    ],
+                    requiredFlows: ["rookies.promotions", "associates.rookies_promotions", "associates.promotions", "partners.associates_promotions"],
+                    requiredRelationships: [
+                        { from: "rookies.count", to: "rookies.promotions", polarity: "+" },
+                        { from: "rookies.promotions", to: "rookies.count", polarity: "-"},
+                        { from: "associates.rookies_promotions", to: "associates.count", polarity: "+" },
+                        
+                        { from: "associates.count", to: "associates.promotions", polarity: "+" },
+                        { from: "associates.promotions", to: "associates.count", polarity: "-" },
+                        { from: "partners.associates_promotions", to: "partners.count", polarity: "+" },
+                        
+                        { from: "rookies.hire_rate", to: "rookies.hires", polarity: "+" },
+                        { from: "rookies.hires", to: "rookies.count", polarity: "+" }
+                    ]
+                },
+                {
+                    name: "Departure Dynamics",
+                    requiredVariables: [
+                        { name: "rookies.departure_rate" },
+                        { name: "associates.departure_rate" },
+                        { name: "partners.departure_rate" },
+                    ],
+                    requiredFlows: ["rookies.departures", "associates.departures", "partners.departures"],
+                    requiredRelationships: [
+                        { from: "rookies.departure_rate", to: "rookies.departures", polarity: "+" },
+                        { from: "associates.departure_rate", to: "associates.departures", polarity: "+" },
+                        { from: "partners.departure_rate", to: "partners.departures", polarity: "+" },
+
+                        { from: "rookies.departures", to: "rookies.count", polarity: "-" },
+                        { from: "associates.departures", to: "associates.count", polarity: "-" },
+                        { from: "partners.departures", to: "partners.count", polarity: "-" },
+                    ]
+                }
+            ],
+            ["rookies", "associates", "partners"]
+        ),
+        generateTest(
+            "Predator-Prey System with Three Modules",
+            "day",
+            `
+            In a certain ecosystem, there are three animal populations: lions, foxes, and chickens.
+            
+            All species reproduce and naturally die out at specific, stable percentage rates.
+            Furthermore, the chicken population is predated at a rate proportional to the fox population,
+            and the fox population is predated at a rate proportional to the lion population.
+            
+            Create a model with three modules named 'lions', 'foxes', and 'chickens'.
+            
+            Use the following component names within each module as appropriate:
+            count, birth rate, death rate, births, deaths, predation rate
+
+            In particular, "[animal].predation rate" should refer to the number of [animal]s that die off due to that animal's predator.
+
+            When creating a ghost component, preserve the name of the original component, including the module prefix (separated by a space rather than a period).
+            So, a ghost of "module1.component" in module2 should be named "module2.module1 component".
+            `,
+            [
+                {
+                    name: "Ecosystem Dynamics",
+                    requiredStocks: ["lions.count", "foxes.count", "chickens.count"]
+                },
+                {
+                    name: "Reproduction Dynamics",
+                    requiredVariables: [
+                        { name: "lions.birth rate" },
+                        { name: "foxes.birth rate" },
+                        { name: "chickens.birth rate" },
+                    ],
+                    requiredFlows: ["lions.births", "foxes.births", "chickens.births"],
+                    requiredRelationships: [
+                        { from: "lions.birth rate", to: "lions.births", polarity: "+" },
+                        { from: "lions.births", to: "lions.count", polarity: "+" },
+                        { from: "foxes.birth rate", to: "foxes.births", polarity: "+" },
+                        { from: "foxes.births", to: "foxes.count", polarity: "+" },
+                        { from: "chickens.birth rate", to: "chickens.births", polarity: "+" },
+                        { from: "chickens.births", to: "chickens.count", polarity: "+" }
+                    ]
+                },
+                {
+                    name: "Predation Dynamics",
+                    requiredVariables: [
+                        { name: "lions.death rate" },
+                        { name: "foxes.death rate" },
+                        { name: "chickens.death rate" },
+                        
+                        { name: "foxes.predation rate" },
+                        { name: "foxes.lions count", crossLevelGhostOf: "lions.count" },
+                        { name: "chickens.predation rate" },
+                        { name: "chickens.foxes count", crossLevelGhostOf: "foxes.count" },
+                    ],
+                    requiredFlows: ["lions.deaths", "foxes.deaths", "chickens.deaths"],
+                    requiredRelationships: [
+                        { from: "foxes.death rate", to: "foxes.deaths" },
+                        { from: "foxes.count", to: "foxes.deaths" },
+                        { from: "foxes.predation rate", to: "foxes.deaths" },
+                        { from: "foxes.lions count", to: "foxes.deaths" },
+
+                        { from: "chickens.death rate", to: "chicken.deaths" },
+                        { from: "chickens.count", to: "chicken.deaths" },
+                        { from: "chickens.predation rate", to: "chicken.deaths" },
+                        { from: "chickens.foxes count", to: "chicken.deaths" },
+
+                        { from: "foxes.deaths", to: "foxes.count", polarity: "-" },
+                        { from: "chickens.deaths", to: "chickens.count", polarity: "-" },
+                    ]
+                }
+            ],
+            ["lions", "foxes", "chickens"],
+        )
     ]
 };

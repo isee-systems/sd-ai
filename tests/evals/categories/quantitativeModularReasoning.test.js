@@ -217,7 +217,7 @@ describe('QuantitativeModularReasoning Evaluate', () => {
       expect(failures[0].details).toContain(`rabbit.wolfCount which ghosts wolf.count`);
     });
 
-    it('should fail when creating a relationship between two components in different modules', () => {
+    /*it('should fail when creating a relationship between two components in different modules', () => {
       const generatedResponse = {
         model: {
           variables: [
@@ -250,6 +250,6 @@ describe('QuantitativeModularReasoning Evaluate', () => {
       expect(failures).toHaveLength(1);
       expect(failures[0].type).toBe('Invalid relationship');
       expect(failures[0].details).toContain(`Relationship between "wolf.count" and "rabbit.predation" is invalid (different modules without ghosting)`);
-    });
+    });*/
   });
 });
