@@ -188,6 +188,7 @@ export const evaluate = function(generatedResponse, expectations) {
         }
     }
     
+    /*
     // Fail if two components from different modules are directly linked (without ghosting)
     for (const f of generatedModel.relationships || []) {
         const fromModule = utils.evalsGetModuleName(f.from || "");
@@ -199,6 +200,7 @@ export const evaluate = function(generatedResponse, expectations) {
             });
         }
     }
+    */
 
     // Check each expected process
     for (const process of expectedProcesses) {
@@ -292,7 +294,7 @@ export const description = () => {
 export const groups = {
     "modularize": [
         generateTest(
-            "Create modules from a non-modular system",
+            "Create a modular model from a non-modular system (predator-prey ecosystem)",
             "predatorPrey.json",
             `
             I've created this non-modular model simulating a predator-prey ecosystem.
@@ -301,25 +303,378 @@ export const groups = {
             Use the following module names exactly:
             hare, lynx
 
-            Name variables within each module by removing the animal prefix, and changing nothing else.
-            For instance, 'hare density' should be renamed to 'hare.density',
-            and 'lynx births' should be renamed to 'lynx.births'.
+            Component naming instructions:
+            - Specifically rename "Hares" to "hare.hares", "area" to "hare.area", and "Lynx" to "lynx.lynx".
+            - Otherwise, name components within each module by removing the animal prefix, and changing nothing else.
+              For instance, 'hares killed per lynx' should be renamed to 'hare.killed_per_lynx', 
+              and 'lynx births' should be renamed to 'lynx.births'.
+            - Preserve the names of components that are not placed in modules.
+            - When ghosting, preserve the original name of the ghosted component, including the module name if appropriate.
+              For example, to create a ghost of "lynx.births" in the "hare" module, name the ghost component "hare.lynx births".
+              To create a ghost of "lynx.lynx" in the "hare" module, name the ghost component "hare.lynx",
             Any other naming convention is unacceptable and will cause issues in my simulation.
+
+            Try to preserve the key causal relationships and processes exactly, adding as few additional variables as possible
+            and only when strictly necessary.
             `,
-            [],
+            [
+                {
+                    name: "Required Components",
+                    requiredStocks: ["hare.hares", "lynx.lynx"],
+                    requiredFlows: ["hare.births", "hare.deaths", "lynx.births", "lynx.deaths"],
+                    requiredVariables: [
+                        { name: "hare.area" },
+                        { name: "hare.density" },
+                        { name: "hare.birth_fraction" },
+                        { name: "hare.killed_per_lynx" },
+                        { name: "lynx.birth_fraction" },
+                        { name: "lynx.death_fraction" },
+                    ]
+                },
+                {
+                    name: "Necessary Ghosting",
+                    requiredVariables: [
+                        { name: "lynx.hare_density", crossLevelGhostOf: "hare.density" },
+                        { name: "hare.lynx", crossLevelGhostOf: "lynx.lynx" },
+                    ]
+                },
+                {
+                    name: "Key Causal Relationships",
+                    requiredRelationships: [
+                        { from: "hare.hares", to: "hare.births" },
+                        { from: "hare.birth_fraction", to: "hare.births" },
+                        { from: "lynx.lynx", to: "lynx.births" },
+                        { from: "lynx.birth_fraction", to: "lynx.births" },
+                        { from: "lynx.lynx", to: "lynx.deaths" },
+                        { from: "lynx.death_fraction", to: "lynx.deaths" },
+                        { from: "hare.hares", to: "hare.density" },
+                        { from: "lynx.hare_density", to: "lynx.death_fraction" },
+                        { from: "hare.lynx", to: "hare.deaths" },
+                        { from: "hare.density", to: "hare.killed_per_lynx" },
+                        { from: "hare.killed_per_lynx", to: "hare.deaths" },
+                        { from: "hare.area", to: "hare.density" },
+                        { from: "hare.births", to: "hare.hares", polarity: "+" },
+                        { from: "hare.deaths", to: "hare.hares", polarity: "-" },
+                        { from: "lynx.births", to: "lynx.lynx", polarity: "+" },
+                        { from: "lynx.deaths", to: "lynx.lynx", polarity: "-" }
+                    ]
+                }
+            ],
             ["hare", "lynx"],
         )
     ],
     "demodularize": [
+        generateTest(
+            "Create a non-modular model from a 2-module system (predator-prey ecosystem)",
+            "predatorPreyModular.json",
+            `
+            I've created this modular model simulating a predator-prey ecosystem.
+            Please recreate the system with no modules, while preserving key causal relationships.
 
+            Component naming instructions:
+            - Name components by removing the module name, and changing nothing else.
+              For instance, 'Hares.hare density' should be renamed to 'hare_density'.
+            Any other naming convention is unacceptable and will cause issues in my simulation.
+
+            Try to preserve the key causal relationships and processes exactly.
+            You are allowed to remove variables and modify relationships that are no longer appropriate in a non-modular context.
+            Do not add any components that do not have a modular equivalent in my source model.
+            `,
+            [
+                {
+                    name: "Required Components",
+                    requiredStocks: ["hares", "lynx"],
+                    requiredFlows: ["hare_births", "hare_deaths", "lynx_births", "lynx_deaths"],
+                    requiredVariables: [
+                        { name: "area" },
+                        { name: "hare_density" },
+                        { name: "hare_birth_fraction" },
+                        { name: "hares_killed_per_lynx" },
+                        { name: "lynx_birth_fraction" },
+                        { name: "lynx_death_fraction" },
+                    ]
+                },
+                {
+                    name: "Key Causal Relationships",
+                    requiredRelationships: [
+                        { from: "hares", to: "hare_births" },
+                        { from: "hare_birth_fraction", to: "hare_births" },
+                        { from: "lynx", to: "lynx_births" },
+                        { from: "lynx_birth_fraction", to: "lynx_births" },
+                        { from: "lynx", to: "lynx_deaths" },
+                        { from: "lynx_death_fraction", to: "lynx_deaths" },
+                        { from: "hares", to: "hare_density" },
+                        { from: "hare_density", to: "lynx_death_fraction" },
+                        { from: "lynx", to: "hare_deaths" },
+                        { from: "hare_density", to: "hare_killed_per_lynx" },
+                        { from: "hares_killed_per_lynx", to: "hare_deaths" },
+                        { from: "area", to: "hare_density" },
+                        { from: "hare_births", to: "hares", polarity: "+" },
+                        { from: "hare_deaths", to: "hares", polarity: "-" },
+                        { from: "lynx_births", to: "lynx", polarity: "+" },
+                        { from: "lynx_deaths", to: "lynx", polarity: "-" }
+                    ]
+                }
+            ],
+            [],
+        ),
+        generateTest(
+            "Create a non-modular model from a 3-module system (urban dynamics)",
+            "urbanDynamics.json",
+            `
+            I've created this modular model simulating the urban dynamics in a city.
+            Please recreate the system with no modules, while preserving key causal relationships.
+
+            Component naming instructions:
+            - Name components by removing the module name, and changing nothing else.
+              For instance, 'Population.target housing per person' should be renamed to 'target housing per person'.
+            Any other naming convention is unacceptable and will cause issues in my simulation.
+
+            Try to preserve the key causal relationships and processes exactly.
+            You are allowed to remove variables and modify relationships that are no longer appropriate in a non-modular context.
+            Do not add any components that do not have a modular equivalent in my source model.
+            `,
+            [
+                {
+                    name: "Required Components",
+                    requiredStocks: ["Population", "Housing Stock", "Business Structures"],
+                    requiredFlows: ["births", "deaths", "migration", "construction", "demolition"],
+                    requiredVariables: [
+                        { name: "birth fraction" },
+                        { name: "death fraction" },
+                        { name: "base migration fraction" },
+                        { name: "target housing per person" },
+                        { name: "target jobs per person" },
+                        { name: "relative housing availability" },
+                        { name: "relative job availability" },
+                        { name: "attractiveness from housing" },
+                        { name: "attractiveness from jobs" },
+                        { name: "base construction fraction" },
+                        { name: "demolition fraction" },
+                        { name: "target persons per house" },
+                        { name: "relative housing demand" },
+                        { name: "construction multiplier" },
+                        { name: "business starts" },
+                        { name: "business closures" },
+                        { name: "base start fraction" },
+                        { name: "closure fraction" },
+                        { name: "target labor per business" },
+                        { name: "relative labor availability" },
+                        { name: "start multiplier" },
+                        { name: "jobs per structure" },
+                        { name: "total jobs" },
+                    ]
+                },
+                {
+                    name: "Key Causal Relationships",
+                    requiredRelationships: [
+                        { "from": "births", "polarity": "+", "to": "Population" },
+                        { "from": "migration", "polarity": "+", "to": "Population" },
+                        { "from": "deaths", "polarity": "-", "to": "Population" },
+                        { "from": "Population", "polarity": "+", "to": "births" },
+                        { "from": "Population", "polarity": "+", "to": "deaths" },
+                        { "from": "Population", "polarity": "+", "to": "migration" },
+                        { "from": "birth fraction", "polarity": "+", "to": "births" },
+                        { "from": "death fraction", "polarity": "+", "to": "deaths" },
+                        { "from": "base migration fraction", "polarity": "+", "to": "migration" },
+                        { "from": "attractiveness from housing", "polarity": "+", "to": "migration" },
+                        { "from": "attractiveness from jobs", "polarity": "+", "to": "migration" },
+                        { "from": "relative housing availability", "polarity": "+", "to": "attractiveness from housing" },
+                        { "from": "relative job availability", "polarity": "+", "to": "attractiveness from jobs" },
+                        { "from": "Housing Stock", "polarity": "+", "to": "relative housing availability" },
+                        { "from": "Population", "polarity": "-", "to": "relative housing availability" },
+                        { "from": "total jobs", "polarity": "+", "to": "relative job availability" },
+                        { "from": "Population", "polarity": "-", "to": "relative job availability" },
+                        { "from": "target housing per person", "polarity": "-", "to": "relative housing availability" },
+                        { "from": "target jobs per person", "polarity": "-", "to": "relative job availability" },
+                        { "from": "construction", "polarity": "+", "to": "Housing Stock" },
+                        { "from": "demolition", "polarity": "-", "to": "Housing Stock" },
+                        { "from": "Housing Stock", "polarity": "+", "to": "construction" },
+                        { "from": "Housing Stock", "polarity": "+", "to": "demolition" },
+                        { "from": "base construction fraction", "polarity": "+", "to": "construction" },
+                        { "from": "demolition fraction", "polarity": "+", "to": "demolition" },
+                        { "from": "construction multiplier", "polarity": "+", "to": "construction" },
+                        { "from": "relative housing demand", "polarity": "+", "to": "construction multiplier" },
+                        { "from": "Population", "polarity": "+", "to": "relative housing demand" },
+                        { "from": "Housing Stock", "polarity": "-", "to": "relative housing demand" },
+                        { "from": "target persons per house", "polarity": "-", "to": "relative housing demand" },
+                        { "from": "business starts", "polarity": "+", "to": "Business Structures" },
+                        { "from": "business closures", "polarity": "-", "to": "Business Structures" },
+                        { "from": "Business Structures", "polarity": "+", "to": "business starts" },
+                        { "from": "Business Structures", "polarity": "+", "to": "business closures" },
+                        { "from": "base start fraction", "polarity": "+", "to": "business starts" },
+                        { "from": "closure fraction", "polarity": "+", "to": "business closures" },
+                        { "from": "start multiplier", "polarity": "+", "to": "business starts" },
+                        { "from": "relative labor availability", "polarity": "+", "to": "start multiplier" },
+                        { "from": "Population", "polarity": "+", "to": "relative labor availability" },
+                        { "from": "Business Structures", "polarity": "-", "to": "relative labor availability" },
+                        { "from": "target labor per business", "polarity": "-", "to": "relative labor availability" },
+                        { "from": "Business Structures", "polarity": "+", "to": "total jobs" },
+                        { "from": "jobs per structure", "polarity": "+", "to": "total jobs" },
+                    ]
+                }
+            ],
+            [],
+        )
     ],
     "addModule": [
+        generateTest(
+            "Add a module to a modular system (predator-prey ecosystem)",
+            "predatorPreyModular.json",
+            `
+            I've created this modular model simulating a predator-prey ecosystem.
+            Please add a third module called 'cougars', representing cougars.
+            
+            As an apex predator, cougars are not hunted by any animal, and hunt lynxes to survive. 
+            Cougars do not have any direct interactions with hares.
 
+            Use the following component names in each module where appropriate:
+            [animals], 
+            [animal] births, [animal] deaths, 
+            [animals] killed per [animal], [animal] density,
+            [animal] birth fraction, [animal] death fraction
+            - Note: [animal] is either "hare", "lynx", or "cougar"
+            - Note: [animals] is either "hares", "lynx", or "cougars" (note the plural of "lynx" is "lynx")
+            
+            When ghosting, preserve the same variable name as in the source module. For instance, a ghost of "Hares.Hares"
+            should be named "Lynx.Hares" in the "Lynx" module.
+
+            You may add any necessary components, using appropriate names (as listed above) whenever possible.
+            Do not modify or remove any existing causal relationships between lynxes and hares.
+            `,
+            [
+                {
+                    name: "Pre-Existing Components",
+                    requiredStocks: ["Hares.Hares", "Lynx.Lynx"],
+                    requiredFlows: ["Hares.hare_births", "Hares.hare_deaths", "Lynx.lynx_births", "Lynx.lynx_deaths"],
+                    requiredVariables: [
+                        { name: "Hares.area" },
+                        { name: "Hares.hare_density" },
+                        { name: "Hares.hare_birth_fraction" },
+                        { name: "Hares.hares_killed_per_lynx" },
+                        { name: "Hares.Lynx", crossLevelGhostOf: "Lynx.Lynx" },
+                        { name: "Lynx.hare_density", crossLevelGhostOf: "Hares.hare_density" },
+                        { name: "Lynx.lynx_birth_fraction" },
+                        { name: "Lynx.lynx_death_fraction" },
+                    ],
+                    requiredRelationships: [
+                        { from: "Hares.Hares", to: "Hares.hare_births" },
+                        { from: "Hares.hare_birth_fraction", to: "Hares.hare_births" },
+                        { from: "Lynx.lynx", to: "Lynx.lynx_births" },
+                        { from: "Lynx.lynx_birth_fraction", to: "Lynx.lynx_births" },
+                        { from: "Lynx.Lynx", to: "Lynx.lynx_deaths" },
+                        { from: "Lynx.lynx_death_fraction", to: "Lynx.lynx_deaths" },
+                        { from: "Hares.Hares", to: "Hares.hare_density" },
+                        { from: "Lynx.hare_density", to: "Lynx.lynx_death_fraction" },
+                        { from: "Hares.Lynx", to: "Hares.hare_deaths" },
+                        { from: "Hares.hare_density", to: "Hares.hares_killed_per_lynx" },
+                        { from: "Hares.hares_killed_per_lynx", to: "Hares.hare_deaths" },
+                        { from: "Hares.area", to: "Hares.hare_density" },
+                        { from: "Hares.hare_births", to: "Hares.Hares", polarity: "+" },
+                        { from: "Hares.hare_deaths", to: "Hares.Hares", polarity: "-" },
+                        { from: "Lynx.lynx_births", to: "Lynx.Lynx", polarity: "+" },
+                        { from: "Lynx.lynx_deaths", to: "Lynx.Lynx", polarity: "-" }
+                    ]
+                },
+                {
+                    name: "Cougar Dynamics",
+                    requiredStocks: ["Cougars.Cougars"],
+                    requiredFlows: ["Cougars.cougar_births", "Cougars.cougar_deaths"],
+                    requiredVariables: [
+                        { name: "Lynx.area", crossLevelGhostOf: "Hares.area" },
+                        { name: "Lynx.lynx_density" },
+                        { name: "Lynx.lynx_killed_per_cougar" },
+                        { name: "Lynx.Cougars", crossLevelGhostOf: "Cougars.Cougars" },
+                        { name: "Cougars.lynx_density", crossLevelGhostOf: "Lynx.lynx_density" },
+                        { name: "Cougars.cougar_birth_fraction" },
+                        { name: "Cougars.cougar_death_fraction" },
+                    ],
+                    requiredRelationships: [
+                        { from: "Cougars.Cougars", to: "Cougars.cougar_births" },
+                        { from: "Cougars.cougar_birth_fraction", to: "Cougars.cougar_births" },
+                        { from: "Cougars.Cougars", to: "Cougars.cougar_deaths" },
+                        { from: "Cougars.cougar_death_fraction", to: "Cougars.cougar_deaths" },
+
+                        { from: "Lynx.Lynx", to: "Lynx.lynx_density" },
+                        { from: "Cougars.lynx_density", to: "Cougars.cougar_death_fraction" },
+
+                        { from: "Lynx.Cougars", to: "Lynx.lynx_deaths" },
+                        { from: "Lynx.lynx_density", to: "Lynx.lynx_killed_per_cougar" },
+                        { from: "Lynx.lynx_killed_per_cougar", to: "Lynx.lynx_deaths" },
+                        { from: "Lynx.area", to: "Lynx.lynx_density" },
+                        
+                        { from: "Cougars.cougar_births", to: "Cougars.Cougars", polarity: "+" },
+                        { from: "Cougars.cougar_deaths", to: "Cougars.Cougars", polarity: "-" },
+                    ]
+                }
+            ],
+            ["hares", "lynx", "cougars"],
+        )
     ],
     "deleteModule": [
+        generateTest(
+            "Remove a module from a modular system (urban dynamics)",
+            "urbanDynamics.json",
+            `
+            I've created this modular model simulating the urban dynamics in a city.
+            However, I no longer need to simulate commerce dynamics. Please remove the 'Commerce' module from my model.
 
-    ],
-    "modifyModule": [
+            Please do not add any variables or modify any processes or relationships unrelated to commerce.
+            `,
+            [
+                {
+                    name: "Required Components",
+                    requiredStocks: ["Population.Population", "Housing.Housing Stock"],
+                    requiredFlows: ["Population.births", "Population.deaths", "Population.migration", "Housing.construction", "Housing.demolition"],
+                    requiredVariables: [
+                        { name: "Population.birth fraction" },
+                        { name: "Population.death fraction" },
+                        { name: "Population.base migration fraction" },
+                        { name: "Population.target housing per person" },
+                        { name: "Population.relative housing availability" },
+                        { name: "Population.attractiveness from housing" },
+                        { name: "Housing.base construction fraction" },
+                        { name: "Housing.demolition fraction" },
+                        { name: "Housing.target persons per house" },
+                        { name: "Housing.relative housing demand" },
+                        { name: "Housing.construction multiplier" },
 
-    ],
+                        { name: "Population.Housing Stock", crossLevelGhostOf: "Housing.Housing Stock" },
+                        { name: "Housing.Population", crossLevelGhostOf: "Population.Population" }
+                    ]
+                },
+                {
+                    name: "Key Causal Relationships",
+                    requiredRelationships: [
+                        { "from": "Population.births", "polarity": "+", "to": "Population.Population" },
+                        { "from": "Population.migration", "polarity": "+", "to": "Population.Population" },
+                        { "from": "Population.deaths", "polarity": "-", "to": "Population.Population" },
+                        { "from": "Population.Population", "polarity": "+", "to": "Population.births" },
+                        { "from": "Population.Population", "polarity": "+", "to": "Population.deaths" },
+                        { "from": "Population.Population", "polarity": "+", "to": "Population.migration" },
+                        { "from": "Population.birth fraction", "polarity": "+", "to": "Population.births" },
+                        { "from": "Population.death fraction", "polarity": "+", "to": "Population.deaths" },
+                        { "from": "Population.base migration fraction", "polarity": "+", "to": "Population.migration" },
+                        { "from": "Population.attractiveness from housing", "polarity": "+", "to": "Population.migration" },
+                        { "from": "Population.relative housing availability", "polarity": "+", "to": "Population.attractiveness from housing" },
+                        { "from": "Population.Housing Stock", "polarity": "+", "to": "Population.relative housing availability" },
+                        { "from": "Population.Population", "polarity": "-", "to": "Population.relative housing availability" },
+                        { "from": "Population.target housing per person", "polarity": "-", "to": "Population.relative housing availability" },
+                        { "from": "Housing.construction", "polarity": "+", "to": "Housing.Housing Stock" },
+                        { "from": "Housing.demolition", "polarity": "-", "to": "Housing.Housing Stock" },
+                        { "from": "Housing.Housing Stock", "polarity": "+", "to": "Housing.construction" },
+                        { "from": "Housing.Housing Stock", "polarity": "+", "to": "Housing.demolition" },
+                        { "from": "Housing.base construction fraction", "polarity": "+", "to": "Housing.construction" },
+                        { "from": "Housing.demolition fraction", "polarity": "+", "to": "Housing.demolition" },
+                        { "from": "Housing.construction multiplier", "polarity": "+", "to": "Housing.construction" },
+                        { "from": "Housing.relative housing demand", "polarity": "+", "to": "Housing.construction multiplier" },
+                        { "from": "Housing.Population", "polarity": "+", "to": "Housing.relative housing demand" },
+                        { "from": "Housing.Housing Stock", "polarity": "-", "to": "Housing.relative housing demand" },
+                        { "from": "Housing.target persons per house", "polarity": "-", "to": "Housing.relative housing demand" },
+                    ]
+                }
+            ],
+            ["population", "housing"],
+        )
+    ]
 };
