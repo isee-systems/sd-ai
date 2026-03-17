@@ -41,8 +41,8 @@ const classifyTimeSeries = (timeSeriesData, options = {}) => {
         const tempFile = path.join(tmpdir(), `timeseries_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.csv`);
 
         try {
-            // Write time series data to CSV
-            const csvContent = 'time,value\n' + timeSeriesData.map((val, idx) => `${idx},${val}`).join('\n');
+            // Write time series data to CSV - single column with header, no time dimension
+            const csvContent = 'value\n' + timeSeriesData.join('\n');
             writeFileSync(tempFile, csvContent);
 
             // Spawn Python process
