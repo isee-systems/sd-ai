@@ -9,9 +9,9 @@ import (
 	"path"
 	"strings"
 
-	"github.com/UB-IAD/sd-ai/go/causal"
-	"github.com/UB-IAD/sd-ai/go/llm/provider"
-	"github.com/UB-IAD/sd-ai/go/sdjson"
+	"github.com/UB-IAD/sd-ai/third-party/causal-chains/causal"
+	"github.com/UB-IAD/sd-ai/third-party/causal-chains/llm/provider"
+	"github.com/UB-IAD/sd-ai/third-party/causal-chains/sdjson"
 	"github.com/bpowers/go-agent/chat"
 )
 

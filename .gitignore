@@ -75,4 +75,5 @@ htmlcov/
 .coverage.*
 *.cover
 
-/engines/causal-chains/causal-chains
+# Third-party binaries
+/third-party/causal-chains/causal-chains

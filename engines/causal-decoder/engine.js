@@ -139,7 +139,7 @@ class Engine {
       const pythonExe =
         process.env.PYTHON ||
         (process.platform === "win32" ? "python" : "python3");
-      const scriptPath = path.resolve(__dirname, "inference.py");
+      const scriptPath = path.resolve(__dirname, "../../third-party/causal-decoder/inference.py");
 
       const { stdout, stderr } = await execFileP(
         pythonExe,
