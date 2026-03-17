@@ -110,7 +110,7 @@ function Leaderboard() {
       );
 
       const score = totalPasses / totalCount;
-      const speed = stats.speeds.reduce((partialSum, a) => partialSum + a, 0) / 1000;
+      const speed = stats.speeds.reduce((partialSum, a) => partialSum + a, 0) / stats.speeds.length / 1000;
       
       return {
         configName,
@@ -280,10 +280,10 @@ function Leaderboard() {
                     wrap: true,
                   })),
                   {
-                    name: 'Speed (Total Seconds)',
+                    name: 'Avg Time (Seconds)',
                     selector: row => row.speed,
                     sortable: true,
-                    format: row => Math.round(row.speed),
+                    format: row => row.speed.toFixed(2),
                     width: '180px',
                     wrap: true,
                   },
@@ -390,9 +390,9 @@ function Leaderboard() {
                       showgrid: true,
                       gridcolor: 'rgba(0,0,0,0.1)'
                     },
-                    yaxis: { 
-                      title: { 
-                        text: 'Speed (total seconds)',
+                    yaxis: {
+                      title: {
+                        text: 'Avg Time per Request (seconds)',
                         standoff: 20
                       },
                       type: 'log',
