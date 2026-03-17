@@ -140,49 +140,11 @@ const checkPattern = async (timeSeriesData, expectedPattern, options = {}) => {
 };
 
 /**
- * Gets a human-readable description of a behavioral pattern
- * @param {string} pattern - The pattern label
- * @returns {string} Description of the pattern
- */
-const getPatternDescription = (pattern) => {
-    const descriptions = {
-        "stable": "Constant/Stasis - no significant change over time",
-        "inactive": "Zero/Inactive - values near zero throughout",
-        "linear_growth": "Linear Growth - steady positive increase",
-        "linear_decline": "Linear Decline - steady negative decrease",
-        "linear_flat": "Linear Flat - near-constant with slight linear trend",
-        "accelerating_growth": "Accelerating Growth - increasing rate of growth",
-        "accelerating_decline": "Accelerating Decline - increasing rate of decline",
-        "inflecting_growth": "Inflecting Growth - cubic curve trending upward",
-        "inflecting_decline": "Inflecting Decline - cubic curve trending downward",
-        "exponential_growth": "Exponential Growth - rapid accelerating increase",
-        "exponential_decline": "Exponential Decline/Decay - rapid decelerating decrease",
-        "s_curve_growth": "S-Curve Growth - sigmoid/logistic growth to plateau",
-        "s_curve_decline": "S-Curve Decline - sigmoid/logistic decay to floor",
-        "peak": "Peak/Bump Up - rises to maximum then falls",
-        "dip": "Dip/Bump Down - falls to minimum then rises",
-        "step_up": "Step Up - abrupt increase to new level",
-        "step_down": "Step Down - abrupt decrease to new level",
-        "oscillating": "Oscillation - periodic fluctuation",
-        "oscillating_trending_up": "Oscillation with Growth - periodic fluctuation with upward trend",
-        "oscillating_trending_down": "Oscillation with Decay - periodic fluctuation with downward trend",
-        "dampening": "Dampening Oscillation - decreasing amplitude waves",
-        "dampening_trending_up": "Dampening with Growth - dampening oscillation with upward trend",
-        "dampening_trending_down": "Dampening with Decay - dampening oscillation with downward trend",
-        "overshoot_up": "Overshoot Up - rises past target then settles back",
-        "overshoot_down": "Overshoot Down - falls past target then settles back"
-    };
-
-    return descriptions[pattern] || "Unknown pattern";
-};
-
-/**
  * BehaviorClassifier object containing all behavior classification utilities
  */
 const BehaviorClassifier = {
     classifyTimeSeries,
-    checkPattern,
-    getPatternDescription
+    checkPattern
 };
 
 export default BehaviorClassifier;
