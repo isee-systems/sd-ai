@@ -622,7 +622,7 @@ NEVER identify feedback loops for the user in explanatory text. Let users discov
         response.relationships = relationships;
     }
 
-    #expandGraphicalFunctions(response) {
+    #expandGraphicalFunctionsAndArrayEquations(response) {
         // Re-expand flattened graphicalFunction format from LLM
         // LLM sends: graphicalFunction: [{x, y}, ...]
         // We need: graphicalFunction: {points: [{x, y}, ...]}
@@ -825,7 +825,7 @@ NEVER identify feedback loops for the user in explanatory text. Let users discov
         this.#filterInvalidRelationships(originalResponse);
 
         // Expand graphical functions and array equations from flattened LLM format
-        this.#expandGraphicalFunctions(originalResponse);
+        this.#expandGraphicalFunctionsAndArrayEquations(originalResponse);
 
         // Clean stock inflows/outflows
         this.#cleanStockFlows(originalResponse);
