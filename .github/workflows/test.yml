@@ -38,6 +38,11 @@ jobs:
         cd third-party/PySD-simulator
         pip install -r requirements.txt
 
+    - name: Install time-series-behavior-analysis dependencies
+      run: |
+        cd third-party/time-series-behavior-analysis
+        pip install -r requirements.txt
+
     - name: Run unit tests
       run: npm test
       

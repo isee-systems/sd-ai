@@ -69,6 +69,7 @@
         "quantitativeCausalReasoning": true,
         "quantitativeIteration": true,
         "conformance": true,
-        "quantitativeErrorFixing": true
+        "quantitativeErrorFixing": true,
+        "behavioralPattern": true
     }
 }
