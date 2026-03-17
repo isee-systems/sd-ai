@@ -2,11 +2,11 @@
     "sequential": true,
     "verbose": true,
     "engineConfigs": {
-        "quantitative-experimental": {
+        "quantitative-experimental-gemini-3-flash-preview": {
             "engine": "quantitative-experimental",
             "additionalParameters": {
-                "underlyingModel": "gemini-2.5-flash"
-            },            
+                "underlyingModel": "gemini-3-flash-preview low"
+            },
             "limits": {
                 "tokensPerMinute": 90000,
                 "requestsPerMinute": 10
@@ -14,7 +14,8 @@
         }
     },
     "categories": {
-        "quantitativeModularReasoning": true,
-        "quantitativeModularModification": true
+        "quantitativeModularModification": false,
+        "quantitativeModularReasoning": false,
+        "quantitativeModularTranslation": true
     }
 }
