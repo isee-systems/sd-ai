@@ -78,7 +78,7 @@ func main() {
 	}
 
 	model := strings.ToLower(strings.TrimSpace(input.Parameters.UnderlyingModel))
-	c, err := provider.NewClient(provider.Config{
+	c, thinkingLevel, err := provider.NewClient(provider.Config{
 		Model:  input.Parameters.UnderlyingModel,
 		APIKey: selectAPIKey(model, input.Parameters),
 		Debug:  os.Getenv("SD_AI_DEBUG") != "",
@@ -87,7 +87,7 @@ func main() {
 		log.Fatalf("provider.NewClient: %s", err)
 	}
 
-	d := causal.NewDiagrammer(c)
+	d := causal.NewDiagrammer(c, thinkingLevel)
 
 	debugDir := path.Dir(inputPath)
 

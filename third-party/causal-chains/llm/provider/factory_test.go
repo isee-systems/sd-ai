@@ -8,7 +8,7 @@ import (
 func TestNewClientDefaultsToOllamaForUnknownModels(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "")
 
-	if _, err := NewClient(Config{Model: "wizardlm-2"}); err != nil {
+	if _, _, err := NewClient(Config{Model: "wizardlm-2"}); err != nil {
 		t.Fatalf("expected fallback to Ollama for unknown model, got error: %v", err)
 	}
 }
@@ -16,7 +16,7 @@ func TestNewClientDefaultsToOllamaForUnknownModels(t *testing.T) {
 func TestNewClientOpenAIModelRequiresAPIKey(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "")
 
-	_, err := NewClient(Config{Model: "gpt-4.1"})
+	_, _, err := NewClient(Config{Model: "gpt-4.1"})
 	if err == nil {
 		t.Fatalf("expected error for missing OpenAI API key")
 	}
@@ -59,7 +59,7 @@ func TestNewClientClaudeModels(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Setenv("ANTHROPIC_API_KEY", tt.envKey)
 
-			_, err := NewClient(Config{
+			_, _, err := NewClient(Config{
 				Model:  tt.model,
 				APIKey: tt.apiKey,
 			})
@@ -109,7 +109,7 @@ func TestNewClientGeminiModels(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Setenv("GOOGLE_API_KEY", tt.envKey)
 
-			_, err := NewClient(Config{
+			_, _, err := NewClient(Config{
 				Model:  tt.model,
 				APIKey: tt.apiKey,
 			})
@@ -145,7 +145,7 @@ func TestNewClientLocalModels(t *testing.T) {
 			// Local models should not require API keys
 			t.Setenv("OPENAI_API_KEY", "")
 
-			_, err := NewClient(Config{Model: tt.model})
+			_, _, err := NewClient(Config{Model: tt.model})
 			if err != nil {
 				t.Errorf("NewClient() for local model %q failed: %v", tt.model, err)
 			}
@@ -168,7 +168,7 @@ func TestNewClientOpenAIReasoningModels(t *testing.T) {
 			t.Setenv("OPENAI_API_KEY", "test-key")
 
 			// Should create client successfully with reasoning model detection
-			_, err := NewClient(Config{Model: tt.model})
+			_, _, err := NewClient(Config{Model: tt.model})
 			if err != nil {
 				t.Errorf("NewClient() for reasoning model %q failed: %v", tt.model, err)
 			}
@@ -194,7 +194,7 @@ func TestNewClientDebugMode(t *testing.T) {
 			t.Setenv("ANTHROPIC_API_KEY", "test-anthropic")
 			t.Setenv("GOOGLE_API_KEY", "test-google")
 
-			_, err := NewClient(Config{
+			_, _, err := NewClient(Config{
 				Model: tt.model,
 				Debug: true,
 			})
@@ -228,13 +228,138 @@ func TestNewClientAPIBaseOverride(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := NewClient(Config{
+			_, _, err := NewClient(Config{
 				Model:   tt.model,
 				APIBase: tt.apiBase,
 				APIKey:  tt.apiKey,
 			})
 			if err != nil {
 				t.Errorf("NewClient() with custom API base failed: %v", err)
+			}
+		})
+	}
+}
+
+func TestParseModelAndThinkingLevel(t *testing.T) {
+	tests := []struct {
+		name              string
+		input             string
+		wantModel         string
+		wantThinkingLevel string
+	}{
+		{
+			name:              "Gemini with low thinking level",
+			input:             "gemini-3-flash-preview low",
+			wantModel:         "gemini-3-flash-preview",
+			wantThinkingLevel: "low",
+		},
+		{
+			name:              "Claude with medium thinking level",
+			input:             "claude-opus-4 medium",
+			wantModel:         "claude-opus-4",
+			wantThinkingLevel: "medium",
+		},
+		{
+			name:              "GPT with high thinking level",
+			input:             "gpt-4 high",
+			wantModel:         "gpt-4",
+			wantThinkingLevel: "high",
+		},
+		{
+			name:              "Model without thinking level",
+			input:             "gemini-2.5-flash",
+			wantModel:         "gemini-2.5-flash",
+			wantThinkingLevel: "",
+		},
+		{
+			name:              "Model with custom thinking level",
+			input:             "o1-preview custom-effort",
+			wantModel:         "o1-preview",
+			wantThinkingLevel: "custom-effort",
+		},
+		{
+			name:              "Model with numeric thinking level",
+			input:             "claude-sonnet-4 5",
+			wantModel:         "claude-sonnet-4",
+			wantThinkingLevel: "5",
+		},
+		{
+			name:              "Empty input",
+			input:             "",
+			wantModel:         "",
+			wantThinkingLevel: "",
+		},
+		{
+			name:              "Only whitespace",
+			input:             "   ",
+			wantModel:         "",
+			wantThinkingLevel: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotModel, gotThinkingLevel := parseModelAndThinkingLevel(tt.input)
+			if gotModel != tt.wantModel {
+				t.Errorf("parseModelAndThinkingLevel() model = %q, want %q", gotModel, tt.wantModel)
+			}
+			if gotThinkingLevel != tt.wantThinkingLevel {
+				t.Errorf("parseModelAndThinkingLevel() thinkingLevel = %q, want %q", gotThinkingLevel, tt.wantThinkingLevel)
+			}
+		})
+	}
+}
+
+func TestNewClientWithThinkingLevel(t *testing.T) {
+	tests := []struct {
+		name              string
+		model             string
+		apiKey            string
+		wantThinkingLevel string
+	}{
+		{
+			name:              "Gemini with thinking level in model string",
+			model:             "gemini-2.5-flash low",
+			apiKey:            "test-google-key",
+			wantThinkingLevel: "low",
+		},
+		{
+			name:              "Claude with thinking level",
+			model:             "claude-opus-4 medium",
+			apiKey:            "test-anthropic-key",
+			wantThinkingLevel: "medium",
+		},
+		{
+			name:              "GPT with thinking level",
+			model:             "gpt-4 high",
+			apiKey:            "test-openai-key",
+			wantThinkingLevel: "high",
+		},
+		{
+			name:              "Model without thinking level",
+			model:             "gemini-2.5-flash",
+			apiKey:            "test-google-key",
+			wantThinkingLevel: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("GOOGLE_API_KEY", "test-google")
+			t.Setenv("ANTHROPIC_API_KEY", "test-anthropic")
+			t.Setenv("OPENAI_API_KEY", "test-openai")
+
+			_, thinkingLevel, err := NewClient(Config{
+				Model:  tt.model,
+				APIKey: tt.apiKey,
+			})
+			if err != nil {
+				t.Errorf("NewClient() error = %v", err)
+				return
+			}
+
+			if thinkingLevel != tt.wantThinkingLevel {
+				t.Errorf("NewClient() thinkingLevel = %q, want %q", thinkingLevel, tt.wantThinkingLevel)
 			}
 		})
 	}
