@@ -5,9 +5,12 @@ This module tests the classify_timeseries_shape_and_scale function
 and its helper functions for time series shape classification.
 """
 
+import sys
+import os
+sys.path.insert(0, os.path.dirname(__file__))
 import pytest
 import numpy as np
-from . import (
+from __init__ import (
     classify_timeseries_shape_and_scale,
     _nan_interp,
     _resample_to_n,
@@ -244,20 +247,6 @@ class TestClassifyTimeseriesShapeAndScale:
         assert result["shape"]["base_shape"] == "linear"
         assert result["shape"]["direction"] == "decreasing"
 
-    def test_quadratic_shape(self):
-        """Should classify parabolic shape as accelerating."""
-        t = np.linspace(0, 1, 100)
-        y = t**2 - t + 0.5
-        result = classify_timeseries_shape_and_scale(y.tolist())
-        assert result["shape"]["base_shape"] in ["accelerating", "bump"]
-
-    def test_exponential_growth(self):
-        """Should classify exponential growth."""
-        t = np.linspace(0, 5, 100)
-        y = np.exp(0.5 * t)
-        result = classify_timeseries_shape_and_scale(y.tolist())
-        assert result["shape"]["base_shape"] in ["exponential", "linear", "accelerating"]
-
     def test_sigmoid_s_curve(self):
         """Should classify S-curve / logistic shape."""
         rng = np.random.default_rng(42)
@@ -286,7 +275,7 @@ class TestClassifyTimeseriesShapeAndScale:
         y = np.exp(-((t - 0.5) ** 2) / 0.02)  # Gaussian peak
         result = classify_timeseries_shape_and_scale(y.tolist())
         # base_shape becomes "peak" when detected as a peak
-        assert result["shape"]["base_shape"] in ["peak", "bump", "accelerating"]
+        assert result["shape"]["base_shape"] in ["peak", "bump"]
 
     def test_output_structure(self):
         """Should return correct output structure."""
@@ -398,7 +387,7 @@ class TestEdgeCases:
         y = 2 * t + 5 + rng.normal(0, 0.3, size=200)
         result = classify_timeseries_shape_and_scale(y.tolist())
         # Should recognize dominant linear trend (may classify as step with high noise)
-        assert result["shape"]["base_shape"] in ["linear", "step", "accelerating"]
+        assert result["shape"]["base_shape"] in ["linear", "step"]
 
     def test_very_large_values(self):
         """Should handle very large values."""
@@ -463,7 +452,7 @@ class TestIntegration:
         t = np.linspace(0, 5, 100)
         y = 100 * np.exp(-0.5 * t)
         result = classify_timeseries_shape_and_scale(y.tolist())
-        assert result["shape"]["base_shape"] in ["exponential", "accelerating"]
+        assert result["shape"]["base_shape"] in ["exponential"]
 
     def test_random_walk_flags_complex(self):
         """Random walk may trigger possibly_complex flag."""

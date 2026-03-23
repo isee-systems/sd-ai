@@ -23,6 +23,8 @@ import PySDSimulator from '../utilities/simulator/PySDSimulator.js';
 import { validateEvaluationResult } from '../evaluationSchema.js';
 import BehaviorClassifier from '../utilities/BehaviorClassifier.js';
 import SDJsonToXMILE from '../../utilities/SDJsonToXMILE.js';
+import fs from 'fs';
+import path from 'path';
 
 /**
  * Returns the description for this category
@@ -161,6 +163,26 @@ export const evaluate = async function(generatedResponse, requirements) {
                     details: `Pattern '${patternCheck.detected}' detected with low confidence: ${(patternCheck.confidence * 100).toFixed(1)}%`
                 });
             }
+            /*
+            if (false) {
+                // Write CSV file with the mismatched behavior
+                try {
+                    const csvFileName = `${patternCheck.detected}_but_expected_${expectedPattern}.csv`;
+                    const csvPath = path.join(process.cwd(), csvFileName);
+
+                    // Create CSV content with time series data
+                    let csvContent = 'time,value\n';
+                    outputTimeSeries.forEach((value, index) => {
+                        csvContent += `${index},${value}\n`;
+                    });
+
+                    fs.writeFileSync(csvPath, csvContent, 'utf8');
+                } catch (csvError) {
+                    // Log error but don't fail the evaluation because of CSV writing
+                    console.error(`Failed to write CSV file: ${csvError.message}`);
+                }
+            }
+            */
         }
 
     } catch (error) {

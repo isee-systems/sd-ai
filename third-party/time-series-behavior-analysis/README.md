@@ -43,7 +43,6 @@ print(result["scale"]["delta"])       # ~1.0 (change from start to end)
 | **Stable** | `stable` | Constant, no trend |
 | **Inactive** | `inactive` | Constant near zero (no activity) |
 | **Linear** | `linear_growth`, `linear_decline`, `linear_flat` | Straight-line trends |
-| **Accelerating** | `accelerating_growth`, `accelerating_decline` | Quadratic curves (speeding up) |
 | **Exponential** | `exponential_growth`, `exponential_decline` | Exponential rise or decay |
 | **S-Curve** | `s_curve_growth`, `s_curve_decline` | Logistic/sigmoid adoption curves |
 | **Peak** | `peak` | Rises then falls (bump up) |
@@ -114,8 +113,6 @@ AICc balances fit quality against model complexity, with extra penalty for small
 |-------|---------|------------|
 | Stable | `y = c` | 1 |
 | Linear | `y = ax + b` | 2 |
-| Accelerating | `y = ax² + bx + c` | 3 |
-| Inflecting | `y = ax³ + bx² + cx + d` | 4 |
 | Exponential | `y = A·exp(bx) + C` | 3 |
 | S-Curve | `y = A / (1 + exp(-k(x-x₀))) + C` | 4 |
 | Bump | `y = A·exp(-(x-μ)²/(2σ²)) + C` | 4 |
