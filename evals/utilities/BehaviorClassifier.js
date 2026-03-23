@@ -21,7 +21,7 @@ const __dirname = dirname(__filename);
  * @param {Array<number>} timeSeriesData - The time series data to classify
  * @param {Object} options - Optional configuration
  * @param {string} options.pythonCommand - Python command to use (default: 'python3')
- * @param {number} options.topN - Number of top matches to return (default: 5)
+ * @param {number} options.topN - Number of top matches to return (default: 1)
  * @returns {Promise<Object>} Classification result with best_label, probabilities, etc.
  */
 const classifyTimeSeries = (timeSeriesData, options = {}) => {
@@ -32,7 +32,7 @@ const classifyTimeSeries = (timeSeriesData, options = {}) => {
         }
 
         const pythonCommand = options.pythonCommand || 'python3';
-        const topN = options.topN || 5;
+        const topN = options.topN || 1;
 
         // Path to the Python classifier script
         const scriptPath = path.join(__dirname, '../../third-party/time-series-behavior-analysis/classify_behavior.py');
@@ -123,7 +123,7 @@ const checkPattern = async (timeSeriesData, expectedPattern, options = {}) => {
         const result = await classifyTimeSeries(timeSeriesData, options);
 
         const detectedPattern = result.best_label;
-        const confidence = result.probabilities[detectedPattern] || 0;
+        const confidence = result.probabilities[result.base_shape] || 0;
 
         const matches = (detectedPattern === expectedPattern) && (confidence >= minConfidence);
 
