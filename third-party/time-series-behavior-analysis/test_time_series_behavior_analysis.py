@@ -427,7 +427,7 @@ class TestEdgeCases:
         t = np.linspace(-np.pi, np.pi, 100)
         y = np.sin(t)
         result = classify_timeseries_shape_and_scale(y.tolist())
-        assert result["shape"]["base_shape"] in ["oscillating", "inflecting", "dampening"]
+        assert result["shape"]["base_shape"] in ["oscillating", "dampening"]
 
     def test_damped_oscillation(self):
         """Should classify damped oscillation as dampening."""

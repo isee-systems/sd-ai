@@ -44,7 +44,6 @@ print(result["scale"]["delta"])       # ~1.0 (change from start to end)
 | **Inactive** | `inactive` | Constant near zero (no activity) |
 | **Linear** | `linear_growth`, `linear_decline`, `linear_flat` | Straight-line trends |
 | **Accelerating** | `accelerating_growth`, `accelerating_decline` | Quadratic curves (speeding up) |
-| **Inflecting** | `inflecting_growth`, `inflecting_decline` | Cubic curves (changing acceleration) |
 | **Exponential** | `exponential_growth`, `exponential_decline` | Exponential rise or decay |
 | **S-Curve** | `s_curve_growth`, `s_curve_decline` | Logistic/sigmoid adoption curves |
 | **Peak** | `peak` | Rises then falls (bump up) |
@@ -256,7 +255,6 @@ Top Matches:
   2. accelerating (0.056) - Accelerating Growth - increasing rate of growth
   3. s_curve (0.031) - S-Curve Growth - sigmoid/logistic growth to plateau
   4. linear (0.012) - Linear Growth - steady positive increase
-  5. inflecting (0.006) - Inflecting Growth - cubic curve trending upward
 ======================================================================
 ```
 
