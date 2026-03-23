@@ -597,6 +597,117 @@ describe('QuantitativeEngineBrain', () => {
       expect(Array.isArray(result.modules)).toBe(true);
       expect(result.modules).toHaveLength(0);
     });
+
+    it('should convert variable names with spaces to underscores in equations (XMILE format)', async () => {
+      const originalResponse = {
+        variables: [
+          { name: 'total population', type: 'stock', equation: '1000', inflows: ['birth rate'], outflows: ['death rate'] },
+          { name: 'birth rate', type: 'flow', equation: 'total population * birth fraction' },
+          { name: 'death rate', type: 'flow', equation: 'total population * death fraction' },
+          { name: 'birth fraction', type: 'variable', equation: '0.05' },
+          { name: 'death fraction', type: 'variable', equation: '0.02' },
+          { name: 'net growth', type: 'variable', equation: 'birth rate - death rate' }
+        ],
+        relationships: []
+      };
+
+      const result = await quantitativeEngine.processResponse(originalResponse);
+
+      // Check that equations now use underscores instead of spaces
+      const birthRate = result.variables.find(v => v.name === 'birth rate');
+      const deathRate = result.variables.find(v => v.name === 'death rate');
+      const netGrowth = result.variables.find(v => v.name === 'net growth');
+
+      expect(birthRate.equation).toBe('total_population * birth_fraction');
+      expect(deathRate.equation).toBe('total_population * death_fraction');
+      expect(netGrowth.equation).toBe('birth_rate - death_rate');
+    });
+
+    it('should convert variable names with spaces in complex equations', async () => {
+      const originalResponse = {
+        variables: [
+          { name: 'total revenue', type: 'variable', equation: '1000' },
+          { name: 'operating costs', type: 'variable', equation: '500' },
+          { name: 'net profit', type: 'variable', equation: '(total revenue - operating costs) / total revenue' },
+          { name: 'profit margin', type: 'variable', equation: 'IF net profit > 0 THEN net profit ELSE 0' }
+        ],
+        relationships: []
+      };
+
+      const result = await quantitativeEngine.processResponse(originalResponse);
+
+      const netProfit = result.variables.find(v => v.name === 'net profit');
+      const profitMargin = result.variables.find(v => v.name === 'profit margin');
+
+      expect(netProfit.equation).toBe('(total_revenue - operating_costs) / total_revenue');
+      expect(profitMargin.equation).toBe('IF net_profit > 0 THEN net_profit ELSE 0');
+    });
+
+    it('should convert variable names in arrayEquations', async () => {
+      const originalResponse = {
+        variables: [
+          {
+            name: 'product sales',
+            type: 'variable',
+            dimensions: ['Product'],
+            arrayEquations: [
+              { forElements: ['Pizza'], equation: 'base demand * price multiplier' },
+              { forElements: ['Kebab'], equation: 'base demand * price multiplier * 0.8' }
+            ]
+          },
+          { name: 'base demand', type: 'variable', equation: '1000' },
+          { name: 'price multiplier', type: 'variable', equation: '1.2' }
+        ],
+        relationships: []
+      };
+
+      const result = await quantitativeEngine.processResponse(originalResponse);
+
+      const productSales = result.variables.find(v => v.name === 'product sales');
+
+      expect(productSales.arrayEquations[0].equation).toBe('base_demand * price_multiplier');
+      expect(productSales.arrayEquations[1].equation).toBe('base_demand * price_multiplier * 0.8');
+    });
+
+    it('should not replace variable names that are substrings of other names', async () => {
+      const originalResponse = {
+        variables: [
+          { name: 'rate', type: 'variable', equation: '0.05' },
+          { name: 'birth rate', type: 'variable', equation: 'rate * 2' },
+          { name: 'total birth rate', type: 'variable', equation: 'birth rate * population' },
+          { name: 'population', type: 'stock', equation: '1000', inflows: [], outflows: [] }
+        ],
+        relationships: []
+      };
+
+      const result = await quantitativeEngine.processResponse(originalResponse);
+
+      const birthRate = result.variables.find(v => v.name === 'birth rate');
+      const totalBirthRate = result.variables.find(v => v.name === 'total birth rate');
+
+      // Should replace 'rate' with 'rate' (no spaces, stays the same)
+      expect(birthRate.equation).toBe('rate * 2');
+
+      // Should replace 'birth rate' with 'birth_rate' and 'population' with 'population'
+      expect(totalBirthRate.equation).toBe('birth_rate * population');
+    });
+
+    it('should handle variables without spaces in names (already XMILE format)', async () => {
+      const originalResponse = {
+        variables: [
+          { name: 'population', type: 'stock', equation: '1000', inflows: ['birth_rate'], outflows: [] },
+          { name: 'birth_rate', type: 'flow', equation: 'population * 0.05' }
+        ],
+        relationships: []
+      };
+
+      const result = await quantitativeEngine.processResponse(originalResponse);
+
+      const birthRate = result.variables.find(v => v.name === 'birth_rate');
+
+      // Should remain unchanged
+      expect(birthRate.equation).toBe('population * 0.05');
+    });
   });
 
   describe('setupLLMParameters', () => {
