@@ -199,7 +199,7 @@ const behavioralPatterns = [
         "Logistic Decay Pattern",
         "logistic decay behavior",
         "s_curve_decline",
-        "Logistic decay is the inverse of logistic growth, where a variable starts at a high value and decreases rapidly at first, then more slowly as it approaches a floor value. The rate of decay slows as the value gets smaller. This can represent depletion of resources with diminishing extraction rates, or abandonment of a technology that follows an inverse S-curve. The output should start high and decrease following an S-curve pattern, rapidly declining at first and then leveling off."
+        "Logistic decay combines reinforcing and balancing feedback in reverse. Initially, decline is exponential due to reinforcing feedback that accelerates the decay. As the system approaches its minimum sustainable level or floor, balancing feedback becomes dominant, slowing the decline until the system stabilizes at a lower equilibrium. Examples include resource depletion with diminishing extraction rates, technology abandonment following an inverse S-curve, and population collapse with limited resilience. The output should start high and decline exponentially at first, then gradually slow and level off as it approaches a minimum sustainable level or floor."
     ),
     generateBasicBehaviorModeTest(
         "Standing Oscillation Pattern",
