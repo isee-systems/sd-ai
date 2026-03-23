@@ -1,4 +1,4 @@
-module github.com/UB-IAD/sd-ai
+module github.com/UB-IAD/sd-ai/third-party/causal-chains
 
 go 1.24.0
 

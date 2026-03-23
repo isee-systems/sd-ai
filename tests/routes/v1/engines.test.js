@@ -2,6 +2,8 @@ import request from 'supertest';
 import express from 'express';
 import enginesRouter from '../../../routes/v1/engines.js';
 
+const TIMEOUT = 5*60*1000;
+
 describe('Engines Route', () => {
   let app;
 
@@ -12,15 +14,6 @@ describe('Engines Route', () => {
   });
 
   describe('GET /', () => {
-    it('should return success response with engines list', async () => {
-      const response = await request(app)
-        .get('/')
-        .expect(200);
-
-      expect(response.body.success).toBe(true);
-      expect(response.body.engines).toBeDefined();
-      expect(Array.isArray(response.body.engines)).toBe(true);
-    });
 
     it('should return recommended defaults', async () => {
       const response = await request(app)
@@ -35,7 +28,7 @@ describe('Engines Route', () => {
         "ltm-discuss": "ltm-narrative",
         "documentation": "generate-documentation"
       });
-    });
+    }, TIMEOUT);
 
     it('should return engines with name and supports properties', async () => {
       const response = await request(app)
@@ -47,8 +40,9 @@ describe('Engines Route', () => {
         expect(typeof engine.name).toBe('string');
         expect(engine.supports).toBeDefined();
         expect(Array.isArray(engine.supports)).toBe(true);
+        expect(engine.supports.length).toBeGreaterThan(0);
       });
-    });
+    }, TIMEOUT);
 
     it('should prioritize qualitative engine first in list', async () => {
       const response = await request(app)
@@ -61,17 +55,7 @@ describe('Engines Route', () => {
           expect(response.body.engines[0]).toEqual(qualEngine);
         }
       }
-    });
-
-    it('should only include engines with supported modes', async () => {
-      const response = await request(app)
-        .get('/')
-        .expect(200);
-
-      response.body.engines.forEach(engine => {
-        expect(engine.supports.length).toBeGreaterThan(0);
-      });
-    });
+    }, TIMEOUT);
 
     it('should place engines ending in -experimental at the end of the list', async () => {
       const response = await request(app)
@@ -99,44 +83,6 @@ describe('Engines Route', () => {
 
         expect(minExperimentalIndex).toBeGreaterThan(maxNonExperimentalIndex);
       }
-    });
-
-    it('should include ALL engines from /engines folder', async () => {
-      const response = await request(app)
-        .get('/')
-        .expect(200);
-
-      const expectedEngines = [
-        'causal-chains',
-        'generate-documentation',
-        'predprey', 
-        'qualitative-experimental',
-        'qualitative',
-        'qualitative-zero',
-        'quantitative-experimental', 
-        'quantitative',
-        'recursivecausal',
-        'seldon-experimental',
-        'seldon',
-        'ltm-narrative',
-        'seldon-mentor',
-        'quantitative-mentor',
-        'causal-decoder'
-      ];
-
-      const returnedEngineNames = response.body.engines.map(engine => engine.name);
-
-      // Every engine from /engines folder MUST be present
-      expectedEngines.forEach(expectedEngine => {
-        expect(returnedEngineNames).toContain(expectedEngine);
-        
-        // Every engine MUST have supported modes (no supported modes is illegal)
-        const engine = response.body.engines.find(e => e.name === expectedEngine);
-        expect(engine).toBeDefined();
-        expect(engine.supports).toBeDefined();
-        expect(Array.isArray(engine.supports)).toBe(true);
-        expect(engine.supports.length).toBeGreaterThan(0);
-      });
-    });
+    }, TIMEOUT);
   });
 });

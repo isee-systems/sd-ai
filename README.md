@@ -185,7 +185,7 @@ GOOGLE_API_KEY="asdjkshd" # if you're doing work with engines using Gemini model
 AUTHENTICATION_KEY="my_secret_key" # only needed for securing publically accessible deployments. Requires client pass an Authentication header matching this value. e.g. `curl -H "Authentication: my_super_secret_value_in_env_file"` to the engine generate request only
 REPORTER_URL="https://your-metrics-server.com/api/metrics" # optional URL to POST engine usage metrics to. If not set, metrics reporting is disabled.
 ```
-3. npm install 
+3. npm install
 4. npm start
 5. (optional) npm run evals -- -e evals/experiments/careful.json
 6. (optional) npm test
@@ -193,7 +193,13 @@ REPORTER_URL="https://your-metrics-server.com/api/metrics" # optional URL to POS
 
 We recommend VSCode using a launch.json for the Node type applications (you get a debugger, and hot-reloading)
 
-If you wish to run using the causal-chains engine you'll need to install the [Go toolchain](https://go.dev/doc/install) onto your PATH.
+## Optional Third-Party Requirements
+Some engines require additional dependencies to be installed on your system:
+
+- **Go 1.24.0 or later** - Required for the causal-chains engine ([installation guide](https://go.dev/doc/install))
+- **Python 3.x** - Required for the causal-decoder engine
+
+These dependencies are automatically built/installed when you run `npm install` via postinstall hooks, but only if the respective toolchains are available on your PATH.
 
 ## Metrics Reporting
 SD-AI includes optional metrics reporting via the `GenerateMetricsReporter` class. When enabled, it automatically tracks and reports usage data for every engine generation request.

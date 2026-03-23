@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/UB-IAD/sd-ai/go/sdjson"
+	"github.com/UB-IAD/sd-ai/third-party/causal-chains/sdjson"
 )
 
 func TestCanonicalize(t *testing.T) {

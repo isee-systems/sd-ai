@@ -9,6 +9,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./third-party/causal-chains
     steps:
       - uses: actions/checkout@v4
 

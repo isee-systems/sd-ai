@@ -369,8 +369,6 @@ def classify_timeseries_shape_and_scale(
     # Polynomials (trend/curvature families)
     fits["stable"] = _poly_model(x, y_shape, deg=0)
     fits["linear"] = _poly_model(x, y_shape, deg=1)
-    fits["accelerating"] = _poly_model(x, y_shape, deg=2)
-    fits["inflecting"] = _poly_model(x, y_shape, deg=3)
 
     # Nonlinear-but-fast families (via grid + linear inner solve)
     fits["exponential"] = _exp_model(y_shape, x, b_grid=b_grid)
@@ -496,7 +494,7 @@ def classify_timeseries_shape_and_scale(
         else:
             direction_suffix = ""
     else:
-        # For trend shapes (linear, accelerating, inflecting, exponential, s_curve)
+        # For trend shapes (linear, exponential, s_curve)
         if direction == "increasing":
             direction_suffix = "_growth"
         elif direction == "decreasing":

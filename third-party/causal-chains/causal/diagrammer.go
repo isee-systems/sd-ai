@@ -18,14 +18,16 @@ type Diagrammer interface {
 }
 
 type diagrammer struct {
-	client chat.Client
+	client          chat.Client
+	reasoningEffort string
 }
 
 var _ Diagrammer = &diagrammer{}
 
-func NewDiagrammer(client chat.Client) Diagrammer {
+func NewDiagrammer(client chat.Client, reasoningEffort string) Diagrammer {
 	return diagrammer{
-		client: client,
+		client:          client,
+		reasoningEffort: reasoningEffort,
 	}
 }
 
@@ -57,10 +59,15 @@ func (d diagrammer) Generate(ctx context.Context, prompt, backgroundKnowledge st
 		maxTokens = 64 * 1024
 	}
 
-	resp, err := c.Message(ctx, msg,
+	opts := []chat.Option{
 		chat.WithResponseFormat("relationships_response", true, RelationshipsResponseSchema),
 		chat.WithMaxTokens(maxTokens),
-	)
+	}
+	if d.reasoningEffort != "" {
+		opts = append(opts, chat.WithReasoningEffort(d.reasoningEffort))
+	}
+
+	resp, err := c.Message(ctx, msg, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("c.ChatCompletion: %w", err)
 	}
@@ -71,10 +78,7 @@ func (d diagrammer) Generate(ctx context.Context, prompt, backgroundKnowledge st
 		// Retry a second time with the error we just got, hoping they can get their act together.
 		retryMsg := chat.UserMessage(fmt.Sprintf("Your response didn't match the required structured JSON output. The specific error was: %v\n\nRe-generate your response addressing this error, ensuring it matches the required structured JSON output format from the system prompt.", err))
 
-		resp, retryErr := c.Message(ctx, retryMsg,
-			chat.WithResponseFormat("relationships_response", true, RelationshipsResponseSchema),
-			chat.WithMaxTokens(maxTokens),
-		)
+		resp, retryErr := c.Message(ctx, retryMsg, opts...)
 		if retryErr != nil {
 			return nil, fmt.Errorf("retry failed: %w (original error: %v)", retryErr, err)
 		}

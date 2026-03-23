@@ -12,7 +12,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/UB-IAD/sd-ai/go/sdjson"
+	"github.com/UB-IAD/sd-ai/third-party/causal-chains/sdjson"
 	"github.com/bpowers/go-agent/schema"
 )
 
