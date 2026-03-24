@@ -1,0 +1,315 @@
+<?xml version="1.0" encoding="utf-8"?>
+<xmile version="1.0" xmlns="http://docs.oasis-open.org/xmile/ns/XMILE/v1.0" xmlns:isee="http://iseesystems.com/XMILE">
+	<header>
+		<smile version="1.0" namespace="std, isee"/>
+		<name>predator_prey</name>
+		<uuid>be75d15c-2d09-4cd8-84cb-fdc59b71fe05</uuid>
+		<vendor>isee systems, inc.</vendor>
+		<product version="1.4.1" isee:build_number="1148" isee:saved_by_v1="true" lang="en">Stella Architect</product>
+	</header>
+	<sim_specs isee:simulation_delay="0" method="RK4" time_units="year" isee:pause_after_rates="false" isee:instantaneous_flows="true">
+		<start>0</start>
+		<stop>100</stop>
+		<dt reciprocal="true">32</dt>
+	</sim_specs>
+	<isee:prefs show_module_prefix="true" live_update_on_drag="true" layer="model" saved_runs="5" keep="false" rifp="true"/>
+	<isee:multiplayer_settings include_chat="true" allow_observers="false" advance_time_increment="1" observer_start_page="home_page" enabled="false"/>
+	<model_units>
+		<unit name="Years">
+			<eqn/>
+			<alias>yr</alias>
+			<alias>year</alias>
+		</unit>
+		<unit name="Per Year">
+			<eqn>1/Years</eqn>
+		</unit>
+	</model_units>
+	<model>
+		<variables>
+			<aux name="area">
+				<doc>The area of the ecosystem is defined as 1000 hectares.</doc>
+				<eqn>1E3</eqn>
+				<units>arce</units>
+			</aux>
+			<flow name="hare births">
+				<doc>A compounding process is used to depict hare births. The births flow is defined as the product of Hares and their natality. This process works just like compounding interest in a savings account.</doc>
+				<eqn>Hares*hare_birth_fraction</eqn>
+				<non_negative/>
+				<units>hares/year</units>
+			</flow>
+			<flow name="hare deaths">
+				<doc>In this external resource process, lynx are the resource underwriting the consumption of hares. Each lynx has a productivity, given by hare kills per lynx.</doc>
+				<eqn>Lynx*hares_killed_per_lynx</eqn>
+				<non_negative/>
+				<units>hares/year</units>
+			</flow>
+			<aux name="hare\ndensity">
+				<doc>This equation calculates the average density of hares in the ecosystem.</doc>
+				<eqn>Hares/area</eqn>
+				<units>hares/arce</units>
+			</aux>
+			<aux name="hare birth\nfraction">
+				<doc>Each hare in the ecosystem is assumed to produce 1.25 offspring (on average) per year.</doc>
+				<eqn>1.25</eqn>
+				<units>per year</units>
+			</aux>
+			<flow name="lynx\nbirths">
+				<doc>A compounding process is used to depict lynx births. The births flow is defined as the product of lynx and their natality. This process works just like compounding interest in a savings account.</doc>
+				<eqn>Lynx*lynx_birth_fraction</eqn>
+				<non_negative/>
+				<units>lynx/year</units>
+			</flow>
+			<flow name="lynx\ndeaths">
+				<doc>This is a draining process. Some fraction of the lynx population will die each year. The portion that dies, in turn, depends on the density of hares in the ecosystem.</doc>
+				<eqn>Lynx*lynx_death_fraction</eqn>
+				<non_negative/>
+				<units>lynx/year</units>
+			</flow>
+			<aux name="lynx birth\nfraction">
+				<doc>On average, each lynx will generate .25 offspring per year.</doc>
+				<eqn>.25</eqn>
+				<units>per year</units>
+			</aux>
+			<stock name="Hares">
+				<doc>Initially, there are 50000 hares in the ecosystem.</doc>
+				<eqn>5E4</eqn>
+				<inflow>hare_births</inflow>
+				<outflow>hare_deaths</outflow>
+				<units>hares</units>
+			</stock>
+			<stock name="Lynx">
+				<doc>Initially, there are 1250 lynx.</doc>
+				<eqn>1250 - 400</eqn>
+				<inflow>lynx_births</inflow>
+				<outflow>lynx_deaths</outflow>
+				<units>lynx</units>
+			</stock>
+			<aux name="hares killed\nper lynx">
+				<doc>The number of hares killed per lynx (per year) increases with the density of hares in the ecosystem. Note that when density is 0 (there are no hares), kills per lynx per year must be 0.</doc>
+				<eqn>hare_density</eqn>
+				<gf>
+					<xscale min="0" max="500"/>
+					<yscale min="0" max="1000"/>
+					<ypts>0,50,100,150,200,250,300,350,400,450,500</ypts>
+				</gf>
+				<units>hares/lynx/year</units>
+			</aux>
+			<aux name="lynx death\nfraction">
+				<doc>Lynx mortality -- the fraction of the lynx population that dies each year, is assumed to depend on hare density. With fewer hares, a greater fraction of the lynx population will starve.</doc>
+				<eqn>hare_density</eqn>
+				<gf>
+					<xscale min="0" max="100"/>
+					<yscale min="0" max="1"/>
+					<ypts>0.94,0.66,0.4,0.35,0.3,0.25,0.2,0.15,0.1,0.07,0.05</ypts>
+				</gf>
+				<units>per year</units>
+			</aux>
+			<isee:dependencies>
+				<var name="hare_births">
+					<in>Hares</in>
+					<in>hare_birth_fraction</in>
+				</var>
+				<var name="hare_deaths">
+					<in>Lynx</in>
+					<in>hares_killed_per_lynx</in>
+				</var>
+				<var name="hare_density">
+					<in>Hares</in>
+					<in>area</in>
+				</var>
+				<var name="lynx_births">
+					<in>Lynx</in>
+					<in>lynx_birth_fraction</in>
+				</var>
+				<var name="lynx_deaths">
+					<in>Lynx</in>
+					<in>lynx_death_fraction</in>
+				</var>
+				<var name="hares_killed_per_lynx">
+					<in>hare_density</in>
+				</var>
+				<var name="lynx_death_fraction">
+					<in>hare_density</in>
+				</var>
+			</isee:dependencies>
+		</variables>
+		<views>
+			<style color="black" background="white" font_style="normal" font_weight="normal" text_decoration="none" text_align="center" vertical_text_align="center" font_color="black" font_family="Arial" font_size="10pt" padding="2" border_color="black" border_width="thin" border_style="none">
+				<text_box color="black" background="white" text_align="left" vertical_text_align="top" font_size="12pt"/>
+				<isee:loop_indicator color="black" background="white"/>
+				<numeric_display color="blue" background="white" font_size="9pt" isee:transparent="false"/>
+				<graph color="black" background="white" font_size="12pt" axis_color="#666666" grid_color="#C8C8C8" isee:graph_area_color="white" legend_position="bottom" isee:transparent="false" isee:hide_border="false">
+					<isee:series_styles>
+						<isee:series_style color="blue" thickness="1"/>
+						<isee:series_style color="red" thickness="1" pen_style="dot_dashed"/>
+						<isee:series_style color="fuchsia" thickness="1" pen_style="dotted"/>
+						<isee:series_style color="#008F44" thickness="1" pen_style="dashed"/>
+						<isee:series_style color="#FF7F00" thickness="1"/>
+						<isee:series_style color="#7F00FF" thickness="1" pen_style="dot_dashed"/>
+						<isee:series_style color="#0CA0FF" thickness="1" pen_style="dotted"/>
+						<isee:series_style color="lime" thickness="1" pen_style="dashed"/>
+						<isee:series_style color="#FF007F" thickness="1"/>
+						<isee:series_style color="aqua" thickness="1" pen_style="dot_dashed"/>
+						<isee:series_style color="#F586FF" thickness="1" pen_style="dotted"/>
+						<isee:series_style color="black" thickness="1" pen_style="dashed"/>
+						<isee:series_style color="#C8C8C8" thickness="1"/>
+					</isee:series_styles>
+				</graph>
+				<table color="black" background="#E0E0E0" text_align="right" font_size="12pt" orientation="vertical" wrap_text="false" isee:auto_fit="true" isee:use_alternate_row_colors="false" isee:unlimited_table_length="false" blank_column_width="80" column_width="160" isee:report_month_names="false" interval="1" report_balances="beginning" report_flows="instantaneous"/>
+				<button color="black" background="#E0E0E0" font_size="12pt" transparent="false" corner_radius="0" isee:flat="false" icon_side="top"/>
+				<isee:annotation color="black" background="#E0E0E0" font_size="12pt" transparent="false" corner_radius="0" isee:flat="false" icon_side="top" popup_background_color="#FFFECF"/>
+				<slider color="black" background="#E0E0E0" font_size="12pt" num_ticks="3" label_side="top" wrap_title="true" input_expands="true" input_width="100"/>
+				<isee:pie_input color="black" background="white" font_size="12pt" legend_position="bottom" isee:transparent="false"/>
+				<knob color="#66CC66" background="#E0E0E0" font_size="12pt" label_side="bottom" wrap_title="true"/>
+				<numeric_input color="black" background="#E0E0E0" font_size="12pt" label_side="left" wrap_title="true" input_expands="false" input_width="100"/>
+				<switch color="black" background="#E0E0E0" font_size="12pt" label_side="top" wrap_title="true" isee:appearance="switch"/>
+				<options color="black" background="white" appearance="radio-buttons" arrangement="vertical"/>
+				<graphical_input color="black" background="#E0E0E0" font_size="12pt"/>
+				<group_input color="black" background="#E0E0E0" font_size="12pt"/>
+				<lamp color="black" background="white" font_size="9pt"/>
+				<gauge color="black" background="white" font_size="9pt" needle_color="#F09F72" bar_color="#EEEEEE" bar_progress_color="black" appearance="radial" num_major_ticks="11" num_minor_ticks="11" show_numeric_value="true"/>
+				<isee:spatial_map color="black" background="white" font_size="12pt"/>
+				<isee:animation_object color="black" background="white" font_size="12pt"/>
+			</style>
+			<view isee:show_pages="false" page_width="756" page_height="584" isee:page_rows="2" isee:scroll_y="73" isee:popup_graphs_are_comparative="true" type="stock_flow">
+				<style color="black" background="white" font_style="normal" font_weight="normal" text_decoration="none" text_align="center" vertical_text_align="center" font_color="black" font_family="Arial" font_size="10pt" padding="2" border_color="black" border_width="thin" border_style="none">
+					<stock color="blue" background="white" font_color="blue" font_size="9pt" label_side="top">
+						<shape type="rectangle" width="45" height="35"/>
+					</stock>
+					<flow color="blue" background="white" font_color="blue" font_size="9pt" label_side="bottom"/>
+					<module color="blue" background="white" font_color="blue" font_size="9pt" label_side="top">
+						<shape type="rectangle" width="55" height="45"/>
+					</module>
+					<aux color="blue" background="white" font_color="blue" font_size="9pt" label_side="bottom">
+						<shape type="circle" radius="18"/>
+					</aux>
+					<group color="red" background="white" font_color="red" font_size="9pt"/>
+					<connector color="#FF007F" background="white" font_color="#FF007F" font_size="9pt" isee:thickness="1"/>
+					<text_box color="black" background="white" text_align="left" vertical_text_align="top" font_size="12pt"/>
+					<isee:loop_indicator color="black" background="white"/>
+					<numeric_display color="blue" background="white" font_size="9pt" isee:transparent="false"/>
+					<graph color="black" background="white" font_size="12pt" axis_color="#666666" grid_color="#C8C8C8" isee:graph_area_color="white" legend_position="bottom" isee:transparent="false" isee:hide_border="false">
+						<isee:series_styles>
+							<isee:series_style color="blue" thickness="1"/>
+							<isee:series_style color="red" thickness="1" pen_style="dot_dashed"/>
+							<isee:series_style color="fuchsia" thickness="1" pen_style="dotted"/>
+							<isee:series_style color="#008F44" thickness="1" pen_style="dashed"/>
+							<isee:series_style color="#FF7F00" thickness="1"/>
+							<isee:series_style color="#7F00FF" thickness="1" pen_style="dot_dashed"/>
+							<isee:series_style color="#0CA0FF" thickness="1" pen_style="dotted"/>
+							<isee:series_style color="lime" thickness="1" pen_style="dashed"/>
+							<isee:series_style color="#FF007F" thickness="1"/>
+							<isee:series_style color="aqua" thickness="1" pen_style="dot_dashed"/>
+							<isee:series_style color="#F586FF" thickness="1" pen_style="dotted"/>
+							<isee:series_style color="black" thickness="1" pen_style="dashed"/>
+							<isee:series_style color="#C8C8C8" thickness="1"/>
+						</isee:series_styles>
+					</graph>
+					<table color="black" background="#E0E0E0" text_align="right" font_size="12pt" orientation="vertical" wrap_text="false" isee:auto_fit="true" isee:use_alternate_row_colors="false" isee:unlimited_table_length="false" blank_column_width="80" column_width="160" isee:report_month_names="false" interval="1" report_balances="beginning" report_flows="instantaneous"/>
+				</style>
+				<connector uid="1" color="#7F00FF" angle="206.565">
+					<from>Hares</from>
+					<to>hare_births</to>
+				</connector>
+				<connector uid="2" color="#7F00FF" angle="63.4349">
+					<from>hare_birth_fraction</from>
+					<to>hare_births</to>
+				</connector>
+				<connector uid="3" color="red" angle="316.548">
+					<from>Lynx</from>
+					<to>lynx_births</to>
+				</connector>
+				<connector uid="4" color="red" angle="145.705">
+					<from>lynx_birth_fraction</from>
+					<to>lynx_births</to>
+				</connector>
+				<connector uid="5" color="red" angle="228.576">
+					<from>Lynx</from>
+					<to>lynx_deaths</to>
+				</connector>
+				<connector uid="6" color="red" angle="282.529">
+					<from>lynx_death_fraction</from>
+					<to>lynx_deaths</to>
+				</connector>
+				<connector uid="7" color="#7F00FF" angle="217.694">
+					<from>Hares</from>
+					<to>hare_density</to>
+				</connector>
+				<connector uid="8" color="red" angle="187.125">
+					<from>hare_density</from>
+					<to>lynx_death_fraction</to>
+				</connector>
+				<connector uid="9" color="red" angle="27.646">
+					<from>Lynx</from>
+					<to>hare_deaths</to>
+				</connector>
+				<connector uid="10" color="red" angle="330.255">
+					<from>hare_density</from>
+					<to>hares_killed_per_lynx</to>
+				</connector>
+				<connector uid="11" color="red" angle="29.7449">
+					<from>hares_killed_per_lynx</from>
+					<to>hare_deaths</to>
+				</connector>
+				<connector uid="12" color="black" angle="32.0054">
+					<from>area</from>
+					<to>hare_density</to>
+				</connector>
+				<aux color="black" font_color="black" x="209" y="248" name="area"/>
+				<flow color="#7F00FF" font_color="#7F00FF" label_side="top" x="226.25" y="150" name="hare births">
+					<pts>
+						<pt x="135" y="150"/>
+						<pt x="317.5" y="150"/>
+					</pts>
+				</flow>
+				<flow color="#7F00FF" font_color="#7F00FF" label_side="top" x="470.25" y="149" name="hare deaths">
+					<pts>
+						<pt x="362.5" y="149"/>
+						<pt x="602" y="149"/>
+					</pts>
+				</flow>
+				<aux color="#7F00FF" font_color="#7F00FF" label_angle="37.1326" x="310" y="242" name="hare\ndensity"/>
+				<aux color="#7F00FF" font_color="#7F00FF" label_angle="175.016" x="172" y="207" name="hare birth\nfraction"/>
+				<flow color="red" font_color="red" label_angle="41.3571" x="525.75" y="341" name="lynx\nbirths">
+					<pts>
+						<pt x="607" y="341"/>
+						<pt x="444.5" y="341"/>
+					</pts>
+				</flow>
+				<flow color="red" font_color="red" label_angle="107.355" x="352.75" y="342" name="lynx\ndeaths">
+					<pts>
+						<pt x="399.5" y="342"/>
+						<pt x="282" y="342"/>
+					</pts>
+				</flow>
+				<aux color="red" font_color="red" x="580" y="378" name="lynx birth\nfraction"/>
+				<stock color="#7F00FF" font_color="#7F00FF" label_side="center" x="340" y="151" name="Hares"/>
+				<stock color="red" font_color="red" label_side="center" x="422" y="338" name="Lynx"/>
+				<aux color="red" font_color="red" label_angle="305.709" x="412" y="251" name="hares killed\nper lynx"/>
+				<aux color="red" font_color="red" label_side="left" label_angle="225" x="223" y="320" name="lynx death\nfraction"/>
+				<text_box font_color="#2F00FF" font_size="24pt" uid="13" x="15" y="10" width="364" height="69">Simple Predator-Prey Dynamics
+Core Model Structure</text_box>
+				<stacked_container uid="14" x="53" y="429" width="652" height="250">
+					<graph x="53" y="429" width="652" height="250" type="time_series" show_grid="false" include_units_in_legend="false" plot_numbers="false" isee:label_pie_slices="false" num_x_grid_lines="0" num_y_grid_lines="0" num_x_labels="5" num_y_labels="3" title="Graph" isee:stacked_area_alpha="0.1" left_axis_multi_scale="false" left_axis_auto_scale="true" right_axis_multi_scale="false" right_axis_auto_scale="true">
+						<plot color="blue" pen_width="1" index="0" show_y_axis="true">
+							<entity name="Hares"/>
+						</plot>
+						<plot color="red" pen_style="dot_dashed" pen_width="1" index="0" right_axis="true" show_y_axis="true">
+							<entity name="Lynx"/>
+						</plot>
+					</graph>
+				</stacked_container>
+			</view>
+			<view isee:show_pages="false" background="white" page_width="800" page_height="600" home_view="true" type="interface">
+				<style/>
+			</view>
+			<isee:templates>
+				<view isee:show_pages="false" background="white" page_width="800" page_height="600" type="template">
+					<style/>
+				</view>
+			</isee:templates>
+			<isee:stories/>
+		</views>
+	</model>
+</xmile>
+

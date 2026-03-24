@@ -66,6 +66,16 @@ utils.evalsNormalizeVariableName = function(name) {
 };
 
 /**
+ * Fetches and normalizes the name of a component's module (if it exists)
+ * @param {string} name The component name to check
+ * @returns {string} The name of the module this component is in; empty string if none
+ */
+utils.evalsGetModuleName = function(name) {
+    if (!name.includes(".")) return ""; // no module
+    return utils.evalsNormalizeVariableName(name.split(".").slice(0, -1).join("."));
+}
+
+/**
  * Checks if a variable name matches the expected name using flexible matching
  * Used in evaluation categories to compare generated variable names with expected names
  * @param {string} variableName The variable name from the generated model
@@ -77,6 +87,19 @@ utils.evalsVariableNameMatches = function(variableName, expectedName) {
     const normalizedExpected = utils.evalsNormalizeVariableName(expectedName);
     return normalizedVariable.includes(normalizedExpected) || normalizedExpected.includes(normalizedVariable);
 };
+
+/**
+ * Checks if a variable name matches the expected name using strict matching
+ * Used in evaluation categories to compare generated variable names with expected names
+ * @param {string} variableName The variable name from the generated model
+ * @param {string} expectedName The expected variable name
+ * @returns {boolean} True if names match
+ */
+utils.evalsVariableNameMatchesStrict = function(variableName, expectedName) {
+    const normalizedVariable = utils.evalsNormalizeVariableName(variableName);
+    const normalizedExpected = utils.evalsNormalizeVariableName(expectedName);
+    return normalizedVariable.includes(normalizedExpected) == normalizedExpected.includes(normalizedVariable);
+}
 
 /**
  * Standardized array of gibberish nouns for use across evaluation categories

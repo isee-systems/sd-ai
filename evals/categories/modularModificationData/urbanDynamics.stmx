@@ -1,0 +1,1143 @@
+<?xml version="1.0" encoding="utf-8"?>
+<xmile version="1.0" xmlns="http://docs.oasis-open.org/xmile/ns/XMILE/v1.0" xmlns:isee="http://iseesystems.com/XMILE">
+	<header>
+		<smile version="1.0" namespace="std, isee" uses_submodels=""/>
+		<name>one prompt holy heck</name>
+		<uuid>85de88a7-fd12-465d-a428-166c5cf02e10</uuid>
+		<vendor>isee systems, inc.</vendor>
+		<product version="4.2" isee:build_number="development" isee:saved_by_v1="true" lang="en">Stella Architect</product>
+	</header>
+	<ai_information>
+		<status verified="true" trusted="true" tampered="false" uses="true" analyzed="false" log_truncated="false" timestamp="1771434175" algorithm="ed25519" keyurl="https://iseesystems.com/keys/stella01.txt" want_var_info="true" want_var_status="true" want_log="true" sampling="1" signature="PYAYnXSV1wb8bEr+65McYYlcjT+eau5U1br/n85b5pVnhZ/otFLgdVq5nzczCR7mXhGBMnO8tfqxsx5ej97NBQ=="/>
+		<testing signed_message_body="algorithm=ed25519 analyzed=false keyurl=https://iseesystems.com/keys/stella01.txt logtruncated=false sampling=1 tampered=false timestamp=1771434175 trusted=true uses=true verified=true wantlog=true wantvarinfo=true wantvarstatus=true Commerce.basestartfraction=0.05 Commerce.businessclosures=BusinessStructures*closurefraction Commerce.businessstarts=BusinessStructures*basestartfraction*startmultiplier Commerce.BusinessStructures=500 Commerce.closurefraction=0.03 Commerce.jobsperstructure=20 Commerce.Population=10000 Commerce.relativelaboravailability=(Population/BusinessStructures)//targetlaborperbusiness Commerce.startmultiplier=relativelaboravailability Commerce.targetlaborperbusiness=20 Commerce.totaljobs=BusinessStructures*jobsperstructure Housing.baseconstructionfraction=0.05 Housing.construction=HousingStock*baseconstructionfraction*constructionmultiplier Housing.constructionmultiplier=relativehousingdemand Housing.demolition=HousingStock*demolitionfraction Housing.demolitionfraction=0.02 Housing.HousingStock=4000 Housing.Population=10000 Housing.relativehousingdemand=(Population/HousingStock)//targetpersonsperhouse Housing.targetpersonsperhouse=2.5 Population.attractivenessfromhousing=relativehousingavailability Population.attractivenessfromjobs=relativejobavailability Population.basemigrationfraction=0.01 Population.birthfraction=0.02 Population.births=Population*birthfraction Population.deathfraction=0.015 Population.deaths=Population*deathfraction Population.HousingStock=4000 Population.migration=Population*basemigrationfraction*((attractivenessfromhousing+attractivenessfromjobs)/2) Population.Population=10000 Population.relativehousingavailability=(HousingStock/Population)//targethousingperperson Population.relativejobavailability=(totaljobs/Population)//targetjobsperperson Population.targethousingperperson=0.4 Population.targetjobsperperson=1 Population.totaljobs={Enterequationforusewhennothookeduptoothermodels} CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC &lt;h3&gt;Youinstructedmeto...&lt;/h3&gt;Givemeamodularmodelofurbandevelopmentwithpopulation,housingandcommerece&lt;br/&gt;&lt;h3&gt;HereiswhatIhavedone...&lt;/h3&gt;&lt;h3&gt;ModularUrbanDevelopmentDynamicsModel&lt;/h3&gt;&lt;p&gt;Thismodularmodelrepresentsurbandevelopmentthroughthreeinterconnectedsectors:Population,Housing,andCommerce.&lt;/p&gt;&lt;ol&gt;&lt;li&gt;&lt;p&gt;&lt;strong&gt;PopulationModule&lt;/strong&gt;:Tracksthenumberofresidents.Growthisdrivenbybirthsandnetmigration.Migrationisinfluencedbythe&amp;#39;attractiveness&amp;#39;ofthecity,whichisafunctionofhousingavailability(fromtheHousingmodule)andjobavailability(fromtheCommercemodule).Thiscreatesa&lt;strong&gt;BalancingLoop&lt;/strong&gt;wherepopulationgrowtheventuallyreducesattractiveness,slowingfurthermigration.&lt;/p&gt;&lt;/li&gt;&lt;li&gt;&lt;p&gt;&lt;strong&gt;HousingModule&lt;/strong&gt;:Tracksthestockofresidentialunits.Constructionisdrivenbyhousingdemand,whichistheratioofpopulationtoexistinghousing.Thisformsa&lt;strong&gt;ReinforcingLoop&lt;/strong&gt;wheremorepeopleleadtomoreconstruction,whichinturnsupportsmorepeople(viathePopulationmodule&amp;#39;sattractiveness).&lt;/p&gt;&lt;/li&gt;&lt;li&gt;&lt;p&gt;&lt;strong&gt;CommerceModule&lt;/strong&gt;:Tracksbusinessstructuresandtotaljobs.Businessstartsareencouragedbylaboravailability(populationperbusiness).Thiscreatesa&lt;strong&gt;ReinforcingLoop&lt;/strong&gt;wherealargerpopulationsupportsmorebusinesses,whichprovidemorejobs,furtherattractingmorepopulation.&lt;/p&gt;&lt;/li&gt;&lt;/ol&gt;&lt;p&gt;Inter-moduledependenciesarehandledvia&lt;strong&gt;Cross-LevelGhostVariables&lt;/strong&gt;,ensuringthateachmoduleremainsencapsulatedwhileallowingthenecessaryfeedbackloopstocloseacrosstheentiresystem.&lt;/p&gt;&lt;br/&gt;&lt;h4&gt;1.Population.Population--&gt;(+)Population.births&lt;/h4&gt;Alargerpopulationleadstomorebirths.&lt;br/&gt;&lt;h4&gt;2.Population.Population--&gt;(+)Population.deaths&lt;/h4&gt;Alargerpopulationleadstomoredeaths.&lt;br/&gt;&lt;h4&gt;3.Population.Population--&gt;(+)Population.migration&lt;/h4&gt;Migrationiscalculatedasafractionoftheexistingpopulation.&lt;br/&gt;&lt;h4&gt;4.Population.birthfraction--&gt;(+)Population.births&lt;/h4&gt;Ahigherbirthfractionincreasesthenumberofbirths.&lt;br/&gt;&lt;h4&gt;5.Population.deathfraction--&gt;(+)Population.deaths&lt;/h4&gt;Ahigherdeathfractionincreasesthenumberofdeaths.&lt;br/&gt;&lt;h4&gt;6.Population.basemigrationfraction--&gt;(+)Population.migration&lt;/h4&gt;Ahigherbasemigrationfractionincreasesnetmigration.&lt;br/&gt;&lt;h4&gt;7.Population.attractivenessfromhousing--&gt;(+)Population.migration&lt;/h4&gt;Higherhousingattractivenessincreasesnetmigrationintothearea.&lt;br/&gt;&lt;h4&gt;8.Population.attractivenessfromjobs--&gt;(+)Population.migration&lt;/h4&gt;Higherjobattractivenessincreasesnetmigrationintothearea.&lt;br/&gt;&lt;h4&gt;9.Population.relativehousingavailability--&gt;(+)Population.attractivenessfromhousing&lt;/h4&gt;Betterhousingavailabilitymakestheareamoreattractiveformigrants.&lt;br/&gt;&lt;h4&gt;10.Population.relativejobavailability--&gt;(+)Population.attractivenessfromjobs&lt;/h4&gt;Betterjobavailabilitymakestheareamoreattractiveformigrants.&lt;br/&gt;&lt;h4&gt;11.Population.HousingStock--&gt;(+)Population.relativehousingavailability&lt;/h4&gt;Morehousingunitsincreasetherelativeavailabilityofhousing.&lt;br/&gt;&lt;h4&gt;12.Population.Population--&gt;(-)Population.relativehousingavailability&lt;/h4&gt;Alargerpopulationdecreasestherelativeavailabilityofhousingperperson.&lt;br/&gt;&lt;h4&gt;13.Population.totaljobs--&gt;(+)Population.relativejobavailability&lt;/h4&gt;Morejobsincreasetherelativeavailabilityofemployment.&lt;br/&gt;&lt;h4&gt;14.Population.Population--&gt;(-)Population.relativejobavailability&lt;/h4&gt;Alargerpopulationdecreasestherelativeavailabilityofjobsperperson.&lt;br/&gt;&lt;h4&gt;15.Population.targethousingperperson--&gt;(-)Population.relativehousingavailability&lt;/h4&gt;Ahighertargetforhousingperpersonmakesthecurrentavailabilitylooklowerrelatively.&lt;br/&gt;&lt;h4&gt;16.Population.targetjobsperperson--&gt;(-)Population.relativejobavailability&lt;/h4&gt;Ahighertargetforjobsperpersonmakesthecurrentavailabilitylooklowerrelatively.&lt;br/&gt;&lt;h4&gt;17.Housing.HousingStock--&gt;(+)Housing.construction&lt;/h4&gt;Constructioniscalculatedasafractionoftheexistinghousingstock.&lt;br/&gt;&lt;h4&gt;18.Housing.HousingStock--&gt;(+)Housing.demolition&lt;/h4&gt;Demolitioniscalculatedasafractionoftheexistinghousingstock.&lt;br/&gt;&lt;h4&gt;19.Housing.baseconstructionfraction--&gt;(+)Housing.construction&lt;/h4&gt;Ahigherbaseconstructionfractionincreasestheconstructionrate.&lt;br/&gt;&lt;h4&gt;20.Housing.demolitionfraction--&gt;(+)Housing.demolition&lt;/h4&gt;Ahigherdemolitionfractionincreasesthedemolitionrate.&lt;br/&gt;&lt;h4&gt;21.Housing.constructionmultiplier--&gt;(+)Housing.construction&lt;/h4&gt;Ahigherconstructionmultiplierincreasestheconstructionrate.&lt;br/&gt;&lt;h4&gt;22.Housing.relativehousingdemand--&gt;(+)Housing.constructionmultiplier&lt;/h4&gt;Higherrelativedemandforhousingencouragesmoreconstruction.&lt;br/&gt;&lt;h4&gt;23.Housing.Population--&gt;(+)Housing.relativehousingdemand&lt;/h4&gt;Alargerpopulationincreasesthedemandforhousing.&lt;br/&gt;&lt;h4&gt;24.Housing.HousingStock--&gt;(-)Housing.relativehousingdemand&lt;/h4&gt;Morehousingstockdecreasestherelativedemandfornewhousing.&lt;br/&gt;&lt;h4&gt;25.Housing.targetpersonsperhouse--&gt;(-)Housing.relativehousingdemand&lt;/h4&gt;Ahighertargetforpersonsperhousemakesthecurrentdemandlooklowerrelatively.&lt;br/&gt;&lt;h4&gt;26.Commerce.BusinessStructures--&gt;(+)Commerce.businessstarts&lt;/h4&gt;Businessstartsarecalculatedasafractionoftheexistingbusinessstructures.&lt;br/&gt;&lt;h4&gt;27.Commerce.BusinessStructures--&gt;(+)Commerce.businessclosures&lt;/h4&gt;Businessclosuresarecalculatedasafractionoftheexistingbusinessstructures.&lt;br/&gt;&lt;h4&gt;28.Commerce.basestartfraction--&gt;(+)Commerce.businessstarts&lt;/h4&gt;Ahigherbasestartfractionincreasesthebusinessstartrate.&lt;br/&gt;&lt;h4&gt;29.Commerce.closurefraction--&gt;(+)Commerce.businessclosures&lt;/h4&gt;Ahigherclosurefractionincreasesthebusinessclosurerate.&lt;br/&gt;&lt;h4&gt;30.Commerce.startmultiplier--&gt;(+)Commerce.businessstarts&lt;/h4&gt;Ahigherstartmultiplierincreasesthebusinessstartrate.&lt;br/&gt;&lt;h4&gt;31.Commerce.relativelaboravailability--&gt;(+)Commerce.startmultiplier&lt;/h4&gt;Higherlaboravailabilityencouragesmorebusinessstarts.&lt;br/&gt;&lt;h4&gt;32.Commerce.Population--&gt;(+)Commerce.relativelaboravailability&lt;/h4&gt;Alargerpopulationincreasestheavailabilityoflaborforbusinesses.&lt;br/&gt;&lt;h4&gt;33.Commerce.BusinessStructures--&gt;(-)Commerce.relativelaboravailability&lt;/h4&gt;Morebusinessstructuresdecreasetherelativeavailabilityoflaborperbusiness.&lt;br/&gt;&lt;h4&gt;34.Commerce.targetlaborperbusiness--&gt;(-)Commerce.relativelaboravailability&lt;/h4&gt;Ahighertargetforlaborperbusinessmakesthecurrentavailabilitylooklowerrelatively.&lt;br/&gt;&lt;h4&gt;35.Commerce.BusinessStructures--&gt;(+)Commerce.totaljobs&lt;/h4&gt;Morebusinessstructuresprovidemoretotaljobs.&lt;br/&gt;&lt;h4&gt;36.Commerce.jobsperstructure--&gt;(+)Commerce.totaljobs&lt;/h4&gt;Morejobsperstructureincreasethetotalnumberofjobs.&lt;br/&gt;"/>
+		<log>&lt;h3&gt;You instructed me to...&lt;/h3&gt;Give me a modular model of urban development with population, housing and commerece&lt;br/&gt;&lt;h3&gt;Here is what I have done...&lt;/h3&gt;&lt;h3&gt;Modular Urban Development Dynamics Model&lt;/h3&gt;&lt;p&gt;This modular model represents urban development through three interconnected sectors: Population, Housing, and Commerce. &lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;p&gt;&lt;strong&gt;Population Module&lt;/strong&gt;: Tracks the number of residents. Growth is driven by births and net migration. Migration is influenced by the &amp;#39;attractiveness&amp;#39; of the city, which is a function of housing availability (from the Housing module) and job availability (from the Commerce module). This creates a &lt;strong&gt;Balancing Loop&lt;/strong&gt; where population growth eventually reduces attractiveness, slowing further migration.&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;p&gt;&lt;strong&gt;Housing Module&lt;/strong&gt;: Tracks the stock of residential units. Construction is driven by housing demand, which is the ratio of population to existing housing. This forms a &lt;strong&gt;Reinforcing Loop&lt;/strong&gt; where more people lead to more construction, which in turn supports more people (via the Population module&amp;#39;s attractiveness).&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;p&gt;&lt;strong&gt;Commerce Module&lt;/strong&gt;: Tracks business structures and total jobs. Business starts are encouraged by labor availability (population per business). This creates a &lt;strong&gt;Reinforcing Loop&lt;/strong&gt; where a larger population supports more businesses, which provide more jobs, further attracting more population.&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;Inter-module dependencies are handled via &lt;strong&gt;Cross-Level Ghost Variables&lt;/strong&gt;, ensuring that each module remains encapsulated while allowing the necessary feedback loops to close across the entire system.&lt;/p&gt;
+&lt;br/&gt;&lt;h4&gt;1. Population.Population --&gt;(+) Population.births&lt;/h4&gt;A larger population leads to more births.&lt;br/&gt;&lt;h4&gt;2. Population.Population --&gt;(+) Population.deaths&lt;/h4&gt;A larger population leads to more deaths.&lt;br/&gt;&lt;h4&gt;3. Population.Population --&gt;(+) Population.migration&lt;/h4&gt;Migration is calculated as a fraction of the existing population.&lt;br/&gt;&lt;h4&gt;4. Population.birth fraction --&gt;(+) Population.births&lt;/h4&gt;A higher birth fraction increases the number of births.&lt;br/&gt;&lt;h4&gt;5. Population.death fraction --&gt;(+) Population.deaths&lt;/h4&gt;A higher death fraction increases the number of deaths.&lt;br/&gt;&lt;h4&gt;6. Population.base migration fraction --&gt;(+) Population.migration&lt;/h4&gt;A higher base migration fraction increases net migration.&lt;br/&gt;&lt;h4&gt;7. Population.attractiveness from housing --&gt;(+) Population.migration&lt;/h4&gt;Higher housing attractiveness increases net migration into the area.&lt;br/&gt;&lt;h4&gt;8. Population.attractiveness from jobs --&gt;(+) Population.migration&lt;/h4&gt;Higher job attractiveness increases net migration into the area.&lt;br/&gt;&lt;h4&gt;9. Population.relative housing availability --&gt;(+) Population.attractiveness from housing&lt;/h4&gt;Better housing availability makes the area more attractive for migrants.&lt;br/&gt;&lt;h4&gt;10. Population.relative job availability --&gt;(+) Population.attractiveness from jobs&lt;/h4&gt;Better job availability makes the area more attractive for migrants.&lt;br/&gt;&lt;h4&gt;11. Population.Housing Stock --&gt;(+) Population.relative housing availability&lt;/h4&gt;More housing units increase the relative availability of housing.&lt;br/&gt;&lt;h4&gt;12. Population.Population --&gt;(-) Population.relative housing availability&lt;/h4&gt;A larger population decreases the relative availability of housing per person.&lt;br/&gt;&lt;h4&gt;13. Population.total jobs --&gt;(+) Population.relative job availability&lt;/h4&gt;More jobs increase the relative availability of employment.&lt;br/&gt;&lt;h4&gt;14. Population.Population --&gt;(-) Population.relative job availability&lt;/h4&gt;A larger population decreases the relative availability of jobs per person.&lt;br/&gt;&lt;h4&gt;15. Population.target housing per person --&gt;(-) Population.relative housing availability&lt;/h4&gt;A higher target for housing per person makes the current availability look lower relatively.&lt;br/&gt;&lt;h4&gt;16. Population.target jobs per person --&gt;(-) Population.relative job availability&lt;/h4&gt;A higher target for jobs per person makes the current availability look lower relatively.&lt;br/&gt;&lt;h4&gt;17. Housing.Housing Stock --&gt;(+) Housing.construction&lt;/h4&gt;Construction is calculated as a fraction of the existing housing stock.&lt;br/&gt;&lt;h4&gt;18. Housing.Housing Stock --&gt;(+) Housing.demolition&lt;/h4&gt;Demolition is calculated as a fraction of the existing housing stock.&lt;br/&gt;&lt;h4&gt;19. Housing.base construction fraction --&gt;(+) Housing.construction&lt;/h4&gt;A higher base construction fraction increases the construction rate.&lt;br/&gt;&lt;h4&gt;20. Housing.demolition fraction --&gt;(+) Housing.demolition&lt;/h4&gt;A higher demolition fraction increases the demolition rate.&lt;br/&gt;&lt;h4&gt;21. Housing.construction multiplier --&gt;(+) Housing.construction&lt;/h4&gt;A higher construction multiplier increases the construction rate.&lt;br/&gt;&lt;h4&gt;22. Housing.relative housing demand --&gt;(+) Housing.construction multiplier&lt;/h4&gt;Higher relative demand for housing encourages more construction.&lt;br/&gt;&lt;h4&gt;23. Housing.Population --&gt;(+) Housing.relative housing demand&lt;/h4&gt;A larger population increases the demand for housing.&lt;br/&gt;&lt;h4&gt;24. Housing.Housing Stock --&gt;(-) Housing.relative housing demand&lt;/h4&gt;More housing stock decreases the relative demand for new housing.&lt;br/&gt;&lt;h4&gt;25. Housing.target persons per house --&gt;(-) Housing.relative housing demand&lt;/h4&gt;A higher target for persons per house makes the current demand look lower relatively.&lt;br/&gt;&lt;h4&gt;26. Commerce.Business Structures --&gt;(+) Commerce.business starts&lt;/h4&gt;Business starts are calculated as a fraction of the existing business structures.&lt;br/&gt;&lt;h4&gt;27. Commerce.Business Structures --&gt;(+) Commerce.business closures&lt;/h4&gt;Business closures are calculated as a fraction of the existing business structures.&lt;br/&gt;&lt;h4&gt;28. Commerce.base start fraction --&gt;(+) Commerce.business starts&lt;/h4&gt;A higher base start fraction increases the business start rate.&lt;br/&gt;&lt;h4&gt;29. Commerce.closure fraction --&gt;(+) Commerce.business closures&lt;/h4&gt;A higher closure fraction increases the business closure rate.&lt;br/&gt;&lt;h4&gt;30. Commerce.start multiplier --&gt;(+) Commerce.business starts&lt;/h4&gt;A higher start multiplier increases the business start rate.&lt;br/&gt;&lt;h4&gt;31. Commerce.relative labor availability --&gt;(+) Commerce.start multiplier&lt;/h4&gt;Higher labor availability encourages more business starts.&lt;br/&gt;&lt;h4&gt;32. Commerce.Population --&gt;(+) Commerce.relative labor availability&lt;/h4&gt;A larger population increases the availability of labor for businesses.&lt;br/&gt;&lt;h4&gt;33. Commerce.Business Structures --&gt;(-) Commerce.relative labor availability&lt;/h4&gt;More business structures decrease the relative availability of labor per business.&lt;br/&gt;&lt;h4&gt;34. Commerce.target labor per business --&gt;(-) Commerce.relative labor availability&lt;/h4&gt;A higher target for labor per business makes the current availability look lower relatively.&lt;br/&gt;&lt;h4&gt;35. Commerce.Business Structures --&gt;(+) Commerce.total jobs&lt;/h4&gt;More business structures provide more total jobs.&lt;br/&gt;&lt;h4&gt;36. Commerce.jobs per structure --&gt;(+) Commerce.total jobs&lt;/h4&gt;More jobs per structure increase the total number of jobs.&lt;br/&gt;</log>
+		<settings>
+			<isee:setting key="backgroundKnowledge" value=""/>
+			<isee:setting key="problemStatement" value=""/>
+		</settings>
+	</ai_information>
+	<sim_specs isee:sim_duration="1.5" isee:run_prefix="Run" isee:simulation_delay="0.03" isee:restore_on_start="false" method="Euler" time_units="years" isee:instantaneous_flows="false" isee:ignore_module_errors="false" isee:strict_units="true" isee:loop_scores="true" isee:loop_exhaustive_allowed="1000">
+		<start>0</start>
+		<stop>50</stop>
+		<dt>0.25</dt>
+	</sim_specs>
+	<isee:prefs saved_runs="5" keep="false" show_module_prefix="true" live_update_on_drag="true" show_restore_buttons="false" layer="model" isee:design="Deluxe Prev-Next Blue Green Pastel" isee:design_custom="false" interface_scale_ui="true" interface_max_page_width="10000" interface_max_page_height="10000" interface_min_page_width="0" interface_min_page_height="0" rifp="true">
+		<isee:tag_styles>
+			<isee:tag_style tag="Interface"/>
+			<isee:tag_style tag="Output"/>
+			<isee:tag_style tag="Parameter"/>
+			<isee:tag_style tag="Policy"/>
+		</isee:tag_styles>
+	</isee:prefs>
+	<isee:multiplayer_settings include_chat="true" allow_observers="false" advance_time_increment="1" max_advance_time_in_ms="0" model_stops_when_players_drop="false" observer_start_page="home_page" enabled="false"/>
+	<isee:time_formats default_format="Builtin">
+		<isee:time_format name="Builtin" type="adaptive"/>
+	</isee:time_formats>
+	<isee:number_format_extenders/>
+	<default_format/>
+	<model_units>
+		<unit name="structure">
+			<eqn/>
+			<alias>structures</alias>
+		</unit>
+		<unit name="unit">
+			<eqn/>
+			<alias>units</alias>
+		</unit>
+	</model_units>
+	<model>
+		<variables>
+			<module name="Population" isee:label="" ai_state="D">
+				<connect to="Commerce.Population" from="Population.Population"/>
+				<connect2 to="Commerce.Population" from="Population.Population"/>
+				<connect to="Housing.Population" from="Population.Population"/>
+				<connect2 to="Housing.Population" from="Population.Population"/>
+				<connect to="Population.Housing_Stock" from="Housing.Housing_Stock"/>
+				<connect2 to="Population.Housing_Stock" from="Housing.Housing_Stock"/>
+				<connect to="Population.total_jobs" from="Commerce.total_jobs"/>
+				<connect2 to="Population.total_jobs" from="Commerce.total_jobs"/>
+			</module>
+			<module name="Housing" isee:label="" ai_state="C">
+				<connect to="Population.Housing_Stock" from="Housing.Housing_Stock"/>
+				<connect2 to="Population.Housing_Stock" from="Housing.Housing_Stock"/>
+				<connect to="Housing.Population" from="Population.Population"/>
+				<connect2 to="Housing.Population" from="Population.Population"/>
+			</module>
+			<module name="Commerce" isee:label="" ai_state="C">
+				<connect to="Population.total_jobs" from="Commerce.total_jobs"/>
+				<connect2 to="Population.total_jobs" from="Commerce.total_jobs"/>
+				<connect to="Commerce.Population" from="Population.Population"/>
+				<connect2 to="Commerce.Population" from="Population.Population"/>
+			</module>
+		</variables>
+		<views>
+			<style color="black" background="white" font_style="normal" font_weight="normal" text_decoration="none" text_align="center" vertical_text_align="center" font_color="black" font_family="Arial" font_size="10pt" padding="2" border_color="black" border_width="thin" border_style="none">
+				<text_box color="black" background="white" text_align="left" vertical_text_align="top" font_size="12pt"/>
+				<isee:loop_indicator color="black" background="white" vertical_text_align="top" font_size="12pt"/>
+				<numeric_display color="white" background="white" font_size="12pt" border_width="thin" border_style="solid" isee:transparent="false" isee:show_divider="true" isee:show_bounding_box="true" label_side="left"/>
+				<graph color="black" background="white" font_size="12pt" axis_color="#666666" grid_color="#C8C8C8" isee:graph_area_color="white" legend_position="bottom" isee:transparent="false" isee:hide_border="false" axis_title_font_style="normal" axis_title_font_weight="normal" axis_title_text_decoration="none" axis_title_text_align="center" axis_title_vertical_text_align="center" axis_title_font_color="black" axis_title_font_family="Arial" axis_title_font_size="12pt" axis_title_text_padding="2" axis_title_text_border_color="black" axis_title_text_border_width="thin" axis_title_text_border_style="none" axis_label_font_style="normal" axis_label_font_weight="normal" axis_label_text_decoration="none" axis_label_text_align="center" axis_label_vertical_text_align="center" axis_label_font_color="black" axis_label_font_family="Arial" axis_label_font_size="9pt" axis_label_text_padding="2" axis_label_text_border_color="black" axis_label_text_border_width="thin" axis_label_text_border_style="none">
+					<isee:series_styles>
+						<isee:series_style color="blue" thickness="1"/>
+						<isee:series_style color="red" thickness="1" pen_style="dot_dashed"/>
+						<isee:series_style color="fuchsia" thickness="1" pen_style="dotted"/>
+						<isee:series_style color="#008F44" thickness="1" pen_style="dashed"/>
+						<isee:series_style color="#FF7F00" thickness="1"/>
+						<isee:series_style color="#7F00FF" thickness="1" pen_style="dot_dashed"/>
+						<isee:series_style color="#0CA0FF" thickness="1" pen_style="dotted"/>
+						<isee:series_style color="lime" thickness="1" pen_style="dashed"/>
+						<isee:series_style color="#FF007F" thickness="1"/>
+						<isee:series_style color="aqua" thickness="1" pen_style="dot_dashed"/>
+						<isee:series_style color="#F586FF" thickness="1" pen_style="dotted"/>
+						<isee:series_style color="black" thickness="1" pen_style="dashed"/>
+						<isee:series_style color="#C8C8C8" thickness="1"/>
+					</isee:series_styles>
+				</graph>
+				<table color="black" background="#E0E0E0" text_align="right" font_size="12pt" orientation="vertical" wrap_text="false" isee:auto_fit="true" isee:use_alternate_row_colors="false" isee:unlimited_table_length="false" blank_column_width="80" column_width="160" interval="1" report_balances="beginning" report_flows="instantaneous" header_font_style="normal" header_font_weight="normal" header_text_decoration="none" header_text_align="center" header_vertical_text_align="center" header_font_color="black" header_font_family="Arial" header_font_size="12pt" header_text_padding="2" header_text_border_color="black" header_text_border_width="thin" header_text_border_style="none"/>
+				<button color="black" background="#E0E0E0" font_size="12pt" border_width="thin" border_style="solid" transparent="false" corner_radius="0" isee:flat="false" icon_side="top" isee:highlight_on_hover="false" isee:highlight_color="#959595"/>
+				<isee:annotation color="black" background="#E0E0E0" font_size="12pt" border_width="thin" border_style="solid" transparent="false" corner_radius="0" isee:flat="false" icon_side="top" isee:highlight_on_hover="false" isee:highlight_color="#959595" popup_corner_radius="0" popup_background_color="#FFFECF"/>
+				<slider color="#0075FF" background="#E0E0E0" font_size="12pt" num_ticks="3" label_side="top" wrap_title="true" vertical="false" isee:fancy_appearance="false" isee:show_hover_tip="when_deciding" input_expands="true" input_width="100"/>
+				<isee:stacked_container color="black" background="white" text_align="left" vertical_text_align="top" font_size="12pt" padding="6 8" border_color="#999999" border_width="thin" border_style="solid" item_spacing="0" corner_radius="4" selected_item_color="black" selected_item_background="white" item_background="#DDDDDD" transparent_bg="false"/>
+				<isee:dual_slider color="#66CC66" background="silver" font_size="12pt" num_ticks="3" label_side="top" wrap_title="true" isee:show_hover_tip="when_deciding" input_expands="true" input_width="100"/>
+				<isee:sim_speed_slider color="black" background="white"/>
+				<isee:time_slider color="#E95F74" background="silver"/>
+				<isee:pie_input color="black" background="white" font_size="12pt" legend_position="bottom" isee:transparent="false"/>
+				<knob color="#66CC66" background="#E0E0E0" font_size="12pt" label_side="bottom" wrap_title="true"/>
+				<numeric_input color="black" background="#E0E0E0" font_size="12pt" label_side="left" wrap_title="true" input_expands="false" input_width="100"/>
+				<isee:dropdown_input color="black" background="#E0E0E0" font_size="12pt" label_side="left" wrap_title="true" input_expands="false" input_width="100"/>
+				<switch color="black" background="#E0E0E0" font_size="12pt" label_side="top" wrap_title="true" isee:appearance="switch" isee:on_color="green"/>
+				<options color="black" background="white" appearance="radio-buttons" arrangement="vertical"/>
+				<graphical_input color="black" background="#E0E0E0" font_size="12pt" isee:show_hover_tip="true"/>
+				<group_input color="black" background="#E0E0E0" font_size="12pt"/>
+				<lamp color="black" background="white" font_size="9pt"/>
+				<gauge color="black" background="white" font_size="9pt" needle_color="#F09F72" bar_color="#EEEEEE" bar_progress_color="black" appearance="radial" num_major_ticks="11" num_minor_ticks="1" show_numeric_value="true"/>
+				<isee:spatial_map color="black" background="white" font_size="12pt"/>
+				<isee:animation_object color="black" background="white" font_size="12pt"/>
+				<isee:navigation_widget color="black" background="white" text_align="left" vertical_text_align="top" font_size="12pt" padding="6 8" border_color="#999999" border_width="thin" border_style="solid" item_spacing="6" appearance="tabs" corner_radius="4" selected_item_color="black" selected_item_background="white" item_background="#DDDDDD" transparent_bg="false"/>
+				<isee:shape color="black" background="white" text_align="left" vertical_text_align="top" font_size="12pt" border_width="thin" border_style="solid" opacity="1" transparent_background="true" corner_radius="1"/>
+				<isee:selector color="black" background="white" text_align="left" vertical_text_align="top" font_size="12pt"/>
+				<isee:iframe color="black" background="white" text_align="left" vertical_text_align="top" font_size="12pt" border_width="thin" border_style="solid"/>
+				<isee:financial_table color="black" background="#E0E0E0" text_align="right" font_size="12pt" hide_border="false" auto_fit="true" first_column_width="250" other_column_width="100" header_font_style="normal" header_font_weight="bold" header_text_decoration="none" header_text_align="center" header_vertical_text_align="center" header_font_color="black" header_font_family="Arial" header_font_size="14pt" header_text_padding="2" header_text_border_color="black" header_text_border_width="thin" header_text_border_style="none"/>
+			</style>
+			<view isee:show_pages="false" background="white" page_width="768" page_height="588" isee:popup_graphs_are_comparative="true" isee:enable_non_negative_highlights="false" type="stock_flow">
+				<style color="black" background="white" font_style="normal" font_weight="normal" text_decoration="none" text_align="center" vertical_text_align="center" font_color="black" font_family="Arial" font_size="10pt" padding="2" border_color="black" border_width="thin" border_style="none">
+					<stock color="blue" background="white" font_color="blue" font_size="9pt" label_side="top">
+						<shape type="rectangle" width="45" height="35"/>
+					</stock>
+					<flow color="blue" background="white" font_color="blue" font_size="9pt" label_side="bottom">
+						<shape type="circle" radius="18"/>
+					</flow>
+					<isee:placeholder color="#228B22" background="white" font_color="#228B22" font_size="9pt" label_side="bottom"/>
+					<module color="blue" background="white" font_color="blue" font_size="9pt" label_side="top">
+						<shape type="rectangle" width="55" height="45"/>
+					</module>
+					<aux color="blue" background="white" font_color="blue" font_size="9pt" label_side="bottom">
+						<shape type="circle" radius="18"/>
+					</aux>
+					<group color="red" background="white" font_color="red" font_size="9pt"/>
+					<connector color="#FF007F" background="white" font_color="#FF007F" font_size="9pt" isee:thickness="1"/>
+					<text_box color="black" background="white" text_align="left" vertical_text_align="top" font_size="12pt"/>
+					<isee:loop_indicator color="black" background="white" vertical_text_align="top" font_size="12pt"/>
+					<numeric_display color="white" background="white" font_size="12pt" border_width="thin" border_style="solid" isee:transparent="false" isee:show_divider="true" isee:show_bounding_box="true" label_side="left"/>
+					<graph color="black" background="white" font_size="12pt" axis_color="#666666" grid_color="#C8C8C8" isee:graph_area_color="white" legend_position="bottom" isee:transparent="false" isee:hide_border="false" axis_title_font_style="normal" axis_title_font_weight="normal" axis_title_text_decoration="none" axis_title_text_align="center" axis_title_vertical_text_align="center" axis_title_font_color="black" axis_title_font_family="Arial" axis_title_font_size="12pt" axis_title_text_padding="2" axis_title_text_border_color="black" axis_title_text_border_width="thin" axis_title_text_border_style="none" axis_label_font_style="normal" axis_label_font_weight="normal" axis_label_text_decoration="none" axis_label_text_align="center" axis_label_vertical_text_align="center" axis_label_font_color="black" axis_label_font_family="Arial" axis_label_font_size="9pt" axis_label_text_padding="2" axis_label_text_border_color="black" axis_label_text_border_width="thin" axis_label_text_border_style="none">
+						<isee:series_styles>
+							<isee:series_style color="blue" thickness="1"/>
+							<isee:series_style color="red" thickness="1" pen_style="dot_dashed"/>
+							<isee:series_style color="fuchsia" thickness="1" pen_style="dotted"/>
+							<isee:series_style color="#008F44" thickness="1" pen_style="dashed"/>
+							<isee:series_style color="#FF7F00" thickness="1"/>
+							<isee:series_style color="#7F00FF" thickness="1" pen_style="dot_dashed"/>
+							<isee:series_style color="#0CA0FF" thickness="1" pen_style="dotted"/>
+							<isee:series_style color="lime" thickness="1" pen_style="dashed"/>
+							<isee:series_style color="#FF007F" thickness="1"/>
+							<isee:series_style color="aqua" thickness="1" pen_style="dot_dashed"/>
+							<isee:series_style color="#F586FF" thickness="1" pen_style="dotted"/>
+							<isee:series_style color="black" thickness="1" pen_style="dashed"/>
+							<isee:series_style color="#C8C8C8" thickness="1"/>
+						</isee:series_styles>
+					</graph>
+					<table color="black" background="#E0E0E0" text_align="right" font_size="12pt" orientation="vertical" wrap_text="false" isee:auto_fit="true" isee:use_alternate_row_colors="false" isee:unlimited_table_length="false" blank_column_width="80" column_width="160" interval="1" report_balances="beginning" report_flows="instantaneous" header_font_style="normal" header_font_weight="normal" header_text_decoration="none" header_text_align="center" header_vertical_text_align="center" header_font_color="black" header_font_family="Arial" header_font_size="12pt" header_text_padding="2" header_text_border_color="black" header_text_border_width="thin" header_text_border_style="none"/>
+				</style>
+				<module x="352" y="315" name="Population"/>
+				<module x="233" y="233" name="Housing"/>
+				<module x="433" y="435" name="Commerce"/>
+				<connector uid="1" isee:thickness="2" angle="345.43" isee:autocreated="true">
+					<from>Housing</from>
+					<to>Population</to>
+				</connector>
+				<connector uid="2" isee:thickness="2" angle="144.019" isee:autocreated="true">
+					<from>Commerce</from>
+					<to>Population</to>
+				</connector>
+				<connector uid="3" isee:thickness="2" angle="165.43" isee:autocreated="true">
+					<from>Population</from>
+					<to>Housing</to>
+				</connector>
+				<connector uid="4" isee:thickness="2" angle="324.019" isee:autocreated="true">
+					<from>Population</from>
+					<to>Commerce</to>
+				</connector>
+			</view>
+		</views>
+	</model>
+	<model name="Commerce">
+		<variables>
+			<flow name="business starts" ai_state="C">
+				<doc>The rate at which new businesses are established.</doc>
+				<eqn>Business_Structures*base_start_fraction*start_multiplier</eqn>
+				<non_negative/>
+				<units>structures/years</units>
+			</flow>
+			<flow name="business closures" ai_state="C">
+				<doc>The rate at which businesses close.</doc>
+				<eqn>Business_Structures*closure_fraction</eqn>
+				<non_negative/>
+				<units>structures/years</units>
+			</flow>
+			<aux name="base start fraction" ai_state="C">
+				<doc>The normal fraction of business structures added through new starts.</doc>
+				<eqn>0.05</eqn>
+				<units>1/year</units>
+			</aux>
+			<aux name="closure fraction" ai_state="C">
+				<doc>The fraction of businesses that close annually.</doc>
+				<eqn>0.03</eqn>
+				<units>1/year</units>
+			</aux>
+			<aux name="target labor per business" ai_state="C">
+				<doc>The desired number of people available per business structure.</doc>
+				<eqn>20</eqn>
+				<units>people/structure</units>
+			</aux>
+			<aux name="relative labor availability" ai_state="C">
+				<doc>The ratio of actual labor availability to the target labor availability.</doc>
+				<eqn>(Population/Business_Structures)//target_labor_per_business</eqn>
+				<units>dimensionless</units>
+			</aux>
+			<aux name="start multiplier" ai_state="C">
+				<doc>A multiplier representing how labor availability influences business starts.</doc>
+				<eqn>relative_labor_availability</eqn>
+				<gf>
+					<yscale min="0" max="3"/>
+					<xpts>0,0.5,1,1.5,2</xpts>
+					<ypts>0,0.2,1,2,3</ypts>
+				</gf>
+				<units>dimensionless</units>
+			</aux>
+			<aux name="jobs per structure" ai_state="C">
+				<doc>The average number of jobs provided by each business structure.</doc>
+				<eqn>20</eqn>
+				<units>jobs/structure</units>
+			</aux>
+			<aux name="total jobs" ai_state="C" access="output" isee:autocreated="true">
+				<doc>The total number of jobs available in the urban area.</doc>
+				<eqn>Business_Structures*jobs_per_structure</eqn>
+				<units>jobs</units>
+			</aux>
+			<stock name="Business Structures" ai_state="C">
+				<doc>The total number of commercial structures or businesses.</doc>
+				<eqn>500</eqn>
+				<inflow>business_starts</inflow>
+				<outflow>business_closures</outflow>
+				<units>structures</units>
+			</stock>
+			<stock name="Population" ai_state="C" access="input">
+				<eqn>10000</eqn>
+				<units>people</units>
+			</stock>
+		</variables>
+		<views>
+			<style color="black" background="white" font_style="normal" font_weight="normal" text_decoration="none" text_align="center" vertical_text_align="center" font_color="black" font_family="Arial" font_size="10pt" padding="2" border_color="black" border_width="thin" border_style="none">
+				<text_box color="black" background="white" text_align="left" vertical_text_align="top" font_size="12pt"/>
+				<isee:loop_indicator color="black" background="white" vertical_text_align="top" font_size="12pt"/>
+				<numeric_display color="white" background="white" font_size="12pt" border_width="thin" border_style="solid" isee:transparent="false" isee:show_divider="true" isee:show_bounding_box="true" label_side="left"/>
+				<graph color="black" background="white" font_size="12pt" axis_color="#666666" grid_color="#C8C8C8" isee:graph_area_color="white" legend_position="bottom" isee:transparent="false" isee:hide_border="false" axis_title_font_style="normal" axis_title_font_weight="normal" axis_title_text_decoration="none" axis_title_text_align="center" axis_title_vertical_text_align="center" axis_title_font_color="black" axis_title_font_family="Arial" axis_title_font_size="12pt" axis_title_text_padding="2" axis_title_text_border_color="black" axis_title_text_border_width="thin" axis_title_text_border_style="none" axis_label_font_style="normal" axis_label_font_weight="normal" axis_label_text_decoration="none" axis_label_text_align="center" axis_label_vertical_text_align="center" axis_label_font_color="black" axis_label_font_family="Arial" axis_label_font_size="9pt" axis_label_text_padding="2" axis_label_text_border_color="black" axis_label_text_border_width="thin" axis_label_text_border_style="none">
+					<isee:series_styles>
+						<isee:series_style color="blue" thickness="1"/>
+						<isee:series_style color="red" thickness="1" pen_style="dot_dashed"/>
+						<isee:series_style color="fuchsia" thickness="1" pen_style="dotted"/>
+						<isee:series_style color="#008F44" thickness="1" pen_style="dashed"/>
+						<isee:series_style color="#FF7F00" thickness="1"/>
+						<isee:series_style color="#7F00FF" thickness="1" pen_style="dot_dashed"/>
+						<isee:series_style color="#0CA0FF" thickness="1" pen_style="dotted"/>
+						<isee:series_style color="lime" thickness="1" pen_style="dashed"/>
+						<isee:series_style color="#FF007F" thickness="1"/>
+						<isee:series_style color="aqua" thickness="1" pen_style="dot_dashed"/>
+						<isee:series_style color="#F586FF" thickness="1" pen_style="dotted"/>
+						<isee:series_style color="black" thickness="1" pen_style="dashed"/>
+						<isee:series_style color="#C8C8C8" thickness="1"/>
+					</isee:series_styles>
+				</graph>
+				<table color="black" background="#E0E0E0" text_align="right" font_size="12pt" orientation="vertical" wrap_text="false" isee:auto_fit="true" isee:use_alternate_row_colors="false" isee:unlimited_table_length="false" blank_column_width="80" column_width="160" interval="1" report_balances="beginning" report_flows="instantaneous" header_font_style="normal" header_font_weight="normal" header_text_decoration="none" header_text_align="center" header_vertical_text_align="center" header_font_color="black" header_font_family="Arial" header_font_size="12pt" header_text_padding="2" header_text_border_color="black" header_text_border_width="thin" header_text_border_style="none"/>
+				<button color="black" background="#E0E0E0" font_size="12pt" border_width="thin" border_style="solid" transparent="false" corner_radius="0" isee:flat="false" icon_side="top" isee:highlight_on_hover="false" isee:highlight_color="#959595"/>
+				<isee:annotation color="black" background="#E0E0E0" font_size="12pt" border_width="thin" border_style="solid" transparent="false" corner_radius="0" isee:flat="false" icon_side="top" isee:highlight_on_hover="false" isee:highlight_color="#959595" popup_corner_radius="0" popup_background_color="#FFFECF"/>
+				<slider color="#0075FF" background="#E0E0E0" font_size="12pt" num_ticks="3" label_side="top" wrap_title="true" vertical="false" isee:fancy_appearance="false" isee:show_hover_tip="when_deciding" input_expands="true" input_width="100"/>
+				<isee:stacked_container color="black" background="white" text_align="left" vertical_text_align="top" font_size="12pt" padding="6 8" border_color="#999999" border_width="thin" border_style="solid" item_spacing="0" corner_radius="4" selected_item_color="black" selected_item_background="white" item_background="#DDDDDD" transparent_bg="false"/>
+				<isee:dual_slider color="#66CC66" background="silver" font_size="12pt" num_ticks="3" label_side="top" wrap_title="true" isee:show_hover_tip="when_deciding" input_expands="true" input_width="100"/>
+				<isee:sim_speed_slider color="black" background="white"/>
+				<isee:time_slider color="#E95F74" background="silver"/>
+				<isee:pie_input color="black" background="white" font_size="12pt" legend_position="bottom" isee:transparent="false"/>
+				<knob color="#66CC66" background="#E0E0E0" font_size="12pt" label_side="bottom" wrap_title="true"/>
+				<numeric_input color="black" background="#E0E0E0" font_size="12pt" label_side="left" wrap_title="true" input_expands="false" input_width="100"/>
+				<isee:dropdown_input color="black" background="#E0E0E0" font_size="12pt" label_side="left" wrap_title="true" input_expands="false" input_width="100"/>
+				<switch color="black" background="#E0E0E0" font_size="12pt" label_side="top" wrap_title="true" isee:appearance="switch" isee:on_color="green"/>
+				<options color="black" background="white" appearance="radio-buttons" arrangement="vertical"/>
+				<graphical_input color="black" background="#E0E0E0" font_size="12pt" isee:show_hover_tip="true"/>
+				<group_input color="black" background="#E0E0E0" font_size="12pt"/>
+				<lamp color="black" background="white" font_size="9pt"/>
+				<gauge color="black" background="white" font_size="9pt" needle_color="#F09F72" bar_color="#EEEEEE" bar_progress_color="black" appearance="radial" num_major_ticks="11" num_minor_ticks="1" show_numeric_value="true"/>
+				<isee:spatial_map color="black" background="white" font_size="12pt"/>
+				<isee:animation_object color="black" background="white" font_size="12pt"/>
+				<isee:navigation_widget color="black" background="white" text_align="left" vertical_text_align="top" font_size="12pt" padding="6 8" border_color="#999999" border_width="thin" border_style="solid" item_spacing="6" appearance="tabs" corner_radius="4" selected_item_color="black" selected_item_background="white" item_background="#DDDDDD" transparent_bg="false"/>
+				<isee:shape color="black" background="white" text_align="left" vertical_text_align="top" font_size="12pt" border_width="thin" border_style="solid" opacity="1" transparent_background="true" corner_radius="1"/>
+				<isee:selector color="black" background="white" text_align="left" vertical_text_align="top" font_size="12pt"/>
+				<isee:iframe color="black" background="white" text_align="left" vertical_text_align="top" font_size="12pt" border_width="thin" border_style="solid"/>
+				<isee:financial_table color="black" background="#E0E0E0" text_align="right" font_size="12pt" hide_border="false" auto_fit="true" first_column_width="250" other_column_width="100" header_font_style="normal" header_font_weight="bold" header_text_decoration="none" header_text_align="center" header_vertical_text_align="center" header_font_color="black" header_font_family="Arial" header_font_size="14pt" header_text_padding="2" header_text_border_color="black" header_text_border_width="thin" header_text_border_style="none"/>
+			</style>
+			<view isee:show_pages="false" background="white" page_width="768" page_height="588" isee:page_cols="2" isee:page_rows="2" isee:popup_graphs_are_comparative="true" isee:enable_non_negative_highlights="false" type="stock_flow">
+				<style color="black" background="white" font_style="normal" font_weight="normal" text_decoration="none" text_align="center" vertical_text_align="center" font_color="black" font_family="Arial" font_size="10pt" padding="2" border_color="black" border_width="thin" border_style="none">
+					<stock color="blue" background="white" font_color="blue" font_size="9pt" label_side="top">
+						<shape type="rectangle" width="45" height="35"/>
+					</stock>
+					<flow color="blue" background="white" font_color="blue" font_size="9pt" label_side="bottom">
+						<shape type="circle" radius="18"/>
+					</flow>
+					<isee:placeholder color="#228B22" background="white" font_color="#228B22" font_size="9pt" label_side="bottom"/>
+					<module color="blue" background="white" font_color="blue" font_size="9pt" label_side="top">
+						<shape type="rectangle" width="55" height="45"/>
+					</module>
+					<aux color="blue" background="white" font_color="blue" font_size="9pt" label_side="bottom">
+						<shape type="circle" radius="18"/>
+					</aux>
+					<group color="red" background="white" font_color="red" font_size="9pt"/>
+					<connector color="#FF007F" background="white" font_color="#FF007F" font_size="9pt" isee:thickness="1"/>
+					<text_box color="black" background="white" text_align="left" vertical_text_align="top" font_size="12pt"/>
+					<isee:loop_indicator color="black" background="white" vertical_text_align="top" font_size="12pt"/>
+					<numeric_display color="white" background="white" font_size="12pt" border_width="thin" border_style="solid" isee:transparent="false" isee:show_divider="true" isee:show_bounding_box="true" label_side="left"/>
+					<graph color="black" background="white" font_size="12pt" axis_color="#666666" grid_color="#C8C8C8" isee:graph_area_color="white" legend_position="bottom" isee:transparent="false" isee:hide_border="false" axis_title_font_style="normal" axis_title_font_weight="normal" axis_title_text_decoration="none" axis_title_text_align="center" axis_title_vertical_text_align="center" axis_title_font_color="black" axis_title_font_family="Arial" axis_title_font_size="12pt" axis_title_text_padding="2" axis_title_text_border_color="black" axis_title_text_border_width="thin" axis_title_text_border_style="none" axis_label_font_style="normal" axis_label_font_weight="normal" axis_label_text_decoration="none" axis_label_text_align="center" axis_label_vertical_text_align="center" axis_label_font_color="black" axis_label_font_family="Arial" axis_label_font_size="9pt" axis_label_text_padding="2" axis_label_text_border_color="black" axis_label_text_border_width="thin" axis_label_text_border_style="none">
+						<isee:series_styles>
+							<isee:series_style color="blue" thickness="1"/>
+							<isee:series_style color="red" thickness="1" pen_style="dot_dashed"/>
+							<isee:series_style color="fuchsia" thickness="1" pen_style="dotted"/>
+							<isee:series_style color="#008F44" thickness="1" pen_style="dashed"/>
+							<isee:series_style color="#FF7F00" thickness="1"/>
+							<isee:series_style color="#7F00FF" thickness="1" pen_style="dot_dashed"/>
+							<isee:series_style color="#0CA0FF" thickness="1" pen_style="dotted"/>
+							<isee:series_style color="lime" thickness="1" pen_style="dashed"/>
+							<isee:series_style color="#FF007F" thickness="1"/>
+							<isee:series_style color="aqua" thickness="1" pen_style="dot_dashed"/>
+							<isee:series_style color="#F586FF" thickness="1" pen_style="dotted"/>
+							<isee:series_style color="black" thickness="1" pen_style="dashed"/>
+							<isee:series_style color="#C8C8C8" thickness="1"/>
+						</isee:series_styles>
+					</graph>
+					<table color="black" background="#E0E0E0" text_align="right" font_size="12pt" orientation="vertical" wrap_text="false" isee:auto_fit="true" isee:use_alternate_row_colors="false" isee:unlimited_table_length="false" blank_column_width="80" column_width="160" interval="1" report_balances="beginning" report_flows="instantaneous" header_font_style="normal" header_font_weight="normal" header_text_decoration="none" header_text_align="center" header_vertical_text_align="center" header_font_color="black" header_font_family="Arial" header_font_size="12pt" header_text_padding="2" header_text_border_color="black" header_text_border_width="thin" header_text_border_style="none"/>
+				</style>
+				<flow x="425.5" y="480" name="business starts">
+					<pts>
+						<pt x="383.5" y="480"/>
+						<pt x="467.5" y="480"/>
+					</pts>
+				</flow>
+				<flow x="548.5" y="480" name="business closures">
+					<pts>
+						<pt x="512.5" y="480"/>
+						<pt x="608.5" y="480"/>
+					</pts>
+				</flow>
+				<aux x="474" y="593" name="base start fraction"/>
+				<aux x="536" y="355" name="closure fraction"/>
+				<aux x="251" y="413" name="target labor per business"/>
+				<aux x="401" y="349" name="relative labor availability"/>
+				<aux x="312" y="219" name="start multiplier"/>
+				<aux x="669" y="714" name="jobs per structure"/>
+				<aux x="574" y="603" name="total jobs"/>
+				<stock x="490" y="480" name="Business Structures"/>
+				<stock font_style="italic" font_weight="bold" x="514" y="231" name="Population"/>
+				<connector uid="1" polarity="+" isee:polarity_placement="outside" angle="220">
+					<isee:documentation>Reasoning:
+Business starts are calculated as a fraction of the existing business structures.
+
+Polarity Reasoning: 
+Positive polarity because structures and starts move in the same direction.</isee:documentation>
+					<isee:reasoning>Business starts are calculated as a fraction of the existing business structures.</isee:reasoning>
+					<isee:polarity_reasoning>Positive polarity because structures and starts move in the same direction.</isee:polarity_reasoning>
+					<from>Business_Structures</from>
+					<to>business_starts</to>
+				</connector>
+				<connector uid="2" polarity="+" isee:polarity_placement="outside" angle="40">
+					<isee:documentation>Reasoning:
+Business closures are calculated as a fraction of the existing business structures.
+
+Polarity Reasoning: 
+Positive polarity because structures and closures move in the same direction.</isee:documentation>
+					<isee:reasoning>Business closures are calculated as a fraction of the existing business structures.</isee:reasoning>
+					<isee:polarity_reasoning>Positive polarity because structures and closures move in the same direction.</isee:polarity_reasoning>
+					<from>Business_Structures</from>
+					<to>business_closures</to>
+				</connector>
+				<connector uid="3" polarity="+" isee:polarity_placement="outside" angle="113.229">
+					<isee:documentation>Reasoning:
+A higher base start fraction increases the business start rate.
+
+Polarity Reasoning: 
+Positive polarity because fraction and starts move in the same direction.</isee:documentation>
+					<isee:reasoning>A higher base start fraction increases the business start rate.</isee:reasoning>
+					<isee:polarity_reasoning>Positive polarity because fraction and starts move in the same direction.</isee:polarity_reasoning>
+					<from>base_start_fraction</from>
+					<to>business_starts</to>
+				</connector>
+				<connector uid="4" polarity="+" isee:polarity_placement="outside" angle="275.711">
+					<isee:documentation>Reasoning:
+A higher closure fraction increases the business closure rate.
+
+Polarity Reasoning: 
+Positive polarity because fraction and closures move in the same direction.</isee:documentation>
+					<isee:reasoning>A higher closure fraction increases the business closure rate.</isee:reasoning>
+					<isee:polarity_reasoning>Positive polarity because fraction and closures move in the same direction.</isee:polarity_reasoning>
+					<from>closure_fraction</from>
+					<to>business_closures</to>
+				</connector>
+				<connector uid="5" polarity="+" isee:polarity_placement="outside" angle="293.503">
+					<isee:documentation>Reasoning:
+A higher start multiplier increases the business start rate.
+
+Polarity Reasoning: 
+Positive polarity because multiplier and starts move in the same direction.</isee:documentation>
+					<isee:reasoning>A higher start multiplier increases the business start rate.</isee:reasoning>
+					<isee:polarity_reasoning>Positive polarity because multiplier and starts move in the same direction.</isee:polarity_reasoning>
+					<from>start_multiplier</from>
+					<to>business_starts</to>
+				</connector>
+				<connector uid="6" polarity="+" isee:polarity_placement="outside" angle="104.644">
+					<isee:documentation>Reasoning:
+Higher labor availability encourages more business starts.
+
+Polarity Reasoning: 
+Positive polarity because availability and multiplier move in the same direction.</isee:documentation>
+					<isee:reasoning>Higher labor availability encourages more business starts.</isee:reasoning>
+					<isee:polarity_reasoning>Positive polarity because availability and multiplier move in the same direction.</isee:polarity_reasoning>
+					<from>relative_labor_availability</from>
+					<to>start_multiplier</to>
+				</connector>
+				<connector uid="7" polarity="+" isee:polarity_placement="outside" angle="226.24">
+					<isee:documentation>Reasoning:
+A larger population increases the availability of labor for businesses.
+
+Polarity Reasoning: 
+Positive polarity because population and availability move in the same direction.</isee:documentation>
+					<isee:reasoning>A larger population increases the availability of labor for businesses.</isee:reasoning>
+					<isee:polarity_reasoning>Positive polarity because population and availability move in the same direction.</isee:polarity_reasoning>
+					<from>Population</from>
+					<to>relative_labor_availability</to>
+				</connector>
+				<connector uid="8" polarity="-" isee:polarity_placement="outside" angle="104.192">
+					<isee:documentation>Reasoning:
+More business structures decrease the relative availability of labor per business.
+
+Polarity Reasoning: 
+Negative polarity because structures and availability move in opposite directions.</isee:documentation>
+					<isee:reasoning>More business structures decrease the relative availability of labor per business.</isee:reasoning>
+					<isee:polarity_reasoning>Negative polarity because structures and availability move in opposite directions.</isee:polarity_reasoning>
+					<from>Business_Structures</from>
+					<to>relative_labor_availability</to>
+				</connector>
+				<connector uid="9" polarity="-" isee:polarity_placement="outside" angle="23.1063">
+					<isee:documentation>Reasoning:
+A higher target for labor per business makes the current availability look lower relatively.
+
+Polarity Reasoning: 
+Negative polarity because target and relative availability move in opposite directions.</isee:documentation>
+					<isee:reasoning>A higher target for labor per business makes the current availability look lower relatively.</isee:reasoning>
+					<isee:polarity_reasoning>Negative polarity because target and relative availability move in opposite directions.</isee:polarity_reasoning>
+					<from>target_labor_per_business</from>
+					<to>relative_labor_availability</to>
+				</connector>
+				<connector uid="10" polarity="+" isee:polarity_placement="outside" angle="304.33">
+					<isee:documentation>Reasoning:
+More business structures provide more total jobs.
+
+Polarity Reasoning: 
+Positive polarity because structures and jobs move in the same direction.</isee:documentation>
+					<isee:reasoning>More business structures provide more total jobs.</isee:reasoning>
+					<isee:polarity_reasoning>Positive polarity because structures and jobs move in the same direction.</isee:polarity_reasoning>
+					<from>Business_Structures</from>
+					<to>total_jobs</to>
+				</connector>
+				<connector uid="11" polarity="+" isee:polarity_placement="outside" angle="130.559">
+					<isee:documentation>Reasoning:
+More jobs per structure increase the total number of jobs.
+
+Polarity Reasoning: 
+Positive polarity because jobs per structure and total jobs move in the same direction.</isee:documentation>
+					<isee:reasoning>More jobs per structure increase the total number of jobs.</isee:reasoning>
+					<isee:polarity_reasoning>Positive polarity because jobs per structure and total jobs move in the same direction.</isee:polarity_reasoning>
+					<from>jobs_per_structure</from>
+					<to>total_jobs</to>
+				</connector>
+			</view>
+		</views>
+	</model>
+	<model name="Housing">
+		<variables>
+			<flow name="construction" ai_state="C">
+				<doc>The rate at which new housing units are built.</doc>
+				<eqn>Housing_Stock*base_construction_fraction*construction_multiplier</eqn>
+				<non_negative/>
+				<units>units/years</units>
+			</flow>
+			<flow name="demolition" ai_state="C">
+				<doc>The rate at which housing units are removed from the stock.</doc>
+				<eqn>Housing_Stock*demolition_fraction</eqn>
+				<non_negative/>
+				<units>units/years</units>
+			</flow>
+			<aux name="base construction fraction" ai_state="C">
+				<doc>The normal fraction of housing stock added through construction.</doc>
+				<eqn>0.05</eqn>
+				<units>1/year</units>
+			</aux>
+			<aux name="demolition fraction" ai_state="C">
+				<doc>The fraction of housing stock demolished annually.</doc>
+				<eqn>0.02</eqn>
+				<units>1/year</units>
+			</aux>
+			<aux name="target persons per house" ai_state="C">
+				<doc>The desired number of people per housing unit.</doc>
+				<eqn>2.5</eqn>
+				<units>people/unit</units>
+			</aux>
+			<aux name="relative housing demand" ai_state="C">
+				<doc>The ratio of actual people per house to the target people per house.</doc>
+				<eqn>(Population/Housing_Stock)//target_persons_per_house</eqn>
+				<units>dimensionless</units>
+			</aux>
+			<aux name="construction multiplier" ai_state="C">
+				<doc>A multiplier representing how housing demand influences construction rates.</doc>
+				<eqn>relative_housing_demand</eqn>
+				<gf>
+					<yscale min="0" max="3"/>
+					<xpts>0,0.5,1,1.5,2</xpts>
+					<ypts>0,0.2,1,2,3</ypts>
+				</gf>
+				<units>dimensionless</units>
+			</aux>
+			<stock name="Housing Stock" ai_state="C" access="output" isee:autocreated="true">
+				<doc>The total number of housing units available.</doc>
+				<eqn>4000</eqn>
+				<inflow>construction</inflow>
+				<outflow>demolition</outflow>
+				<units>units</units>
+			</stock>
+			<stock name="Population" ai_state="C" access="input">
+				<eqn>10000</eqn>
+				<units>people</units>
+			</stock>
+		</variables>
+		<views>
+			<style color="black" background="white" font_style="normal" font_weight="normal" text_decoration="none" text_align="center" vertical_text_align="center" font_color="black" font_family="Arial" font_size="10pt" padding="2" border_color="black" border_width="thin" border_style="none">
+				<text_box color="black" background="white" text_align="left" vertical_text_align="top" font_size="12pt"/>
+				<isee:loop_indicator color="black" background="white" vertical_text_align="top" font_size="12pt"/>
+				<numeric_display color="white" background="white" font_size="12pt" border_width="thin" border_style="solid" isee:transparent="false" isee:show_divider="true" isee:show_bounding_box="true" label_side="left"/>
+				<graph color="black" background="white" font_size="12pt" axis_color="#666666" grid_color="#C8C8C8" isee:graph_area_color="white" legend_position="bottom" isee:transparent="false" isee:hide_border="false" axis_title_font_style="normal" axis_title_font_weight="normal" axis_title_text_decoration="none" axis_title_text_align="center" axis_title_vertical_text_align="center" axis_title_font_color="black" axis_title_font_family="Arial" axis_title_font_size="12pt" axis_title_text_padding="2" axis_title_text_border_color="black" axis_title_text_border_width="thin" axis_title_text_border_style="none" axis_label_font_style="normal" axis_label_font_weight="normal" axis_label_text_decoration="none" axis_label_text_align="center" axis_label_vertical_text_align="center" axis_label_font_color="black" axis_label_font_family="Arial" axis_label_font_size="9pt" axis_label_text_padding="2" axis_label_text_border_color="black" axis_label_text_border_width="thin" axis_label_text_border_style="none">
+					<isee:series_styles>
+						<isee:series_style color="blue" thickness="1"/>
+						<isee:series_style color="red" thickness="1" pen_style="dot_dashed"/>
+						<isee:series_style color="fuchsia" thickness="1" pen_style="dotted"/>
+						<isee:series_style color="#008F44" thickness="1" pen_style="dashed"/>
+						<isee:series_style color="#FF7F00" thickness="1"/>
+						<isee:series_style color="#7F00FF" thickness="1" pen_style="dot_dashed"/>
+						<isee:series_style color="#0CA0FF" thickness="1" pen_style="dotted"/>
+						<isee:series_style color="lime" thickness="1" pen_style="dashed"/>
+						<isee:series_style color="#FF007F" thickness="1"/>
+						<isee:series_style color="aqua" thickness="1" pen_style="dot_dashed"/>
+						<isee:series_style color="#F586FF" thickness="1" pen_style="dotted"/>
+						<isee:series_style color="black" thickness="1" pen_style="dashed"/>
+						<isee:series_style color="#C8C8C8" thickness="1"/>
+					</isee:series_styles>
+				</graph>
+				<table color="black" background="#E0E0E0" text_align="right" font_size="12pt" orientation="vertical" wrap_text="false" isee:auto_fit="true" isee:use_alternate_row_colors="false" isee:unlimited_table_length="false" blank_column_width="80" column_width="160" interval="1" report_balances="beginning" report_flows="instantaneous" header_font_style="normal" header_font_weight="normal" header_text_decoration="none" header_text_align="center" header_vertical_text_align="center" header_font_color="black" header_font_family="Arial" header_font_size="12pt" header_text_padding="2" header_text_border_color="black" header_text_border_width="thin" header_text_border_style="none"/>
+				<button color="black" background="#E0E0E0" font_size="12pt" border_width="thin" border_style="solid" transparent="false" corner_radius="0" isee:flat="false" icon_side="top" isee:highlight_on_hover="false" isee:highlight_color="#959595"/>
+				<isee:annotation color="black" background="#E0E0E0" font_size="12pt" border_width="thin" border_style="solid" transparent="false" corner_radius="0" isee:flat="false" icon_side="top" isee:highlight_on_hover="false" isee:highlight_color="#959595" popup_corner_radius="0" popup_background_color="#FFFECF"/>
+				<slider color="#0075FF" background="#E0E0E0" font_size="12pt" num_ticks="3" label_side="top" wrap_title="true" vertical="false" isee:fancy_appearance="false" isee:show_hover_tip="when_deciding" input_expands="true" input_width="100"/>
+				<isee:stacked_container color="black" background="white" text_align="left" vertical_text_align="top" font_size="12pt" padding="6 8" border_color="#999999" border_width="thin" border_style="solid" item_spacing="0" corner_radius="4" selected_item_color="black" selected_item_background="white" item_background="#DDDDDD" transparent_bg="false"/>
+				<isee:dual_slider color="#66CC66" background="silver" font_size="12pt" num_ticks="3" label_side="top" wrap_title="true" isee:show_hover_tip="when_deciding" input_expands="true" input_width="100"/>
+				<isee:sim_speed_slider color="black" background="white"/>
+				<isee:time_slider color="#E95F74" background="silver"/>
+				<isee:pie_input color="black" background="white" font_size="12pt" legend_position="bottom" isee:transparent="false"/>
+				<knob color="#66CC66" background="#E0E0E0" font_size="12pt" label_side="bottom" wrap_title="true"/>
+				<numeric_input color="black" background="#E0E0E0" font_size="12pt" label_side="left" wrap_title="true" input_expands="false" input_width="100"/>
+				<isee:dropdown_input color="black" background="#E0E0E0" font_size="12pt" label_side="left" wrap_title="true" input_expands="false" input_width="100"/>
+				<switch color="black" background="#E0E0E0" font_size="12pt" label_side="top" wrap_title="true" isee:appearance="switch" isee:on_color="green"/>
+				<options color="black" background="white" appearance="radio-buttons" arrangement="vertical"/>
+				<graphical_input color="black" background="#E0E0E0" font_size="12pt" isee:show_hover_tip="true"/>
+				<group_input color="black" background="#E0E0E0" font_size="12pt"/>
+				<lamp color="black" background="white" font_size="9pt"/>
+				<gauge color="black" background="white" font_size="9pt" needle_color="#F09F72" bar_color="#EEEEEE" bar_progress_color="black" appearance="radial" num_major_ticks="11" num_minor_ticks="1" show_numeric_value="true"/>
+				<isee:spatial_map color="black" background="white" font_size="12pt"/>
+				<isee:animation_object color="black" background="white" font_size="12pt"/>
+				<isee:navigation_widget color="black" background="white" text_align="left" vertical_text_align="top" font_size="12pt" padding="6 8" border_color="#999999" border_width="thin" border_style="solid" item_spacing="6" appearance="tabs" corner_radius="4" selected_item_color="black" selected_item_background="white" item_background="#DDDDDD" transparent_bg="false"/>
+				<isee:shape color="black" background="white" text_align="left" vertical_text_align="top" font_size="12pt" border_width="thin" border_style="solid" opacity="1" transparent_background="true" corner_radius="1"/>
+				<isee:selector color="black" background="white" text_align="left" vertical_text_align="top" font_size="12pt"/>
+				<isee:iframe color="black" background="white" text_align="left" vertical_text_align="top" font_size="12pt" border_width="thin" border_style="solid"/>
+				<isee:financial_table color="black" background="#E0E0E0" text_align="right" font_size="12pt" hide_border="false" auto_fit="true" first_column_width="250" other_column_width="100" header_font_style="normal" header_font_weight="bold" header_text_decoration="none" header_text_align="center" header_vertical_text_align="center" header_font_color="black" header_font_family="Arial" header_font_size="14pt" header_text_padding="2" header_text_border_color="black" header_text_border_width="thin" header_text_border_style="none"/>
+			</style>
+			<view isee:show_pages="false" background="white" page_width="768" page_height="576" isee:page_cols="2" isee:popup_graphs_are_comparative="true" isee:enable_non_negative_highlights="false" type="stock_flow">
+				<style color="black" background="white" font_style="normal" font_weight="normal" text_decoration="none" text_align="center" vertical_text_align="center" font_color="black" font_family="Arial" font_size="10pt" padding="2" border_color="black" border_width="thin" border_style="none">
+					<stock color="blue" background="white" font_color="blue" font_size="9pt" label_side="top">
+						<shape type="rectangle" width="45" height="35"/>
+					</stock>
+					<flow color="blue" background="white" font_color="blue" font_size="9pt" label_side="bottom">
+						<shape type="circle" radius="18"/>
+					</flow>
+					<isee:placeholder color="#228B22" background="white" font_color="#228B22" font_size="9pt" label_side="bottom"/>
+					<module color="blue" background="white" font_color="blue" font_size="9pt" label_side="top">
+						<shape type="rectangle" width="55" height="45"/>
+					</module>
+					<aux color="blue" background="white" font_color="blue" font_size="9pt" label_side="bottom">
+						<shape type="circle" radius="18"/>
+					</aux>
+					<group color="red" background="white" font_color="red" font_size="9pt"/>
+					<connector color="#FF007F" background="white" font_color="#FF007F" font_size="9pt" isee:thickness="1"/>
+					<text_box color="black" background="white" text_align="left" vertical_text_align="top" font_size="12pt"/>
+					<isee:loop_indicator color="black" background="white" vertical_text_align="top" font_size="12pt"/>
+					<numeric_display color="white" background="white" font_size="12pt" border_width="thin" border_style="solid" isee:transparent="false" isee:show_divider="true" isee:show_bounding_box="true" label_side="left"/>
+					<graph color="black" background="white" font_size="12pt" axis_color="#666666" grid_color="#C8C8C8" isee:graph_area_color="white" legend_position="bottom" isee:transparent="false" isee:hide_border="false" axis_title_font_style="normal" axis_title_font_weight="normal" axis_title_text_decoration="none" axis_title_text_align="center" axis_title_vertical_text_align="center" axis_title_font_color="black" axis_title_font_family="Arial" axis_title_font_size="12pt" axis_title_text_padding="2" axis_title_text_border_color="black" axis_title_text_border_width="thin" axis_title_text_border_style="none" axis_label_font_style="normal" axis_label_font_weight="normal" axis_label_text_decoration="none" axis_label_text_align="center" axis_label_vertical_text_align="center" axis_label_font_color="black" axis_label_font_family="Arial" axis_label_font_size="9pt" axis_label_text_padding="2" axis_label_text_border_color="black" axis_label_text_border_width="thin" axis_label_text_border_style="none">
+						<isee:series_styles>
+							<isee:series_style color="blue" thickness="1"/>
+							<isee:series_style color="red" thickness="1" pen_style="dot_dashed"/>
+							<isee:series_style color="fuchsia" thickness="1" pen_style="dotted"/>
+							<isee:series_style color="#008F44" thickness="1" pen_style="dashed"/>
+							<isee:series_style color="#FF7F00" thickness="1"/>
+							<isee:series_style color="#7F00FF" thickness="1" pen_style="dot_dashed"/>
+							<isee:series_style color="#0CA0FF" thickness="1" pen_style="dotted"/>
+							<isee:series_style color="lime" thickness="1" pen_style="dashed"/>
+							<isee:series_style color="#FF007F" thickness="1"/>
+							<isee:series_style color="aqua" thickness="1" pen_style="dot_dashed"/>
+							<isee:series_style color="#F586FF" thickness="1" pen_style="dotted"/>
+							<isee:series_style color="black" thickness="1" pen_style="dashed"/>
+							<isee:series_style color="#C8C8C8" thickness="1"/>
+						</isee:series_styles>
+					</graph>
+					<table color="black" background="#E0E0E0" text_align="right" font_size="12pt" orientation="vertical" wrap_text="false" isee:auto_fit="true" isee:use_alternate_row_colors="false" isee:unlimited_table_length="false" blank_column_width="80" column_width="160" interval="1" report_balances="beginning" report_flows="instantaneous" header_font_style="normal" header_font_weight="normal" header_text_decoration="none" header_text_align="center" header_vertical_text_align="center" header_font_color="black" header_font_family="Arial" header_font_size="12pt" header_text_padding="2" header_text_border_color="black" header_text_border_width="thin" header_text_border_style="none"/>
+				</style>
+				<flow x="480.5" y="305.634" name="construction">
+					<pts>
+						<pt x="438.5" y="305.634"/>
+						<pt x="522.5" y="305.634"/>
+					</pts>
+				</flow>
+				<flow x="603.5" y="305.634" name="demolition">
+					<pts>
+						<pt x="567.5" y="305.634"/>
+						<pt x="663.5" y="305.634"/>
+					</pts>
+				</flow>
+				<aux x="549" y="408" name="base construction fraction"/>
+				<aux x="614" y="489" name="demolition fraction"/>
+				<aux x="251" y="428" name="target persons per house"/>
+				<aux x="398" y="370" name="relative housing demand"/>
+				<aux x="337" y="219" name="construction multiplier"/>
+				<stock x="545" y="303" name="Housing Stock"/>
+				<stock font_style="italic" font_weight="bold" x="458" y="513" name="Population"/>
+				<connector uid="1" polarity="+" isee:polarity_placement="outside" angle="222.339">
+					<isee:documentation>Reasoning:
+Construction is calculated as a fraction of the existing housing stock.
+
+Polarity Reasoning: 
+Positive polarity because stock and construction move in the same direction.</isee:documentation>
+					<isee:reasoning>Construction is calculated as a fraction of the existing housing stock.</isee:reasoning>
+					<isee:polarity_reasoning>Positive polarity because stock and construction move in the same direction.</isee:polarity_reasoning>
+					<from>Housing_Stock</from>
+					<to>construction</to>
+				</connector>
+				<connector uid="2" polarity="+" isee:polarity_placement="outside" angle="37.4216">
+					<isee:documentation>Reasoning:
+Demolition is calculated as a fraction of the existing housing stock.
+
+Polarity Reasoning: 
+Positive polarity because stock and demolition move in the same direction.</isee:documentation>
+					<isee:reasoning>Demolition is calculated as a fraction of the existing housing stock.</isee:reasoning>
+					<isee:polarity_reasoning>Positive polarity because stock and demolition move in the same direction.</isee:polarity_reasoning>
+					<from>Housing_Stock</from>
+					<to>demolition</to>
+				</connector>
+				<connector uid="3" polarity="+" isee:polarity_placement="outside" angle="123.789">
+					<isee:documentation>Reasoning:
+A higher base construction fraction increases the construction rate.
+
+Polarity Reasoning: 
+Positive polarity because fraction and construction move in the same direction.</isee:documentation>
+					<isee:reasoning>A higher base construction fraction increases the construction rate.</isee:reasoning>
+					<isee:polarity_reasoning>Positive polarity because fraction and construction move in the same direction.</isee:polarity_reasoning>
+					<from>base_construction_fraction</from>
+					<to>construction</to>
+				</connector>
+				<connector uid="4" polarity="+" isee:polarity_placement="outside" angle="93.2773">
+					<isee:documentation>Reasoning:
+A higher demolition fraction increases the demolition rate.
+
+Polarity Reasoning: 
+Positive polarity because fraction and demolition move in the same direction.</isee:documentation>
+					<isee:reasoning>A higher demolition fraction increases the demolition rate.</isee:reasoning>
+					<isee:polarity_reasoning>Positive polarity because fraction and demolition move in the same direction.</isee:polarity_reasoning>
+					<from>demolition_fraction</from>
+					<to>demolition</to>
+				</connector>
+				<connector uid="5" polarity="+" isee:polarity_placement="outside" angle="328.88">
+					<isee:documentation>Reasoning:
+A higher construction multiplier increases the construction rate.
+
+Polarity Reasoning: 
+Positive polarity because multiplier and construction move in the same direction.</isee:documentation>
+					<isee:reasoning>A higher construction multiplier increases the construction rate.</isee:reasoning>
+					<isee:polarity_reasoning>Positive polarity because multiplier and construction move in the same direction.</isee:polarity_reasoning>
+					<from>construction_multiplier</from>
+					<to>construction</to>
+				</connector>
+				<connector uid="6" polarity="+" isee:polarity_placement="outside" angle="131.997">
+					<isee:documentation>Reasoning:
+Higher relative demand for housing encourages more construction.
+
+Polarity Reasoning: 
+Positive polarity because demand and multiplier move in the same direction.</isee:documentation>
+					<isee:reasoning>Higher relative demand for housing encourages more construction.</isee:reasoning>
+					<isee:polarity_reasoning>Positive polarity because demand and multiplier move in the same direction.</isee:polarity_reasoning>
+					<from>relative_housing_demand</from>
+					<to>construction_multiplier</to>
+				</connector>
+				<connector uid="7" polarity="+" isee:polarity_placement="outside" angle="112.762">
+					<isee:documentation>Reasoning:
+A larger population increases the demand for housing.
+
+Polarity Reasoning: 
+Positive polarity because population and demand move in the same direction.</isee:documentation>
+					<isee:reasoning>A larger population increases the demand for housing.</isee:reasoning>
+					<isee:polarity_reasoning>Positive polarity because population and demand move in the same direction.</isee:polarity_reasoning>
+					<from>Population</from>
+					<to>relative_housing_demand</to>
+				</connector>
+				<connector uid="8" polarity="-" isee:polarity_placement="outside" angle="224.503">
+					<isee:documentation>Reasoning:
+More housing stock decreases the relative demand for new housing.
+
+Polarity Reasoning: 
+Negative polarity because stock and demand move in opposite directions.</isee:documentation>
+					<isee:reasoning>More housing stock decreases the relative demand for new housing.</isee:reasoning>
+					<isee:polarity_reasoning>Negative polarity because stock and demand move in opposite directions.</isee:polarity_reasoning>
+					<from>Housing_Stock</from>
+					<to>relative_housing_demand</to>
+				</connector>
+				<connector uid="9" polarity="-" isee:polarity_placement="outside" angle="21.5321">
+					<isee:documentation>Reasoning:
+A higher target for persons per house makes the current demand look lower relatively.
+
+Polarity Reasoning: 
+Negative polarity because target and relative demand move in opposite directions.</isee:documentation>
+					<isee:reasoning>A higher target for persons per house makes the current demand look lower relatively.</isee:reasoning>
+					<isee:polarity_reasoning>Negative polarity because target and relative demand move in opposite directions.</isee:polarity_reasoning>
+					<from>target_persons_per_house</from>
+					<to>relative_housing_demand</to>
+				</connector>
+			</view>
+		</views>
+	</model>
+	<model name="Population">
+		<variables>
+			<flow name="births" ai_state="C">
+				<doc>The number of new residents born per year.</doc>
+				<eqn>Population*birth_fraction</eqn>
+				<non_negative/>
+				<units>people/years</units>
+			</flow>
+			<flow name="deaths" ai_state="C">
+				<doc>The number of residents who die per year.</doc>
+				<eqn>Population*death_fraction</eqn>
+				<non_negative/>
+				<units>people/years</units>
+			</flow>
+			<flow name="migration" ai_state="C">
+				<doc>The net movement of people into or out of the urban area based on housing and job availability.</doc>
+				<eqn>Population*base_migration_fraction*((attractiveness_from_housing+attractiveness_from_jobs)/2)</eqn>
+				<non_negative/>
+				<units>people/years</units>
+			</flow>
+			<aux name="birth fraction" ai_state="C">
+				<doc>The annual birth rate per person.</doc>
+				<eqn>0.02</eqn>
+				<units>1/year</units>
+			</aux>
+			<aux name="death fraction" ai_state="C">
+				<doc>The annual death rate per person.</doc>
+				<eqn>0.015</eqn>
+				<units>1/year</units>
+			</aux>
+			<aux name="base migration fraction" ai_state="C">
+				<doc>The normal net migration rate under balanced conditions.</doc>
+				<eqn>0.01</eqn>
+				<units>1/year</units>
+			</aux>
+			<aux name="target housing per person" ai_state="C">
+				<doc>The desired ratio of housing units per resident.</doc>
+				<eqn>0.4</eqn>
+				<units>units/person</units>
+			</aux>
+			<aux name="target jobs per person" ai_state="C">
+				<doc>The desired ratio of jobs per resident.</doc>
+				<eqn>1</eqn>
+				<units>jobs/person</units>
+			</aux>
+			<aux name="relative housing availability" ai_state="C">
+				<doc>The ratio of actual housing per person to the target housing per person.</doc>
+				<eqn>(Housing_Stock/Population)//target_housing_per_person</eqn>
+				<units>dimensionless</units>
+			</aux>
+			<aux name="relative job availability" ai_state="C">
+				<doc>The ratio of actual jobs per person to the target jobs per person.</doc>
+				<eqn>(total_jobs/Population)//target_jobs_per_person</eqn>
+				<units>dimensionless</units>
+			</aux>
+			<aux name="attractiveness from housing" ai_state="C">
+				<doc>A multiplier representing how housing availability influences migration.</doc>
+				<eqn>relative_housing_availability</eqn>
+				<gf>
+					<yscale min="0" max="1.5"/>
+					<xpts>0,0.5,1,1.5,2</xpts>
+					<ypts>0,0.5,1,1.3,1.5</ypts>
+				</gf>
+				<units>dimensionless</units>
+			</aux>
+			<aux name="attractiveness from jobs" ai_state="C">
+				<doc>A multiplier representing how job availability influences migration.</doc>
+				<eqn>relative_job_availability</eqn>
+				<gf>
+					<yscale min="0" max="1.5"/>
+					<xpts>0,0.5,1,1.5,2</xpts>
+					<ypts>0,0.5,1,1.3,1.5</ypts>
+				</gf>
+				<units>dimensionless</units>
+			</aux>
+			<stock name="Population" ai_state="C" access="output" isee:autocreated="true">
+				<doc>The total number of residents in the urban area.</doc>
+				<eqn>10000</eqn>
+				<inflow>births</inflow>
+				<inflow>migration</inflow>
+				<outflow>deaths</outflow>
+				<units>people</units>
+			</stock>
+			<stock name="Housing Stock" ai_state="C" access="input">
+				<eqn>4000</eqn>
+				<units>units</units>
+			</stock>
+			<aux name="total jobs" ai_state="C" access="input">
+				<eqn>{Enter equation for use when not hooked up to other models}</eqn>
+				<units>jobs</units>
+			</aux>
+		</variables>
+		<views>
+			<style color="black" background="white" font_style="normal" font_weight="normal" text_decoration="none" text_align="center" vertical_text_align="center" font_color="black" font_family="Arial" font_size="10pt" padding="2" border_color="black" border_width="thin" border_style="none">
+				<text_box color="black" background="white" text_align="left" vertical_text_align="top" font_size="12pt"/>
+				<isee:loop_indicator color="black" background="white" vertical_text_align="top" font_size="12pt"/>
+				<numeric_display color="white" background="white" font_size="12pt" border_width="thin" border_style="solid" isee:transparent="false" isee:show_divider="true" isee:show_bounding_box="true" label_side="left"/>
+				<graph color="black" background="white" font_size="12pt" axis_color="#666666" grid_color="#C8C8C8" isee:graph_area_color="white" legend_position="bottom" isee:transparent="false" isee:hide_border="false" axis_title_font_style="normal" axis_title_font_weight="normal" axis_title_text_decoration="none" axis_title_text_align="center" axis_title_vertical_text_align="center" axis_title_font_color="black" axis_title_font_family="Arial" axis_title_font_size="12pt" axis_title_text_padding="2" axis_title_text_border_color="black" axis_title_text_border_width="thin" axis_title_text_border_style="none" axis_label_font_style="normal" axis_label_font_weight="normal" axis_label_text_decoration="none" axis_label_text_align="center" axis_label_vertical_text_align="center" axis_label_font_color="black" axis_label_font_family="Arial" axis_label_font_size="9pt" axis_label_text_padding="2" axis_label_text_border_color="black" axis_label_text_border_width="thin" axis_label_text_border_style="none">
+					<isee:series_styles>
+						<isee:series_style color="blue" thickness="1"/>
+						<isee:series_style color="red" thickness="1" pen_style="dot_dashed"/>
+						<isee:series_style color="fuchsia" thickness="1" pen_style="dotted"/>
+						<isee:series_style color="#008F44" thickness="1" pen_style="dashed"/>
+						<isee:series_style color="#FF7F00" thickness="1"/>
+						<isee:series_style color="#7F00FF" thickness="1" pen_style="dot_dashed"/>
+						<isee:series_style color="#0CA0FF" thickness="1" pen_style="dotted"/>
+						<isee:series_style color="lime" thickness="1" pen_style="dashed"/>
+						<isee:series_style color="#FF007F" thickness="1"/>
+						<isee:series_style color="aqua" thickness="1" pen_style="dot_dashed"/>
+						<isee:series_style color="#F586FF" thickness="1" pen_style="dotted"/>
+						<isee:series_style color="black" thickness="1" pen_style="dashed"/>
+						<isee:series_style color="#C8C8C8" thickness="1"/>
+					</isee:series_styles>
+				</graph>
+				<table color="black" background="#E0E0E0" text_align="right" font_size="12pt" orientation="vertical" wrap_text="false" isee:auto_fit="true" isee:use_alternate_row_colors="false" isee:unlimited_table_length="false" blank_column_width="80" column_width="160" interval="1" report_balances="beginning" report_flows="instantaneous" header_font_style="normal" header_font_weight="normal" header_text_decoration="none" header_text_align="center" header_vertical_text_align="center" header_font_color="black" header_font_family="Arial" header_font_size="12pt" header_text_padding="2" header_text_border_color="black" header_text_border_width="thin" header_text_border_style="none"/>
+				<button color="black" background="#E0E0E0" font_size="12pt" border_width="thin" border_style="solid" transparent="false" corner_radius="0" isee:flat="false" icon_side="top" isee:highlight_on_hover="false" isee:highlight_color="#959595"/>
+				<isee:annotation color="black" background="#E0E0E0" font_size="12pt" border_width="thin" border_style="solid" transparent="false" corner_radius="0" isee:flat="false" icon_side="top" isee:highlight_on_hover="false" isee:highlight_color="#959595" popup_corner_radius="0" popup_background_color="#FFFECF"/>
+				<slider color="#0075FF" background="#E0E0E0" font_size="12pt" num_ticks="3" label_side="top" wrap_title="true" vertical="false" isee:fancy_appearance="false" isee:show_hover_tip="when_deciding" input_expands="true" input_width="100"/>
+				<isee:stacked_container color="black" background="white" text_align="left" vertical_text_align="top" font_size="12pt" padding="6 8" border_color="#999999" border_width="thin" border_style="solid" item_spacing="0" corner_radius="4" selected_item_color="black" selected_item_background="white" item_background="#DDDDDD" transparent_bg="false"/>
+				<isee:dual_slider color="#66CC66" background="silver" font_size="12pt" num_ticks="3" label_side="top" wrap_title="true" isee:show_hover_tip="when_deciding" input_expands="true" input_width="100"/>
+				<isee:sim_speed_slider color="black" background="white"/>
+				<isee:time_slider color="#E95F74" background="silver"/>
+				<isee:pie_input color="black" background="white" font_size="12pt" legend_position="bottom" isee:transparent="false"/>
+				<knob color="#66CC66" background="#E0E0E0" font_size="12pt" label_side="bottom" wrap_title="true"/>
+				<numeric_input color="black" background="#E0E0E0" font_size="12pt" label_side="left" wrap_title="true" input_expands="false" input_width="100"/>
+				<isee:dropdown_input color="black" background="#E0E0E0" font_size="12pt" label_side="left" wrap_title="true" input_expands="false" input_width="100"/>
+				<switch color="black" background="#E0E0E0" font_size="12pt" label_side="top" wrap_title="true" isee:appearance="switch" isee:on_color="green"/>
+				<options color="black" background="white" appearance="radio-buttons" arrangement="vertical"/>
+				<graphical_input color="black" background="#E0E0E0" font_size="12pt" isee:show_hover_tip="true"/>
+				<group_input color="black" background="#E0E0E0" font_size="12pt"/>
+				<lamp color="black" background="white" font_size="9pt"/>
+				<gauge color="black" background="white" font_size="9pt" needle_color="#F09F72" bar_color="#EEEEEE" bar_progress_color="black" appearance="radial" num_major_ticks="11" num_minor_ticks="1" show_numeric_value="true"/>
+				<isee:spatial_map color="black" background="white" font_size="12pt"/>
+				<isee:animation_object color="black" background="white" font_size="12pt"/>
+				<isee:navigation_widget color="black" background="white" text_align="left" vertical_text_align="top" font_size="12pt" padding="6 8" border_color="#999999" border_width="thin" border_style="solid" item_spacing="6" appearance="tabs" corner_radius="4" selected_item_color="black" selected_item_background="white" item_background="#DDDDDD" transparent_bg="false"/>
+				<isee:shape color="black" background="white" text_align="left" vertical_text_align="top" font_size="12pt" border_width="thin" border_style="solid" opacity="1" transparent_background="true" corner_radius="1"/>
+				<isee:selector color="black" background="white" text_align="left" vertical_text_align="top" font_size="12pt"/>
+				<isee:iframe color="black" background="white" text_align="left" vertical_text_align="top" font_size="12pt" border_width="thin" border_style="solid"/>
+				<isee:financial_table color="black" background="#E0E0E0" text_align="right" font_size="12pt" hide_border="false" auto_fit="true" first_column_width="250" other_column_width="100" header_font_style="normal" header_font_weight="bold" header_text_decoration="none" header_text_align="center" header_vertical_text_align="center" header_font_color="black" header_font_family="Arial" header_font_size="14pt" header_text_padding="2" header_text_border_color="black" header_text_border_width="thin" header_text_border_style="none"/>
+			</style>
+			<view isee:show_pages="false" background="white" page_width="768" page_height="576" isee:page_cols="3" isee:page_rows="2" isee:popup_graphs_are_comparative="true" isee:enable_non_negative_highlights="false" type="stock_flow">
+				<style color="black" background="white" font_style="normal" font_weight="normal" text_decoration="none" text_align="center" vertical_text_align="center" font_color="black" font_family="Arial" font_size="10pt" padding="2" border_color="black" border_width="thin" border_style="none">
+					<stock color="blue" background="white" font_color="blue" font_size="9pt" label_side="top">
+						<shape type="rectangle" width="45" height="35"/>
+					</stock>
+					<flow color="blue" background="white" font_color="blue" font_size="9pt" label_side="bottom">
+						<shape type="circle" radius="18"/>
+					</flow>
+					<isee:placeholder color="#228B22" background="white" font_color="#228B22" font_size="9pt" label_side="bottom"/>
+					<module color="blue" background="white" font_color="blue" font_size="9pt" label_side="top">
+						<shape type="rectangle" width="55" height="45"/>
+					</module>
+					<aux color="blue" background="white" font_color="blue" font_size="9pt" label_side="bottom">
+						<shape type="circle" radius="18"/>
+					</aux>
+					<group color="red" background="white" font_color="red" font_size="9pt"/>
+					<connector color="#FF007F" background="white" font_color="#FF007F" font_size="9pt" isee:thickness="1"/>
+					<text_box color="black" background="white" text_align="left" vertical_text_align="top" font_size="12pt"/>
+					<isee:loop_indicator color="black" background="white" vertical_text_align="top" font_size="12pt"/>
+					<numeric_display color="white" background="white" font_size="12pt" border_width="thin" border_style="solid" isee:transparent="false" isee:show_divider="true" isee:show_bounding_box="true" label_side="left"/>
+					<graph color="black" background="white" font_size="12pt" axis_color="#666666" grid_color="#C8C8C8" isee:graph_area_color="white" legend_position="bottom" isee:transparent="false" isee:hide_border="false" axis_title_font_style="normal" axis_title_font_weight="normal" axis_title_text_decoration="none" axis_title_text_align="center" axis_title_vertical_text_align="center" axis_title_font_color="black" axis_title_font_family="Arial" axis_title_font_size="12pt" axis_title_text_padding="2" axis_title_text_border_color="black" axis_title_text_border_width="thin" axis_title_text_border_style="none" axis_label_font_style="normal" axis_label_font_weight="normal" axis_label_text_decoration="none" axis_label_text_align="center" axis_label_vertical_text_align="center" axis_label_font_color="black" axis_label_font_family="Arial" axis_label_font_size="9pt" axis_label_text_padding="2" axis_label_text_border_color="black" axis_label_text_border_width="thin" axis_label_text_border_style="none">
+						<isee:series_styles>
+							<isee:series_style color="blue" thickness="1"/>
+							<isee:series_style color="red" thickness="1" pen_style="dot_dashed"/>
+							<isee:series_style color="fuchsia" thickness="1" pen_style="dotted"/>
+							<isee:series_style color="#008F44" thickness="1" pen_style="dashed"/>
+							<isee:series_style color="#FF7F00" thickness="1"/>
+							<isee:series_style color="#7F00FF" thickness="1" pen_style="dot_dashed"/>
+							<isee:series_style color="#0CA0FF" thickness="1" pen_style="dotted"/>
+							<isee:series_style color="lime" thickness="1" pen_style="dashed"/>
+							<isee:series_style color="#FF007F" thickness="1"/>
+							<isee:series_style color="aqua" thickness="1" pen_style="dot_dashed"/>
+							<isee:series_style color="#F586FF" thickness="1" pen_style="dotted"/>
+							<isee:series_style color="black" thickness="1" pen_style="dashed"/>
+							<isee:series_style color="#C8C8C8" thickness="1"/>
+						</isee:series_styles>
+					</graph>
+					<table color="black" background="#E0E0E0" text_align="right" font_size="12pt" orientation="vertical" wrap_text="false" isee:auto_fit="true" isee:use_alternate_row_colors="false" isee:unlimited_table_length="false" blank_column_width="80" column_width="160" interval="1" report_balances="beginning" report_flows="instantaneous" header_font_style="normal" header_font_weight="normal" header_text_decoration="none" header_text_align="center" header_vertical_text_align="center" header_font_color="black" header_font_family="Arial" header_font_size="12pt" header_text_padding="2" header_text_border_color="black" header_text_border_width="thin" header_text_border_style="none"/>
+				</style>
+				<flow x="525.5" y="368.5" name="births">
+					<pts>
+						<pt x="537.5" y="368.5"/>
+						<pt x="537.5" y="368.5"/>
+					</pts>
+				</flow>
+				<flow x="618.5" y="386" name="deaths">
+					<pts>
+						<pt x="582.5" y="386"/>
+						<pt x="678.5" y="386"/>
+					</pts>
+				</flow>
+				<flow x="525.5" y="368.5" name="migration">
+					<pts>
+						<pt x="537.5" y="368.5"/>
+						<pt x="537.5" y="368.5"/>
+					</pts>
+				</flow>
+				<aux x="513" y="509" name="birth fraction"/>
+				<aux x="603" y="277" name="death fraction"/>
+				<aux x="653" y="509" name="base migration fraction"/>
+				<aux x="882" y="371" name="target housing per person"/>
+				<aux x="245" y="395" name="target jobs per person"/>
+				<aux x="728" y="379" name="relative housing availability"/>
+				<aux x="402" y="391" name="relative job availability"/>
+				<aux x="769" y="219" name="attractiveness from housing"/>
+				<aux x="355" y="549" name="attractiveness from jobs"/>
+				<stock x="560" y="386" name="Population"/>
+				<stock font_style="italic" font_weight="bold" x="783" y="534" name="Housing Stock"/>
+				<aux font_style="italic" font_weight="bold" x="346" y="235" name="total jobs"/>
+				<connector uid="1" polarity="+" isee:polarity_placement="outside" angle="193.104">
+					<isee:documentation>Reasoning:
+A larger population leads to more births.
+
+Polarity Reasoning: 
+Positive polarity because population and births move in the same direction.</isee:documentation>
+					<isee:reasoning>A larger population leads to more births.</isee:reasoning>
+					<isee:polarity_reasoning>Positive polarity because population and births move in the same direction.</isee:polarity_reasoning>
+					<from>Population</from>
+					<to>births</to>
+				</connector>
+				<connector uid="2" polarity="+" isee:polarity_placement="outside" angle="40">
+					<isee:documentation>Reasoning:
+A larger population leads to more deaths.
+
+Polarity Reasoning: 
+Positive polarity because population and deaths move in the same direction.</isee:documentation>
+					<isee:reasoning>A larger population leads to more deaths.</isee:reasoning>
+					<isee:polarity_reasoning>Positive polarity because population and deaths move in the same direction.</isee:polarity_reasoning>
+					<from>Population</from>
+					<to>deaths</to>
+				</connector>
+				<connector uid="3" polarity="+" isee:polarity_placement="outside" angle="193.104">
+					<isee:documentation>Reasoning:
+Migration is calculated as a fraction of the existing population.
+
+Polarity Reasoning: 
+Positive polarity because population and migration move in the same direction.</isee:documentation>
+					<isee:reasoning>Migration is calculated as a fraction of the existing population.</isee:reasoning>
+					<isee:polarity_reasoning>Positive polarity because population and migration move in the same direction.</isee:polarity_reasoning>
+					<from>Population</from>
+					<to>migration</to>
+				</connector>
+				<connector uid="4" polarity="+" isee:polarity_placement="outside" angle="84.9159">
+					<isee:documentation>Reasoning:
+A higher birth fraction increases the number of births.
+
+Polarity Reasoning: 
+Positive polarity because birth fraction and births move in the same direction.</isee:documentation>
+					<isee:reasoning>A higher birth fraction increases the number of births.</isee:reasoning>
+					<isee:polarity_reasoning>Positive polarity because birth fraction and births move in the same direction.</isee:polarity_reasoning>
+					<from>birth_fraction</from>
+					<to>births</to>
+				</connector>
+				<connector uid="5" polarity="+" isee:polarity_placement="outside" angle="278.093">
+					<isee:documentation>Reasoning:
+A higher death fraction increases the number of deaths.
+
+Polarity Reasoning: 
+Positive polarity because death fraction and deaths move in the same direction.</isee:documentation>
+					<isee:reasoning>A higher death fraction increases the number of deaths.</isee:reasoning>
+					<isee:polarity_reasoning>Positive polarity because death fraction and deaths move in the same direction.</isee:polarity_reasoning>
+					<from>death_fraction</from>
+					<to>deaths</to>
+				</connector>
+				<connector uid="6" polarity="+" isee:polarity_placement="outside" angle="132.223">
+					<isee:documentation>Reasoning:
+A higher base migration fraction increases net migration.
+
+Polarity Reasoning: 
+Positive polarity because base migration and migration move in the same direction.</isee:documentation>
+					<isee:reasoning>A higher base migration fraction increases net migration.</isee:reasoning>
+					<isee:polarity_reasoning>Positive polarity because base migration and migration move in the same direction.</isee:polarity_reasoning>
+					<from>base_migration_fraction</from>
+					<to>migration</to>
+				</connector>
+				<connector uid="7" polarity="+" isee:polarity_placement="outside" angle="211.548">
+					<isee:documentation>Reasoning:
+Higher housing attractiveness increases net migration into the area.
+
+Polarity Reasoning: 
+Positive polarity because attractiveness and migration move in the same direction.</isee:documentation>
+					<isee:reasoning>Higher housing attractiveness increases net migration into the area.</isee:reasoning>
+					<isee:polarity_reasoning>Positive polarity because attractiveness and migration move in the same direction.</isee:polarity_reasoning>
+					<from>attractiveness_from_housing</from>
+					<to>migration</to>
+				</connector>
+				<connector uid="8" polarity="+" isee:polarity_placement="outside" angle="46.6319">
+					<isee:documentation>Reasoning:
+Higher job attractiveness increases net migration into the area.
+
+Polarity Reasoning: 
+Positive polarity because attractiveness and migration move in the same direction.</isee:documentation>
+					<isee:reasoning>Higher job attractiveness increases net migration into the area.</isee:reasoning>
+					<isee:polarity_reasoning>Positive polarity because attractiveness and migration move in the same direction.</isee:polarity_reasoning>
+					<from>attractiveness_from_jobs</from>
+					<to>migration</to>
+				</connector>
+				<connector uid="9" polarity="+" isee:polarity_placement="outside" angle="55.6272">
+					<isee:documentation>Reasoning:
+Better housing availability makes the area more attractive for migrants.
+
+Polarity Reasoning: 
+Positive polarity because availability and attractiveness move in the same direction.</isee:documentation>
+					<isee:reasoning>Better housing availability makes the area more attractive for migrants.</isee:reasoning>
+					<isee:polarity_reasoning>Positive polarity because availability and attractiveness move in the same direction.</isee:polarity_reasoning>
+					<from>relative_housing_availability</from>
+					<to>attractiveness_from_housing</to>
+				</connector>
+				<connector uid="10" polarity="+" isee:polarity_placement="outside" angle="233.434">
+					<isee:documentation>Reasoning:
+Better job availability makes the area more attractive for migrants.
+
+Polarity Reasoning: 
+Positive polarity because availability and attractiveness move in the same direction.</isee:documentation>
+					<isee:reasoning>Better job availability makes the area more attractive for migrants.</isee:reasoning>
+					<isee:polarity_reasoning>Positive polarity because availability and attractiveness move in the same direction.</isee:polarity_reasoning>
+					<from>relative_job_availability</from>
+					<to>attractiveness_from_jobs</to>
+				</connector>
+				<connector uid="11" polarity="+" isee:polarity_placement="outside" angle="109.537">
+					<isee:documentation>Reasoning:
+More housing units increase the relative availability of housing.
+
+Polarity Reasoning: 
+Positive polarity because stock and availability move in the same direction.</isee:documentation>
+					<isee:reasoning>More housing units increase the relative availability of housing.</isee:reasoning>
+					<isee:polarity_reasoning>Positive polarity because stock and availability move in the same direction.</isee:polarity_reasoning>
+					<from>Housing_Stock</from>
+					<to>relative_housing_availability</to>
+				</connector>
+				<connector uid="12" polarity="-" isee:polarity_placement="outside" angle="342.386">
+					<isee:documentation>Reasoning:
+A larger population decreases the relative availability of housing per person.
+
+Polarity Reasoning: 
+Negative polarity because population and availability move in opposite directions.</isee:documentation>
+					<isee:reasoning>A larger population decreases the relative availability of housing per person.</isee:reasoning>
+					<isee:polarity_reasoning>Negative polarity because population and availability move in opposite directions.</isee:polarity_reasoning>
+					<from>Population</from>
+					<to>relative_housing_availability</to>
+				</connector>
+				<connector uid="13" polarity="+" isee:polarity_placement="outside" angle="289.747">
+					<isee:documentation>Reasoning:
+More jobs increase the relative availability of employment.
+
+Polarity Reasoning: 
+Positive polarity because jobs and availability move in the same direction.</isee:documentation>
+					<isee:reasoning>More jobs increase the relative availability of employment.</isee:reasoning>
+					<isee:polarity_reasoning>Positive polarity because jobs and availability move in the same direction.</isee:polarity_reasoning>
+					<from>total_jobs</from>
+					<to>relative_job_availability</to>
+				</connector>
+				<connector uid="14" polarity="-" isee:polarity_placement="outside" angle="161.813">
+					<isee:documentation>Reasoning:
+A larger population decreases the relative availability of jobs per person.
+
+Polarity Reasoning: 
+Negative polarity because population and availability move in opposite directions.</isee:documentation>
+					<isee:reasoning>A larger population decreases the relative availability of jobs per person.</isee:reasoning>
+					<isee:polarity_reasoning>Negative polarity because population and availability move in opposite directions.</isee:polarity_reasoning>
+					<from>Population</from>
+					<to>relative_job_availability</to>
+				</connector>
+				<connector uid="15" polarity="-" isee:polarity_placement="outside" angle="182.974">
+					<isee:documentation>Reasoning:
+A higher target for housing per person makes the current availability look lower relatively.
+
+Polarity Reasoning: 
+Negative polarity because target and relative availability move in opposite directions.</isee:documentation>
+					<isee:reasoning>A higher target for housing per person makes the current availability look lower relatively.</isee:reasoning>
+					<isee:polarity_reasoning>Negative polarity because target and relative availability move in opposite directions.</isee:polarity_reasoning>
+					<from>target_housing_per_person</from>
+					<to>relative_housing_availability</to>
+				</connector>
+				<connector uid="16" polarity="-" isee:polarity_placement="outside" angle="1.45945">
+					<isee:documentation>Reasoning:
+A higher target for jobs per person makes the current availability look lower relatively.
+
+Polarity Reasoning: 
+Negative polarity because target and relative availability move in opposite directions.</isee:documentation>
+					<isee:reasoning>A higher target for jobs per person makes the current availability look lower relatively.</isee:reasoning>
+					<isee:polarity_reasoning>Negative polarity because target and relative availability move in opposite directions.</isee:polarity_reasoning>
+					<from>target_jobs_per_person</from>
+					<to>relative_job_availability</to>
+				</connector>
+			</view>
+		</views>
+	</model>
+</xmile>
+
