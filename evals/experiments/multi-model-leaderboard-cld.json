@@ -1,0 +1,122 @@
+{
+    "sequential": true,
+    "engineConfigs": {
+    "qualitative-qwen3.5-397b": {
+      "engine": "qualitative",
+      "underlyingModel": "qwen3.5-397b-a17b",
+      "additionalParameters": {},
+      "limits": {
+        "requestsPerMinute": 10,
+        "tokensPerMinute": 100000
+      }
+    },
+    "causal-chains-qwen3.5-397b": {
+      "engine": "causal-chains",
+      "underlyingModel": "qwen3.5-397b-a17b",
+      "additionalParameters": {},
+      "limits": {
+        "requestsPerMinute": 10,
+        "tokensPerMinute": 100000
+      }
+    },
+    "recursivecausal-qwen3.5-397b": {
+      "engine": "recursivecausal",
+      "underlyingModel": "qwen3.5-397b-a17b",
+      "additionalParameters": {
+        "maxDepth": 3
+      },
+      "limits": {
+        "requestsPerMinute": 10,
+        "tokensPerMinute": 100000
+      }
+    },
+    "qualitative-zero-qwen3.5-397b": {
+      "engine": "qualitative-zero",
+      "underlyingModel": "qwen3.5-397b-a17b",
+      "additionalParameters": {},
+      "limits": {
+        "requestsPerMinute": 10,
+        "tokensPerMinute": 100000
+      }
+    },
+    "qualitative-deepseek-v3.2": {
+      "engine": "qualitative",
+      "underlyingModel": "deepseek-v3.2",
+      "additionalParameters": {},
+      "limits": {
+        "requestsPerMinute": 10,
+        "tokensPerMinute": 100000
+      }
+    },
+    "causal-chains-deepseek-v3.2": {
+      "engine": "causal-chains",
+      "underlyingModel": "deepseek-v3.2",
+      "additionalParameters": {},
+      "limits": {
+        "requestsPerMinute": 10,
+        "tokensPerMinute": 100000
+      }
+    },
+    "recursivecausal-deepseek-v3.2": {
+      "engine": "recursivecausal",
+      "underlyingModel": "deepseek-v3.2",
+      "additionalParameters": {
+        "maxDepth": 3
+      },
+      "limits": {
+        "requestsPerMinute": 10,
+        "tokensPerMinute": 100000
+      }
+    },
+    "qualitative-zero-deepseek-v3.2": {
+      "engine": "qualitative-zero",
+      "underlyingModel": "deepseek-v3.2",
+      "additionalParameters": {},
+      "limits": {
+        "requestsPerMinute": 10,
+        "tokensPerMinute": 100000
+      }
+    },
+    "qualitative-kimi-k2.5": {
+      "engine": "qualitative",
+      "underlyingModel": "kimi-k2.5",
+      "additionalParameters": {},
+      "limits": {
+        "requestsPerMinute": 10,
+        "tokensPerMinute": 100000
+      }
+    },
+    "causal-chains-kimi-k2.5": {
+      "engine": "causal-chains",
+      "underlyingModel": "kimi-k2.5",
+      "additionalParameters": {},
+      "limits": {
+        "requestsPerMinute": 10,
+        "tokensPerMinute": 100000
+      }
+    },
+    "recursivecausal-kimi-k2.5": {
+      "engine": "recursivecausal",
+      "underlyingModel": "kimi-k2.5",
+      "additionalParameters": {
+        "maxDepth": 3
+      },
+      "limits": {
+        "requestsPerMinute": 10,
+        "tokensPerMinute": 100000
+      }
+    },
+    "qualitative-zero-kimi-k2.5": {
+      "engine": "qualitative-zero",
+      "underlyingModel": "kimi-k2.5",
+      "additionalParameters": {},
+      "limits": {
+        "requestsPerMinute": 10,
+        "tokensPerMinute": 100000
+      }
+    }
+  },
+  "categories": {
+    "qualitativeTranslation": ["all"]
+  }
+}

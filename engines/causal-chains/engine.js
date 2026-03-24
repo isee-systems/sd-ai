@@ -45,8 +45,16 @@ focus on chains of relationships, rather then individual links.`
 
     additionalParameters() {
         const models = LLMWrapper.MODELS.filter(item => {
-            // true if the value starts with "gpt", "o[0-9]", or contains "gemini" or "claude"
-            return /^(gpt|o\d)/.test(item.value) || item.value.includes('gemini') || item.value.includes('claude');
+            // Support cloud models AND local models (llama, qwen, deepseek, hermes, etc.)
+            return /^(gpt|o\d)/.test(item.value) ||
+                   item.value.includes('gemini') ||
+                   item.value.includes('claude') ||
+                   item.value.includes('llama') ||
+                   item.value.includes('qwen') ||
+                   item.value.includes('deepseek') ||
+                   item.value.includes('hermes') ||
+                   item.value.includes('glm') ||
+                   item.value.includes('kimi');
         });
 
         return [

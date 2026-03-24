@@ -1,0 +1,20 @@
+{
+    "sequential": true,
+    "verbose": true,
+    "engineConfigs": {
+        "qualitative-zero-deepseek-v3.2": {
+            "engine": "qualitative-zero",
+            "additionalParameters": {
+                "underlyingModel": "deepseek-v3.2"
+            },
+            "limits": {
+                "tokensPerMinute": 50000,
+                "requestsPerMinute": 5,
+                "baselineTokenUsage": 5000
+            }
+        }
+    },
+    "categories": {
+        "conformance": ["specificConformance"]
+    }
+}

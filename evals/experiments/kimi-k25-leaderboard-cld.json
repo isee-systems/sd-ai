@@ -1,0 +1,50 @@
+{
+  "experimentName": "cj4_kimi-k25-leaderboard-cld",
+  "engineConfigs": {
+    "qualitative-kimi-k25": {
+      "engine": "qualitative", 
+      "underlyingModel": "kimi-k-2.5", 
+      "limits": {
+        "tokensPerMinute": 15000,
+        "requestsPerMinute": 5,
+        "baselineTokenUsage": 8000
+      }
+    },
+    "causal-chains-kimi-k25": {
+      "engine": "causal-chains",
+      "underlyingModel": "kimi-k-2.5",
+      "limits": {
+        "tokensPerMinute": 15000,
+        "requestsPerMinute": 5,
+        "baselineTokenUsage": 10000
+      }
+    },
+    "recursivecausal-kimi-k25": {
+      "engine": "recursivecausal",
+      "underlyingModel": "kimi-k-2.5",
+      "additionalParameters": {
+        "maxIterations": 3
+      },
+      "limits": {
+        "tokensPerMinute": 15000,
+        "requestsPerMinute": 3,
+        "baselineTokenUsage": 10000
+      }
+    },
+    "qualitative-zero-kimi-k25": {
+      "engine": "qualitative-zero",
+      "underlyingModel": "kimi-k-2.5",
+      "limits": {
+        "tokensPerMinute": 15000,
+        "requestsPerMinute": 5,
+        "baselineTokenUsage": 8000
+      }
+    }
+  },
+  "categories": {
+    "conformance": ["singleRelationship", "singleFeedbackLoop", "multipleFeedbackLoops", "specificConformance", "genericConformance"],
+    "qualitativeCausalReasoning": ["organizationalChange", "publicHealth"],
+    "qualitativeIteration": ["addToSimpleLoop", "addToMediumNetwork", "addToComplexNetwork", "addComplexToComplexNetwork"],
+    "qualitativeTranslation": ["singleRelationship", "singleFeedbackLoop", "multipleFeedbackLoops"]
+  }
+}

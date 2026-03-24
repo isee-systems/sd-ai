@@ -1,0 +1,22 @@
+{
+  "concurrency": 2,
+  "experimentName": "cj4_qwen35-leaderboard-discuss",
+  "engineConfigs": {
+    "Seldon-qwen3.5-397b": {
+      "engine": "seldon",
+      "additionalParameters": {
+        "underlyingModel": "qwen3.5-397b-a17b"
+      },
+      "limits": {
+        "tokensPerMinute": 15000,
+        "requestsPerMinute": 5,
+        "baselineTokenUsage": 10000
+      }
+    }
+  },
+  "categories": {
+    "feedbackExplanation": true,
+    "modelBuildingSteps": true,
+    "errorFixingSuggestions": true
+  }
+}

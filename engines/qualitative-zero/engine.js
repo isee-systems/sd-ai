@@ -45,6 +45,9 @@ class QualitativeZero extends Engine {
     }
 
     manipulateParameters(parameters) {
+        if (!parameters) {
+            parameters = {};
+        }
         parameters.descriptionlessStructuredOutput = true;
         parameters.feedbackPrompt = "";
         parameters.systemPrompt = "You are a System Dynamics Professional Modeler. Users will give you text, and it is your job to generate causal relationships from that text.";

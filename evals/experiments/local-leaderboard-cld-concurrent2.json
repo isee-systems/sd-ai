@@ -1,0 +1,60 @@
+{
+    "sequential": true,
+    "concurrency": 2,
+    "engineConfigs": {
+        "qualitative-qwen3.5-397b": {
+            "engine": "qualitative",
+            "additionalParameters": {
+                "underlyingModel": "qwen3.5-397b-a17b"
+            },
+            "limits": {
+                "tokensPerMinute": 15000,
+                "requestsPerMinute": 5,
+                "baselineTokenUsage": 8000
+            }
+        },
+
+        "causal-chains-qwen3.5-397b": {
+            "engine": "causal-chains",
+            "additionalParameters": {
+                "underlyingModel": "qwen3.5-397b-a17b"
+            },
+            "limits": {
+                "tokensPerMinute": 15000,
+                "requestsPerMinute": 5,
+                "baselineTokenUsage": 10000
+            }
+        },
+        
+        "recursivecausal-qwen3.5-397b": {
+            "engine": "recursivecausal",
+            "additionalParameters": {
+                "underlyingModel": "qwen3.5-397b-a17b",
+                "depth": 1
+            },
+            "limits": {
+                "tokensPerMinute": 15000,
+                "requestsPerMinute": 3,
+                "baselineTokenUsage": 10000
+            }
+        },
+
+        "qualitative-zero-qwen3.5-397b": {
+            "engine": "qualitative-zero",
+            "additionalParameters": {
+                "underlyingModel": "qwen3.5-397b-a17b"
+            },
+            "limits": {
+                "tokensPerMinute": 15000,
+                "requestsPerMinute": 5,
+                "baselineTokenUsage": 8000
+            }
+        }
+    },
+    "categories": {
+        "qualitativeTranslation": true,
+        "conformance": true,
+        "qualitativeCausalReasoning": true,
+        "qualitativeIteration": true
+    }
+}

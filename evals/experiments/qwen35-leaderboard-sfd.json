@@ -1,0 +1,24 @@
+{
+  "concurrency": 2,
+  "experimentName": "cj4_qwen35-leaderboard-sfd",
+  "engineConfigs": {
+    "quantitative-qwen3.5-397b": {
+      "engine": "quantitative",
+      "additionalParameters": {
+        "underlyingModel": "qwen3.5-397b-a17b"
+      },
+      "limits": {
+        "tokensPerMinute": 15000,
+        "requestsPerMinute": 5,
+        "baselineTokenUsage": 12000
+      }
+    }
+  },
+  "categories": {
+    "conformance": ["singleRelationship", "singleFeedbackLoop", "multipleFeedbackLoops", "specificConformance", "genericConformance"],
+    "quantitativeCausalReasoning": ["organizationalChange", "publicHealth"],
+    "quantitativeIteration": ["addToSimpleLoop", "addToMediumNetwork", "addToComplexNetwork", "addComplexToComplexNetwork"],
+    "quantitativeTranslation": ["singleRelationship", "singleFeedbackLoop", "multipleFeedbackLoops"],
+    "quantitativeErrorFixing": ["covidCorrect", "covidDelayErr1", "covidDelayErr2", "covidDelayErr4", "covidLookupErr1", "covidLookupErr2", "covidSumErr1", "covidSumErr2"]
+  }
+}

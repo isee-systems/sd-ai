@@ -1,0 +1,41 @@
+{
+  "sequential": true,
+  "engineConfigs": {
+    "quantitative-qwen3.5-397b": {
+      "engine": "quantitative",
+      "underlyingModel": "qwen3.5-397b-a17b",
+      "additionalParameters": {
+        "underlyingModel": "qwen3.5-397b-a17b"
+      },
+      "limits": {
+        "requestsPerMinute": 10,
+        "tokensPerMinute": 100000
+      }
+    },
+    "quantitative-deepseek-v3.2": {
+      "engine": "quantitative",
+      "underlyingModel": "deepseek-v3.2",
+      "additionalParameters": {
+        "underlyingModel": "deepseek-v3.2"
+      },
+      "limits": {
+        "requestsPerMinute": 10,
+        "tokensPerMinute": 100000
+      }
+    },
+    "quantitative-kimi-k2.5": {
+      "engine": "quantitative",
+      "underlyingModel": "kimi-k2.5",
+      "additionalParameters": {
+        "underlyingModel": "kimi-k2.5"
+      },
+      "limits": {
+        "requestsPerMinute": 10,
+        "tokensPerMinute": 100000
+      }
+    }
+  },
+  "categories": {
+    "quantitativeTranslation": ["all"]
+  }
+}

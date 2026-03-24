@@ -12,7 +12,7 @@
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { LLMWrapper } from '../../utilities/LLMWrapper.js';
+import { LLMWrapper, ModelType } from '../../utilities/LLMWrapper.js';
 import { validateEvaluationResult } from '../evaluationSchema.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -87,21 +87,37 @@ export const evaluate = async function(generatedResponse, expectations) {
     // Iterate through each expected fact
     for (const expectedFact of expectedFacts) {
         try {
-            // Create messages for the LLM
-            const messages = [
-                {
-                    role: 'system',
-                    content: 'Your job is to determine if a given statement is true based only on the information provided. You will be given some text, and then asked to verify if a specific statement is supported by that text. Answer only "true" if the statement is clearly supported by the text, or "false" if it is not supported or contradicted by the text.'
-                },
-                {
-                    role: 'user',
-                    content: `Here is the text to analyze:\n\n${generatedResponse.output?.textContent || JSON.stringify(generatedResponse)}`
-                },
-                {
-                    role: 'user',
-                    content: `Based only on the information provided above, is the following statement true?\n\nStatement: "${expectedFact}"\n\nAnswer with only "true" or "false".`
-                }
-            ];
+            // Check if using local model that needs simplified message structure
+            const modelKind = llm.model.kind;
+            let messages;
+            
+            if (modelKind === ModelType.LLAMA || modelKind === ModelType.DEEPSEEK) {
+                // Simplified structure for local models to avoid Jinja template errors
+                const systemContent = 'Your job is to determine if a given statement is true based only on the information provided. You will be given some text, and then asked to verify if a specific statement is supported by that text. Answer only "true" if the statement is clearly supported by the text, or "false" if it is not supported or contradicted by the text.';
+                const textToAnalyze = generatedResponse.output?.textContent || JSON.stringify(generatedResponse);
+                const combinedUserContent = `Here is the text to analyze:\n\n${textToAnalyze}\n\nBased only on the information provided above, is the following statement true?\n\nStatement: "${expectedFact}"\n\nAnswer with only "true" or "false".`;
+                
+                messages = [
+                    { role: 'system', content: systemContent },
+                    { role: 'user', content: combinedUserContent }
+                ];
+            } else {
+                // Original structure for cloud models
+                messages = [
+                    {
+                        role: 'system',
+                        content: 'Your job is to determine if a given statement is true based only on the information provided. You will be given some text, and then asked to verify if a specific statement is supported by that text. Answer only "true" if the statement is clearly supported by the text, or "false" if it is not supported or contradicted by the text.'
+                    },
+                    {
+                        role: 'user',
+                        content: `Here is the text to analyze:\n\n${generatedResponse.output?.textContent || JSON.stringify(generatedResponse)}`
+                    },
+                    {
+                        role: 'user',
+                        content: `Based only on the information provided above, is the following statement true?\n\nStatement: "${expectedFact}"\n\nAnswer with only "true" or "false".`
+                    }
+                ];
+            }
 
             // Get LLM parameters
             const { underlyingModel, temperature } = llm.getLLMParameters(0);

@@ -1,0 +1,46 @@
+{
+    "sequential": true,
+    "verbose": true,
+    "groupByModel": true,
+    "engineConfigs": {
+        "01-qualitative-zero-deepseek-v3.2": {
+            "engine": "qualitative-zero",
+            "additionalParameters": {
+                "underlyingModel": "deepseek-v3.2"
+            },
+            "limits": {
+                "tokensPerMinute": 25000,
+                "requestsPerMinute": 2,
+                "baselineTokenUsage": 8000
+            }
+        },
+        "01-quantitative-deepseek-v3.2": {
+            "engine": "quantitative",
+            "additionalParameters": {
+                "underlyingModel": "deepseek-v3.2"
+            },
+            "limits": {
+                "tokensPerMinute": 20000,
+                "requestsPerMinute": 1,
+                "baselineTokenUsage": 10000
+            }
+        },
+        "02-qualitative-zero-hermes-405b": {
+            "engine": "qualitative-zero",
+            "additionalParameters": {
+                "underlyingModel": "hermes-3-llama-3.1-405b"
+            },
+            "limits": {
+                "tokensPerMinute": 15000,
+                "requestsPerMinute": 1,
+                "baselineTokenUsage": 12000
+            }
+        }
+    },
+    "categories": {
+        "conformance": ["specificConformance"],
+        "qualitativeTranslation": ["singleRelationship"],
+        "qualitativeCausalReasoning": ["publicHealth"],
+        "quantitativeCausalReasoning": ["publicHealth"]
+    }
+}

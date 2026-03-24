@@ -1,4 +1,4 @@
-import {LLMWrapper} from "../../utilities/LLMWrapper.js";
+import {LLMWrapper, ModelType} from "../../utilities/LLMWrapper.js";
 import projectUtils from "../../utilities/utils.js";
 
 class ResponseFormatError extends Error {
@@ -199,35 +199,76 @@ You will conduct a multistep process:
             responseFormat = undefined;
         }
 
-        let messages = [{ 
-            role: systemRole, 
-            content: systemPrompt 
-        }];
+        // For local LM Studio models, use a simplified message structure to avoid Jinja template errors
+        const isLocalModel = this.#llmWrapper.model.kind === ModelType.LLAMA || this.#llmWrapper.model.kind === ModelType.DEEPSEEK;
+        
+        let messages; // Declare messages variable in outer scope
+        
+        if (isLocalModel) {
+            // Simplified structure for LM Studio compatibility
+            let combinedPrompt = systemPrompt;
+            
+            if (this.#data.backgroundKnowledge) {
+                combinedPrompt += "\n\nBackground Information:\n" +
+                    this.#data.backgroundPrompt.replaceAll("{backgroundKnowledge}", this.#data.backgroundKnowledge);
+            }
+            
+            if (this.#data.problemStatement) {
+                combinedPrompt += "\n\nProblem Statement:\n" +
+                    this.#data.problemStatementPrompt.replaceAll("{problemStatement}", this.#data.problemStatement);
+            }
 
-        if (this.#data.backgroundKnowledge) {
-            messages.push({
-                role: "user",
-                content:  this.#data.backgroundPrompt.replaceAll("{backgroundKnowledge}", this.#data.backgroundKnowledge),
-            });
-        }
-        if (this.#data.problemStatement) {
-            messages.push({
+            messages = [{
+                role: "system",
+                content: combinedPrompt
+            }];
+
+            if (lastModel && lastModel.relationships && lastModel.relationships.length > 0) {
+                messages.push({ role: "assistant", content: JSON.stringify(lastModel.relationships, null, 2) });
+
+                if (this.#data.assistantPrompt)
+                    messages.push({ role: "user", content: this.#data.assistantPrompt });
+            }
+
+            // Ensure the final message is always from user with clear query
+            let finalUserPrompt = userPrompt;
+            if (this.#data.feedbackPrompt) {
+                finalUserPrompt += "\n\n" + this.#data.feedbackPrompt;
+            }
+            messages.push({ role: "user", content: finalUserPrompt });
+            
+        } else {
+            // Original structure for cloud models
+            messages = [{
                 role: systemRole,
-                content: this.#data.problemStatementPrompt.replaceAll("{problemStatement}", this.#data.problemStatement),
-            });
+                content: systemPrompt
+            }];
+
+            if (this.#data.backgroundKnowledge) {
+                messages.push({
+                    role: "user",
+                    content:  this.#data.backgroundPrompt.replaceAll("{backgroundKnowledge}", this.#data.backgroundKnowledge),
+                });
+            }
+            if (this.#data.problemStatement) {
+                messages.push({
+                    role: systemRole,
+                    content: this.#data.problemStatementPrompt.replaceAll("{problemStatement}", this.#data.problemStatement),
+                });
+            }
+
+            if (lastModel && lastModel.relationships && lastModel.relationships.length > 0) {
+                messages.push({ role: "assistant", content: JSON.stringify(lastModel.relationships, null, 2) });
+
+                if (this.#data.assistantPrompt)
+                    messages.push({ role: "user", content: this.#data.assistantPrompt });
+            }
+
+            //give it the user prompt
+            messages.push({ role: "user", content: userPrompt });
+            if (this.#data.feedbackPrompt)
+                messages.push({ role: "user", content: this.#data.feedbackPrompt }); //then have it try to close feedback
         }
-
-        if (lastModel && lastModel.relationships && lastModel.relationships.length > 0) {
-            messages.push({ role: "assistant", content: JSON.stringify(lastModel.relationships, null, 2) });
-
-            if (this.#data.assistantPrompt)
-                messages.push({ role: "user", content: this.#data.assistantPrompt });
-        }
-
-        //give it the user prompt
-        messages.push({ role: "user", content: userPrompt });
-        if (this.#data.feedbackPrompt)
-            messages.push({ role: "user", content: this.#data.feedbackPrompt }); //then have it try to close feedback
 
         return {
             messages,

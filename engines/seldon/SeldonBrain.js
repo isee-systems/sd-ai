@@ -1,5 +1,5 @@
 import utils from '../../utilities/utils.js'
-import { LLMWrapper } from '../../utilities/LLMWrapper.js'
+import { LLMWrapper, ModelType } from '../../utilities/LLMWrapper.js'
 import { marked } from 'marked';
 
 class ResponseFormatError extends Error {
@@ -183,48 +183,89 @@ As the world's best System Dynamics Modeler, you will consider and apply the Sys
         const { underlyingModel, systemRole, temperature, reasoningEffort } = this.#llmWrapper.getLLMParameters();
         let systemPrompt = this.#data.systemPrompt;
         let responseFormat = this.#llmWrapper.generateSeldonResponseSchema();
+        let messages;
 
-        let messages = [{ 
-            role: systemRole, 
-            content: systemPrompt 
-        }];
-
-        if (this.#data.backgroundKnowledge) {
-            messages.push({
-                role: "user",
-                content:  this.#data.backgroundPrompt.replaceAll("{backgroundKnowledge}", this.#data.backgroundKnowledge),
-            });
-        }
-
-        if (this.#data.problemStatement) {
-            messages.push({
-                role: systemRole,
-                content: this.#data.problemStatementPrompt.replaceAll("{problemStatement}", this.#data.problemStatement),
-            });
-        }
-
-        if (lastModel && lastModel.variables && lastModel.variables.length > 0) {
-            const filteredModel = this.#filterModelForErrors(lastModel);
-
-            messages.push({ role: "assistant", content: JSON.stringify(filteredModel, null, 2) });
-
-            if (this.#data.structurePrompt)
-                messages.push({ role: "user", content: this.#data.structurePrompt });
-
-            if (this.#data.behaviorPrompt && this.#data.behaviorContent)
-                messages.push({ role: "user", content: this.#data.behaviorPrompt.replaceAll("{behaviorContent}", this.#data.behaviorContent) });
-
-            if (this.#isValidFeedbackContent())
-                messages.push({ role: "user", content: this.#data.feedbackPrompt.replaceAll("{feedbackContent}", JSON.stringify(this.#data.feedbackContent, null, 2)) });
+        // Check if this is a local model (LLAMA/DEEPSEEK) that needs simplified message structure
+        if (this.#llmWrapper.model.kind === ModelType.LLAMA || this.#llmWrapper.model.kind === ModelType.DEEPSEEK) {
+            // Simplified structure for local models to avoid Jinja template errors
+            let combinedSystemContent = systemPrompt;
+            
+            if (this.#data.backgroundKnowledge) {
+                combinedSystemContent += "\n\nBackground: " + this.#data.backgroundKnowledge;
+            }
+            if (this.#data.problemStatement) {
+                combinedSystemContent += "\n\nProblem: " + this.#data.problemStatement;
+            }
+            
+            messages = [{ role: systemRole, content: combinedSystemContent }];
+            
+            if (lastModel && lastModel.variables && lastModel.variables.length > 0) {
+                const filteredModel = this.#filterModelForErrors(lastModel);
+                let combinedUserContent = "Previous model:\n" + JSON.stringify(filteredModel, null, 2);
+                
+                if (this.#data.structurePrompt) {
+                    combinedUserContent += "\n\n" + this.#data.structurePrompt;
+                }
+                if (this.#data.behaviorPrompt && this.#data.behaviorContent) {
+                    combinedUserContent += "\n\n" + this.#data.behaviorPrompt.replaceAll("{behaviorContent}", this.#data.behaviorContent);
+                }
+                if (this.#isValidFeedbackContent()) {
+                    combinedUserContent += "\n\n" + this.#data.feedbackPrompt.replaceAll("{feedbackContent}", JSON.stringify(this.#data.feedbackContent, null, 2));
+                }
+                combinedUserContent += "\n\n" + userPrompt;
+                
+                messages.push({ role: "user", content: combinedUserContent });
+            } else {
+                let combinedUserContent = userPrompt;
+                if (this.#data.behaviorPrompt && this.#data.behaviorContent) {
+                    combinedUserContent = this.#data.behaviorPrompt.replaceAll("{behaviorContent}", this.#data.behaviorContent) + "\n\n" + userPrompt;
+                }
+                messages.push({ role: "user", content: combinedUserContent });
+            }
         } else {
+            // Original complex structure for cloud models
+            messages = [{
+                role: systemRole,
+                content: systemPrompt
+            }];
 
-            if (this.#data.behaviorPrompt && this.#data.behaviorContent)
-                messages.push({ role: "user", content: this.#data.behaviorPrompt.replaceAll("{behaviorContent}", this.#data.behaviorContent) });
+            if (this.#data.backgroundKnowledge) {
+                messages.push({
+                    role: "user",
+                    content:  this.#data.backgroundPrompt.replaceAll("{backgroundKnowledge}", this.#data.backgroundKnowledge),
+                });
+            }
 
+            if (this.#data.problemStatement) {
+                messages.push({
+                    role: systemRole,
+                    content: this.#data.problemStatementPrompt.replaceAll("{problemStatement}", this.#data.problemStatement),
+                });
+            }
+
+            if (lastModel && lastModel.variables && lastModel.variables.length > 0) {
+                const filteredModel = this.#filterModelForErrors(lastModel);
+
+                messages.push({ role: "assistant", content: JSON.stringify(filteredModel, null, 2) });
+
+                if (this.#data.structurePrompt)
+                    messages.push({ role: "user", content: this.#data.structurePrompt });
+
+                if (this.#data.behaviorPrompt && this.#data.behaviorContent)
+                    messages.push({ role: "user", content: this.#data.behaviorPrompt.replaceAll("{behaviorContent}", this.#data.behaviorContent) });
+
+                if (this.#isValidFeedbackContent())
+                    messages.push({ role: "user", content: this.#data.feedbackPrompt.replaceAll("{feedbackContent}", JSON.stringify(this.#data.feedbackContent, null, 2)) });
+            } else {
+
+                if (this.#data.behaviorPrompt && this.#data.behaviorContent)
+                    messages.push({ role: "user", content: this.#data.behaviorPrompt.replaceAll("{behaviorContent}", this.#data.behaviorContent) });
+
+            }
+
+            //give it the user prompt
+            messages.push({ role: "user", content: userPrompt });
         }
-
-        //give it the user prompt
-        messages.push({ role: "user", content: userPrompt });
 
         return {
             messages,

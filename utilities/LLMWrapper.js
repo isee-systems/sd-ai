@@ -44,6 +44,8 @@ export class ModelCapabilities {
           return ModelType.DEEPSEEK;
       } else if (this.name.includes('claude')) {
           return ModelType.CLAUDE;
+      } else if (this.name.includes('qwen') || this.name.includes('glm') || this.name.includes('hermes') || this.name.includes('kimi')) {
+          return ModelType.LLAMA; // Use local LM Studio endpoint for these models
       } else {
           return ModelType.OPEN_AI;
       }
@@ -113,7 +115,9 @@ export class LLMWrapper {
         case ModelType.LLAMA:
             this.#openAIAPI = new OpenAI({
                 apiKey: 'junk', // required but unused
-                baseURL: 'http://localhost:11434/v1',
+                baseURL: 'http://localhost:1234/v1',
+                timeout: 600000, // 10 minutes for local LLMs (complex tests need more time)
+                maxRetries: 2,
             });
             break;
     }
@@ -154,7 +158,7 @@ export class LLMWrapper {
 
   static BUILD_DEFAULT_MODEL = 'gemini-3-flash-preview low'; //'claude-opus-4-6';
   static NON_BUILD_DEFAULT_MODEL = 'gemini-3-flash-preview low'; //'claude-opus-4-6';
-  static EVAL_MODEL = 'gemini-2.5-flash';
+  static EVAL_MODEL = 'qwen3.5-397b-a17b'; // Temporarily changed to local model for testing
   
   static SCHEMA_STRINGS = {
     "from": "This is a variable which causes the to variable in this relationship that is between two variables, from and to.  The from variable is the equivalent of a cause.  The to variable is the equivalent of an effect",
@@ -488,8 +492,21 @@ export class LLMWrapper {
       completionParams.reasoning_effort = reasoningEffort;
     }
 
+    // Add seed for reproducibility with local models
+    if (this.model.kind === ModelType.LLAMA || this.model.kind === ModelType.DEEPSEEK) {
+      completionParams.seed = 4242;
+    }
+
     const completion = await this.#openAIAPI.chat.completions.create(completionParams);
-    return completion.choices[0].message;
+    const message = completion.choices[0].message;
+    
+    // Handle LM Studio quirk: when using structured output, it puts JSON in reasoning_content instead of content
+    if (this.model.kind === ModelType.LLAMA && zodSchema && message.reasoning_content && (!message.content || message.content.trim() === '')) {
+      // For LM Studio, move reasoning_content to content when using structured output
+      message.content = message.reasoning_content;
+    }
+    
+    return message;
   }
 
   async #createGeminiChatCompletion(messages, model, zodSchema = null, temperature = null, reasoningEffort = null) {

@@ -25,6 +25,7 @@ import {
   loadCategoryTests,
   loadTestsForEngine,
 } from "./runHelpers.js";
+import { runInBatches } from "./concurrencyHelper.js";
 
 import "dotenv/config";
 
@@ -234,7 +235,11 @@ const runEngineTests = async ([engineConfigName, engineTests]) => {
     console.log(chalk.blue(`Running tests for: ${engineConfigName}`));
 
   let testRuns = [];
-  if (experiment.sequential) {
+  // Determine concurrency level
+  const concurrency = experiment.concurrency || (experiment.sequential ? 1 : engineTests.length);
+  
+  if (concurrency === 1) {
+    // Fully sequential execution
     testRuns = await engineTests.reduce(async (promise, test) => {
       const acc = await promise;
       const result = await runSingleTest(
@@ -249,7 +254,8 @@ const runEngineTests = async ([engineConfigName, engineTests]) => {
 
       return [...acc, result];
     }, Promise.resolve([]));
-  } else {
+  } else if (concurrency >= engineTests.length) {
+    // Fully parallel execution
     testRuns = await Promise.all(
       engineTests.map((test) =>
         runSingleTest(
@@ -262,6 +268,21 @@ const runEngineTests = async ([engineConfigName, engineTests]) => {
           errorTracker
         )
       )
+    );
+  } else {
+    // Controlled concurrency execution
+    testRuns = await runInBatches(
+      engineTests,
+      (test) => runSingleTest(
+        test,
+        requestLimiter,
+        tokenLimiter,
+        inProgress,
+        earlyResults,
+        engineBar,
+        errorTracker
+      ),
+      concurrency
     );
   }
 

@@ -1,0 +1,35 @@
+{
+    "sequential": true,
+    "engineConfigs": {
+    "Seldon-qwen3.5-397b": {
+      "engine": "seldon",
+      "underlyingModel": "qwen3.5-397b-a17b",
+      "additionalParameters": {},
+      "limits": {
+        "requestsPerMinute": 10,
+        "tokensPerMinute": 100000
+      }
+    },
+    "Seldon-deepseek-v3.2": {
+      "engine": "seldon",
+      "underlyingModel": "deepseek-v3.2",
+      "additionalParameters": {},
+      "limits": {
+        "requestsPerMinute": 10,
+        "tokensPerMinute": 100000
+      }
+    },
+    "Seldon-kimi-k2.5": {
+      "engine": "seldon",
+      "underlyingModel": "kimi-k2.5",
+      "additionalParameters": {},
+      "limits": {
+        "requestsPerMinute": 10,
+        "tokensPerMinute": 100000
+      }
+    }
+  },
+  "categories": {
+    "feedbackExplanation": ["all"]
+  }
+}
