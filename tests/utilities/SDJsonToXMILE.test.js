@@ -163,6 +163,32 @@ describe('SDJsonToXMILE', () => {
             });
         });
 
+        test('should NOT include non_negative for flows with "change in" in name', () => {
+            const testCases = [
+                'change in angle',
+                'Change in Population',
+                'total change in value',
+                'change_in_velocity'
+            ];
+
+            testCases.forEach(flowName => {
+                const sdJson = {
+                    variables: [
+                        { name: flowName, type: 'flow', equation: '100' }
+                    ],
+                    relationships: []
+                };
+
+                const xmile = SDJsonToXMILE(sdJson);
+                const flowSection = xmile.substring(
+                    xmile.indexOf(`<flow name=`),
+                    xmile.indexOf('</flow>') + 7
+                );
+
+                expect(flowSection).not.toContain('<non_negative/>');
+            });
+        });
+
         test('should generate NAN equation for flows without equations', () => {
             const sdJson = {
                 variables: [
