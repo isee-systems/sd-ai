@@ -517,48 +517,6 @@ function buildStock(stock, model, currentModule = '') {
 }
 
 /**
- * Check if a flow name represents a bidirectional (net) flow
- * Net flows can be positive or negative and are not constrained to non-negative values
- * Examples:
- *   - "net profit", "Net Revenue", "profit net" -> true
- *   - "change in angle", "total change in population" -> true
- *   - "internet", "magnet", "cabinet" -> false
- *   - "exchange rate" -> false
- */
-function isNetFlow(flowName) {
-    if (!flowName) return false;
-
-    const normalized = flowName.toLowerCase();
-
-    // Check if contains "change in" or "change_in" anywhere in the name
-    if (/change[\s_]in[\s_]/.test(normalized)) {
-        return true;
-    }
-
-    // Check if starts with "net " or "net_"
-    if (/^net[\s_]/.test(normalized)) {
-        return true;
-    }
-
-    // Check if contains " net " or "_net_" (standalone word in middle)
-    if (/[\s_]net[\s_]/.test(normalized)) {
-        return true;
-    }
-
-    // Check if ends with " net" or "_net"
-    if (/[\s_]net$/.test(normalized)) {
-        return true;
-    }
-
-    // Check if the entire name is just "net"
-    if (normalized === 'net') {
-        return true;
-    }
-
-    return false;
-}
-
-/**
  * Build flow variable
  */
 function buildFlow(flow, model, currentModule = '') {
@@ -569,8 +527,10 @@ function buildFlow(flow, model, currentModule = '') {
     // Get access attribute (for module inputs/outputs)
     const accessAttr = getAccessAttribute(flow, model);
 
-    // Flows are non-negative unless they contain "net" as a standalone word
-    const nonNegative = !isNetFlow(localName);
+    // Determine if flow is non-negative based on uniflow attribute
+    // If uniflow is explicitly set, use that value
+    // If uniflow is not set, default to true (non-negative) for backward compatibility
+    const nonNegative = flow.uniflow !== false;
 
     lines.push(`      <flow name="${escapeNameAttribute(xmileName)}"${accessAttr}>`);
 

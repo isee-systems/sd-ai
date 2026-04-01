@@ -111,6 +111,12 @@ Provide equations for every variable:
 - This is the XMILE standard and is NON-NEGOTIABLE - equations with spaces in variable names will FAIL
 - CONSTANT HANDLING: NEVER embed numerical constants directly in equations with other variables. ALWAYS create separate named variables for all constants.
 - Every variable referenced in an equation MUST have its own equation, type, and appear in the relationships list
+- UNIFLOW CONSTRAINT FOR FLOWS:
+  * Mark a flow as uniflow=true when it represents a one-directional process that should never be negative
+  * When uniflow=true, if the flow equation produces a negative value during simulation, it will be automatically constrained to zero
+  * Common uniflow=true examples: births, deaths, purchases, production, hiring, shipments
+  * Use uniflow=false for bidirectional flows that can legitimately go negative: net migration, balance adjustments, corrections
+  * Setting uniflow correctly prevents physically impossible negative flows (e.g., negative births) while allowing valid negative flows
 - GRAPHICAL FUNCTION BEST PRACTICES:
   * For all non-time based graphical functions: Design the function so that normal input produces normal output and include the point (1, 1) in your graphical function to ensure that when the input variable equals 1, the output equals 1
   * This normalization principle allows the function to express deviations from normal behavior in both directions
@@ -258,12 +264,14 @@ Here is a complete example of a properly structured modular model (Lynx-Hare pre
         {
             "name": "Hares.hare births",
             "type": "flow",
+            "uniflow": true,
             "equation": "Hares*hare_birth_fraction",
             "units": "hares/year"
         },
         {
             "name": "Hares.hare deaths",
             "type": "flow",
+            "uniflow": true,
             "equation": "Lynx*hares_killed_per_lynx",
             "units": "hares/year"
         },
@@ -316,12 +324,14 @@ Here is a complete example of a properly structured modular model (Lynx-Hare pre
         {
             "name": "Lynx.lynx births",
             "type": "flow",
+            "uniflow": true,
             "equation": "Lynx*lynx_birth_fraction",
             "units": "lynx/year"
         },
         {
             "name": "Lynx.lynx deaths",
             "type": "flow",
+            "uniflow": true,
             "equation": "Lynx*lynx_death_fraction",
             "units": "lynx/year"
         },

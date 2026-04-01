@@ -79,6 +79,7 @@ Contains the engines used by [Stella](https://www.iseesystems.com/store/products
         equation?: <string>,
         documentation?: <string>,
         units?: <string>,
+        uniflow?: <boolean>, # For flows only: true if flow should never be negative
         inflows?: Array<string>,
         outflows?: Array<string>,
         dimensions?: Array<string>, # Array of dimension names for arrayed variables
