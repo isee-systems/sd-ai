@@ -112,41 +112,223 @@ const extractVariables = (list) => {
 };
 
 /**
- * Counts the number of feedback loops embodied by the list of relationships
- * @param {Array<Object>} list List of relationships in form of {from: <string>, to: <string> } 
- * @returns {Number} The number of feedback loops
+ * Finds all strongly connected components using Tarjan's algorithm.
+ * @param {Map<number, number[]>} adj Adjacency list (node index -> list of neighbor indices)
+ * @param {number[]} nodeSubset Subset of node indices to consider
+ * @returns {number[][]} Array of SCCs, each being an array of node indices
  */
-const countLoops = (list) => {
-  const graph = {};
-  for (const r of list) {
-    if (!graph[r.from]) graph[r.from] = [];
-    graph[r.from].push(r.to);
-  }
+const tarjanSCCs = (adj, nodeSubset) => {
+  const nodeSet = new Set(nodeSubset);
+  const index = new Map();
+  const lowlink = new Map();
+  const onStack = new Set();
+  const stack = [];
+  const sccs = [];
+  let idx = 0;
 
-  let count = 0;
-  const visited = new Set();
-  const recStack = new Set();
+  function strongconnect(v) {
+    index.set(v, idx);
+    lowlink.set(v, idx);
+    idx++;
+    stack.push(v);
+    onStack.add(v);
 
-  function dfs(v) {
-    visited.add(v);
-    recStack.add(v);
-    for (const n of graph[v] || []) {
-      if (!visited.has(n)) {
-        if (dfs(n)) return true;
-      } else if (recStack.has(n)) {
-        count++;
-        return true;
+    for (const w of adj.get(v) || []) {
+      if (!nodeSet.has(w)) continue;
+      if (!index.has(w)) {
+        strongconnect(w);
+        lowlink.set(v, Math.min(lowlink.get(v), lowlink.get(w)));
+      } else if (onStack.has(w)) {
+        lowlink.set(v, Math.min(lowlink.get(v), index.get(w)));
       }
     }
-    recStack.delete(v);
-    return false;
+
+    if (lowlink.get(v) === index.get(v)) {
+      const scc = [];
+      let w;
+      do {
+        w = stack.pop();
+        onStack.delete(w);
+        scc.push(w);
+      } while (w !== v);
+      sccs.push(scc);
+    }
   }
 
-  for (const node of Object.keys(graph)) {
-    if (!visited.has(node)) dfs(node);
+  for (const v of nodeSubset) {
+    if (!index.has(v)) {
+      strongconnect(v);
+    }
+  }
+  return sccs;
+};
+
+const countLoopsInternal = (list, options = {}) => {
+  const maxCycles = Number.isFinite(options.maxCycles)
+    ? Math.max(0, options.maxCycles)
+    : Infinity;
+
+  // Deduplicate edges
+  const edgeSet = new Set();
+  const edges = [];
+  for (const r of list) {
+    const key = r.from + '\0' + r.to;
+    if (!edgeSet.has(key)) {
+      edgeSet.add(key);
+      edges.push(r);
+    }
   }
 
-  return count;
+  // Map node names to integer indices
+  const nameToIndex = new Map();
+  let nextIndex = 0;
+  for (const r of edges) {
+    if (!nameToIndex.has(r.from)) nameToIndex.set(r.from, nextIndex++);
+    if (!nameToIndex.has(r.to)) nameToIndex.set(r.to, nextIndex++);
+  }
+
+  // Build adjacency list using integer indices
+  const adj = new Map();
+  for (const r of edges) {
+    const from = nameToIndex.get(r.from);
+    const to = nameToIndex.get(r.to);
+    if (!adj.has(from)) adj.set(from, []);
+    adj.get(from).push(to);
+  }
+
+  const n = nameToIndex.size;
+  if (n === 0 || maxCycles === 0) {
+    return {
+      count: 0,
+      capped: false
+    };
+  }
+
+  // Johnson's algorithm
+  let cycleCount = 0;
+  let s = 0;
+
+  while (s < n && cycleCount < maxCycles) {
+    // Find SCCs in the subgraph induced by nodes {s, s+1, ..., n-1}
+    const subNodes = [];
+    for (let i = s; i < n; i++) subNodes.push(i);
+
+    const sccs = tarjanSCCs(adj, subNodes);
+
+    // Find the SCC containing the smallest-indexed node (>= s)
+    let bestSCC = null;
+    let bestMin = n;
+    for (const scc of sccs) {
+      if (scc.length < 2) {
+        // A single-node SCC is only relevant if it has a self-loop
+        const node = scc[0];
+        const neighbors = adj.get(node) || [];
+        if (!neighbors.includes(node)) continue;
+      }
+      const minNode = Math.min(...scc);
+      if (minNode < bestMin) {
+        bestMin = minNode;
+        bestSCC = scc;
+      }
+    }
+
+    if (!bestSCC) break;
+
+    s = bestMin;
+    const sccSet = new Set(bestSCC);
+
+    // Build the subgraph adjacency restricted to this SCC
+    const subAdj = new Map();
+    for (const v of bestSCC) {
+      const neighbors = [];
+      for (const w of adj.get(v) || []) {
+        if (sccSet.has(w)) neighbors.push(w);
+      }
+      subAdj.set(v, neighbors);
+    }
+
+    // Johnson's circuit-finding on this SCC with start node s
+    const blocked = new Set();
+    const blockedMap = new Map(); // node -> Set of nodes
+    for (const v of bestSCC) {
+      blockedMap.set(v, new Set());
+    }
+
+    function unblock(u) {
+      blocked.delete(u);
+      const bSet = blockedMap.get(u);
+      if (bSet) {
+        for (const w of bSet) {
+          if (blocked.has(w)) unblock(w);
+        }
+        bSet.clear();
+      }
+    }
+
+    function circuit(v) {
+      let foundCycle = false;
+      blocked.add(v);
+
+      for (const w of subAdj.get(v) || []) {
+        if (cycleCount >= maxCycles) break;
+
+        if (w === s) {
+          cycleCount++;
+          foundCycle = true;
+        } else if (!blocked.has(w)) {
+          if (circuit(w)) foundCycle = true;
+        }
+
+        if (cycleCount >= maxCycles) break;
+      }
+
+      if (foundCycle) {
+        unblock(v);
+      } else {
+        for (const w of subAdj.get(v) || []) {
+          const bSet = blockedMap.get(w);
+          if (bSet) bSet.add(v);
+        }
+      }
+
+      return foundCycle;
+    }
+
+    circuit(s);
+    s++;
+  }
+
+  return {
+    count: cycleCount,
+    capped: Number.isFinite(maxCycles) && cycleCount >= maxCycles
+  };
+};
+
+/**
+ * Counts the number of elementary cycles (simple cycles) in a directed graph
+ * using Johnson's algorithm (1975).
+ * @param {Array<Object>} list List of relationships in form of {from: <string>, to: <string> }
+ * @param {Object} [options]
+ * @param {Number} [options.maxCycles=Infinity] Maximum cycles to count before returning early. When set, the returned count is capped at this value.
+ * @returns {Number} The number of feedback loops (elementary cycles)
+ */
+export const countLoops = (list, options = {}) => {
+  return countLoopsInternal(list, options).count;
+};
+
+const getFeedbackLoopCountLimit = (requirements) => {
+  const hasMinFeedback = Number.isFinite(requirements.minFeedback);
+  const hasMaxFeedback = Number.isFinite(requirements.maxFeedback);
+
+  if (!hasMinFeedback && !hasMaxFeedback) {
+    return null;
+  }
+
+  if (hasMaxFeedback) {
+    return Math.max(requirements.maxFeedback + 1, hasMinFeedback ? requirements.minFeedback : 0);
+  }
+
+  return requirements.minFeedback;
 };
 
 /**
@@ -281,8 +463,14 @@ export const makeRelationshipsFromStocks = function(variables) {
 export const evaluate = function(generatedResponse, requirements) {
   let fromAI = (generatedResponse.model?.relationships || []).concat(makeRelationshipsFromStocks(generatedResponse.model?.variables));
   const vars = extractVariables(fromAI);
-  const loops = countLoops(fromAI);
+  const feedbackLoopCountLimit = getFeedbackLoopCountLimit(requirements);
+  const loopCount = feedbackLoopCountLimit === null
+    ? { count: 0, capped: false }
+    : countLoopsInternal(fromAI, { maxCycles: feedbackLoopCountLimit });
+  const loops = loopCount.count;
   const fails = [];
+  const hasMinFeedback = Number.isFinite(requirements.minFeedback);
+  const hasMaxFeedback = Number.isFinite(requirements.maxFeedback);
 
   if (requirements.variables) {
     const lowerCaseVariables = requirements.variables.map((v) => { return v.toLowerCase() });
@@ -311,17 +499,19 @@ export const evaluate = function(generatedResponse, requirements) {
     });
   }
 
-  if (requirements.minFeedback && loops < requirements.minFeedback) {
+  if (hasMinFeedback && loops < requirements.minFeedback) {
     fails.push({
       type: "Too few feedback loops",
       details: `Only ${loops} feedback loops found`
     });
   }
 
-  if (requirements.maxFeedback && loops > requirements.maxFeedback) {
+  if (hasMaxFeedback && loops > requirements.maxFeedback) {
     fails.push({
       type: "Too many feedback loops",
-      details: `Found ${loops} feedback loops`
+      details: loopCount.capped
+        ? `Found at least ${loops} feedback loops`
+        : `Found ${loops} feedback loops`
     });
   }
 
