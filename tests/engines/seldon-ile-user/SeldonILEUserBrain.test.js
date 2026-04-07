@@ -446,5 +446,96 @@ describe('SeldonILEUserBrain', () => {
       expect(result.messages[result.messages.length - 1].content).toBe(userPrompt);
       expect(result.messages[result.messages.length - 1].role).toBe('user');
     });
+
+    it('should include current run name in separate message when provided', () => {
+      const brainWithRunName = new SeldonILEUserBrain({
+        openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
+        googleKey: 'test-google-key',
+        feedbackContent: [{ loop: 'Test Loop', polarity: 'reinforcing' }],
+        currentRunName: 'Baseline Scenario'
+      });
+
+      const lastModel = {
+        variables: [{ name: 'Test', type: 'variable', equation: '10' }]
+      };
+
+      const result = brainWithRunName.setupLLMParameters('Test prompt', lastModel);
+
+      const runNameMessage = result.messages.find(m =>
+        m.role === 'user' && m.content.includes('Baseline Scenario')
+      );
+      expect(runNameMessage).toBeDefined();
+      expect(runNameMessage.content).toContain('simulation run');
+      expect(runNameMessage.content).toContain('Baseline Scenario');
+    });
+
+    it('should not include run name message when currentRunName is not provided', () => {
+      const brainWithoutRunName = new SeldonILEUserBrain({
+        openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
+        googleKey: 'test-google-key',
+        feedbackContent: [{ loop: 'Test Loop', polarity: 'reinforcing' }]
+      });
+
+      const lastModel = {
+        variables: [{ name: 'Test', type: 'variable', equation: '10' }]
+      };
+
+      const result = brainWithoutRunName.setupLLMParameters('Test prompt', lastModel);
+
+      const runNameMessage = result.messages.find(m =>
+        m.role === 'user' && m.content.includes('simulation run the user is working with is called')
+      );
+      expect(runNameMessage).toBeUndefined();
+    });
+
+    it('should not include run name message when currentRunName is empty string', () => {
+      const brainWithEmptyRunName = new SeldonILEUserBrain({
+        openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
+        googleKey: 'test-google-key',
+        feedbackContent: [{ loop: 'Test Loop', polarity: 'reinforcing' }],
+        currentRunName: ''
+      });
+
+      const lastModel = {
+        variables: [{ name: 'Test', type: 'variable', equation: '10' }]
+      };
+
+      const result = brainWithEmptyRunName.setupLLMParameters('Test prompt', lastModel);
+
+      const runNameMessage = result.messages.find(m =>
+        m.role === 'user' && m.content.includes('simulation run the user is working with is called')
+      );
+      expect(runNameMessage).toBeUndefined();
+    });
+
+    it('should place run name message before feedback message', () => {
+      const brainWithRunName = new SeldonILEUserBrain({
+        openAIKey: 'test-key',
+        anthropicKey: 'test-claude-key',
+        googleKey: 'test-google-key',
+        feedbackContent: [{ loop: 'Test Loop', polarity: 'reinforcing' }],
+        currentRunName: 'High Growth Scenario'
+      });
+
+      const lastModel = {
+        variables: [{ name: 'Test', type: 'variable', equation: '10' }]
+      };
+
+      const result = brainWithRunName.setupLLMParameters('Test prompt', lastModel);
+
+      const runNameIndex = result.messages.findIndex(m =>
+        m.role === 'user' && m.content.includes('High Growth Scenario')
+      );
+      const feedbackIndex = result.messages.findIndex(m =>
+        m.role === 'user' && m.content.includes('feedback loops in the model')
+      );
+
+      expect(runNameIndex).toBeGreaterThan(-1);
+      expect(feedbackIndex).toBeGreaterThan(-1);
+      expect(runNameIndex).toBeLessThan(feedbackIndex);
+    });
   });
 });

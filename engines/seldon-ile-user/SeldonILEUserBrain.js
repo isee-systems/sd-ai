@@ -75,6 +75,7 @@ A dominant feedback process is one that drives more than 50% of the model's beha
         googleKey: null,
         behaviorContent: null,
         feedbackContent: null,
+        currentRunName: null,
         underlyingModel: LLMWrapper.NON_BUILD_DEFAULT_MODEL,
         systemPrompt: SeldonILEUserBrain.DEFAULT_SYSTEM_PROMPT,
         structurePrompt: SeldonILEUserBrain.DEFAULT_STRUCTURE_PROMPT,
@@ -177,8 +178,18 @@ A dominant feedback process is one that drives more than 50% of the model's beha
             if (this.#data.behaviorPrompt && this.#data.behaviorContent)
                 messages.push({ role: "user", content: this.#data.behaviorPrompt.replaceAll("{behaviorContent}", this.#data.behaviorContent) });
 
-            if (this.#isValidFeedbackContent())
-                messages.push({ role: "user", content: this.#data.feedbackPrompt.replaceAll("{feedbackContent}", JSON.stringify(this.#data.feedbackContent, null, 2)) });
+            if (this.#data.currentRunName) {
+                messages.push({
+                    role: "user",
+                    content: `The current simulation run the user is working with is called: "${this.#data.currentRunName}"`
+                });
+            }
+
+            if (this.#isValidFeedbackContent()) {
+                const feedbackPromptContent = this.#data.feedbackPrompt
+                    .replaceAll("{feedbackContent}", JSON.stringify(this.#data.feedbackContent, null, 2));
+                messages.push({ role: "user", content: feedbackPromptContent });
+            }
         } else {
 
             if (this.#data.behaviorPrompt && this.#data.behaviorContent)

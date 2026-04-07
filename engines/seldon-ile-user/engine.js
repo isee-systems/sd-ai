@@ -60,10 +60,18 @@ class Engine {
         },{
             name: "feedbackContent",
             type: "feedbackJSON",
+            supportsComparative: true,
             required: false,
             uiElement: "hidden",
             label: "JSON Description of feedback loops",
             description: "A JSON object representing all of the feedback loops in the model"
+        },{
+            name: "currentRunName",
+            type: "string",
+            required: false,
+            uiElement: "hidden",
+            label: "Current Run Name",
+            description: "The name of the current simulation run"
         }];
     }
 
