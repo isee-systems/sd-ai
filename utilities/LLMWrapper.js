@@ -51,6 +51,7 @@ export class ModelCapabilities {
 };
 
 export class LLMWrapper {
+
   #openAIKey;
   #googleKey;
   #anthropicKey;
@@ -120,6 +121,8 @@ export class LLMWrapper {
   }
 
   static MODELS = [
+      {label: "GPT-5.4", value: 'gpt-5.4 medium'},
+      {label: "GPT-5.3", value: 'gpt-5.3 medium'},
       {label: "GPT-5.2", value: 'gpt-5.2 medium'},
       {label: "GPT-5.1", value: 'gpt-5.1 medium'},
       {label: "GPT-5", value: 'gpt-5'},
@@ -131,6 +134,8 @@ export class LLMWrapper {
       {label: "GPT-4o", value: 'gpt-4o'},
       {label: "GPT-4o-mini", value: 'gpt-4o-mini'},
       {label: "Gemini 3.1-pro-preview", value: 'gemini-3.1-pro-preview'},
+      {label: "Gemini 3-flash-preview", value: 'gemini-3-flash-preview'},
+      {label: "Gemini 3-flash-preview high", value: 'gemini-3-flash-preview high'},
       {label: "Gemini 3-flash-preview medium", value: 'gemini-3-flash-preview medium'},
       {label: "Gemini 3-flash-preview low", value: 'gemini-3-flash-preview low'},
       {label: "Gemini 3-flash-preview minimal", value: 'gemini-3-flash-preview minimal'},
@@ -414,12 +419,14 @@ export class LLMWrapper {
       return Model;
   }
 
+    static DEFAULT_TEMPERATURE = 0;
+
   /**
    * Gets the LLM parameters based on model capabilities
-   * @param {number} defaultTemperature - The default temperature to use (default: 0)
+   * @param {number} defaultTemperature - The default temperature to use (default: LLMWrapper.DEFAULT_TEMPERATURE)
    * @returns {{underlyingModel: string, systemRole: string, temperature: number|undefined, reasoningEffort: string|undefined}}
    */
-  getLLMParameters(defaultTemperature = 0) {
+  getLLMParameters(defaultTemperature = LLMWrapper.DEFAULT_TEMPERATURE) {
     let underlyingModel = this.model.name;
     let reasoningEffort = undefined;
 
@@ -456,6 +463,10 @@ export class LLMWrapper {
       temperature = 1;
     }
     if (!this.model.hasTemperature) {
+      temperature = undefined;
+    }
+    // Gemini-3 models really don't want you messing with temperature!
+    if (underlyingModel.startsWith('gemini-3')) {
       temperature = undefined;
     }
 

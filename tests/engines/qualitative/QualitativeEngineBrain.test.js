@@ -244,7 +244,6 @@ describe('QualitativeEngineBrain', () => {
       const expectedReasoningEffort = parts.length > 1 ? parts[1] : undefined;
 
       expect(result.model).toBe(expectedModel);
-      expect(result.temperature).toBe(0);
       expect(result.reasoningEffort).toBe(expectedReasoningEffort);
       expect(result.responseFormat).toBeDefined();
       expect(result.messages).toBeInstanceOf(Array);
