@@ -145,14 +145,9 @@ export class LLMWrapper {
       {label: "Claude Opus 4.6", value: 'claude-opus-4-6'},
       {label: "Claude Sonnet 4.6", value: 'claude-sonnet-4-6'},
       {label: "Claude Haiku 4.5", value: 'claude-haiku-4-5'},
-      {label: "Claude Opus 4.5", value: 'claude-sonnet-4-5'},
-      {label: "Claude Sonnet 4.5", value: 'claude-opus-4-5'},
-      {label: "Claude Opus 4.1", value: 'claude-opus-4-1-20250805'},
-      {label: "Claude Sonnet 4", value: 'claude-sonnet-4-20250514'},
+      {label: "Claude Opus 4.5", value: 'claude-opus-4-5'},
+      {label: "Claude Sonnet 4.5", value: 'claude-sonnet-4-5'},
       {label: "o1", value: 'o1'},
-      {label: "o3-mini low", value: 'o3-mini low'},
-      {label: "o3-mini medium", value: 'o3-mini medium'},
-      {label: "o3-mini high", value: 'o3-mini high'},
       {label: "o3", value: 'o3'},
       {label: "o4-mini", value: 'o4-mini'}
   ];
