@@ -116,51 +116,81 @@ describe('SDJsonToXMILE', () => {
             expect(xmile).toContain('<eqn>population * 0.1</eqn>');
         });
 
-        test('should NOT include non_negative for flows with "net" in name', () => {
-            const testCases = [
-                'net profit',
-                'Net Revenue',
-                'profit net',
-                'net',
-                'net_income'
-            ];
+        test('should include non_negative when uniflow is true', () => {
+            const sdJson = {
+                variables: [
+                    { name: 'births', type: 'flow', equation: 'population * 0.1', uniflow: true }
+                ],
+                relationships: []
+            };
 
-            testCases.forEach(flowName => {
-                const sdJson = {
-                    variables: [
-                        { name: flowName, type: 'flow', equation: '100' }
-                    ],
-                    relationships: []
-                };
+            const xmile = SDJsonToXMILE(sdJson);
 
-                const xmile = SDJsonToXMILE(sdJson);
-                const flowSection = xmile.substring(
-                    xmile.indexOf(`<flow name=`),
-                    xmile.indexOf('</flow>') + 7
-                );
-
-                expect(flowSection).not.toContain('<non_negative/>');
-            });
+            expect(xmile).toContain('<flow name="births">');
+            expect(xmile).toContain('<non_negative/>');
         });
 
-        test('should include non_negative for flows where "net" is part of another word', () => {
-            const testCases = [
-                'internet',
-                'magnet',
-                'cabinet'
-            ];
+        test('should include non_negative when uniflow is undefined (backward compatibility)', () => {
+            const sdJson = {
+                variables: [
+                    { name: 'production', type: 'flow', equation: '50' }
+                ],
+                relationships: []
+            };
 
-            testCases.forEach(flowName => {
-                const sdJson = {
-                    variables: [
-                        { name: flowName, type: 'flow', equation: '100' }
-                    ],
-                    relationships: []
-                };
+            const xmile = SDJsonToXMILE(sdJson);
 
-                const xmile = SDJsonToXMILE(sdJson);
-                expect(xmile).toContain('<non_negative/>');
-            });
+            expect(xmile).toContain('<non_negative/>');
+        });
+
+        test('should NOT include non_negative when uniflow is false', () => {
+            const sdJson = {
+                variables: [
+                    { name: 'net change', type: 'flow', equation: 'inflow - outflow', uniflow: false }
+                ],
+                relationships: []
+            };
+
+            const xmile = SDJsonToXMILE(sdJson);
+            const flowSection = xmile.substring(
+                xmile.indexOf(`<flow name=`),
+                xmile.indexOf('</flow>') + 7
+            );
+
+            expect(flowSection).not.toContain('<non_negative/>');
+        });
+
+        test('should handle multiple flows with different uniflow settings', () => {
+            const sdJson = {
+                variables: [
+                    { name: 'births', type: 'flow', equation: '10', uniflow: true },
+                    { name: 'deaths', type: 'flow', equation: '5', uniflow: true },
+                    { name: 'net migration', type: 'flow', equation: 'immigrants - emigrants', uniflow: false }
+                ],
+                relationships: []
+            };
+
+            const xmile = SDJsonToXMILE(sdJson);
+
+            // births and deaths should be non-negative
+            const birthsSection = xmile.substring(
+                xmile.indexOf('<flow name="births">'),
+                xmile.indexOf('</flow>', xmile.indexOf('<flow name="births">'))
+            );
+            expect(birthsSection).toContain('<non_negative/>');
+
+            const deathsSection = xmile.substring(
+                xmile.indexOf('<flow name="deaths">'),
+                xmile.indexOf('</flow>', xmile.indexOf('<flow name="deaths">'))
+            );
+            expect(deathsSection).toContain('<non_negative/>');
+
+            // net migration should NOT be non-negative
+            const migrationSection = xmile.substring(
+                xmile.indexOf('<flow name="net_migration">'),
+                xmile.indexOf('</flow>', xmile.indexOf('<flow name="net_migration">'))
+            );
+            expect(migrationSection).not.toContain('<non_negative/>');
         });
 
         test('should generate NAN equation for flows without equations', () => {

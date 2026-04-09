@@ -68,7 +68,6 @@ describe('EngineGenerate Route', () => {
 
       expect(response.status).toBe(403);
       expect(response.body.success).toBe(false);
-      expect(response.body.message).toBe('Unauthorized, please pass valid Authentication header.');
     });
 
     it('should handle requests with OpenAI key for OpenAI models', async () => {

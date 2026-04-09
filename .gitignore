@@ -75,8 +75,9 @@ htmlcov/
 .coverage.*
 *.cover
 
-/engines/causal-chains/causal-chains
 
 # Test and debug files
 test-*.js
 debug-*.js
+# Third-party binaries
+/third-party/causal-chains/causal-chains

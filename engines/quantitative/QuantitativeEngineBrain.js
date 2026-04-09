@@ -1,6 +1,7 @@
 import projectUtils from '../../utilities/utils.js'
 import { LLMWrapper } from '../../utilities/LLMWrapper.js'
 import { marked } from 'marked';
+import logger from '../../utilities/logger.js';
 
 class ResponseFormatError extends Error {
     constructor(message) {
@@ -104,9 +105,18 @@ CRITICAL STOCK-FLOW CONSTRAINT:
 
 STEP 4 - WRITE EQUATIONS:
 Provide equations for every variable:
-- Write all equations in XMILE format, meaning variable names NEVER have spaces and ALWAYS use underscores
+- CRITICAL XMILE NAMING RULE: When referencing variables in equations, you MUST replace all spaces with underscores
+- Example: If a variable is named "birth rate", reference it in equations as "birth_rate"
+- Example: If a variable is named "total population", reference it in equations as "total_population"
+- This is the XMILE standard and is NON-NEGOTIABLE - equations with spaces in variable names will FAIL
 - CONSTANT HANDLING: NEVER embed numerical constants directly in equations with other variables. ALWAYS create separate named variables for all constants.
 - Every variable referenced in an equation MUST have its own equation, type, and appear in the relationships list
+- UNIFLOW CONSTRAINT FOR FLOWS:
+  * Mark a flow as uniflow=true when it represents a one-directional process that should never be negative
+  * When uniflow=true, if the flow equation produces a negative value during simulation, it will be automatically constrained to zero
+  * Common uniflow=true examples: births, deaths, purchases, production, hiring, shipments
+  * Use uniflow=false for bidirectional flows that can legitimately go negative: net migration, balance adjustments, corrections
+  * Setting uniflow correctly prevents physically impossible negative flows (e.g., negative births) while allowing valid negative flows
 - GRAPHICAL FUNCTION BEST PRACTICES:
   * For all non-time based graphical functions: Design the function so that normal input produces normal output and include the point (1, 1) in your graphical function to ensure that when the input variable equals 1, the output equals 1
   * This normalization principle allows the function to express deviations from normal behavior in both directions
@@ -254,12 +264,14 @@ Here is a complete example of a properly structured modular model (Lynx-Hare pre
         {
             "name": "Hares.hare births",
             "type": "flow",
+            "uniflow": true,
             "equation": "Hares*hare_birth_fraction",
             "units": "hares/year"
         },
         {
             "name": "Hares.hare deaths",
             "type": "flow",
+            "uniflow": true,
             "equation": "Lynx*hares_killed_per_lynx",
             "units": "hares/year"
         },
@@ -312,12 +324,14 @@ Here is a complete example of a properly structured modular model (Lynx-Hare pre
         {
             "name": "Lynx.lynx births",
             "type": "flow",
+            "uniflow": true,
             "equation": "Lynx*lynx_birth_fraction",
             "units": "lynx/year"
         },
         {
             "name": "Lynx.lynx deaths",
             "type": "flow",
+            "uniflow": true,
             "equation": "Lynx*lynx_death_fraction",
             "units": "lynx/year"
         },
@@ -818,6 +832,76 @@ NEVER identify feedback loops for the user in explanatory text. Let users discov
         response.modules = newModules;
     }
 
+    #convertEquationsToXMILEFormat(response) {
+        // CRITICAL: Ensure all variable names in equations use underscores instead of spaces
+        // This follows XMILE conventions where variable references must use underscores
+
+        // Build a mapping of all variable names (with spaces) to their XMILE equivalents (with underscores)
+        const variableNameMap = new Map();
+        response.variables.forEach((v) => {
+            if (v.name && v.name.includes(' ')) {
+                const xmileName = projectUtils.xmileName(v.name);
+                variableNameMap.set(v.name, xmileName);
+            }
+        });
+
+        // Process each variable's equation to replace variable names with XMILE format
+        response.variables.forEach((v) => {
+            // Process main equation field
+            if (v.equation && typeof v.equation === 'string') {
+                const originalEquation = v.equation;
+                v.equation = this.#replaceVariableNamesInEquation(v.equation, variableNameMap);
+                if (originalEquation !== v.equation) {
+                    logger.debug(`[XMILE Conversion] Variable "${v.name}": "${originalEquation}" → "${v.equation}"`);
+                }
+            }
+
+            // Process arrayEquations if present
+            if (v.arrayEquations && Array.isArray(v.arrayEquations)) {
+                v.arrayEquations.forEach((eq) => {
+                    if (eq.equation && typeof eq.equation === 'string') {
+                        const originalEquation = eq.equation;
+                        eq.equation = this.#replaceVariableNamesInEquation(eq.equation, variableNameMap);
+                        if (originalEquation !== eq.equation) {
+                            const elementsStr = Array.isArray(eq.forElements) ? eq.forElements.join(',') : eq.forElements;
+                            logger.debug(`[XMILE Conversion] Variable "${v.name}"[${elementsStr}]: "${originalEquation}" → "${eq.equation}"`);
+                        }
+                    }
+                });
+            }
+        });
+    }
+
+    #replaceVariableNamesInEquation(equation, variableNameMap) {
+        // Replace variable names that have spaces with their XMILE underscore equivalents
+        // We need to be careful to do whole-word matching to avoid replacing parts of other names
+
+        let result = equation;
+
+        // Sort variable names by length (longest first) to avoid partial replacements
+        const sortedNames = Array.from(variableNameMap.keys()).sort((a, b) => b.length - a.length);
+
+        for (const varName of sortedNames) {
+            const xmileName = variableNameMap.get(varName);
+
+            // Create a regex that matches the variable name as a whole word
+            // This ensures we don't replace parts of other variable names
+            // We need to escape special regex characters in the variable name
+            const escapedVarName = varName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+            // Match the variable name with word boundaries or specific delimiters
+            // Word boundaries work for alphanumeric, but we also need to handle operators, parentheses, brackets, commas
+            const regex = new RegExp(
+                '(?<=[\\s\\(\\[,+\\-*/^=<>]|^)' + escapedVarName + '(?=[\\s\\)\\],+\\-*/^=<>]|$)',
+                'g'
+            );
+
+            result = result.replace(regex, xmileName);
+        }
+
+        return result;
+    }
+
     async processResponse(originalResponse) {
         originalResponse.variables = originalResponse.variables || [];
 
@@ -835,6 +919,9 @@ NEVER identify feedback loops for the user in explanatory text. Let users discov
 
         // Fix flow types and graphical function equations
         this.#fixFlowTypesAndGraphicalFunctions(originalResponse);
+
+        // Convert all equations to XMILE format (spaces to underscores in variable names)
+        this.#convertEquationsToXMILEFormat(originalResponse);
 
         // Sync specs.modules array with actual variable usage
         this.#processAndCleanModules(originalResponse);

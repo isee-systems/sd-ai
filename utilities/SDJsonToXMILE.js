@@ -7,6 +7,33 @@
 import utils from './utils.js';
 
 /**
+ * Converts safe division operator (//) to regular division (/) in all equations
+ * Modifies the model in place
+ * @param {Object} model - The SD-JSON model
+ */
+function convertSafeDivisionInModel(model) {
+    if (!model.variables || !Array.isArray(model.variables)) {
+        return;
+    }
+
+    model.variables.forEach(variable => {
+        // Convert main equation field
+        if (variable.equation && typeof variable.equation === 'string' && variable.equation.includes('//')) {
+            variable.equation = variable.equation.replace(/\/\//g, '/');
+        }
+
+        // Convert arrayEquations if present
+        if (variable.arrayEquations && Array.isArray(variable.arrayEquations)) {
+            variable.arrayEquations.forEach(eq => {
+                if (eq.equation && typeof eq.equation === 'string' && eq.equation.includes('//')) {
+                    eq.equation = eq.equation.replace(/\/\//g, '/');
+                }
+            });
+        }
+    });
+}
+
+/**
  * Converts an SD-JSON model to XMILE XML format
  * @param {Object} sdJson - The SD-JSON model object (can include the 'model' wrapper or be the model directly)
  * @param {Object} options - Optional configuration
@@ -14,6 +41,7 @@ import utils from './utils.js';
  * @param {string} options.vendor - Vendor name (default: "BEAMS Initiative")
  * @param {string} options.product - Product name (default: "sd-ai")
  * @param {string} options.version - Product version (default: "1.0")
+ * @param {boolean} options.convertSafeDivision - Convert // (safe division) to / (default: true)
  * @returns {string} XMILE XML string
  */
 function SDJsonToXMILE(sdJson, options = {}) {
@@ -32,8 +60,14 @@ function SDJsonToXMILE(sdJson, options = {}) {
         modelName = 'SD Model',
         vendor = 'BEAMS Initiative',
         product = 'sd-ai',
-        version = '1.0'
+        version = '1.0',
+        convertSafeDivision = true
     } = options;
+
+    // Convert safe division operator if enabled
+    if (convertSafeDivision) {
+        convertSafeDivisionInModel(model);
+    }
 
     // Build XMILE document
     const lines = [];
@@ -483,39 +517,6 @@ function buildStock(stock, model, currentModule = '') {
 }
 
 /**
- * Check if a flow name contains "net" as a standalone word or at the beginning
- * Examples: "net profit", "Net Revenue", "profit net" -> true
- *          "internet", "magnet", "cabinet" -> false
- */
-function isNetFlow(flowName) {
-    if (!flowName) return false;
-
-    const normalized = flowName.toLowerCase();
-
-    // Check if starts with "net " or "net_"
-    if (/^net[\s_]/.test(normalized)) {
-        return true;
-    }
-
-    // Check if contains " net " or "_net_" (standalone word in middle)
-    if (/[\s_]net[\s_]/.test(normalized)) {
-        return true;
-    }
-
-    // Check if ends with " net" or "_net"
-    if (/[\s_]net$/.test(normalized)) {
-        return true;
-    }
-
-    // Check if the entire name is just "net"
-    if (normalized === 'net') {
-        return true;
-    }
-
-    return false;
-}
-
-/**
  * Build flow variable
  */
 function buildFlow(flow, model, currentModule = '') {
@@ -526,8 +527,10 @@ function buildFlow(flow, model, currentModule = '') {
     // Get access attribute (for module inputs/outputs)
     const accessAttr = getAccessAttribute(flow, model);
 
-    // Flows are non-negative unless they contain "net" as a standalone word
-    const nonNegative = !isNetFlow(localName);
+    // Determine if flow is non-negative based on uniflow attribute
+    // If uniflow is explicitly set, use that value
+    // If uniflow is not set, default to true (non-negative) for backward compatibility
+    const nonNegative = flow.uniflow !== false;
 
     lines.push(`      <flow name="${escapeNameAttribute(xmileName)}"${accessAttr}>`);
 
