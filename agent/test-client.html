@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SD-AI Agent WebSocket Test Client</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: #f5f5f5;
+      padding: 20px;
+      line-height: 1.6;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    header {
+      background: #2c3e50;
+      color: white;
+      padding: 20px;
+      border-radius: 8px 8px 0 0;
+    }
+
+    h1 {
+      font-size: 24px;
+      margin-bottom: 10px;
+    }
+
+    .status {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .status.connected {
+      background: #27ae60;
+      color: white;
+    }
+
+    .status.disconnected {
+      background: #e74c3c;
+      color: white;
+    }
+
+    .main-content {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 20px;
+      padding: 20px;
+    }
+
+    .left-column {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .right-column {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .step-number {
+      display: inline-block;
+      background: #3498db;
+      color: white;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      text-align: center;
+      line-height: 28px;
+      font-weight: bold;
+      margin-right: 10px;
+      font-size: 16px;
+    }
+
+    .panel h2 {
+      display: flex;
+      align-items: center;
+    }
+
+    .panel {
+      background: #f8f9fa;
+      border-radius: 4px;
+      padding: 15px;
+    }
+
+    .panel h2 {
+      font-size: 18px;
+      margin-bottom: 15px;
+      color: #2c3e50;
+    }
+
+    .form-group {
+      margin-bottom: 15px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: 600;
+      font-size: 14px;
+      color: #34495e;
+    }
+
+    input, select, textarea {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+      font-family: inherit;
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 80px;
+      font-family: 'Monaco', 'Menlo', monospace;
+    }
+
+    button {
+      background: #3498db;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      transition: background 0.2s;
+    }
+
+    button:hover {
+      background: #2980b9;
+    }
+
+    button:disabled {
+      background: #95a5a6;
+      cursor: not-allowed;
+    }
+
+    button.secondary {
+      background: #95a5a6;
+    }
+
+    button.secondary:hover {
+      background: #7f8c8d;
+    }
+
+    .button-group {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+
+    #log {
+      background: #1e1e1e;
+      color: #d4d4d4;
+      padding: 15px;
+      border-radius: 4px;
+      height: 500px;
+      overflow-y: auto;
+      font-family: 'Monaco', 'Menlo', monospace;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .log-entry {
+      margin-bottom: 8px;
+      padding: 4px;
+      border-left: 3px solid transparent;
+    }
+
+    .log-entry.sent {
+      border-left-color: #3498db;
+      background: rgba(52, 152, 219, 0.1);
+    }
+
+    .log-entry.received {
+      border-left-color: #27ae60;
+      background: rgba(39, 174, 96, 0.1);
+    }
+
+    .log-entry.error {
+      border-left-color: #e74c3c;
+      background: rgba(231, 76, 60, 0.1);
+    }
+
+    .log-entry .timestamp {
+      color: #7f8c8d;
+      margin-right: 10px;
+    }
+
+    .log-entry .type {
+      color: #f39c12;
+      margin-right: 10px;
+      font-weight: 600;
+    }
+
+    .code-block {
+      background: #2d2d2d;
+      padding: 10px;
+      border-radius: 4px;
+      overflow-x: auto;
+      margin-top: 5px;
+    }
+
+    .info-box {
+      background: #e8f4f8;
+      border-left: 4px solid #3498db;
+      padding: 12px;
+      margin-bottom: 15px;
+      font-size: 13px;
+    }
+
+    .full-width {
+      grid-column: 1 / -1;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>SD-AI Agent WebSocket Test Client</h1>
+      <p>Test and document the WebSocket agent server implementation</p>
+      <p style="margin-top: 10px;">Status: <span class="status disconnected" id="status">Disconnected</span></p>
+    </header>
+
+    <div class="main-content">
+      <div class="left-column">
+        <!-- Step 1: Connection Panel -->
+        <div class="panel">
+          <h2><span class="step-number">1</span>Connection</h2>
+          <div class="form-group">
+            <label for="wsUrl">WebSocket URL</label>
+            <input type="text" id="wsUrl" value="ws://localhost:3000/api/v1/agent" />
+          </div>
+          <div class="button-group">
+            <button id="connectBtn">Connect</button>
+            <button id="disconnectBtn" class="secondary" disabled>Disconnect</button>
+          </div>
+        </div>
+
+        <!-- Step 2: Session Panel -->
+        <div class="panel">
+          <h2><span class="step-number">2</span>Session Initialization</h2>
+          <div class="form-group">
+            <label for="agentType">Agent Type</label>
+            <select id="agentType">
+              <option value="ganos-lal">Ganos Lal (Helpful Mentor)</option>
+              <option value="myrddin">Myrddin (Expert Modeler)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="modelType">Model Type</label>
+            <select id="modelType">
+              <option value="cld">CLD (Causal Loop Diagram)</option>
+              <option value="sfd">SFD (Stock Flow Diagram)</option>
+            </select>
+          </div>
+          <button id="initBtn" disabled>Initialize Session</button>
+        </div>
+
+        <!-- Step 3: User Message Panel -->
+        <div class="panel">
+          <h2><span class="step-number">3</span>Send User Message</h2>
+          <div class="form-group">
+            <label for="userMessage">Message</label>
+            <textarea id="userMessage" placeholder="Build me a simple population model..."></textarea>
+          </div>
+          <div class="button-group">
+            <button type="button" id="sendBtn" disabled>Send Message</button>
+            <button type="button" id="stopBtn" class="secondary" disabled>Stop Agent</button>
+          </div>
+        </div>
+
+        <!-- Step 4: Message Log -->
+        <div class="panel">
+          <h2>Message Log</h2>
+          <div id="log"></div>
+          <button id="clearLogBtn" class="secondary" style="margin-top: 10px;">Clear Log</button>
+        </div>
+      </div>
+
+      <div class="right-column">
+        <!-- Model Data Panel -->
+        <div class="panel">
+          <h2>Model Data</h2>
+          <div class="info-box">
+            This is the model returned by get_current_model tool
+          </div>
+          <div class="form-group">
+            <label for="modelData">Model JSON</label>
+            <textarea id="modelData" rows="20">{
+  "variables": [
+    {"name": "Population", "type": "stock", "equation": "1000"},
+    {"name": "Births", "type": "flow", "equation": "Population * 0.02"}
+  ],
+  "title": "Test Model"
+}</textarea>
+          </div>
+          <button id="updateModelBtn" disabled>Update Model</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let ws = null;
+    let sessionId = null;
+    let pendingToolCalls = new Map();
+
+    const elements = {
+      status: document.getElementById('status'),
+      connectBtn: document.getElementById('connectBtn'),
+      disconnectBtn: document.getElementById('disconnectBtn'),
+      initBtn: document.getElementById('initBtn'),
+      sendBtn: document.getElementById('sendBtn'),
+      stopBtn: document.getElementById('stopBtn'),
+      updateModelBtn: document.getElementById('updateModelBtn'),
+      wsUrl: document.getElementById('wsUrl'),
+      agentType: document.getElementById('agentType'),
+      modelType: document.getElementById('modelType'),
+      userMessage: document.getElementById('userMessage'),
+      modelData: document.getElementById('modelData'),
+      log: document.getElementById('log'),
+      clearLogBtn: document.getElementById('clearLogBtn')
+    };
+
+    // Logging functions
+    function log(message, type = 'info') {
+      const entry = document.createElement('div');
+      entry.className = `log-entry ${type}`;
+
+      const timestamp = new Date().toLocaleTimeString();
+      const typeLabel = type.toUpperCase();
+
+      entry.innerHTML = `<span class="timestamp">${timestamp}</span><span class="type">${typeLabel}</span>${message}`;
+
+      elements.log.appendChild(entry);
+      elements.log.scrollTop = elements.log.scrollHeight;
+    }
+
+    function logObject(message, obj, type = 'info') {
+      const entry = document.createElement('div');
+      entry.className = `log-entry ${type}`;
+
+      const timestamp = new Date().toLocaleTimeString();
+      const typeLabel = type.toUpperCase();
+
+      entry.innerHTML = `
+        <span class="timestamp">${timestamp}</span>
+        <span class="type">${typeLabel}</span>
+        ${message}
+        <div class="code-block">${JSON.stringify(obj, null, 2)}</div>
+      `;
+
+      elements.log.appendChild(entry);
+      elements.log.scrollTop = elements.log.scrollHeight;
+    }
+
+    // WebSocket functions
+    function connect() {
+      const url = elements.wsUrl.value;
+      log(`Connecting to ${url}...`);
+
+      ws = new WebSocket(url);
+
+      ws.onopen = () => {
+        log('Connected to WebSocket server', 'received');
+        elements.status.textContent = 'Connected';
+        elements.status.className = 'status connected';
+        elements.connectBtn.disabled = true;
+        elements.disconnectBtn.disabled = false;
+        elements.initBtn.disabled = false;
+      };
+
+      ws.onclose = () => {
+        log('Disconnected from server', 'error');
+        elements.status.textContent = 'Disconnected';
+        elements.status.className = 'status disconnected';
+        elements.connectBtn.disabled = false;
+        elements.disconnectBtn.disabled = true;
+        elements.initBtn.disabled = true;
+        elements.sendBtn.disabled = true;
+        elements.stopBtn.disabled = true;
+        elements.updateModelBtn.disabled = true;
+        sessionId = null;
+      };
+
+      ws.onerror = (error) => {
+        log('WebSocket error occurred', 'error');
+        console.error('WebSocket error:', error);
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data);
+          handleMessage(message);
+        } catch (error) {
+          log('Failed to parse message: ' + error.message, 'error');
+        }
+      };
+    }
+
+    function disconnect() {
+      if (ws) {
+        ws.close();
+        ws = null;
+      }
+    }
+
+    function send(message) {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(message));
+        logObject('Sent message:', message, 'sent');
+      } else {
+        log('Cannot send - not connected', 'error');
+      }
+    }
+
+    // Message handlers
+    function handleMessage(message) {
+      logObject('Received message:', message, 'received');
+
+      switch (message.type) {
+        case 'session_ready':
+          log(`Session ready! Session ID: ${message.sessionId}`);
+          sessionId = message.sessionId;
+          elements.sendBtn.disabled = false;
+          elements.stopBtn.disabled = false;
+          elements.updateModelBtn.disabled = false;
+          break;
+
+        case 'agent_text':
+          log(`Agent: ${message.content}`);
+          break;
+
+        case 'tool_call_initiated':
+          handleToolCallInitiated(message);
+          break;
+
+        case 'tool_call_request':
+          handleToolCallRequest(message);
+          break;
+
+        case 'tool_call_completed':
+          log(`Tool ${message.toolName} completed`);
+          // Check if the tool result contains a model and update the model data
+          if (message.result && !message.isError) {
+            updateModelFromToolResult(message.toolName, message.result);
+          }
+          break;
+
+        case 'agent_complete':
+          log(`Agent complete: ${message.finalMessage || message.status}`);
+          break;
+
+        case 'error':
+          log(`Error: ${message.error} (${message.errorCode})`, 'error');
+          break;
+
+        case 'visualization':
+          log('Received visualization');
+          break;
+
+        default:
+          log(`Unknown message type: ${message.type}`);
+      }
+    }
+
+    function handleToolCallInitiated(message) {
+      const { toolName, arguments: toolArgs } = message;
+      log(`Tool initiated: ${toolName}`);
+
+      // Check if tool arguments contain a model update and display it
+      if (!message.isBuiltIn && toolName === 'update_model' && toolArgs && toolArgs.model) {
+        elements.modelData.value = JSON.stringify(toolArgs.model, null, 2);
+        log('✓ Model data updated from update_model arguments', 'received');
+      }
+
+      // Built-in tools will be handled by the server
+      if (message.isBuiltIn) {
+        if (toolName === 'generate_quantitative_model' || toolName === 'generate_qualitative_model') {
+          log('Built-in model generation tool - will update model data when completed');
+        }
+      }
+    }
+
+    function handleToolCallRequest(message) {
+      const { callId, toolName, arguments: toolArgs } = message;
+      log(`Tool requested: ${toolName}`);
+
+      // Automatically respond to client tool calls with mock data
+      setTimeout(() => {
+        const result = generateMockToolResult(toolName, toolArgs);
+        send({
+          type: 'tool_call_response',
+          sessionId: sessionId,
+          callId: callId,
+          result: result
+        });
+      }, 100);
+    }
+
+    function updateModelFromToolResult(toolName, result) {
+      let model = null;
+
+      // Extract model from different tool result formats
+      try {
+        if (toolName === 'generate_quantitative_model' || toolName === 'generate_qualitative_model') {
+          // These tools return { content: [{ type: 'text', text: JSON.stringify({ model: ..., supportingInfo: ... }) }] }
+          if (result.content && result.content[0] && result.content[0].text) {
+            const parsed = JSON.parse(result.content[0].text);
+            model = parsed.model;
+          }
+        } else if (toolName === 'generate_documentation') {
+          // Documentation engine also returns model
+          if (result.content && result.content[0] && result.content[0].text) {
+            const parsed = JSON.parse(result.content[0].text);
+            model = parsed.model;
+          }
+        } else if (toolName === 'update_model' || toolName === 'get_current_model') {
+          // Client tools that return models directly
+          if (result.model) {
+            model = result.model;
+          }
+        }
+
+        if (model) {
+          elements.modelData.value = JSON.stringify(model, null, 2);
+          log(`✓ Model data updated from ${toolName}`, 'received');
+        }
+      } catch (e) {
+        log(`Warning: Failed to extract model from ${toolName}: ${e.message}`, 'error');
+      }
+    }
+
+    function generateMockToolResult(toolName, toolInput) {
+      let currentModel;
+      try {
+        currentModel = JSON.parse(elements.modelData.value);
+      } catch (e) {
+        currentModel = { variables: [], error: 'Invalid model JSON' };
+      }
+
+      switch (toolName) {
+        case 'get_current_model':
+          return { model: currentModel };
+
+        case 'update_model':
+          // Set/update the model - no distinction between create and update
+          // Always update local display and return the full model
+          if (toolInput && toolInput.model) {
+            elements.modelData.value = JSON.stringify(toolInput.model, null, 2);
+            log('✓ Model set/updated', 'received');
+          }
+          // Return the full model (not incremental changes)
+          const updatedModel = toolInput.model || currentModel;
+          return { success: true, model: updatedModel };
+
+        case 'run_model':
+          // Generate dummy simulation data based on current model
+          const variables = currentModel.variables || [];
+          const timePoints = 20;
+          const series = [];
+
+          for (let t = 0; t <= timePoints; t++) {
+            const point = { time: t };
+            // Add dummy data for each variable in the model
+            variables.forEach(variable => {
+              const varName = variable.name || variable.id || `var_${Math.random()}`;
+              // Generate some variety in the data
+              if (variable.type === 'stock') {
+                point[varName] = 1000 + t * 20 + Math.sin(t / 3) * 50;
+              } else if (variable.type === 'flow') {
+                point[varName] = 20 + Math.cos(t / 4) * 5;
+              } else {
+                point[varName] = 100 + t * 5;
+              }
+            });
+            series.push(point);
+          }
+
+          return {
+            success: true,
+            results: { series }
+          };
+
+        case 'get_feedback_loop_analysis':
+          // Generate dummy feedback loop analysis based on current model
+          const modelVars = currentModel.variables || [];
+          const relationships = currentModel.relationships || [];
+          const loops = [];
+
+          // Create at least one dummy loop
+          if (modelVars.length > 0) {
+            loops.push({
+              name: 'Primary Loop',
+              type: 'reinforcing',
+              variables: modelVars.slice(0, Math.min(3, modelVars.length)).map(v => v.name || v.id),
+              strength: 0.85,
+              polarity: 'R'
+            });
+          }
+
+          if (modelVars.length > 3) {
+            loops.push({
+              name: 'Balancing Loop',
+              type: 'balancing',
+              variables: modelVars.slice(0, Math.min(4, modelVars.length)).map(v => v.name || v.id),
+              strength: 0.65,
+              polarity: 'B'
+            });
+          }
+
+          return { feedbackLoops: loops };
+
+        case 'show_intermediate_model':
+          log('Mock: Intermediate model shown in separate window');
+          return { success: true };
+
+        default:
+          return { success: true, message: `Mock response for ${toolName}` };
+      }
+    }
+
+    // UI Event handlers
+    elements.connectBtn.onclick = connect;
+    elements.disconnectBtn.onclick = disconnect;
+
+    elements.initBtn.onclick = () => {
+      const message = {
+        type: 'initialize_session',
+        sessionId: 'test-' + Date.now(),
+        modelType: elements.modelType.value,
+        model: {},
+        tools: [
+          {
+            name: 'get_current_model',
+            description: 'Get the current model from the client',
+            inputSchema: { type: 'object', properties: {} }
+          },
+          {
+            name: 'update_model',
+            description: 'Update the client model',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                model: { type: 'object' },
+                explanation: { type: 'string' }
+              }
+            }
+          },
+          {
+            name: 'run_model',
+            description: 'Run model simulation',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                timeRange: { type: 'object' }
+              }
+            }
+          },
+          {
+            name: 'get_feedback_loop_analysis',
+            description: 'Get feedback loop analysis',
+            inputSchema: { type: 'object', properties: {} }
+          },
+          {
+            name: 'show_intermediate_model',
+            description: 'Show intermediate model in separate window',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                model: { type: 'object' },
+                displayMode: { type: 'string' }
+              }
+            }
+          }
+        ],
+        sessionConfig: {
+          agentId: elements.agentType.value
+        },
+        context: {
+          description: 'Test client session'
+        }
+      };
+
+      send(message);
+    };
+
+    elements.sendBtn.onclick = () => {
+      const message = {
+        type: 'chat',
+        sessionId: sessionId,
+        message: elements.userMessage.value
+      };
+      send(message);
+      elements.userMessage.value = '';
+    };
+
+    elements.stopBtn.onclick = () => {
+      if (sessionId) {
+        const message = {
+          type: 'disconnect',
+          sessionId: sessionId
+        };
+        send(message);
+        log('Stop signal sent to agent');
+      }
+    };
+
+    elements.updateModelBtn.onclick = () => {
+      try {
+        const model = JSON.parse(elements.modelData.value);
+        const message = {
+          type: 'model_updated_notification',
+          sessionId: sessionId,
+          model: model,
+          changeReason: 'Manual update from test client'
+        };
+        send(message);
+        log('Model updated notification sent');
+      } catch (e) {
+        log('Invalid JSON in mock model: ' + e.message, 'error');
+      }
+    };
+
+    elements.clearLogBtn.onclick = () => {
+      elements.log.innerHTML = '';
+    };
+
+    // Allow Enter to send message (Shift+Enter for newline)
+    elements.userMessage.onkeydown = (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        elements.sendBtn.click();
+      }
+    };
+
+    log('Test client loaded. Click Connect to start.');
+  </script>
+</body>
+</html>
