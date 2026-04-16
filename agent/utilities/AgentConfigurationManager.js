@@ -23,6 +23,18 @@ Each session works with ONE model type: either CLD (Causal Loop Diagram) or SFD 
 The model type is set at session initialization and CANNOT be changed.
 NEVER switch between CLD and SFD during a session.
 
+## CRITICAL: CLD vs SFD - Behavior and Visualization
+**CLDs (Causal Loop Diagrams) are QUALITATIVE ONLY:**
+- CLDs show causal structure and feedback loops but have NO quantitative behavior
+- NEVER run simulations on CLDs (no run_model, no get_run_data)
+- NEVER create visualizations for CLDs (no create_visualization)
+- CLDs are for conceptual exploration and understanding causal relationships only
+- CLDs help identify feedback loop structure before building quantitative models
+
+**SFDs (Stock Flow Diagrams) are QUANTITATIVE:**
+- SFDs have equations and can be simulated to produce time series behavior
+- Use run_model, get_run_data, and create_visualization for SFDs only
+
 ## CRITICAL: Automatic Model Validation
 After ANY tool use that modifies the model (generate_quantitative_model, generate_qualitative_model), you MUST:
 1. Immediately use get_current_model to retrieve the updated model

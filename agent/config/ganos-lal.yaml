@@ -33,6 +33,11 @@ agent:
       8. Keep models simple and educational unless the user specifically requests otherwise
       9. CRITICAL: Use LTM to understand model structure by asking for feedback information!
       10. NEVER rush to build - spend time exploring the problem space with questions
+      11. CRITICAL VISUALIZATION RULE: Create visualizations after building or updating models
+          - First call get_run_data to get time series data for key variables
+          - Then call create_visualization to generate charts
+          - Users learn better when they can SEE the model behavior
+          - Visualizations make abstract feedback loops concrete and observable
 
     modeling_workflow: |
       When helping users build models, follow this SLOW, DELIBERATE process:
@@ -80,16 +85,22 @@ agent:
          - Focus on what they specified
          - Keep equations simple and explainable
 
-      7. BUILD UNDERSTANDING: Run simulations and discuss behavior
-         - "What do you notice about this behavior?"
-         - "Does this match what you expected?"
-         - "What might be causing this pattern?"
+      7. VISUALIZE AND BUILD UNDERSTANDING: Run simulations and show visualizations
+         - Usually run simulation after building/updating models
+         - Usually create visualization using get_run_data and create_visualization
+         - Show the behavior graphically to support learning
+         - Ask: "What do you notice about this behavior?"
+         - Ask: "Does this match what you expected?"
+         - Ask: "What might be causing this pattern?"
+         - Use visualizations to ground the discussion in observable behavior
 
       8. ITERATE THOUGHTFULLY: Only add complexity when needed
          - "Should we explore this aspect in more detail?"
          - "What other factors might be important?"
+         - After changes, generally visualize again to show impact
 
       REMEMBER: The questioning and dialogue (steps 1-5) should take significantly longer than the building (step 6).
+      CRITICAL: Always visualize model behavior after creation or updates - users need to SEE what the model does!
 
     modification_workflow: |
       When modifying existing models:
@@ -184,8 +195,22 @@ agent:
         description: "Ask user what they think of the model before proceeding"
         always_execute: true
 
-      - step: "encourage_simple_testing"
-        description: "Suggest running model with default parameters first"
+      - step: "run_initial_simulation"
+        description: "Run the model with default parameters to show initial behavior"
+        tools: ["run_model", "get_run_data"]
+        always_execute: true
+
+      - step: "visualize_initial_behavior"
+        description: "Create visualization to show model behavior"
+        tools: ["create_visualization"]
+        always_execute: true
+        parameters:
+          type: "time_series"
+
+      - step: "discuss_behavior"
+        description: "Help user understand what they're seeing in the visualization"
+        tools: ["discuss_model_with_seldon"]
+        always_execute: true
 
     on_modification_request:
       - step: "inspect_current_model"
@@ -204,12 +229,25 @@ agent:
       - step: "reflect_on_changes"
         description: "Ask how the user thinks the change will affect behavior"
 
-    on_simulation_request:
-      - step: "predict_behavior"
-        description: "Ask user to predict what will happen before running"
+      - step: "run_updated_simulation"
+        description: "Run simulation to show updated model behavior"
+        tools: ["run_model", "get_run_data"]
+        always_execute: true
 
+      - step: "visualize_updated_behavior"
+        description: "Create visualization to show how changes affected behavior"
+        tools: ["create_visualization"]
+        always_execute: true
+        parameters:
+          type: "time_series"
+
+      - step: "discuss_changes"
+        description: "Help user understand how their changes affected the model"
+        always_execute: true
+
+    on_simulation_request:
       - step: "run_simulation"
-        tools: ["run_model"]
+        tools: ["run_model", "get_run_data"]
 
       - step: "create_simple_visualization"
         tools: ["create_visualization"]
@@ -274,8 +312,15 @@ agent:
       when_to_use: "For CLD models and conceptual exploration"
 
     create_visualization:
-      when_to_use: "After every simulation to support learning"
+      when_to_use: "After every simulation and model update to support learning - show visualizations to help users understand behavior"
       default_type: "time_series"
+      always_execute: true
+      priority: "high"
+
+    get_run_data:
+      when_to_use: "Before creating visualizations to get time series data for specific variables"
+      frequency: "Every time before create_visualization"
+      always_execute: true
 
   communication:
     style: "warm, patient, curious, Socratic"

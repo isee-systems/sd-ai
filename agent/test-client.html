@@ -231,6 +231,38 @@
     .full-width {
       grid-column: 1 / -1;
     }
+
+    .visualization-item {
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 10px;
+      margin-bottom: 10px;
+      overflow: hidden;
+      max-width: 100%;
+    }
+
+    .visualization-item h3 {
+      font-size: 14px;
+      margin-bottom: 8px;
+      color: #2c3e50;
+    }
+
+    .visualization-item img {
+      max-width: 100%;
+      width: 100%;
+      height: auto;
+      border-radius: 4px;
+      border: 1px solid #e0e0e0;
+      display: block;
+      object-fit: contain;
+    }
+
+    .visualization-meta {
+      font-size: 12px;
+      color: #7f8c8d;
+      margin-top: 5px;
+    }
   </style>
 </head>
 <body>
@@ -306,9 +338,20 @@
           </div>
           <div class="form-group">
             <label for="modelData">Model JSON</label>
-            <textarea id="modelData" rows="20">{}</textarea>
+            <textarea id="modelData" rows="10">{}</textarea>
           </div>
           <button id="updateModelBtn" disabled>Update Model</button>
+        </div>
+
+        <!-- Visualizations Panel -->
+        <div class="panel">
+          <h2>Visualizations</h2>
+          <div class="info-box">
+            Base64-encoded PNG images from create_visualization tool
+          </div>
+          <div id="visualizations" style="display: flex; flex-direction: column; gap: 15px;">
+            <p style="color: #7f8c8d; font-style: italic;">No visualizations yet</p>
+          </div>
         </div>
       </div>
     </div>
@@ -485,7 +528,7 @@
           break;
 
         case 'visualization':
-          log('Received visualization');
+          handleVisualization(message);
           break;
 
         case 'feedback_request':
@@ -572,6 +615,66 @@
       } catch (e) {
         log(`Warning: Failed to extract model from ${toolName}: ${e.message}`, 'error');
       }
+    }
+
+    function handleVisualization(message) {
+      const { visualizationId, title, description, format, data, metadata } = message;
+      log(`📊 Visualization received: ${title || visualizationId}`);
+
+      const visualizationsContainer = document.getElementById('visualizations');
+
+      // Remove "no visualizations" message if present
+      if (visualizationsContainer.querySelector('p')) {
+        visualizationsContainer.innerHTML = '';
+      }
+
+      // Create visualization item
+      const vizItem = document.createElement('div');
+      vizItem.className = 'visualization-item';
+      vizItem.id = `viz-${visualizationId}`;
+
+      // Add title
+      const titleEl = document.createElement('h3');
+      titleEl.textContent = title || `Visualization ${visualizationId}`;
+      vizItem.appendChild(titleEl);
+
+      // Add description if present
+      if (description) {
+        const descEl = document.createElement('p');
+        descEl.textContent = description;
+        descEl.style.fontSize = '13px';
+        descEl.style.marginBottom = '10px';
+        vizItem.appendChild(descEl);
+      }
+
+      // Display the image
+      if (format === 'image' && data) {
+        const img = document.createElement('img');
+        img.src = `data:image/png;base64,${data}`;
+        img.alt = title || 'Visualization';
+        vizItem.appendChild(img);
+      } else {
+        const errorMsg = document.createElement('p');
+        errorMsg.textContent = 'Unsupported visualization format or missing data';
+        errorMsg.style.color = '#e74c3c';
+        vizItem.appendChild(errorMsg);
+      }
+
+      // Add metadata
+      if (metadata) {
+        const metaEl = document.createElement('div');
+        metaEl.className = 'visualization-meta';
+        const metaParts = [];
+        if (metadata.createdBy) metaParts.push(`Created by: ${metadata.createdBy}`);
+        if (metadata.variables) metaParts.push(`Variables: ${metadata.variables.join(', ')}`);
+        metaEl.textContent = metaParts.join(' | ');
+        vizItem.appendChild(metaEl);
+      }
+
+      // Add to container (prepend to show newest first)
+      visualizationsContainer.insertBefore(vizItem, visualizationsContainer.firstChild);
+
+      log(`✓ Visualization "${title}" displayed`, 'received');
     }
 
     function handleFeedbackRequest(message) {
@@ -732,7 +835,7 @@
         case 'run_model':
           // Generate dummy simulation data based on current model
           const variables = currentModel.variables || [];
-          const timePoints = 20;
+          const timePoints = 100;
           const series = [];
 
           for (let t = 0; t <= timePoints; t++) {
@@ -740,7 +843,7 @@
             // Add dummy data for each variable in the model
             variables.forEach(variable => {
               const varName = variable.name || variable.id || `var_${Math.random()}`;
-              // Generate some variety in the data
+              // Generate some variety in the data with more realistic patterns
               if (variable.type === 'stock') {
                 point[varName] = 1000 + t * 20 + Math.sin(t / 3) * 50;
               } else if (variable.type === 'flow') {
@@ -756,6 +859,46 @@
             success: true,
             results: { series }
           };
+
+        case 'get_run_data':
+          // Generate random test data for requested variables
+          const requestedVariables = toolInput.variables || [];
+          const numPoints = 100;
+
+          // Generate time array
+          const timeArray = [];
+          for (let i = 0; i <= numPoints; i++) {
+            timeArray.push(i);
+          }
+
+          // Generate random data for each requested variable
+          const result = {
+            success: true,
+            runId: toolInput.runId || 'latest',
+            time: timeArray
+          };
+
+          requestedVariables.forEach(varName => {
+            const data = [];
+            const baseValue = Math.random() * 1000 + 100; // Random base between 100-1100
+            const trend = (Math.random() - 0.5) * 10; // Random trend -5 to +5
+            const amplitude = Math.random() * 100 + 20; // Random amplitude 20-120
+            const frequency = Math.random() * 0.3 + 0.1; // Random frequency 0.1-0.4
+
+            for (let t = 0; t <= numPoints; t++) {
+              // Generate realistic-looking time series with trend + oscillation + noise
+              const trendComponent = trend * t;
+              const oscillation = amplitude * Math.sin(frequency * t);
+              const noise = (Math.random() - 0.5) * 20;
+              const value = Math.max(0, baseValue + trendComponent + oscillation + noise);
+              data.push(value);
+            }
+
+            result[varName] = data;
+          });
+
+          log(`✓ Generated random data for: ${requestedVariables.join(', ')}`, 'received');
+          return result;
 
         case 'show_intermediate_model':
           log('Mock: Intermediate model shown in separate window');
@@ -803,6 +946,25 @@
               properties: {
                 timeRange: { type: 'object' }
               }
+            }
+          },
+          {
+            name: 'get_run_data',
+            description: 'Get time series data for specific variables from a simulation run',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                runId: {
+                  type: 'string',
+                  description: 'The ID of the simulation run (optional, defaults to latest run)'
+                },
+                variables: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: 'Array of variable names to retrieve data for'
+                }
+              },
+              required: ['variables']
             }
           },
           {

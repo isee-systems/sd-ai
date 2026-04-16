@@ -531,12 +531,23 @@ Use useAICustom=true to have AI generate custom matplotlib code for complex visu
               visualizationGoal
             };
 
-            let vizMessage;
-            if (useAICustom) {
-              vizMessage = await vizEngine.createVisualization(type || 'time_series', data, variables, vizOptions);
-            } else {
-              vizMessage = await vizEngine.createVisualization(type || 'time_series', data, variables, vizOptions);
-            }
+            // VisualizationEngine now returns just base64 image string
+            const base64Image = await vizEngine.createVisualization(type || 'time_series', data, variables, vizOptions);
+
+            // Generate visualization ID
+            const visualizationId = `viz_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+
+            // Wrap base64 string in proper visualization message object
+            const vizMessage = {
+              visualizationId,
+              title: title || 'Visualization',
+              description: description || '',
+              format: 'image',
+              data: {
+                base64: base64Image,
+                mimeType: 'image/png'
+              }
+            };
 
             // Send visualization to client
             await sendToClient({

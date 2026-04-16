@@ -34,14 +34,13 @@ The **server** maintains (in-memory only):
 
 ### Model Type Enforcement
 
-**CRITICAL:** Each session works with ONE model type that cannot be changed:
+Each session works with ONE model type that cannot be changed:
 - **CLD** (Causal Loop Diagram) - Conceptual models with feedback loops
 - **SFD** (Stock Flow Diagram) - Quantitative models with stocks, flows, and equations
 
 The model type is declared at session initialization and enforced throughout:
 - Agent will only use tools appropriate for that model type
 - If building an SFD requires a conceptual CLD first, the CLD will be shown in a separate window
-- Prevents confusion and maintains workflow consistency
 
 ### Message Flow
 
@@ -60,14 +59,6 @@ Client ← WebSocket → Server ← Tools → SD-AI Engines
 ```
 ws://localhost:3000/api/v1/agent
 ```
-
-### HTTP Monitoring
-
-```
-GET /api/v1/agent/stats
-```
-
-Returns active session statistics, memory usage, and temp folder info.
 
 ## WebSocket Protocol
 
@@ -393,7 +384,7 @@ Sent after a tool completes execution (built-in or client tool).
 
 #### 8. Visualization
 
-Sends visualization data to the client (Plotly or image format).
+Sends visualization data to the client as base64 encoded PNG images.
 
 ```json
 {
@@ -402,22 +393,8 @@ Sends visualization data to the client (Plotly or image format).
   "visualizationId": "viz_12345",
   "title": "Population Growth Over Time",
   "description": "Shows exponential growth pattern",
-  "format": "plotly",
-  "data": {
-    "data": [
-      {
-        "x": [0, 1, 2, 3, 4, 5],
-        "y": [100, 105, 110, 116, 122, 128],
-        "type": "scatter",
-        "name": "Population"
-      }
-    ],
-    "layout": {
-      "title": "Population Growth",
-      "xaxis": { "title": "Time" },
-      "yaxis": { "title": "Population" }
-    }
-  },
+  "format": "image",
+  "data": "iVBORw0KGgoAAAANSUhEUgAAA...",
   "metadata": {
     "createdBy": "generate_quantitative_model",
     "variables": ["Population"]
@@ -426,9 +403,9 @@ Sends visualization data to the client (Plotly or image format).
 }
 ```
 
-**Formats:**
-- `"plotly"` - Plotly JSON specification
-- `"image"` - Base64-encoded image with metadata
+**Format:**
+- All visualizations are returned as base64-encoded PNG images
+- The `data` field contains the base64 string directly
 
 #### 9. Show Intermediate Model
 
@@ -711,8 +688,8 @@ The agent has access to these SD-AI engine tools:
 ### Visualization
 
 8. **create_visualization** - Create charts and plots
-   - Plotly-based interactive visualizations
-   - Python/matplotlib for custom charts
+   - Returns base64-encoded PNG images only
+   - Python/matplotlib for all visualizations
    - AI-generated custom visualization code
 
 ## Agent Configuration
@@ -754,11 +731,11 @@ toolPolicies:
 
 ## Visualization System
 
-The agent can create visualizations using three modes:
+The agent creates visualizations using Python/matplotlib and always returns base64-encoded PNG images.
 
-### 1. Plotly (Default)
+### 1. Template-Based Visualizations (Default)
 
-Generates Plotly JSON specifications (no temp files).
+Generates Python scripts using predefined templates for common visualization types.
 
 ```javascript
 {
@@ -768,19 +745,12 @@ Generates Plotly JSON specifications (no temp files).
 }
 ```
 
-### 2. Python/Matplotlib Templates
+**Supported types:**
+- `time_series` - Time series line plots
+- `phase_portrait` - Phase space diagrams
+- `comparison` - Compare runs side-by-side
 
-Generates Python scripts using predefined templates.
-
-```javascript
-{
-  type: 'time_series',
-  variables: ['Population'],
-  usePython: true
-}
-```
-
-### 3. AI-Custom Visualizations
+### 2. AI-Custom Visualizations
 
 Uses AI to write custom Python/matplotlib code for unique requirements.
 
@@ -798,6 +768,10 @@ Uses AI to write custom Python/matplotlib code for unique requirements.
 - Session-specific folder: `/tmp/sd-agent-{sessionId}/`
 - Files deleted immediately after visualization creation
 - Folder cleaned up on session disconnect
+
+**Output:**
+- All visualizations return base64-encoded PNG strings
+- No JSON specs or other formats - images only
 
 ## Example Client Implementation
 
@@ -980,47 +954,9 @@ npm start
 
 WebSocket server available at: `ws://localhost:3000/api/v1/agent`
 
-### Monitoring
-
-```bash
-curl http://localhost:3000/api/v1/agent/stats
-```
-
-Shows:
-- Active sessions
-- Total messages/tool calls
-- Temp folder sizes
-- Memory usage
 
 ### Testing
 
 Use the included test client: `agent/test-client.html`
 
 Open in a browser and connect to test all message types.
-
-## Dependencies
-
-### Node.js Dependencies
-
-```bash
-npm install
-```
-
-Key packages:
-- `@anthropic-ai/sdk` - Claude API
-- `ws` - WebSocket server
-- `zod` - Schema validation
-- `js-yaml` - YAML config parsing
-- All existing SD-AI dependencies
-
-### Python Dependencies (for Visualizations)
-
-```bash
-pip install matplotlib numpy
-```
-
-These are likely already installed if PySD is working.
-
-## License
-
-Same as main SD-AI project.
