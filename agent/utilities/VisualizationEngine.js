@@ -77,7 +77,7 @@ export class VisualizationEngine {
 
     } catch (err) {
       error = err;
-      console.error(`Failed to create AI custom visualization ${vizId}:`, err);
+      // Suppress error logging - errors are thrown and handled by caller
     } finally {
       // ALWAYS cleanup temp files
       this.cleanupVisualizationFiles(vizId);
@@ -159,7 +159,7 @@ Generate ONLY the Python code, no explanations. The code should be complete and 
       return pythonCode;
 
     } catch (err) {
-      console.error('Failed to generate AI visualization script:', err);
+      // Suppress error logging - errors are thrown and handled by caller
       throw new Error(`AI visualization generation failed: ${err.message}`);
     }
   }
@@ -237,7 +237,7 @@ Generate ONLY the Python code, no explanations. The code should be complete and 
 
     } catch (err) {
       error = err;
-      console.error(`Failed to create Python visualization ${vizId}:`, err);
+      // Suppress error logging - errors are thrown and handled by caller
     } finally {
       // ALWAYS cleanup temp files
       this.cleanupVisualizationFiles(vizId);
@@ -266,7 +266,7 @@ Generate ONLY the Python code, no explanations. The code should be complete and 
           unlinkSync(file);
         }
       } catch (err) {
-        console.warn(`Failed to delete temp file ${file}:`, err.message);
+        // Suppress cleanup errors - they're not critical
       }
     }
   }

@@ -1032,7 +1032,7 @@ NEVER identify feedback loops for the user in explanatory text. Let users discov
             try {
                 parsedObj = JSON.parse(originalResponse.content);
             } catch (err) {
-                console.log(originalResponse);
+                logger.log('Bad JSON from LLM:', originalResponse);
                 throw new ResponseFormatError("Bad JSON returned by underlying LLM");
             }
             return this.processResponse(parsedObj);

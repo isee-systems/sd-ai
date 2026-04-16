@@ -1,4 +1,5 @@
 import { StructuredOutputToZodConverter } from '../../utilities/StructuredOutputToZodConverter.js';
+import logger from '../../utilities/logger.js';
 
 /**
  * DynamicToolServer
@@ -36,7 +37,7 @@ export class DynamicToolServer {
     // Create MCP server from client tools
     this.mcpServer = this.createMcpServerFromClientTools(clientTools);
 
-    console.log(`Updated dynamic tools for session ${this.sessionId}: ${clientTools.map(t => `client_${t.name}`).join(', ')}`);
+    logger.log(`Updated dynamic tools for session ${this.sessionId}: ${clientTools.map(t => `client_${t.name}`).join(', ')}`);
   }
 
   /**
@@ -79,7 +80,7 @@ export class DynamicToolServer {
           return await this.requestClientExecution(clientToolName, args);
         }
       } catch (error) {
-        console.error(`Error executing client tool ${toolDef.name}:`, error);
+        logger.error(`Error executing client tool ${toolDef.name}:`, error);
         return {
           content: [{ type: 'text', text: `Error: ${error.message}` }],
           isError: true
