@@ -40,22 +40,20 @@ export const ToolDefinitionSchema = z.object({
 export const InitializeSessionMessageSchema = z.object({
   type: z.literal('initialize_session'),
   sessionId: z.string().optional(),
+  authenticationKey: z.string().describe('Authentication key for server access'),
+  clientProduct: z.string().describe('Client product name (e.g., "sd-web", "sd-desktop")'),
+  clientVersion: z.string().describe('Client version (e.g., "1.0.0")'),
   modelType: z.enum(['cld', 'sfd']).describe('Model type: CLD (Causal Loop Diagram) or SFD (Stock Flow Diagram). This cannot be changed during the session.'),
   model: SDModelSchema,
   tools: z.array(ToolDefinitionSchema),
-  sessionConfig: z.object({
-    agentInstructions: z.object({
-      role: z.string().optional(),
-      constraints: z.array(z.string()).optional(),
-      goals: z.array(z.string()).optional(),
-      workflowOverrides: z.record(z.any()).optional()
-    }).optional(),
-    personality: z.object({
-      tone: z.string().optional(),
-      verbosity: z.enum(['low', 'medium', 'high']).optional()
-    }).optional()
-  }).optional(),
   context: z.record(z.any()).optional(),
+  timestamp: z.string().optional()
+});
+
+export const SelectAgentMessageSchema = z.object({
+  type: z.literal('select_agent'),
+  sessionId: z.string(),
+  agentId: z.string().describe('Agent ID to use (e.g., "myrddin", "ganos-lal")'),
   timestamp: z.string().optional()
 });
 
@@ -63,10 +61,6 @@ export const ChatMessageSchema = z.object({
   type: z.literal('chat'),
   sessionId: z.string(),
   message: z.string(),
-  directives: z.object({
-    temporaryInstructions: z.array(z.string()).optional(),
-    scope: z.string().optional()
-  }).optional(),
   timestamp: z.string().optional()
 });
 
@@ -94,6 +88,7 @@ export const DisconnectMessageSchema = z.object({
 
 export const ClientMessageSchema = z.discriminatedUnion('type', [
   InitializeSessionMessageSchema,
+  SelectAgentMessageSchema,
   ChatMessageSchema,
   ToolCallResponseMessageSchema,
   ModelUpdatedNotificationSchema,
@@ -113,10 +108,19 @@ export const SessionCreatedMessageSchema = z.object({
 export const SessionReadyMessageSchema = z.object({
   type: z.literal('session_ready'),
   sessionId: z.string(),
-  agentCapabilities: z.object({
-    builtInTools: z.array(z.string()),
-    clientTools: z.array(z.string())
-  }),
+  availableAgents: z.array(z.object({
+    id: z.string(),
+    name: z.string(),
+    description: z.string()
+  })),
+  timestamp: z.string().optional()
+});
+
+export const AgentSelectedMessageSchema = z.object({
+  type: z.literal('agent_selected'),
+  sessionId: z.string(),
+  agentId: z.string(),
+  agentName: z.string(),
   timestamp: z.string().optional()
 });
 
@@ -128,13 +132,13 @@ export const AgentTextMessageSchema = z.object({
   timestamp: z.string().optional()
 });
 
-export const ToolCallInitiatedMessageSchema = z.object({
-  type: z.literal('tool_call_initiated'),
+export const ToolCallNotificationMessageSchema = z.object({
+  type: z.literal('tool_call_notification'),
   sessionId: z.string(),
   callId: z.string(),
   toolName: z.string(),
   arguments: z.record(z.any()),
-  isBuiltIn: z.boolean(),
+  isBuiltIn: z.boolean().describe('Whether this is a built-in tool (true) or client tool (false)'),
   timestamp: z.string().optional()
 });
 
@@ -144,7 +148,7 @@ export const ToolCallRequestMessageSchema = z.object({
   callId: z.string(),
   toolName: z.string(),
   arguments: z.record(z.any()),
-  timeout: z.number().optional().default(30000),
+  timeout: z.number().optional().default(30000).describe('Timeout for client tool execution in milliseconds'),
   timestamp: z.string().optional()
 });
 
@@ -222,15 +226,26 @@ export const ShowIntermediateModelMessageSchema = z.object({
   timestamp: z.string().optional()
 });
 
+export const FeedbackRequestMessageSchema = z.object({
+  type: z.literal('feedback_request'),
+  sessionId: z.string(),
+  requestId: z.string(),
+  runId: z.string().optional().describe('Simulation run ID for single-run feedback'),
+  comparative: z.boolean().optional().default(false).describe('Whether to request comparative feedback for all runs'),
+  timestamp: z.string().optional()
+});
+
 export const ServerMessageSchema = z.discriminatedUnion('type', [
   SessionCreatedMessageSchema,
   SessionReadyMessageSchema,
+  AgentSelectedMessageSchema,
   AgentTextMessageSchema,
-  ToolCallInitiatedMessageSchema,
+  ToolCallNotificationMessageSchema,
   ToolCallRequestMessageSchema,
   ToolCallCompletedMessageSchema,
   VisualizationMessageSchema,
   ShowIntermediateModelMessageSchema,
+  FeedbackRequestMessageSchema,
   AgentCompleteMessageSchema,
   ErrorMessageSchema
 ]);
@@ -281,11 +296,21 @@ export function createSessionCreatedMessage(sessionId) {
   };
 }
 
-export function createSessionReadyMessage(sessionId, capabilities) {
+export function createSessionReadyMessage(sessionId, availableAgents) {
   return {
     type: 'session_ready',
     sessionId,
-    agentCapabilities: capabilities,
+    availableAgents,
+    timestamp: new Date().toISOString()
+  };
+}
+
+export function createAgentSelectedMessage(sessionId, agentId, agentName) {
+  return {
+    type: 'agent_selected',
+    sessionId,
+    agentId,
+    agentName,
     timestamp: new Date().toISOString()
   };
 }
@@ -300,9 +325,9 @@ export function createAgentTextMessage(sessionId, content, isThinking = false) {
   };
 }
 
-export function createToolCallInitiatedMessage(sessionId, callId, toolName, args, isBuiltIn) {
+export function createToolCallNotificationMessage(sessionId, callId, toolName, args, isBuiltIn) {
   return {
-    type: 'tool_call_initiated',
+    type: 'tool_call_notification',
     sessionId,
     callId,
     toolName,
@@ -381,6 +406,17 @@ export function createShowIntermediateModelMessage(sessionId, modelType, model, 
     model,
     purpose,
     displayMode,
+    timestamp: new Date().toISOString()
+  };
+}
+
+export function createFeedbackRequestMessage(sessionId, requestId, runId = null, comparative = false) {
+  return {
+    type: 'feedback_request',
+    sessionId,
+    requestId,
+    ...(runId && { runId }),
+    comparative,
     timestamp: new Date().toISOString()
   };
 }

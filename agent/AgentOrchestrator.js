@@ -5,7 +5,7 @@ import { createBuiltInToolsServer, getBuiltInToolNames } from './tools/BuiltInTo
 import { DynamicToolServer } from './tools/DynamicToolServer.js';
 import {
   createAgentTextMessage,
-  createToolCallInitiatedMessage,
+  createToolCallNotificationMessage,
   createToolCallCompletedMessage,
   createAgentCompleteMessage,
   createErrorMessage
@@ -58,7 +58,7 @@ export class AgentOrchestrator {
   /**
    * Start a conversation with the agent
    */
-  async startConversation(userMessage, sessionConfig = {}) {
+  async startConversation(userMessage) {
     try {
       const session = this.sessionManager.getSession(this.sessionId);
       if (!session) {
@@ -72,13 +72,8 @@ export class AgentOrchestrator {
       });
 
       // Build system prompt from config
-      const runtimeDirectives = this.sessionManager.getRuntimeDirectives(this.sessionId);
       const modelType = session.modelType;
-      const systemPrompt = this.configManager.buildSystemPrompt(
-        sessionConfig,
-        runtimeDirectives,
-        modelType
-      );
+      const systemPrompt = this.configManager.buildSystemPrompt(modelType);
 
       // Get tool servers
       const builtInTools = createBuiltInToolsServer(
@@ -187,9 +182,9 @@ export class AgentOrchestrator {
       } else if (block.type === 'tool_use') {
         hasToolCalls = true;
 
-        // Notify client that tool call is initiated
+        // Notify client that tool call is happening (for UI display)
         const isBuiltIn = this.isBuiltInTool(block.name, builtInTools);
-        await this.sendToClient(createToolCallInitiatedMessage(
+        await this.sendToClient(createToolCallNotificationMessage(
           this.sessionId,
           block.id,
           block.name,
@@ -357,39 +352,13 @@ export class AgentOrchestrator {
   isBuiltInTool(toolName, builtInTools) {
     return toolName in builtInTools.tools;
   }
-
-  /**
-   * Set runtime directives
-   */
-  setRuntimeDirectives(directives) {
-    this.sessionManager.setRuntimeDirectives(this.sessionId, directives);
-  }
-
   /**
    * Get agent capabilities for session_ready message
    */
   getAgentCapabilities() {
-    const session = this.sessionManager.getSession(this.sessionId);
-    const model = session?.clientModel;
-
     return {
       builtInTools: getBuiltInToolNames(),
-      clientTools: this.dynamicToolServer.getClientToolNames(),
-      modelSummary: model ? this.summarizeModel(model) : undefined
-    };
-  }
-
-  /**
-   * Summarize model for capabilities
-   */
-  summarizeModel(model) {
-    const variables = model.variables || [];
-
-    return {
-      variableCount: variables.length,
-      stockCount: variables.filter(v => v.type === 'stock').length,
-      flowCount: variables.filter(v => v.type === 'flow').length,
-      hasModules: (model.modules && model.modules.length > 0) || false
+      clientTools: this.dynamicToolServer.getClientToolNames()
     };
   }
 }

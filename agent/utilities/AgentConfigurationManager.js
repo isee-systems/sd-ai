@@ -8,14 +8,15 @@ import logger from '../../utilities/logger.js';
  *
  * Key Features:
  * - Loads agent configuration from YAML files (e.g., ganos-lal.yaml, myrddin.yaml)
- * - Merges with session-specific config
- * - Merges with runtime directives
  * - Generates system prompts for Claude Agent SDK
  * - NO filesystem writes - all modifications in memory only
  */
 export class AgentConfigurationManager {
   static UNIVERSAL_AGENT_INSTRUCTIONS = 
 `# System Dynamics Modeling Assistant
+
+## CRITICAL: Text Generation
+- NEVER use emojis
 
 ## CRITICAL: Model Type Enforcement
 Each session works with ONE model type: either CLD (Causal Loop Diagram) or SFD (Stock Flow Diagram).
@@ -30,11 +31,9 @@ After ANY tool use that modifies the model (generate_quantitative_model, generat
 4. If WARNINGS are present: You SHOULD fix them before proceeding. Attempt to fix them yourself first. If you cannot fix them, ask the user to fix them.
 5. Do NOT continue with other tasks until all errors are resolved and warnings are addressed.
 
-## CRITICAL: Use Loops that Matter, called LTM for Feedback Loop Analysis
-Loops That Matter (LTM) is a feedback‑loop dominance analysis technique from system dynamics used to identify which feedback loops are actually driving system behavior at a given time. Rather than cataloging all loops in a model, LTM ranks loops by their instantaneous impact on change, showing how dominance shifts as system structure, delays, and nonlinearities interact.
-
 ## CRITICAL: Feedback Loop Analysis and Model Understanding
 Make HEAVY use of any tools that provide feedback loop information (such as loop analysis, causal structure analysis, or behavioral mode detection).
+Loops That Matter (LTM) is a feedback‑loop dominance analysis technique from system dynamics used to identify which feedback loops are actually driving system behavior at a given time. Rather than cataloging all loops in a model, LTM ranks loops by their instantaneous impact on change, showing how dominance shifts as system structure, delays, and nonlinearities interact.
 
 **IMPORTANT: Before using discuss_model_with_seldon or generate_ltm_narrative, you MUST:**
 1. First call get_feedback_information to retrieve feedback loop analysis data from the client
@@ -100,58 +99,10 @@ ALWAYS share feedback loop information with Seldon when discussing model behavio
   /**
    * Build system prompt by merging configs
    */
-  buildSystemPrompt(sessionConfig = {}, runtimeDirectives = {}, modelType = null) {
-    const merged = this.mergeConfigs(this.baseConfig, sessionConfig, runtimeDirectives);
+  buildSystemPrompt(modelType = null) {
+    const merged = this.baseConfig;
     merged.modelType = modelType;
-    return this.formatSystemPrompt(merged);
-  }
-
-  /**
-   * Merge configurations (runtime > session > base)
-   */
-  mergeConfigs(base, session, runtime) {
-    const merged = {
-      ...base,
-      instructions: {
-        ...base.instructions
-      },
-      toolPolicies: {
-        ...base.toolPolicies
-      },
-      communication: {
-        ...base.communication
-      }
-    };
-
-    // Apply session-level overrides
-    if (session.agentInstructions) {
-      if (session.agentInstructions.role) {
-        merged.sessionRole = session.agentInstructions.role;
-      }
-      if (session.agentInstructions.constraints) {
-        merged.sessionConstraints = session.agentInstructions.constraints;
-      }
-      if (session.agentInstructions.goals) {
-        merged.sessionGoals = session.agentInstructions.goals;
-      }
-      if (session.agentInstructions.workflowOverrides) {
-        merged.workflowOverrides = session.agentInstructions.workflowOverrides;
-      }
-    }
-
-    if (session.personality) {
-      merged.communication = {
-        ...merged.communication,
-        ...session.personality
-      };
-    }
-
-    // Apply runtime directives
-    if (runtime.temporaryInstructions) {
-      merged.runtimeInstructions = runtime.temporaryInstructions;
-    }
-
-    return merged;
+    return this.formatSystemPrompt(this.baseConfig);
   }
 
   /**
@@ -195,11 +146,11 @@ ALWAYS share feedback loop information with Seldon when discussing model behavio
 
     // Tool policies
     prompt += '\n\n## Tool Usage Policies';
-    prompt += '\n' + this.formatToolPolicies(config.toolPolicies);
+    prompt += '\n' + this.formatToolPolicies(config.tool_policies);
 
     // Action sequences
     prompt += '\n\n## Action Sequences';
-    prompt += '\n' + this.formatActionSequences(config.actionSequence, config.workflowOverrides);
+    prompt += '\n' + this.formatActionSequences(config.action_sequence);
 
     // Communication style
     prompt += '\n\n## Communication Style';
@@ -207,35 +158,11 @@ ALWAYS share feedback loop information with Seldon when discussing model behavio
 
     // Error handling
     prompt += '\n\n## Error Handling';
-    prompt += '\n' + this.formatErrorHandling(config.errorHandling);
+    prompt += '\n' + this.formatErrorHandling(config.error_handling);
 
     // Constraints
     prompt += '\n\n## Constraints';
     prompt += '\n' + this.formatConstraints(config.constraints);
-
-    // Session goals
-    if (config.sessionGoals && config.sessionGoals.length > 0) {
-      prompt += '\n\n## Session Goals';
-      config.sessionGoals.forEach(goal => {
-        prompt += `\n- ${goal}`;
-      });
-    }
-
-    // Session constraints
-    if (config.sessionConstraints && config.sessionConstraints.length > 0) {
-      prompt += '\n\n## Session Constraints';
-      config.sessionConstraints.forEach(constraint => {
-        prompt += `\n- ${constraint}`;
-      });
-    }
-
-    // Runtime instructions
-    if (config.runtimeInstructions && config.runtimeInstructions.length > 0) {
-      prompt += '\n\n## IMPORTANT: Current Instructions';
-      config.runtimeInstructions.forEach(instruction => {
-        prompt += `\n- ${instruction}`;
-      });
-    }
 
     return prompt;
   }
@@ -271,7 +198,7 @@ ALWAYS share feedback loop information with Seldon when discussing model behavio
   /**
    * Format action sequences
    */
-  formatActionSequences(sequences, overrides = {}) {
+  formatActionSequences(sequences) {
     const lines = [];
 
     // Handle missing or null sequences
@@ -280,11 +207,8 @@ ALWAYS share feedback loop information with Seldon when discussing model behavio
     }
 
     for (const [triggerType, steps] of Object.entries(sequences)) {
-      // Check for workflow overrides
-      const effectiveSteps = overrides?.[triggerType] || steps;
-
       lines.push(`\n### ${triggerType}`);
-      effectiveSteps.forEach((step, idx) => {
+      steps.forEach((step, idx) => {
         lines.push(`${idx + 1}. **${step.step}**`);
         if (step.description) {
           lines.push(`   ${step.description}`);
@@ -350,23 +274,23 @@ ALWAYS share feedback loop information with Seldon when discussing model behavio
       return '';
     }
 
-    if (errorHandling.onToolFailure) {
+    if (errorHandling.on_tool_failure) {
       lines.push('**On tool failure:**');
-      Object.entries(errorHandling.onToolFailure).forEach(([key, value]) => {
+      Object.entries(errorHandling.on_tool_failure).forEach(([key, value]) => {
         lines.push(`- ${key}: ${value}`);
       });
     }
 
-    if (errorHandling.onInvalidModel) {
+    if (errorHandling.on_invalid_model) {
       lines.push('\n**On invalid model:**');
-      Object.entries(errorHandling.onInvalidModel).forEach(([key, value]) => {
+      Object.entries(errorHandling.on_invalid_model).forEach(([key, value]) => {
         lines.push(`- ${key}: ${value}`);
       });
     }
 
-    if (errorHandling.onSimulationFailure) {
+    if (errorHandling.on_simulation_failure) {
       lines.push('\n**On simulation failure:**');
-      Object.entries(errorHandling.onSimulationFailure).forEach(([key, value]) => {
+      Object.entries(errorHandling.on_simulation_failure).forEach(([key, value]) => {
         lines.push(`- ${key}: ${value}`);
       });
     }
@@ -380,20 +304,20 @@ ALWAYS share feedback loop information with Seldon when discussing model behavio
   formatConstraints(constraints) {
     const lines = [];
 
-    if (constraints.maxModelComplexity) {
+    if (constraints.max_model_complexity) {
       lines.push('**Maximum model complexity:**');
-      Object.entries(constraints.maxModelComplexity).forEach(([key, value]) => {
+      Object.entries(constraints.max_model_complexity).forEach(([key, value]) => {
         lines.push(`- ${key}: ${value}`);
       });
     }
 
-    if (constraints.requireDocumentation) {
+    if (constraints.require_documentation) {
       lines.push('- All variables must have documentation');
     }
-    if (constraints.enforceUnits) {
+    if (constraints.enforce_units) {
       lines.push('- All variables must have units');
     }
-    if (constraints.validateEquations) {
+    if (constraints.validate_equations) {
       lines.push('- All equations must be validated');
     }
 

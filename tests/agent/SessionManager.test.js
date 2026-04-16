@@ -19,17 +19,16 @@ describe('SessionManager', () => {
       const modelType = 'cld';
       const model = { variables: [], relationships: [] };
       const tools = [];
-      const sessionConfig = {};
-      const context = 'Test context';
+      const context = { description: 'Test context' };
 
       const sessionId = sessionManager.createSession(null); // null WebSocket for testing
-      sessionManager.initializeSession(sessionId, modelType, model, tools, sessionConfig, context);
+      sessionManager.initializeSession(sessionId, modelType, model, tools, context);
 
       const session = sessionManager.getSession(sessionId);
       expect(session).toBeDefined();
       expect(session.modelType).toBe('cld');
       expect(session.clientModel).toEqual(model);
-      expect(session.context).toBe(context);
+      expect(session.context).toEqual(context);
       expect(session.conversationContext).toEqual([]);
     });
 
@@ -130,28 +129,6 @@ describe('SessionManager', () => {
       expect(history).toHaveLength(2);
       expect(history[0].content).toBe('First');
       expect(history[1].content).toBe('Second');
-    });
-  });
-
-  describe('runtime directives', () => {
-    let testSessionId;
-
-    beforeEach(() => {
-      testSessionId = sessionManager.createSession(null);
-      sessionManager.initializeSession(testSessionId, 'sfd', {}, [], {}, '');
-    });
-
-    it('should set and get runtime directives', () => {
-      const directives = 'Use metric units';
-      sessionManager.setRuntimeDirectives(testSessionId, directives);
-
-      const retrieved = sessionManager.getRuntimeDirectives(testSessionId);
-      expect(retrieved).toBe(directives);
-    });
-
-    it('should return empty object if no directives set', () => {
-      const retrieved = sessionManager.getRuntimeDirectives(testSessionId);
-      expect(retrieved).toEqual({});
     });
   });
 

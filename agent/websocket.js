@@ -3,15 +3,54 @@ import {
   validateClientMessage,
   createSessionCreatedMessage,
   createSessionReadyMessage,
+  createAgentSelectedMessage,
+  createAgentTextMessage,
   createErrorMessage
 } from './utilities/MessageProtocol.js';
 import { join } from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import { readdirSync, readFileSync } from 'fs';
+import yaml from 'js-yaml';
 import logger from '../utilities/logger.js';
+import utils from '../utilities/utils.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+/**
+ * Scan the config directory and return available agents
+ */
+function getAvailableAgents() {
+  const configDir = join(__dirname, 'config');
+  const agents = [];
+
+  try {
+    const files = readdirSync(configDir).filter(f => f.endsWith('.yaml'));
+
+    for (const file of files) {
+      try {
+        const content = readFileSync(join(configDir, file), 'utf8');
+        const config = yaml.load(content);
+
+        if (config?.agent) {
+          agents.push({
+            id: file.replace('.yaml', ''),
+            name: config.agent.name || file.replace('.yaml', ''),
+            supports: config.agent.supports || [],
+            description: config.agent.description || ''
+          });
+        }
+      } catch (err) {
+        logger.warn(`Failed to load agent config from ${file}:`, err.message);
+      }
+    }
+  } catch (err) {
+    logger.error('Failed to scan agent config directory:', err);
+  }
+
+  return agents;
+}
 
 /**
  * Handle WebSocket connection
@@ -69,6 +108,10 @@ export function handleWebSocketConnection(ws, sessionManager) {
           await handleInitializeSession(message);
           break;
 
+        case 'select_agent':
+          await handleSelectAgent(message);
+          break;
+
         case 'chat':
           await handleChat(message);
           break;
@@ -108,41 +151,41 @@ export function handleWebSocketConnection(ws, sessionManager) {
   // Handle initialize_session
   async function handleInitializeSession(message) {
     try {
+      // Validate authentication key
+      const authenticationKey = process.env.AUTHENTICATION_KEY;
+      if (authenticationKey) {
+        const expectedAuthKey = process.env.AUTHENTICATION_KEY;
+        if (!expectedAuthKey || message.authenticationKey !== expectedAuthKey) {
+          ws.close(1008, 'Unauthorized, please pass valid Authentication key.');
+          return;
+        }
+      }
+
+      // Validate client product and version
+      if (!utils.supportedPlatform(message.clientProduct, message.clientVersion)) {
+        ws.close(1008, 'Your client application is not currently supported.');
+        return;
+      }
+
       // Validate model type
       if (!message.modelType || !['cld', 'sfd'].includes(message.modelType)) {
         throw new Error('Invalid or missing modelType. Must be "cld" or "sfd".');
       }
 
-      // Initialize session with model type, model, tools, and config
+      // Initialize session with model type, model, tools, and context
       sessionManager.initializeSession(
         sessionId,
         message.modelType,
         message.model,
         message.tools,
-        message.sessionConfig,
         message.context
       );
 
-      // Get agent ID from session config, default to myrddin
-      const agentId = message.sessionConfig?.agentId || 'myrddin';
-      const configPath = join(__dirname, 'config', `${agentId}.yaml`);
+      // Get available agents from config directory
+      const availableAgents = getAvailableAgents();
 
-      // Create agent orchestrator
-      orchestrator = new AgentOrchestrator(
-        sessionManager,
-        sessionId,
-        sendToClient,
-        configPath
-      );
-
-      // Initialize tools
-      orchestrator.initializeTools(message.tools);
-
-      // Get capabilities
-      const capabilities = orchestrator.getAgentCapabilities();
-
-      // Send session ready
-      await sendToClient(createSessionReadyMessage(sessionId, capabilities));
+      // Send session ready with available agents
+      await sendToClient(createSessionReadyMessage(sessionId, availableAgents));
 
       logger.log(`Session initialized: ${sessionId}`);
     } catch (error) {
@@ -156,6 +199,49 @@ export function handleWebSocketConnection(ws, sessionManager) {
     }
   }
 
+  // Handle select_agent
+  async function handleSelectAgent(message) {
+    try {
+      // Validate that the agent exists
+      const availableAgents = getAvailableAgents();
+      const selectedAgent = availableAgents.find(agent => agent.id === message.agentId);
+
+      if (!selectedAgent) {
+        throw new Error(`Agent '${message.agentId}' not found. Available agents: ${availableAgents.map(a => a.id).join(', ')}`);
+      }
+
+      // Get the agent config path
+      const configPath = join(__dirname, 'config', `${message.agentId}.yaml`);
+
+      // Create agent orchestrator
+      orchestrator = new AgentOrchestrator(
+        sessionManager,
+        sessionId,
+        sendToClient,
+        configPath
+      );
+
+      // Get session to access tools
+      const session = sessionManager.getSession(sessionId);
+
+      // Send agent selected message
+      await sendToClient(createAgentSelectedMessage(sessionId, selectedAgent.id, selectedAgent.name));
+
+      // Send initial greeting message
+      await sendToClient(createAgentTextMessage(sessionId, 'What can I do for you today?', false));
+
+      logger.log(`Agent selected: ${message.agentId} for session ${sessionId}`);
+    } catch (error) {
+      logger.error(`Failed to select agent for session ${sessionId}:`, error);
+      await sendToClient(createErrorMessage(
+        sessionId,
+        `Agent selection failed: ${error.message}`,
+        'AGENT_SELECTION_ERROR',
+        false
+      ));
+    }
+  }
+
   // Handle chat
   async function handleChat(message) {
     try {
@@ -163,16 +249,10 @@ export function handleWebSocketConnection(ws, sessionManager) {
         throw new Error('Session not initialized. Send initialize_session first.');
       }
 
-      // Set runtime directives if present
-      if (message.directives) {
-        orchestrator.setRuntimeDirectives(message.directives);
-      }
-
       // Start conversation
       const session = sessionManager.getSession(sessionId);
       await orchestrator.startConversation(
-        message.message,
-        session.sessionConfig
+        message.message
       );
 
     } catch (error) {

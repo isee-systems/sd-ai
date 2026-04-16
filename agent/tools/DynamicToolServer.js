@@ -141,7 +141,8 @@ export class DynamicToolServer {
       args
     );
 
-    // Send tool call request to client
+    // Send tool_call_request to client (separate from tool_call_notification)
+    // This actually requests the client to execute the tool and send back results
     await this.sendToClient({
       type: 'tool_call_request',
       sessionId: this.sessionId,

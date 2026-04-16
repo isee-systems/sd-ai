@@ -306,13 +306,7 @@
           </div>
           <div class="form-group">
             <label for="modelData">Model JSON</label>
-            <textarea id="modelData" rows="20">{
-  "variables": [
-    {"name": "Population", "type": "stock", "equation": "1000"},
-    {"name": "Births", "type": "flow", "equation": "Population * 0.02"}
-  ],
-  "title": "Test Model"
-}</textarea>
+            <textarea id="modelData" rows="20">{}</textarea>
           </div>
           <button id="updateModelBtn" disabled>Update Model</button>
         </div>
@@ -439,9 +433,24 @@
       logObject('Received message:', message, 'received');
 
       switch (message.type) {
-        case 'session_ready':
-          log(`Session ready! Session ID: ${message.sessionId}`);
+        case 'session_created':
+          log(`Session created! Session ID: ${message.sessionId}`);
           sessionId = message.sessionId;
+          break;
+
+        case 'session_ready':
+          log(`Session ready! Available agents: ${message.availableAgents.map(a => a.name).join(', ')}`);
+          // Automatically select the agent specified in the UI
+          const agentId = elements.agentType.value;
+          send({
+            type: 'select_agent',
+            sessionId: sessionId,
+            agentId: agentId
+          });
+          break;
+
+        case 'agent_selected':
+          log(`Agent selected: ${message.agentName}`);
           elements.sendBtn.disabled = false;
           elements.stopBtn.disabled = false;
           elements.updateModelBtn.disabled = false;
@@ -451,8 +460,8 @@
           log(`Agent: ${message.content}`);
           break;
 
-        case 'tool_call_initiated':
-          handleToolCallInitiated(message);
+        case 'tool_call_notification':
+          handleToolCallNotification(message);
           break;
 
         case 'tool_call_request':
@@ -483,23 +492,32 @@
           handleFeedbackRequest(message);
           break;
 
+        case 'show_intermediate_model':
+          log(`Server wants to show intermediate model: ${message.purpose}`);
+          log(`Display mode: ${message.displayMode}`);
+          // For now, just log the intermediate model - client could implement UI to display it
+          elements.modelData.value = JSON.stringify(message.model, null, 2);
+          log('✓ Intermediate model displayed', 'received');
+          break;
+
         default:
           log(`Unknown message type: ${message.type}`);
       }
     }
 
-    function handleToolCallInitiated(message) {
-      const { toolName, arguments: toolArgs } = message;
-      log(`Tool initiated: ${toolName}`);
+    function handleToolCallNotification(message) {
+      const { toolName, arguments: toolArgs, isBuiltIn } = message;
+      const toolType = isBuiltIn ? 'built-in' : 'client';
+      log(`🔧 Tool call (${toolType}): ${toolName}`);
 
       // Check if tool arguments contain a model update and display it
-      if (!message.isBuiltIn && toolName === 'update_model' && toolArgs && toolArgs.model) {
+      if (!isBuiltIn && toolName === 'update_model' && toolArgs && toolArgs.model) {
         elements.modelData.value = JSON.stringify(toolArgs.model, null, 2);
         log('✓ Model data updated from update_model arguments', 'received');
       }
 
       // Built-in tools will be handled by the server
-      if (message.isBuiltIn) {
+      if (isBuiltIn) {
         if (toolName === 'generate_quantitative_model' || toolName === 'generate_qualitative_model') {
           log('Built-in model generation tool - will update model data when completed');
         }
@@ -508,7 +526,7 @@
 
     function handleToolCallRequest(message) {
       const { callId, toolName, arguments: toolArgs } = message;
-      log(`Tool requested: ${toolName}`);
+      log(`📨 Client tool execution requested: ${toolName}`);
 
       // Automatically respond to client tool calls with mock data
       setTimeout(() => {
@@ -519,6 +537,7 @@
           callId: callId,
           result: result
         });
+        log(`✅ Client tool response sent for: ${toolName}`);
       }, 100);
     }
 
@@ -754,7 +773,9 @@
     elements.initBtn.onclick = () => {
       const message = {
         type: 'initialize_session',
-        sessionId: 'test-' + Date.now(),
+        authenticationKey: 'test-key-12345',
+        clientProduct: 'sd-test-client',
+        clientVersion: '1.0.0',
         modelType: elements.modelType.value,
         model: {},
         tools: [
@@ -796,9 +817,6 @@
             }
           }
         ],
-        sessionConfig: {
-          agentId: elements.agentType.value
-        },
         context: {
           description: 'Test client session'
         }

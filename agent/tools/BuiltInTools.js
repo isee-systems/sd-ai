@@ -9,7 +9,7 @@ import {
   callSeldonMentorEngine
 } from '../utilities/EngineWrapper.js';
 import { VisualizationEngine } from '../utilities/VisualizationEngine.js';
-import { SDModelSchema } from '../utilities/MessageProtocol.js';
+import { SDModelSchema, createFeedbackRequestMessage } from '../utilities/MessageProtocol.js';
 import logger from '../../utilities/logger.js';
 
 /**
@@ -174,11 +174,7 @@ export function createBuiltInToolsServer(sessionManager, sessionId, sendToClient
               const requestId = generateRequestId('feedback');
 
               // Send request to client for feedback data
-              await sendToClient({
-                type: 'feedback_request',
-                sessionId: sessionId,
-                requestId: requestId
-              });
+              await sendToClient(createFeedbackRequestMessage(sessionId, requestId));
 
               // Create pending request that will be resolved when client responds
               const resultPromise = new Promise((resolve, reject) => {
@@ -269,13 +265,7 @@ export function createBuiltInToolsServer(sessionManager, sessionId, sendToClient
               const requestId = generateRequestId('feedback');
 
               // Send request to client for comparative feedback data
-              await sendToClient({
-                type: 'feedback_request',
-                sessionId: sessionId,
-                requestId: requestId,
-                runId: runName,
-                comparative: true  // Request feedback for all runs for comparative analysis
-              });
+              await sendToClient(createFeedbackRequestMessage(sessionId, requestId, runName, true));
 
               // Create pending request that will be resolved when client responds
               const resultPromise = new Promise((resolve, reject) => {
@@ -458,13 +448,7 @@ export function createBuiltInToolsServer(sessionManager, sessionId, sendToClient
             const requestId = generateRequestId('feedback');
 
             // Send request to client for feedback data
-            await sendToClient({
-              type: 'feedback_request',
-              sessionId: sessionId,
-              requestId: requestId,
-              runId: runId,
-              comparative: comparative || false
-            });
+            await sendToClient(createFeedbackRequestMessage(sessionId, requestId, runId, comparative || false));
 
             // Create pending request that will be resolved when client responds
             const resultPromise = new Promise((resolve, reject) => {

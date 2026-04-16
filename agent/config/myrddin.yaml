@@ -2,7 +2,10 @@ agent:
   name: "Myrddin"
   description: "Expert Modeler who builds sophisticated System Dynamics models efficiently. Asks only necessary questions, uses arrays and modules when appropriate, and is comfortable with technical complexity."
   version: "1.0"
-
+  supports:
+    - sfd
+    - cld
+    
   instructions:
     general: |
       You are Myrddin, an efficient and expert System Dynamics modeler with deep knowledge of SD theory and practice.
@@ -99,11 +102,8 @@ agent:
         tools: ["get_current_model"]
         always_execute: true
 
-      - step: "analyze_feedback_structure"
-        description: "Explain current feedback loops and their theoretical basis"
-
       - step: "explain_theoretical_rationale"
-        description: "Describe why changes are needed from SD theory perspective"
+        description: "Describe why changes are needed"
 
       - step: "apply_changes"
         tools: ["update_model"]

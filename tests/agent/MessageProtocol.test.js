@@ -4,7 +4,7 @@ import {
   ChatMessageSchema,
   ModelUpdatedNotificationSchema,
   createAgentTextMessage,
-  createToolCallInitiatedMessage,
+  createToolCallNotificationMessage,
   createToolCallCompletedMessage,
   createAgentCompleteMessage,
   createErrorMessage,
@@ -52,7 +52,9 @@ describe('MessageProtocol', () => {
     it('should validate valid initialization message', () => {
       const message = {
         type: 'initialize_session',
-        sessionId: 'test-123',
+        authenticationKey: 'test-key',
+        clientProduct: 'sd-web',
+        clientVersion: '1.0.0',
         modelType: 'cld',
         model: { variables: [] },
         tools: []
@@ -65,7 +67,9 @@ describe('MessageProtocol', () => {
     it('should require modelType to be cld or sfd', () => {
       const message = {
         type: 'initialize_session',
-        sessionId: 'test-123',
+        authenticationKey: 'test-key',
+        clientProduct: 'sd-web',
+        clientVersion: '1.0.0',
         modelType: 'invalid',
         model: {},
         tools: []
@@ -75,18 +79,15 @@ describe('MessageProtocol', () => {
       expect(result.success).toBe(false);
     });
 
-    it('should allow optional sessionConfig and context', () => {
+    it('should allow optional context', () => {
       const message = {
         type: 'initialize_session',
-        sessionId: 'test-123',
+        authenticationKey: 'test-key',
+        clientProduct: 'sd-web',
+        clientVersion: '1.0.0',
         modelType: 'sfd',
         model: {},
         tools: [],
-        sessionConfig: {
-          agentInstructions: {
-            role: 'expert'
-          }
-        },
         context: { description: 'This is test context' }
       };
 
@@ -142,8 +143,8 @@ describe('MessageProtocol', () => {
       expect(message.isThinking).toBe(false);
     });
 
-    it('should create tool call initiated message', () => {
-      const message = createToolCallInitiatedMessage(
+    it('should create tool call notification message', () => {
+      const message = createToolCallNotificationMessage(
         'session-1',
         'call-123',
         'generate_quantitative_model',
@@ -151,7 +152,7 @@ describe('MessageProtocol', () => {
         true
       );
 
-      expect(message.type).toBe('tool_call_initiated');
+      expect(message.type).toBe('tool_call_notification');
       expect(message.callId).toBe('call-123');
       expect(message.toolName).toBe('generate_quantitative_model');
       expect(message.isBuiltIn).toBe(true);
@@ -189,14 +190,16 @@ describe('MessageProtocol', () => {
     });
 
     it('should create session ready message', () => {
-      const message = createSessionReadyMessage('session-1', {
-        builtInTools: ['generate_quantitative_model'],
-        clientTools: ['get_current_model']
-      });
+      const availableAgents = [
+        { id: 'ganos-lal', name: 'Ganos Lal', description: 'Helpful mentor' },
+        { id: 'myrddin', name: 'Myrddin', description: 'Expert modeler' }
+      ];
+      const message = createSessionReadyMessage('session-1', availableAgents);
 
       expect(message.type).toBe('session_ready');
-      expect(message.agentCapabilities.builtInTools).toHaveLength(1);
-      expect(message.agentCapabilities.clientTools).toHaveLength(1);
+      expect(message.sessionId).toBe('session-1');
+      expect(message.availableAgents).toHaveLength(2);
+      expect(message.availableAgents[0].id).toBe('ganos-lal');
     });
   });
 });

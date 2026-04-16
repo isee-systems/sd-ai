@@ -85,9 +85,6 @@ export class SessionManager {
       // Agent conversation context (for Claude Agent SDK)
       conversationContext: [],
 
-      // Runtime configuration
-      runtimeDirectives: {},
-
       // Usage metrics (anonymous)
       messageCount: 0,
       toolCallCount: 0
@@ -112,9 +109,9 @@ export class SessionManager {
   }
 
   /**
-   * Initialize a session with model, tools, and config
+   * Initialize a session with model and tools
    */
-  initializeSession(sessionId, modelType, model, tools, sessionConfig, context) {
+  initializeSession(sessionId, modelType, model, tools, context) {
     const session = this.getSession(sessionId);
     if (!session) {
       throw new Error(`Session not found: ${sessionId}`);
@@ -133,7 +130,6 @@ export class SessionManager {
 
     session.clientModel = model;
     session.registeredTools = tools;
-    session.sessionConfig = sessionConfig;
     session.context = context || {};
 
     logger.log(`Session initialized: ${sessionId} with modelType=${modelType} and ${tools.length} client tools`);
@@ -243,24 +239,6 @@ export class SessionManager {
   getPendingToolCall(sessionId, callId) {
     const session = this.getSession(sessionId);
     return session?.pendingToolCalls.get(callId);
-  }
-
-  /**
-   * Set runtime directives
-   */
-  setRuntimeDirectives(sessionId, directives) {
-    const session = this.getSession(sessionId);
-    if (session) {
-      session.runtimeDirectives = directives;
-    }
-  }
-
-  /**
-   * Get runtime directives
-   */
-  getRuntimeDirectives(sessionId) {
-    const session = this.getSession(sessionId);
-    return session?.runtimeDirectives || {};
   }
 
   /**
