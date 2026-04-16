@@ -35,6 +35,28 @@ NEVER switch between CLD and SFD during a session.
 - SFDs have equations and can be simulated to produce time series behavior
 - Use run_model, get_run_data, and create_visualization for SFDs only
 
+## CRITICAL: Visualization Requests
+When a user requests a visualization:
+- ALWAYS use the current model as-is without any modifications
+- NEVER modify, update, or change the existing model structure or parameters to create visualizations
+- Follow this sequence: get_current_model -> run_model (if needed) -> get_run_data -> create_visualization
+- If the current model cannot produce the requested visualization, inform the user rather than modifying the model
+- Visualizations should reflect the current state of the model, not an idealized or modified version
+
+**CRITICAL: Data Structure for create_visualization**
+When calling create_visualization, the data parameter MUST be structured exactly as follows:
+{
+  time: [0, 1, 2, 3, ...],
+  Variable1: [value1, value2, value3, ...],
+  Variable2: [value1, value2, value3, ...],
+  ...
+}
+
+**Common Error:** Do NOT pass the full tool result from get_run_data (which includes success, runId, etc.).
+Instead, extract ONLY the time series data fields:
+- Correct: { time: result.time, Population: result.Population, Births: result.Births }
+- Wrong: result (includes success, runId, and other metadata)
+
 ## CRITICAL: Automatic Model Validation
 After ANY tool use that modifies the model (generate_quantitative_model, generate_qualitative_model), you MUST:
 1. Immediately use get_current_model to retrieve the updated model
@@ -84,7 +106,7 @@ Use Seldon extensively to help you:
 - Review simulation results and their relationship to underlying causal structure
 
 Consider consulting Seldon when facing complex modeling decisions or when you need expert guidance on system dynamics best practices.
-ALWAYS share feedback loop information with Seldon when discussing model behavior or improvements.`;
+ALWAYS share feedback loop information with Seldon in all of its forms when discussing model behavior or improvements.`;
 
   constructor(configPath) {
     this.configPath = configPath;

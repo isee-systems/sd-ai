@@ -16,6 +16,8 @@
       background: #f5f5f5;
       padding: 20px;
       line-height: 1.6;
+      overflow-x: hidden;
+      max-width: 100vw;
     }
 
     .container {
@@ -24,6 +26,7 @@
       background: white;
       border-radius: 8px;
       box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      overflow: hidden;
     }
 
     header {
@@ -61,18 +64,23 @@
       grid-template-columns: 2fr 1fr;
       gap: 20px;
       padding: 20px;
+      overflow: hidden;
     }
 
     .left-column {
       display: flex;
       flex-direction: column;
       gap: 20px;
+      min-width: 0;
+      overflow: hidden;
     }
 
     .right-column {
       display: flex;
       flex-direction: column;
       gap: 20px;
+      min-width: 0;
+      overflow: hidden;
     }
 
     .step-number {
@@ -98,6 +106,8 @@
       background: #f8f9fa;
       border-radius: 4px;
       padding: 15px;
+      min-width: 0;
+      overflow: hidden;
     }
 
     .panel h2 {
@@ -648,9 +658,9 @@
       }
 
       // Display the image
-      if (format === 'image' && data) {
+      if (format === 'image' && data && data.base64) {
         const img = document.createElement('img');
-        img.src = `data:image/png;base64,${data}`;
+        img.src = `data:${data.mimeType || 'image/png'};base64,${data.base64}`;
         img.alt = title || 'Visualization';
         vizItem.appendChild(img);
       } else {

@@ -62,7 +62,7 @@ export class LLMWrapper {
 
   model = new ModelCapabilities(LLMWrapper.BUILD_DEFAULT_MODEL);
 
-  constructor(parameters) {
+  constructor(parameters = {}) {
     if (!parameters.openAIKey) {
         this.#openAIKey = process.env.OPENAI_API_KEY
     } else {
