@@ -35,6 +35,12 @@ export class ZodToStructuredOutputConverter {
         return this.convertZodUnionToStructuredOutput(zodSchema._def);
       case 'ZodLiteral':
         return this.convertZodLiteralToStructuredOutput(zodSchema._def);
+      case 'ZodAny':
+        // ZodAny allows any value - we treat it as an object with no constraints
+        return {
+          type: 'object',
+          additionalProperties: true
+        };
       default:
         logger.warn(`Unsupported Zod type: ${zodType}`);
         return { type: 'string' };

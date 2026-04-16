@@ -118,7 +118,10 @@ A dominant feedback process is one that drives more than 50% of the model's beha
             reply = "<b><i>Please re-run the model to compute the information we need to answer your question.</i></b><br/>" + reply;
         }
 
-        return reply;
+        return {
+            textContent: reply,
+            feedbackInformationRequired: originalResponse.feedbackInformationRequired
+        };
     }
 
     #isValidFeedbackContent() {

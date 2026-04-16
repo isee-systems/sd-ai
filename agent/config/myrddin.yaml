@@ -11,11 +11,6 @@ agent:
       Ask only the essential questions needed to build accurate models.
 
       CRITICAL MODEL TYPE RULES:
-      - If working on an SFD and you need to conceptualize with a CLD first:
-        1. Generate the CLD using generate_qualitative_model
-        2. Send it to the client with show_intermediate_model message (displayMode: 'separate_window')
-        3. Ask the client to review it in a separate window
-        4. Then generate the SFD based on the CLD insights
       - The main model being built must always match the session's modelType
 
       IMPORTANT RULES:
@@ -44,11 +39,10 @@ agent:
     modification_workflow: |
       When modifying existing models:
       1. Call get_current_model() to review current structure
-      2. Quickly analyze existing feedback loops and their theoretical implications
+      2. If necessary, use discuss_model_with_seldon to quickly analyze existing feedback loops and their implications
       3. Make changes efficiently, explaining technical rationale
       4. Use update_model() with clear theoretical reasoning
-      5. Consider opportunities to use arrays or modules to simplify structure
-      6. Recommend testing after significant modifications
+      5. Recommend testing after significant modifications
 
     validation_rules: |
       Enforce strict validation:
@@ -83,9 +77,6 @@ agent:
       - step: "ask_essential_questions"
         description: "Ask only critical questions needed (time horizon, key variables, problem statement)"
 
-      - step: "choose_diagram_type"
-        description: "Recommend CLD for hypothesis development, SFD for quantitative analysis"
-
       - step: "generate_model"
         tools: ["generate_qualitative_model", "generate_quantitative_model"]
         parameters:
@@ -93,8 +84,8 @@ agent:
           supportsModules: true
 
       - step: "critique_structure"
-        description: "Identify structural issues and get user opinion on model"
-        tools: ["discuss_with_mentor"]
+        description: "Use Seldon to identify structural issues and critique the model"
+        tools: ["discuss_model_with_seldon"]
         always_execute: true
 
       - step: "validate_structure"
@@ -131,23 +122,14 @@ agent:
       - step: "run_simulation"
         tools: ["run_model"]
 
-      - step: "analyze_feedback_dominance"
-        tools: ["get_feedback_loop_analysis"]
-        always_execute: true
-
       - step: "create_analytical_visualization"
         tools: ["create_visualization"]
         always_execute: true
         parameters:
           type: "time_series"
 
-      - step: "generate_loop_narrative"
-        description: "Generate LTM narrative to verify correct causal interpretation"
-        tools: ["generate_ltm_narrative"]
-        always_execute: true
-
-      - step: "validate_behavior_causation"
-        description: "Use Seldon to verify behavior comes from correct feedback mechanisms"
+      - step: "understand_causal_mechanisms"
+        description: "Use Seldon to understand WHY behavior occurs and which feedback mechanisms are driving it"
         tools: ["discuss_model_with_seldon"]
         always_execute: true
 
@@ -171,27 +153,20 @@ agent:
       when_to_use: "After structural validation passes"
       auto_suggest: true
 
-    get_feedback_loop_analysis:
-      when_to_use: "After every simulation to explain behavior"
-      frequency: "Every time"
-      always_execute: true
-
     generate_ltm_narrative:
-      when_to_use: "After every simulation to verify causal mechanisms"
-      frequency: "Every time"
-      always_execute: true
+      when_to_use: "When deep feedback loop analysis would help explain complex behavior"
+      frequency: "As needed for understanding causal mechanisms"
+      auto_suggest: false
 
     discuss_model_with_seldon:
-      when_to_use: "Default discussion tool - use SD terminology freely, verify behavior causation"
-      frequency: "After simulations and when critiquing models"
+      when_to_use: "Default discussion tool for understanding WHY behavior occurs - use SD terminology freely"
+      frequency: "After simulations to understand causal mechanisms and critique models"
       auto_suggest: true
 
     discuss_model_across_runs:
-      when_to_use: "Only when specifically asked to simplify language"
-
-    discuss_with_mentor:
-      when_to_use: "When needing to ask critical questions or get user opinions on model validity"
-      frequency: "When critiquing models or validating assumptions"
+      when_to_use: "Use to understand what causes behavioral differences across runs - analyzes how different scenarios or parameter changes produce different outcomes by examining underlying feedback loop dynamics"
+      frequency: "When comparing simulation results from different runs or scenarios"
+      auto_suggest: false
 
     generate_quantitative_model:
       when_to_use: "For SFD models - use arrays and modules when appropriate"

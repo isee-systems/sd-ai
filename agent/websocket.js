@@ -189,7 +189,7 @@ export function handleWebSocketConnection(ws, sessionManager) {
   // Handle tool_call_response
   async function handleToolCallResponse(message) {
     try {
-      // Resolve pending tool call
+      // First try to resolve as a regular tool call
       const resolved = sessionManager.resolvePendingToolCall(
         sessionId,
         message.callId,
@@ -197,8 +197,24 @@ export function handleWebSocketConnection(ws, sessionManager) {
         message.isError
       );
 
+      // If not a regular tool call, check if it's a feedback request response
       if (!resolved) {
-        logger.warn(`Received response for unknown call ID: ${message.callId}`);
+        const session = sessionManager.getSession(sessionId);
+        if (session?.pendingFeedbackRequests?.has(message.callId)) {
+          const pending = session.pendingFeedbackRequests.get(message.callId);
+          clearTimeout(pending.timeout);
+
+          if (message.isError) {
+            pending.reject(new Error(message.result));
+          } else {
+            pending.resolve(message.result);
+          }
+
+          session.pendingFeedbackRequests.delete(message.callId);
+          logger.log(`Resolved feedback request: ${message.callId}`);
+        } else {
+          logger.warn(`Received response for unknown call ID: ${message.callId}`);
+        }
       }
     } catch (error) {
       logger.error(`Error handling tool response for session ${sessionId}:`, error);

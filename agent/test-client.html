@@ -479,6 +479,10 @@
           log('Received visualization');
           break;
 
+        case 'feedback_request':
+          handleFeedbackRequest(message);
+          break;
+
         default:
           log(`Unknown message type: ${message.type}`);
       }
@@ -551,6 +555,138 @@
       }
     }
 
+    function handleFeedbackRequest(message) {
+      const { requestId, runId, comparative } = message;
+      log(`Feedback request received for ${comparative ? 'all runs (comparative)' : `runId: ${runId || 'latest'}`}`);
+
+      // Generate hard-coded feedback loop analysis data
+      let feedbackContent;
+
+      if (comparative) {
+        // Return comparative feedback data for multiple runs
+        feedbackContent = {
+          runs: {
+            'run_baseline': {
+              loops: [
+                {
+                  id: 'loop_1',
+                  name: 'Population Growth Loop',
+                  type: 'reinforcing',
+                  polarity: 'R',
+                  variables: ['Population', 'Births', 'Birth Rate'],
+                  description: 'As population increases, more births occur',
+                  strength: 0.85,
+                  dominance: [
+                    { time: 0, value: 0.3 },
+                    { time: 10, value: 0.8 },
+                    { time: 20, value: 0.9 }
+                  ]
+                }
+              ]
+            },
+            'run_policy': {
+              loops: [
+                {
+                  id: 'loop_1',
+                  name: 'Population Growth Loop',
+                  type: 'reinforcing',
+                  polarity: 'R',
+                  variables: ['Population', 'Births', 'Birth Rate'],
+                  description: 'Growth loop weakened by policy',
+                  strength: 0.45,
+                  dominance: [
+                    { time: 0, value: 0.3 },
+                    { time: 10, value: 0.5 },
+                    { time: 20, value: 0.4 }
+                  ]
+                },
+                {
+                  id: 'loop_2',
+                  name: 'Resource Limitation Loop',
+                  type: 'balancing',
+                  polarity: 'B',
+                  variables: ['Population', 'Resources', 'Death Rate'],
+                  description: 'Balancing loop strengthened by policy',
+                  strength: 0.85,
+                  dominance: [
+                    { time: 0, value: 0.2 },
+                    { time: 10, value: 0.6 },
+                    { time: 20, value: 0.8 }
+                  ]
+                }
+              ]
+            }
+          },
+          comparison: {
+            differenceExplanation: 'Policy intervention shifts dominance from growth loop to balancing loop'
+          }
+        };
+      } else {
+        // Return single run feedback data
+        feedbackContent = {
+          loops: [
+            {
+              id: 'loop_1',
+              name: 'Population Growth Loop',
+              type: 'reinforcing',
+              polarity: 'R',
+              variables: ['Population', 'Births', 'Birth Rate'],
+              description: 'As population increases, more births occur, further increasing population',
+              strength: 0.85,
+              dominance: [
+                { time: 0, value: 0.3 },
+                { time: 5, value: 0.6 },
+                { time: 10, value: 0.8 },
+                { time: 15, value: 0.85 },
+                { time: 20, value: 0.9 }
+              ]
+            },
+            {
+              id: 'loop_2',
+              name: 'Resource Limitation Loop',
+              type: 'balancing',
+              polarity: 'B',
+              variables: ['Population', 'Resources', 'Death Rate', 'Deaths'],
+              description: 'As population grows, resources become scarce, increasing death rate and limiting growth',
+              strength: 0.65,
+              dominance: [
+                { time: 0, value: 0.1 },
+                { time: 5, value: 0.2 },
+                { time: 10, value: 0.4 },
+                { time: 15, value: 0.55 },
+                { time: 20, value: 0.65 }
+              ]
+            }
+          ],
+          analysis: {
+            dominantLoops: ['loop_1'],
+            behaviorMode: 'exponential_growth',
+            phaseDuration: {
+              early: { time: [0, 8], dominantLoop: 'loop_1' },
+              middle: { time: [8, 15], dominantLoop: 'loop_1' },
+              late: { time: [15, 20], dominantLoop: 'loop_1' }
+            }
+          }
+        };
+      }
+
+      // Send feedback response back to server using tool_call_response format
+      setTimeout(() => {
+        send({
+          type: 'tool_call_response',
+          sessionId: sessionId,
+          callId: requestId,  // Use requestId as callId
+          result: {
+            feedbackContent: feedbackContent,
+            runId: runId || 'run_latest',
+            comparative: comparative || false
+          },
+          isError: false
+        });
+        log(`✓ Feedback response sent (${comparative ? 'comparative' : 'single run'})`, 'sent');
+      }, 100);
+    }
+
     function generateMockToolResult(toolName, toolInput) {
       let currentModel;
       try {
@@ -602,35 +738,6 @@
             results: { series }
           };
 
-        case 'get_feedback_loop_analysis':
-          // Generate dummy feedback loop analysis based on current model
-          const modelVars = currentModel.variables || [];
-          const relationships = currentModel.relationships || [];
-          const loops = [];
-
-          // Create at least one dummy loop
-          if (modelVars.length > 0) {
-            loops.push({
-              name: 'Primary Loop',
-              type: 'reinforcing',
-              variables: modelVars.slice(0, Math.min(3, modelVars.length)).map(v => v.name || v.id),
-              strength: 0.85,
-              polarity: 'R'
-            });
-          }
-
-          if (modelVars.length > 3) {
-            loops.push({
-              name: 'Balancing Loop',
-              type: 'balancing',
-              variables: modelVars.slice(0, Math.min(4, modelVars.length)).map(v => v.name || v.id),
-              strength: 0.65,
-              polarity: 'B'
-            });
-          }
-
-          return { feedbackLoops: loops };
-
         case 'show_intermediate_model':
           log('Mock: Intermediate model shown in separate window');
           return { success: true };
@@ -676,11 +783,6 @@
                 timeRange: { type: 'object' }
               }
             }
-          },
-          {
-            name: 'get_feedback_loop_analysis',
-            description: 'Get feedback loop analysis',
-            inputSchema: { type: 'object', properties: {} }
           },
           {
             name: 'show_intermediate_model',

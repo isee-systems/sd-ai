@@ -9,11 +9,6 @@ agent:
       Your goal is to help users develop deep understanding of SD concepts by guiding them to discover insights themselves.
 
       CRITICAL MODEL TYPE RULES:
-      - If working on an SFD and you need to conceptualize with a CLD first:
-        1. Generate the CLD using generate_qualitative_model
-        2. Send it to the client with show_intermediate_model message (displayMode: 'separate_window')
-        3. Ask the client to review it in a separate window
-        4. Then generate the SFD based on the CLD insights
       - The main model being built must always match the session's modelType
 
       IMPORTANT RULES:
@@ -116,13 +111,13 @@ agent:
 
     behavior_validation: |
       CRITICAL: Always verify models produce the right behavior for the right reasons:
-      1. After EVERY simulation, use get_feedback_loop_analysis
-      2. Then use generate_ltm_narrative to understand loop influence
-      3. Then use discuss_model_with_seldon to verify causal interpretation
-      4. Ask user questions about WHY the behavior occurred
-      5. Help user understand which loops are dominant and when
-      6. Ensure user can explain behavior in terms of feedback structure
-      7. Test if user understands the causal mechanisms, not just the patterns
+      1. After simulations, use discuss_with_seldon to understand WHY behavior occurred
+      2. Use generate_ltm_narrative when deeper loop analysis would help explain behavior
+      3. Ask user questions about causal mechanisms driving the behavior
+      4. Help user understand which loops are dominant and when
+      5. Ensure user can explain behavior in terms of feedback structure
+      6. Test if user understands the causal mechanisms, not just the patterns
+      7. Focus on teaching users to think in terms of feedback loops and causal relationships
 
   action_sequence:
     on_new_model_request:
@@ -138,9 +133,6 @@ agent:
       - step: "guide_structure_thinking"
         description: "Help user think through causal relationships and feedback loops"
         tools: ["discuss_with_mentor"]
-
-      - step: "choose_diagram_type"
-        description: "Recommend CLD for conceptual exploration, SFD for basic quantitative learning"
 
       - step: "generate_model"
         tools: ["generate_qualitative_model", "generate_quantitative_model"]
@@ -159,7 +151,6 @@ agent:
 
       - step: "get_user_opinion"
         description: "Ask user what they think of the model before proceeding"
-        tools: ["discuss_with_mentor"]
         always_execute: true
 
       - step: "encourage_simple_testing"
@@ -199,18 +190,13 @@ agent:
         parameters:
           type: "time_series"
 
-      - step: "analyze_feedback_loops"
-        description: "CRITICAL: Get feedback loop analysis to understand causal structure"
-        tools: ["get_feedback_loop_analysis"]
-        always_execute: true
-
-      - step: "generate_loop_narrative"
-        description: "CRITICAL: Generate narrative explaining which loops matter and why"
-        tools: ["generate_ltm_narrative"]
+      - step: "understand_behavior_causes"
+        description: "Use Seldon to understand WHY the model produced this behavior"
+        tools: ["discuss_model_with_seldon"]
         always_execute: true
 
       - step: "discuss_loop_behavior"
-        description: "Ask questions to help user understand loop dynamics and behavior causation"
+        description: "Ask questions to help user understand causal mechanisms and feedback dynamics"
         tools: ["discuss_with_mentor", "discuss_model_across_runs"]
         always_execute: true
 
@@ -241,29 +227,26 @@ agent:
       when_to_use: "After user understands the model structure"
       auto_suggest: true
 
-    get_feedback_loop_analysis:
-      when_to_use: "ALWAYS after every simulation - critical for teaching"
-      frequency: "Every single simulation"
-      always_execute: true
-
     generate_ltm_narrative:
-      when_to_use: "ALWAYS after getting feedback loops - critical for understanding behavior"
-      frequency: "Every single simulation"
-      always_execute: true
+      when_to_use: "When deep feedback loop analysis would help explain complex behavior"
+      frequency: "As needed for understanding causal mechanisms"
+      auto_suggest: false
 
     discuss_with_mentor:
       when_to_use: "Frequently - this is your primary teaching tool"
-      frequency: "Multiple times per conversation, especially after LTM narrative"
+      frequency: "Multiple times per conversation, especially after simulations"
       auto_suggest: true
 
     discuss_model_across_runs:
-      when_to_use: "When explaining behavior in user-friendly terms"
-      frequency: "After simulations to discuss results and loop influence"
+      when_to_use: "Use to help users understand what causes behavioral differences across runs - explain how different scenarios or parameter changes produce different outcomes by examining underlying feedback loop dynamics in plain language"
+      frequency: "When comparing simulation results from different runs or scenarios"
       auto_suggest: true
 
     discuss_model_with_seldon:
-      when_to_use: "After LTM narrative to verify understanding of feedback loop behavior"
-      frequency: "After each simulation to ensure correct interpretation"
+      when_to_use: "After simulations to understand WHY behavior occurs"
+      frequency: "Primary tool for explaining causal mechanisms and feedback loop behavior"
+      auto_suggest: true
+      always_execute: false
 
     generate_quantitative_model:
       when_to_use: "For SFD models - keep them simple"

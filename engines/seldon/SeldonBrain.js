@@ -150,7 +150,10 @@ As the world's best System Dynamics Modeler, you will consider and apply the Sys
             reply = "<b><i>Please re-run the model with calculate loop dominance information turned on.</i></b><br/>" + reply;
         }
 
-        return reply;
+        return {
+            textContent: reply,
+            feedbackInformationRequired: originalResponse.feedbackInformationRequired
+        };
     }
 
     mentor() {

@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { StructuredOutputToZodConverter } from '../../utilities/StructuredOutputToZodConverter.js';
 
 /**
  * DynamicToolServer
@@ -16,6 +16,9 @@ export class DynamicToolServer {
     this.sessionId = sessionId;
     this.sendToClient = sendToClient;
     this.mcpServer = null;
+
+    // Initialize schema converter
+    this.schemaConverter = new StructuredOutputToZodConverter();
   }
 
   /**
@@ -33,7 +36,7 @@ export class DynamicToolServer {
     // Create MCP server from client tools
     this.mcpServer = this.createMcpServerFromClientTools(clientTools);
 
-    console.log(`Updated dynamic tools for session ${this.sessionId}: ${clientTools.map(t => t.name).join(', ')}`);
+    console.log(`Updated dynamic tools for session ${this.sessionId}: ${clientTools.map(t => `client_${t.name}`).join(', ')}`);
   }
 
   /**
@@ -43,9 +46,10 @@ export class DynamicToolServer {
     const tools = {};
 
     for (const toolDef of clientTools) {
-      tools[toolDef.name] = {
+      const toolName = `client_${toolDef.name}`;
+      tools[toolName] = {
         description: toolDef.description,
-        inputSchema: this.convertInputSchema(toolDef.inputSchema),
+        inputSchema: this.schemaConverter.convert(toolDef.inputSchema),
         handler: this.createToolHandler(toolDef)
       };
     }
@@ -57,76 +61,22 @@ export class DynamicToolServer {
   }
 
   /**
-   * Convert client input schema to Zod schema
-   */
-  convertInputSchema(inputSchema) {
-    // inputSchema is in JSON Schema format from client
-    // Convert to Zod schema
-    const properties = inputSchema.properties || {};
-    const required = inputSchema.required || [];
-
-    const zodSchema = {};
-
-    for (const [propName, propDef] of Object.entries(properties)) {
-      let zodField = this.jsonSchemaTypeToZod(propDef);
-
-      // Make optional if not required
-      if (!required.includes(propName)) {
-        zodField = zodField.optional();
-      }
-
-      // Add description if present
-      if (propDef.description) {
-        zodField = zodField.describe(propDef.description);
-      }
-
-      zodSchema[propName] = zodField;
-    }
-
-    return z.object(zodSchema);
-  }
-
-  /**
-   * Convert JSON Schema type to Zod type
-   */
-  jsonSchemaTypeToZod(propDef) {
-    switch (propDef.type) {
-      case 'string':
-        return z.string();
-      case 'number':
-        return z.number();
-      case 'integer':
-        return z.number().int();
-      case 'boolean':
-        return z.boolean();
-      case 'array':
-        if (propDef.items) {
-          return z.array(this.jsonSchemaTypeToZod(propDef.items));
-        }
-        return z.array(z.any());
-      case 'object':
-        if (propDef.properties) {
-          return this.convertInputSchema(propDef);
-        }
-        return z.object({}).passthrough();
-      default:
-        return z.any();
-    }
-  }
-
-  /**
    * Create a tool handler that proxies to the client
+   * Note: toolDef.name is the UNPREFIXED name (e.g., 'get_current_model')
    */
   createToolHandler(toolDef) {
     return async (args) => {
       try {
+        // Use unprefixed name when communicating with client
+        const clientToolName = toolDef.name;
+
         // Special handling for specific tools
-        if (toolDef.name === 'get_current_model') {
+        if (clientToolName === 'get_current_model') {
           return await this.handleGetCurrentModel(args);
-        } else if (toolDef.name === 'update_model') {
+        } else if (clientToolName === 'update_model') {
           return await this.handleUpdateModel(args);
         } else {
-          return await this.requestClientExecution(toolDef.name, args);
+          return await this.requestClientExecution(clientToolName, args);
         }
       } catch (error) {
         console.error(`Error executing client tool ${toolDef.name}:`, error);
@@ -236,15 +186,15 @@ export class DynamicToolServer {
   }
 
   /**
-   * Get list of registered client tool names
+   * Get list of registered client tool names (with client_ prefix)
    */
   getClientToolNames() {
     const session = this.sessionManager.getSession(this.sessionId);
-    return session?.registeredTools.map(t => t.name) || [];
+    return session?.registeredTools.map(t => `client_${t.name}`) || [];
   }
 
   /**
-   * Check if a tool is a client tool
+   * Check if a tool is a client tool (expects prefixed name)
    */
   isClientTool(toolName) {
     return this.getClientToolNames().includes(toolName);

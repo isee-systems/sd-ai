@@ -94,8 +94,8 @@ Returns active session statistics, memory usage, and temp folder info.
       "inputSchema": {...}
     },
     {
-      "name": "get_feedback_loop_analysis",
-      "description": "Analyzes feedback loop dominance",
+      "name": "generate_ltm_narrative",
+      "description": "Generates LTM narrative with feedback loop analysis",
       "inputSchema": {...}
     },
     {
@@ -247,15 +247,16 @@ Retrieves time series data from an existing run.
 }
 ```
 
-### 3. get_feedback_loop_analysis
+### 3. generate_ltm_narrative
 
-Analyzes feedback loop dominance for a run.
+Generates LTM narrative with feedback loop analysis for a run.
 
 **Input:** `{ runId: string }`
 
 **Output:**
 ```json
 {
+  "narrative": "...",
   "feedbackLoops": [...],
   "dominantLoopsByPeriod": [...]
 }

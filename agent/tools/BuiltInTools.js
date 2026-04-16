@@ -13,6 +13,15 @@ import { SDModelSchema } from '../utilities/MessageProtocol.js';
 import logger from '../../utilities/logger.js';
 
 /**
+ * Generate a unique request ID for async operations
+ * @param {string} prefix - Prefix for the request ID (e.g., 'feedback', 'tool')
+ * @returns {string} Unique request ID
+ */
+function generateRequestId(prefix = 'request') {
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+}
+
+/**
  * BuiltInTools
  * Creates an MCP server with all SD-AI engine tools plus visualization
  *
@@ -154,6 +163,55 @@ export function createBuiltInToolsServer(sessionManager, sessionId, sendToClient
               };
             }
 
+            // Check if feedback information is required but not provided
+            if (result.output.feedbackInformationRequired && !feedbackLoops) {
+              // Get feedback information from client
+              const session = sessionManager.getSession(sessionId);
+              if (!session) {
+                throw new Error(`Session not found: ${sessionId}`);
+              }
+
+              const requestId = generateRequestId('feedback');
+
+              // Send request to client for feedback data
+              await sendToClient({
+                type: 'feedback_request',
+                sessionId: sessionId,
+                requestId: requestId
+              });
+
+              // Create pending request that will be resolved when client responds
+              const resultPromise = new Promise((resolve, reject) => {
+                const timeout = setTimeout(() => {
+                  reject(new Error('Feedback request timeout: Client did not respond within 30 seconds'));
+                }, 30000);
+
+                if (!session.pendingFeedbackRequests) {
+                  session.pendingFeedbackRequests = new Map();
+                }
+                session.pendingFeedbackRequests.set(requestId, { resolve, reject, timeout });
+              });
+
+              const feedbackData = await resultPromise;
+
+              // Retry the call with feedback information
+              const retryResult = await callSeldonEngine(prompt, model, feedbackData.feedbackContent.loops, parameters);
+
+              if (!retryResult.success) {
+                return {
+                  content: [{ type: 'text', text: `Error: ${retryResult.error}` }],
+                  isError: true
+                };
+              }
+
+              return {
+                content: [{
+                  type: 'text',
+                  text: JSON.stringify(retryResult.output, null, 2)
+                }]
+              };
+            }
+
             return {
               content: [{
                 type: 'text',
@@ -170,11 +228,12 @@ export function createBuiltInToolsServer(sessionManager, sessionId, sendToClient
       },
 
       discuss_model_across_runs: {
-        description: 'Have a user-friendly discussion about the model without jargon, with the ability to compare and explain differences between simulation runs. Use this for explaining models to beginners or analyzing how different scenarios produce different outcomes.',
+        description: 'Have a user-friendly discussion about the model without jargon, with the ability to compare and explain differences between simulation runs. Use this to understand what causes behavioral differences across runs - analyzing how different scenarios or parameter changes produce different outcomes by examining the underlying feedback loop dynamics.',
         inputSchema: z.object({
           prompt: z.string().describe('Question or topic for discussion'),
           model: SDModelSchema.describe('The model to discuss'),
           runName: z.string().optional().describe('Simulation run ID for context'),
+          feedbackContent: z.object({}).passthrough().optional().describe('Feedback loop analysis data'),
           parameters: z.object({
             model: z.string().optional(),
             problemStatement: z.string().optional().describe('Description of dynamic issue to address'),
@@ -182,14 +241,76 @@ export function createBuiltInToolsServer(sessionManager, sessionId, sendToClient
             behaviorContent: z.string().optional().describe('Time series behavior data')
           }).optional()
         }),
-        handler: async ({ prompt, model, runName, parameters }) => {
+        handler: async ({ prompt, model, runName, feedbackContent, parameters }) => {
           try {
-            const result = await callSeldonILEEngine(prompt, model, runName, parameters);
+            // Add feedbackContent to parameters if provided
+            const engineParams = {
+              ...parameters,
+              ...(feedbackContent && { feedbackContent })
+            };
+
+            const result = await callSeldonILEEngine(prompt, model, runName, engineParams);
 
             if (!result.success) {
               return {
                 content: [{ type: 'text', text: `Error: ${result.error}` }],
                 isError: true
+              };
+            }
+
+            // Check if feedback information is required but not provided
+            if (result.output.feedbackInformationRequired && !feedbackContent) {
+              // Get comparative feedback information from client (all runs)
+              const session = sessionManager.getSession(sessionId);
+              if (!session) {
+                throw new Error(`Session not found: ${sessionId}`);
+              }
+
+              const requestId = generateRequestId('feedback');
+
+              // Send request to client for comparative feedback data
+              await sendToClient({
+                type: 'feedback_request',
+                sessionId: sessionId,
+                requestId: requestId,
+                runId: runName,
+                comparative: true  // Request feedback for all runs for comparative analysis
+              });
+
+              // Create pending request that will be resolved when client responds
+              const resultPromise = new Promise((resolve, reject) => {
+                const timeout = setTimeout(() => {
+                  reject(new Error('Feedback request timeout: Client did not respond within 30 seconds'));
+                }, 30000);
+
+                if (!session.pendingFeedbackRequests) {
+                  session.pendingFeedbackRequests = new Map();
+                }
+                session.pendingFeedbackRequests.set(requestId, { resolve, reject, timeout });
+              });
+
+              const feedbackData = await resultPromise;
+
+              // Retry the call with comparative feedback information
+              const retryParams = {
+                ...parameters,
+                feedbackContent: feedbackData.feedbackContent
+              };
+
+              const retryResult = await callSeldonILEEngine(prompt, model, runName, retryParams);
+
+              if (!retryResult.success) {
+                return {
+                  content: [{ type: 'text', text: `Error: ${retryResult.error}` }],
+                  isError: true
+                };
+              }
+
+              return {
+                content: [{
+                  type: 'text',
+                  text: JSON.stringify(retryResult.output, null, 2)
+                }]
               };
             }
 
@@ -320,6 +441,66 @@ export function createBuiltInToolsServer(sessionManager, sessionId, sendToClient
         }
       },
 
+      get_feedback_information: {
+        description: 'Request feedback loop analysis data from the client. MUST be called before using discuss_model_with_seldon or generate_ltm_narrative to ensure feedback information is available. Can request feedback for a single run or for all runs (comparative analysis).',
+        inputSchema: z.object({
+          runId: z.string().optional().describe('Simulation run ID to get feedback for. If not provided, gets feedback for the most recent run.'),
+          comparative: z.boolean().optional().describe('If true, requests feedback information for all runs to enable comparative analysis. Default: false')
+        }),
+        handler: async ({ runId, comparative }) => {
+          try {
+            // Create a promise that will be resolved when client responds
+            const session = sessionManager.getSession(sessionId);
+            if (!session) {
+              throw new Error(`Session not found: ${sessionId}`);
+            }
+
+            const requestId = generateRequestId('feedback');
+
+            // Send request to client for feedback data
+            await sendToClient({
+              type: 'feedback_request',
+              sessionId: sessionId,
+              requestId: requestId,
+              runId: runId,
+              comparative: comparative || false
+            });
+
+            // Create pending request that will be resolved when client responds
+            const resultPromise = new Promise((resolve, reject) => {
+              const timeout = setTimeout(() => {
+                reject(new Error('Feedback request timeout: Client did not respond within 30 seconds'));
+              }, 30000);
+
+              // Store the resolver in session so it can be called when client responds
+              if (!session.pendingFeedbackRequests) {
+                session.pendingFeedbackRequests = new Map();
+              }
+              session.pendingFeedbackRequests.set(requestId, { resolve, reject, timeout });
+            });
+
+            const feedbackData = await resultPromise;
+
+            return {
+              content: [{
+                type: 'text',
+                text: JSON.stringify({
+                  feedbackContent: feedbackData.feedbackContent,
+                  runId: feedbackData.runId,
+                  comparative: feedbackData.comparative || false
+                }, null, 2)
+              }]
+            };
+          } catch (error) {
+            logger.error('get_feedback_information error:', error);
+            return {
+              content: [{ type: 'text', text: `Failed to get feedback information: ${error.message}` }],
+              isError: true
+            };
+          }
+        }
+      },
+
       create_visualization: {
         description: `Create a data visualization and send it to the client for display in chat.
 
@@ -411,6 +592,7 @@ export function getBuiltInToolNames() {
     'discuss_with_mentor',
     'generate_documentation',
     'generate_ltm_narrative',
+    'get_feedback_information',
     'create_visualization'
   ];
 }

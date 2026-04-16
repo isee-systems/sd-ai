@@ -1,16 +1,16 @@
-import { ConfigManager } from '../../agent/utilities/ConfigManager.js';
+import { AgentConfigurationManager } from '../../agent/utilities/AgentConfigurationManager.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-describe('ConfigManager', () => {
+describe('AgentConfigurationManager', () => {
   let configManager;
 
   beforeEach(() => {
     const configPath = path.join(__dirname, '../../agent/config/ganos-lal.yaml');
-    configManager = new ConfigManager(configPath);
+    configManager = new AgentConfigurationManager(configPath);
   });
 
   describe('constructor', () => {
@@ -22,7 +22,7 @@ describe('ConfigManager', () => {
 
     it('should throw error for non-existent config file', () => {
       expect(() => {
-        new ConfigManager('/non/existent/path.yaml');
+        new AgentConfigurationManager('/non/existent/path.yaml');
       }).toThrow();
     });
   });
@@ -71,7 +71,7 @@ describe('ConfigManager', () => {
   describe('agent configurations', () => {
     it('should load Myrddin config correctly', () => {
       const configPath = path.join(__dirname, '../../agent/config/myrddin.yaml');
-      const myrddinConfig = new ConfigManager(configPath);
+      const myrddinConfig = new AgentConfigurationManager(configPath);
 
       expect(myrddinConfig.config.agent.name).toBe('Myrddin');
       expect(myrddinConfig.config.agent.description).toContain('Expert Modeler');
@@ -79,7 +79,7 @@ describe('ConfigManager', () => {
 
     it('should have different constraints for different agents', () => {
       const ganosConfig = configManager;
-      const myrConfig = new ConfigManager(path.join(__dirname, '../../agent/config/myrddin.yaml'));
+      const myrConfig = new AgentConfigurationManager(path.join(__dirname, '../../agent/config/myrddin.yaml'));
 
       const ganosPrompt = ganosConfig.buildSystemPrompt({}, {}, 'sfd');
       const myrPrompt = myrConfig.buildSystemPrompt({}, {}, 'sfd');

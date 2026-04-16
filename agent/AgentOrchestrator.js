@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { marked } from 'marked';
-import { ConfigManager } from './utilities/ConfigManager.js';
+import { AgentConfigurationManager } from './utilities/AgentConfigurationManager.js';
 import { createBuiltInToolsServer, getBuiltInToolNames } from './tools/BuiltInTools.js';
 import { DynamicToolServer } from './tools/DynamicToolServer.js';
 import {
@@ -10,6 +10,7 @@ import {
   createAgentCompleteMessage,
   createErrorMessage
 } from './utilities/MessageProtocol.js';
+import { ZodToStructuredOutputConverter } from '../utilities/ZodToStructuredOutputConverter.js';
 import logger from '../utilities/logger.js';
 
 /**
@@ -31,7 +32,7 @@ export class AgentOrchestrator {
     this.sendToClient = sendToClient;
 
     // Load configuration
-    this.configManager = new ConfigManager(configPath);
+    this.configManager = new AgentConfigurationManager(configPath);
 
     // Create dynamic tool server
     this.dynamicToolServer = new DynamicToolServer(sessionManager, sessionId, sendToClient);
@@ -40,6 +41,9 @@ export class AgentOrchestrator {
     this.anthropic = new Anthropic({
       apiKey: process.env.ANTHROPIC_API_KEY
     });
+
+    // Initialize schema converter
+    this.schemaConverter = new ZodToStructuredOutputConverter();
 
     logger.log(`AgentOrchestrator initialized for session ${sessionId}`);
   }
@@ -129,7 +133,7 @@ export class AgentOrchestrator {
       try {
         // Call Claude API
         const response = await this.anthropic.messages.create({
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-sonnet-4-6',
           max_tokens: 8192,
           system: systemPrompt,
           messages: messages,
@@ -310,103 +314,41 @@ export class AgentOrchestrator {
    */
   convertToolsToAnthropicFormat(builtInTools, dynamicTools) {
     const tools = [];
+    const toolNames = new Set();
 
     // Convert built-in tools
     for (const [toolName, toolDef] of Object.entries(builtInTools.tools)) {
+      if (toolNames.has(toolName)) {
+        logger.warn(`Duplicate tool name detected: ${toolName} (from built-in tools)`);
+        continue;
+      }
+      toolNames.add(toolName);
+
       tools.push({
         name: toolName,
         description: toolDef.description,
-        input_schema: this.zodToJsonSchema(toolDef.inputSchema)
+        input_schema: this.schemaConverter.convert(toolDef.inputSchema)
       });
     }
 
-    // Convert dynamic tools
+    // Convert dynamic tools (client tools)
     if (dynamicTools && dynamicTools.tools) {
       for (const [toolName, toolDef] of Object.entries(dynamicTools.tools)) {
+        if (toolNames.has(toolName)) {
+          logger.warn(`Duplicate tool name detected: ${toolName} (from client tools) - skipping client version, using built-in`);
+          continue;
+        }
+        toolNames.add(toolName);
+
         tools.push({
           name: toolName,
           description: toolDef.description,
-          input_schema: this.zodToJsonSchema(toolDef.inputSchema)
+          input_schema: this.schemaConverter.convert(toolDef.inputSchema)
         });
       }
     }
 
     return tools;
-  }
-
-  /**
-   * Convert Zod schema to JSON schema for Anthropic
-   */
-  zodToJsonSchema(zodSchema) {
-    // Simple conversion - in production, use a library like zod-to-json-schema
-    // For now, we'll use a basic approach
-    if (zodSchema._def && zodSchema._def.typeName === 'ZodObject') {
-      const properties = {};
-      const required = [];
-      const shape = zodSchema._def.shape();
-
-      for (const [key, value] of Object.entries(shape)) {
-        properties[key] = this.zodTypeToJsonSchema(value);
-        if (!value.isOptional()) {
-          required.push(key);
-        }
-      }
-
-      return {
-        type: 'object',
-        properties,
-        required: required.length > 0 ? required : undefined
-      };
-    }
-
-    return { type: 'object' };
-  }
-
-  //TODO: try to remove this since its duplicate with the ZodToStructuredOutputConverter.js
-  /**
-   * Convert individual Zod type to JSON schema type
-   */
-  zodTypeToJsonSchema(zodType) {
-    const typeName = zodType._def?.typeName;
-
-    switch (typeName) {
-      case 'ZodString':
-        return {
-          type: 'string',
-          description: zodType._def.description
-        };
-      case 'ZodNumber':
-        return {
-          type: 'number',
-          description: zodType._def.description
-        };
-      case 'ZodBoolean':
-        return {
-          type: 'boolean',
-          description: zodType._def.description
-        };
-      case 'ZodArray':
-        return {
-          type: 'array',
-          items: this.zodTypeToJsonSchema(zodType._def.type),
-          description: zodType._def.description
-        };
-      case 'ZodObject':
-        return this.zodToJsonSchema(zodType);
-      case 'ZodEnum':
-        return {
-          type: 'string',
-          enum: zodType._def.values,
-          description: zodType._def.description
-        };
-      case 'ZodOptional':
-        return this.zodTypeToJsonSchema(zodType._def.innerType);
-      default:
-        return {
-          type: 'string',
-          description: zodType._def?.description
-        };
-    }
   }
 
   /**
