@@ -1,8 +1,13 @@
 import { randomBytes } from 'crypto';
-import { join, resolve, normalize } from 'path';
+import { join, resolve, normalize, dirname } from 'path';
 import { writeFileSync, readFileSync, existsSync, unlinkSync } from 'fs';
 import { spawn } from 'child_process';
+import { fileURLToPath } from 'url';
 import { LLMWrapper } from '../../utilities/LLMWrapper.js';
+import logger from '../../utilities/logger.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 /**
  * VisualizationEngine
@@ -442,27 +447,64 @@ print('Visualization saved')
   }
 
   /**
-   * Execute Python script
+   * Execute Python script with OS-level sandboxing
    */
   async executePythonScript(scriptPath) {
     // Validate that the script path is within the session temp directory
     const validatedPath = this.validatePath(scriptPath);
 
+    // Detect OS and use appropriate sandbox script
+    const isWindows = process.platform === 'win32';
+    const isMacOS = process.platform === 'darwin';
+
+    if (isWindows) {
+      logger.warn('WARNING: Running on Windows with minimal sandbox security.');
+      logger.warn('This is for LOCAL DEVELOPMENT ONLY.');
+      logger.warn('DO NOT use for publicly hosted services.');
+      logger.warn('For production, deploy on Linux.');
+    } else if (isMacOS) {
+      logger.warn('WARNING: Running on MacOS sandbox security.');
+      logger.warn('This is for LOCAL DEVELOPMENT ONLY.');
+      logger.warn('DO NOT use for publicly hosted services.');
+      logger.warn('For production, deploy on Linux.');
+    }
+
+    const sandboxScript = isWindows
+      ? join(__dirname, 'python_sandbox_windows.bat')
+      : join(__dirname, 'python_sandbox.sh');
+
     return new Promise((resolve, reject) => {
-      const python = spawn('python3', [validatedPath]);
+      // Arguments: sandbox_dir, script_path
+      const sandboxProcess = spawn(sandboxScript, [
+        this.resolvedTempDir,  // Sandbox directory (session temp dir)
+        validatedPath           // Script to execute
+      ], {
+        // Additional security: set working directory to sandbox
+        cwd: this.resolvedTempDir,
+        // Limit environment variables
+        env: {
+          PATH: process.env.PATH,
+          HOME: this.resolvedTempDir,
+          TMPDIR: this.resolvedTempDir,
+        },
+        // Set timeout at process level as well
+        timeout: 70000, // 70 seconds (sandbox has 65s timeout + 5s buffer)
+        // Windows needs shell
+        shell: isWindows
+      });
 
       let stdout = '';
       let stderr = '';
 
-      python.stdout.on('data', (data) => {
+      sandboxProcess.stdout.on('data', (data) => {
         stdout += data.toString();
       });
 
-      python.stderr.on('data', (data) => {
+      sandboxProcess.stderr.on('data', (data) => {
         stderr += data.toString();
       });
 
-      python.on('close', (code) => {
+      sandboxProcess.on('close', (code) => {
         if (code !== 0) {
           reject(new Error(`Python script failed (code ${code}): ${stderr}`));
         } else {
@@ -470,8 +512,8 @@ print('Visualization saved')
         }
       });
 
-      python.on('error', (err) => {
-        reject(new Error(`Failed to spawn Python: ${err.message}`));
+      sandboxProcess.on('error', (err) => {
+        reject(new Error(`Failed to spawn sandboxed Python: ${err.message}`));
       });
     });
   }
