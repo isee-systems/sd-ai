@@ -3,6 +3,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { existsSync, mkdirSync, readdirSync, unlinkSync, rmdirSync, statSync } from 'fs';
 import logger from '../../utilities/logger.js';
+import config from '../../config.js';
 
 /**
  * SessionManager
@@ -18,7 +19,10 @@ import logger from '../../utilities/logger.js';
 export class SessionManager {
   constructor(options = {}) {
     this.sessions = new Map();
-    this.tempBasePath = join(tmpdir(), 'sd-agent');
+
+    // Use configured temp directory or default to OS tmpdir
+    const baseTempDir = config.sessionTempDir || tmpdir();
+    this.tempBasePath = join(baseTempDir, 'sd-agent');
 
     // Configuration
     this.maxSessions = options.maxSessions || 1000;

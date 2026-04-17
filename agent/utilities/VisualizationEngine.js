@@ -1,5 +1,5 @@
 import { randomBytes } from 'crypto';
-import { join } from 'path';
+import { join, resolve, normalize } from 'path';
 import { writeFileSync, readFileSync, existsSync, unlinkSync } from 'fs';
 import { spawn } from 'child_process';
 import { LLMWrapper } from '../../utilities/LLMWrapper.js';
@@ -24,6 +24,28 @@ export class VisualizationEngine {
     if (!this.sessionTempDir) {
       throw new Error(`Session not found: ${sessionId}`);
     }
+
+    // Normalize and resolve the session temp directory for security checks
+    this.resolvedTempDir = resolve(normalize(this.sessionTempDir));
+  }
+
+  /**
+   * Validate that a file path is within the session temp directory
+   * This prevents path traversal attacks (e.g., ../../etc/passwd)
+   * @param {string} filePath - The file path to validate
+   * @returns {string} The validated, resolved path
+   * @throws {Error} If the path is outside the session temp directory
+   */
+  validatePath(filePath) {
+    // Resolve and normalize the path to eliminate any .. or symbolic links
+    const resolvedPath = resolve(normalize(filePath));
+
+    // Check if the resolved path starts with the session temp directory
+    if (!resolvedPath.startsWith(this.resolvedTempDir + '/') && resolvedPath !== this.resolvedTempDir) {
+      throw new Error(`Security violation: Path '${filePath}' is outside session directory`);
+    }
+
+    return resolvedPath;
   }
 
   /**
@@ -51,9 +73,9 @@ export class VisualizationEngine {
    */
   async createAICustomVisualization(data, variables, options) {
     const vizId = this.generateVizId();
-    const scriptPath = join(this.sessionTempDir, `visualization-${vizId}.py`);
-    const dataPath = join(this.sessionTempDir, `data-${vizId}.json`);
-    const outputPath = join(this.sessionTempDir, `visualization-${vizId}.png`);
+    const scriptPath = this.validatePath(join(this.sessionTempDir, `visualization-${vizId}.py`));
+    const dataPath = this.validatePath(join(this.sessionTempDir, `data-${vizId}.json`));
+    const outputPath = this.validatePath(join(this.sessionTempDir, `visualization-${vizId}.png`));
 
     let base64Image = null;
     let error = null;
@@ -211,9 +233,9 @@ Generate ONLY the Python code, no explanations. The code should be complete and 
    */
   async createVisualizationWithPython(type, data, variables, options) {
     const vizId = this.generateVizId();
-    const scriptPath = join(this.sessionTempDir, `visualization-${vizId}.py`);
-    const dataPath = join(this.sessionTempDir, `data-${vizId}.json`);
-    const outputPath = join(this.sessionTempDir, `visualization-${vizId}.png`);
+    const scriptPath = this.validatePath(join(this.sessionTempDir, `visualization-${vizId}.py`));
+    const dataPath = this.validatePath(join(this.sessionTempDir, `data-${vizId}.json`));
+    const outputPath = this.validatePath(join(this.sessionTempDir, `visualization-${vizId}.png`));
 
     let base64Image = null;
     let error = null;
@@ -262,8 +284,10 @@ Generate ONLY the Python code, no explanations. The code should be complete and 
 
     for (const file of filesToDelete) {
       try {
-        if (existsSync(file)) {
-          unlinkSync(file);
+        // Validate path before deletion
+        const validatedPath = this.validatePath(file);
+        if (existsSync(validatedPath)) {
+          unlinkSync(validatedPath);
         }
       } catch (err) {
         // Suppress cleanup errors - they're not critical
@@ -421,8 +445,11 @@ print('Visualization saved')
    * Execute Python script
    */
   async executePythonScript(scriptPath) {
+    // Validate that the script path is within the session temp directory
+    const validatedPath = this.validatePath(scriptPath);
+
     return new Promise((resolve, reject) => {
-      const python = spawn('python3', [scriptPath]);
+      const python = spawn('python3', [validatedPath]);
 
       let stdout = '';
       let stderr = '';
