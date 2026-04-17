@@ -290,7 +290,7 @@
           <h2><span class="step-number">1</span>Connection</h2>
           <div class="form-group">
             <label for="wsUrl">WebSocket URL</label>
-            <input type="text" id="wsUrl" value="ws://localhost:3001/api/v1/agent" />
+            <input type="text" id="wsUrl" value="ws://localhost:3000/api/v1" />
           </div>
           <div class="button-group">
             <button id="connectBtn">Connect</button>
@@ -584,6 +584,26 @@
           handleFeedbackRequest(message);
           break;
 
+        case 'get_current_model':
+          handleGetCurrentModel(message);
+          break;
+
+        case 'update_model':
+          handleUpdateModel(message);
+          break;
+
+        case 'run_model':
+          handleRunModel(message);
+          break;
+
+        case 'get_run_info':
+          handleGetRunInfo(message);
+          break;
+
+        case 'get_variable_data':
+          handleGetVariableData(message);
+          break;
+
         case 'show_intermediate_model':
           log(`Server wants to show intermediate model: ${message.purpose}`);
           log(`Display mode: ${message.displayMode}`);
@@ -667,7 +687,7 @@
     }
 
     function handleVisualization(message) {
-      const { visualizationId, title, description, format, data, metadata } = message;
+      const { visualizationId, title, description, format, data } = message;
       log(`📊 Visualization received: ${title || visualizationId}`);
 
       const visualizationsContainer = document.getElementById('visualizations');
@@ -696,28 +716,19 @@
         vizItem.appendChild(descEl);
       }
 
-      // Display the image
-      if (format === 'image' && data && data.base64) {
+      // Display the image (new format: data.content with data.encoding)
+      if (format === 'image' && data && data.content && data.encoding === 'base64') {
         const img = document.createElement('img');
-        img.src = `data:${data.mimeType || 'image/png'};base64,${data.base64}`;
+        img.src = `data:${data.mimeType || 'image/png'};base64,${data.content}`;
         img.alt = title || 'Visualization';
+        if (data.width) img.width = data.width;
+        if (data.height) img.height = data.height;
         vizItem.appendChild(img);
       } else {
         const errorMsg = document.createElement('p');
         errorMsg.textContent = 'Unsupported visualization format or missing data';
         errorMsg.style.color = '#e74c3c';
         vizItem.appendChild(errorMsg);
-      }
-
-      // Add metadata
-      if (metadata) {
-        const metaEl = document.createElement('div');
-        metaEl.className = 'visualization-meta';
-        const metaParts = [];
-        if (metadata.createdBy) metaParts.push(`Created by: ${metadata.createdBy}`);
-        if (metadata.variables) metaParts.push(`Variables: ${metadata.variables.join(', ')}`);
-        metaEl.textContent = metaParts.join(' | ');
-        vizItem.appendChild(metaEl);
       }
 
       // Add to container (prepend to show newest first)
@@ -727,17 +738,27 @@
     }
 
     function handleFeedbackRequest(message) {
-      const { requestId, runId, comparative } = message;
-      log(`Feedback request received for ${comparative ? 'all runs (comparative)' : `runId: ${runId || 'latest'}`}`);
+      const { requestId, runIds } = message;
+
+      // Empty array means current run
+      const requestedRunIds = runIds.length === 0 ? ['run_latest'] : runIds;
+      const isMultipleRuns = requestedRunIds.length > 1;
+
+      log(`Feedback request received for runIds: [${requestedRunIds.join(', ')}] (${isMultipleRuns ? 'multiple runs' : 'single run'})`);
 
       // Generate hard-coded feedback loop analysis data
       let feedbackContent;
 
-      if (comparative) {
-        // Return comparative feedback data for multiple runs
+      if (isMultipleRuns) {
+        // Return feedback data for multiple runs (comparative)
         feedbackContent = {
-          runs: {
-            'run_baseline': {
+          runs: {}
+        };
+
+        // Generate feedback for each requested run
+        requestedRunIds.forEach(runId => {
+          if (runId.includes('baseline') || runId === 'run_latest') {
+            feedbackContent.runs[runId] = {
               loops: [
                 {
                   id: 'loop_1',
@@ -754,8 +775,9 @@
                   ]
                 }
               ]
-            },
-            'run_policy': {
+            };
+          } else {
+            feedbackContent.runs[runId] = {
               loops: [
                 {
                   id: 'loop_1',
@@ -786,11 +808,12 @@
                   ]
                 }
               ]
-            }
-          },
-          comparison: {
-            differenceExplanation: 'Policy intervention shifts dominance from growth loop to balancing loop'
+            };
           }
+        });
+
+        feedbackContent.comparison = {
+          differenceExplanation: 'Policy intervention shifts dominance from growth loop to balancing loop'
         };
       } else {
         // Return single run feedback data
@@ -849,16 +872,18 @@
           callId: requestId,  // Use requestId as callId
           result: {
             feedbackContent: feedbackContent,
-            runId: runId || 'run_latest',
-            comparative: comparative || false
+            runIds: requestedRunIds
           },
           isError: false
         });
-        log(`✓ Feedback response sent (${comparative ? 'comparative' : 'single run'})`, 'sent');
+        log(`✓ Feedback response sent for ${requestedRunIds.length} run(s)`, 'sent');
       }, 100);
     }
 
-    function generateMockToolResult(toolName, toolInput) {
+    function handleGetCurrentModel(message) {
+      const { requestId } = message;
+      log('Get current model request received');
+
       let currentModel;
       try {
         currentModel = JSON.parse(elements.modelData.value);
@@ -866,92 +891,157 @@
         currentModel = { variables: [], error: 'Invalid model JSON' };
       }
 
-      switch (toolName) {
-        case 'get_current_model':
-          return { model: currentModel };
+      // Send response back to server using tool_call_response format
+      setTimeout(() => {
+        send({
+          type: 'tool_call_response',
+          sessionId: sessionId,
+          callId: requestId,
+          result: currentModel,
+          isError: false
+        });
+        log('✓ Current model sent', 'sent');
+      }, 100);
+    }
 
-        case 'update_model':
-          // Set/update the model - no distinction between create and update
-          // Always update local display and return the full model
-          if (toolInput && toolInput.model) {
-            elements.modelData.value = JSON.stringify(toolInput.model, null, 2);
-            log('✓ Model set/updated', 'received');
-          }
-          // Return the full model (not incremental changes)
-          const updatedModel = toolInput.model || currentModel;
-          return { success: true, model: updatedModel };
+    function handleUpdateModel(message) {
+      const { requestId, modelData } = message;
+      log('Update model request received');
 
-        case 'run_model':
-          // Generate dummy simulation data based on current model
-          const variables = currentModel.variables || [];
-          const timePoints = 100;
-          const series = [];
+      // Update the model in the UI
+      if (modelData) {
+        elements.modelData.value = JSON.stringify(modelData, null, 2);
+        log('✓ Model updated in UI', 'received');
+      }
+
+      // Send response back to server
+      setTimeout(() => {
+        send({
+          type: 'tool_call_response',
+          sessionId: sessionId,
+          callId: requestId,
+          result: { success: true, model: modelData },
+          isError: false
+        });
+        log('✓ Update model response sent', 'sent');
+      }, 100);
+    }
+
+    function handleRunModel(message) {
+      const { requestId } = message;
+
+      log('Run model request received');
+
+      // Generate a unique run ID
+      const runId = `run_${Date.now()}`;
+
+      // Send response back to server
+      setTimeout(() => {
+        const result = {
+          runId: runId,
+          success: true
+        };
+
+        send({
+          type: 'tool_call_response',
+          sessionId: sessionId,
+          callId: requestId,
+          result: result,
+          isError: false
+        });
+        log(`✓ Run model response sent (runId: ${runId})`, 'sent');
+      }, 500); // Longer delay to simulate running
+    }
+
+    function handleGetRunInfo(message) {
+      const { requestId } = message;
+      log('Get run info request received');
+
+      // Return mock run info with multiple runs
+      const runs = [
+        { id: 'run_baseline', name: 'Baseline Run', metadata: { timestamp: '2024-01-15T10:00:00Z', description: 'Initial baseline' } },
+        { id: 'run_policy', name: 'Policy Intervention', metadata: { timestamp: '2024-01-15T11:30:00Z', description: 'With new policy' } },
+        { id: 'run_optimized', name: 'Optimized Parameters', metadata: { timestamp: '2024-01-15T14:00:00Z' } }
+      ];
+
+      // Send response back to server
+      setTimeout(() => {
+        send({
+          type: 'tool_call_response',
+          sessionId: sessionId,
+          callId: requestId,
+          result: { runs: runs },
+          isError: false
+        });
+        log(`✓ Run info sent (${runs.length} runs)`, 'sent');
+      }, 100);
+    }
+
+    function handleGetVariableData(message) {
+      const { requestId, variableNames: rawVariableNames, runIds: rawRunIds } = message;
+
+      // Handle variableNames - could be array or string
+      let variableNames = [];
+      if (Array.isArray(rawVariableNames)) {
+        variableNames = rawVariableNames;
+      } else if (typeof rawVariableNames === 'string') {
+        variableNames = rawVariableNames.split(',').map(v => v.trim()).filter(v => v.length > 0);
+      }
+
+      // Handle runIds - could be array or string
+      let runIds = [];
+      if (Array.isArray(rawRunIds)) {
+        runIds = rawRunIds;
+      } else if (typeof rawRunIds === 'string') {
+        runIds = rawRunIds.split(',').map(v => v.trim()).filter(v => v.length > 0);
+      }
+
+      log(`Get variable data request received (variables: ${variableNames.join(', ')}, runs: ${runIds.join(', ')})`);
+
+      // Generate mock data for requested variables and runs
+      const timePoints = 100;
+      const result = {};
+
+      runIds.forEach(runId => {
+        result[runId] = {};
+        variableNames.forEach(varName => {
+          const data = [];
+          // Generate different data based on runId
+          const runMultiplier = runId.includes('baseline') ? 1.0 : runId.includes('policy') ? 0.7 : 0.9;
+          const baseValue = 100;
 
           for (let t = 0; t <= timePoints; t++) {
-            const point = { time: t };
-            // Add dummy data for each variable in the model
-            variables.forEach(variable => {
-              const varName = variable.name || variable.id || `var_${Math.random()}`;
-              // Generate some variety in the data with more realistic patterns
-              if (variable.type === 'stock') {
-                point[varName] = 1000 + t * 20 + Math.sin(t / 3) * 50;
-              } else if (variable.type === 'flow') {
-                point[varName] = 20 + Math.cos(t / 4) * 5;
-              } else {
-                point[varName] = 100 + t * 5;
-              }
+            data.push({
+              time: t,
+              value: (baseValue + Math.sin(t / 10) * 20 * runMultiplier) + Math.random() * 5
             });
-            series.push(point);
           }
+          result[runId][varName] = data;
+        });
+      });
 
+      // Send response back to server
+      setTimeout(() => {
+        send({
+          type: 'tool_call_response',
+          sessionId: sessionId,
+          callId: requestId,
+          result: result,
+          isError: false
+        });
+        log(`✓ Variable data sent`, 'sent');
+      }, 200);
+    }
+
+    function generateMockToolResult(toolName, toolInput) {
+      switch (toolName) {
+        case 'hello_world':
+          const name = toolInput?.name || 'World';
           return {
             success: true,
-            results: { series }
+            message: `Hello ${name}! This is a dummy tool response from the test client.`,
+            timestamp: new Date().toISOString()
           };
-
-        case 'get_run_data':
-          // Generate random test data for requested variables
-          const requestedVariables = toolInput.variables || [];
-          const numPoints = 100;
-
-          // Generate time array
-          const timeArray = [];
-          for (let i = 0; i <= numPoints; i++) {
-            timeArray.push(i);
-          }
-
-          // Generate random data for each requested variable
-          const result = {
-            success: true,
-            runId: toolInput.runId || 'latest',
-            time: timeArray
-          };
-
-          requestedVariables.forEach(varName => {
-            const data = [];
-            const baseValue = Math.random() * 1000 + 100; // Random base between 100-1100
-            const trend = (Math.random() - 0.5) * 10; // Random trend -5 to +5
-            const amplitude = Math.random() * 100 + 20; // Random amplitude 20-120
-            const frequency = Math.random() * 0.3 + 0.1; // Random frequency 0.1-0.4
-
-            for (let t = 0; t <= numPoints; t++) {
-              // Generate realistic-looking time series with trend + oscillation + noise
-              const trendComponent = trend * t;
-              const oscillation = amplitude * Math.sin(frequency * t);
-              const noise = (Math.random() - 0.5) * 20;
-              const value = Math.max(0, baseValue + trendComponent + oscillation + noise);
-              data.push(value);
-            }
-
-            result[varName] = data;
-          });
-
-          log(`✓ Generated random data for: ${requestedVariables.join(', ')}`, 'received');
-          return result;
-
-        case 'show_intermediate_model':
-          log('Mock: Intermediate model shown in separate window');
-          return { success: true };
 
         default:
           return { success: true, message: `Mock response for ${toolName}` };
@@ -972,58 +1062,15 @@
         model: {},
         tools: [
           {
-            name: 'get_current_model',
-            description: 'Get the current model from the client',
-            inputSchema: { type: 'object', properties: {} }
-          },
-          {
-            name: 'update_model',
-            description: 'Update the client model',
+            name: 'hello_world',
+            description: 'A simple dummy tool that returns a Hello World message',
             inputSchema: {
               type: 'object',
               properties: {
-                model: { type: 'object' },
-                explanation: { type: 'string' }
-              }
-            }
-          },
-          {
-            name: 'run_model',
-            description: 'Run model simulation',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                timeRange: { type: 'object' }
-              }
-            }
-          },
-          {
-            name: 'get_run_data',
-            description: 'Get time series data for specific variables from a simulation run',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                runId: {
+                name: {
                   type: 'string',
-                  description: 'The ID of the simulation run (optional, defaults to latest run)'
-                },
-                variables: {
-                  type: 'array',
-                  items: { type: 'string' },
-                  description: 'Array of variable names to retrieve data for'
+                  description: 'Optional name to include in the greeting'
                 }
-              },
-              required: ['variables']
-            }
-          },
-          {
-            name: 'show_intermediate_model',
-            description: 'Show intermediate model in separate window',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                model: { type: 'object' },
-                displayMode: { type: 'string' }
               }
             }
           }

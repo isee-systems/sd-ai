@@ -34,6 +34,8 @@ NEVER switch between CLD and SFD during a session.
 **SFDs (Stock Flow Diagrams) are QUANTITATIVE:**
 - SFDs have equations and can be simulated to produce time series behavior
 - Use run_model, get_run_data, and create_visualization for SFDs only
+- ALWAYS check that stocks and variables that represent physical quantities (population, inventory, resources, etc.) cannot go negative
+- Add appropriate constraints prevent negative values where they are physically impossible
 
 ## CRITICAL: Visualization Requests
 When a user requests a visualization:

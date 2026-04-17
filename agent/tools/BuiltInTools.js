@@ -9,7 +9,15 @@ import {
   callSeldonMentorEngine
 } from '../utilities/EngineWrapper.js';
 import { VisualizationEngine } from '../utilities/VisualizationEngine.js';
-import { SDModelSchema, createFeedbackRequestMessage } from '../utilities/MessageProtocol.js';
+import {
+  SDModelSchema,
+  createFeedbackRequestMessage,
+  createGetCurrentModelMessage,
+  createUpdateModelMessage,
+  createRunModelMessage,
+  createGetRunInfoMessage,
+  createGetVariableDataMessage
+} from '../utilities/MessageProtocol.js';
 import logger from '../../utilities/logger.js';
 
 /**
@@ -52,7 +60,7 @@ export function createBuiltInToolsServer(sessionManager, sessionId, sendToClient
     name: 'sd_ai_engines',
     tools: {
       generate_quantitative_model: {
-        description: 'Generate a Stock Flow Diagram (SFD) model with equations and quantitative structure. Use this for building computational models that can be simulated.',
+        description: 'Generate a Stock Flow Diagram (SFD) model with equations and quantitative structure. Use this for building computational models that can be simulated. Automatically pushes the generated model to the client.',
         inputSchema: z.object({
           prompt: z.string().describe('Description of the model to generate'),
           currentModel: SDModelSchema.optional().describe('Existing model to build upon'),
@@ -75,10 +83,34 @@ export function createBuiltInToolsServer(sessionManager, sessionId, sendToClient
               };
             }
 
+            // Automatically push the generated model to the client
+            const session = sessionManager.getSession(sessionId);
+            if (!session) {
+              throw new Error(`Session not found: ${sessionId}`);
+            }
+
+            const requestId = generateRequestId('model');
+            await sendToClient(createUpdateModelMessage(sessionId, requestId, result.model));
+
+            // Wait for client confirmation
+            const updatePromise = new Promise((resolve, reject) => {
+              const timeout = setTimeout(() => {
+                reject(new Error('Update model timeout: Client did not respond within 30 seconds'));
+              }, 30000);
+
+              if (!session.pendingModelRequests) {
+                session.pendingModelRequests = new Map();
+              }
+              session.pendingModelRequests.set(requestId, { resolve, reject, timeout });
+            });
+
+            await updatePromise;
+
             // Build response
             const responseText = JSON.stringify({
               model: result.model,
-              supportingInfo: result.supportingInfo
+              supportingInfo: result.supportingInfo,
+              pushedToClient: true
             }, null, 2);
 
             return {
@@ -97,7 +129,7 @@ export function createBuiltInToolsServer(sessionManager, sessionId, sendToClient
       },
 
       generate_qualitative_model: {
-        description: 'Generate a Causal Loop Diagram (CLD) showing feedback loops and causal relationships. Use this for conceptual models focusing on system structure.',
+        description: 'Generate a Causal Loop Diagram (CLD) showing feedback loops and causal relationships. Use this for conceptual models focusing on system structure. Automatically pushes the generated model to the client.',
         inputSchema: z.object({
           prompt: z.string().describe('Description of the model to generate'),
           currentModel: SDModelSchema.optional().describe('Existing model to build upon'),
@@ -118,10 +150,34 @@ export function createBuiltInToolsServer(sessionManager, sessionId, sendToClient
               };
             }
 
+            // Automatically push the generated model to the client
+            const session = sessionManager.getSession(sessionId);
+            if (!session) {
+              throw new Error(`Session not found: ${sessionId}`);
+            }
+
+            const requestId = generateRequestId('model');
+            await sendToClient(createUpdateModelMessage(sessionId, requestId, result.model));
+
+            // Wait for client confirmation
+            const updatePromise = new Promise((resolve, reject) => {
+              const timeout = setTimeout(() => {
+                reject(new Error('Update model timeout: Client did not respond within 30 seconds'));
+              }, 30000);
+
+              if (!session.pendingModelRequests) {
+                session.pendingModelRequests = new Map();
+              }
+              session.pendingModelRequests.set(requestId, { resolve, reject, timeout });
+            });
+
+            await updatePromise;
+
             // Build response
             const responseText = JSON.stringify({
               model: result.model,
-              supportingInfo: result.supportingInfo
+              supportingInfo: result.supportingInfo,
+              pushedToClient: true
             }, null, 2);
 
             return {
@@ -173,8 +229,8 @@ export function createBuiltInToolsServer(sessionManager, sessionId, sendToClient
 
               const requestId = generateRequestId('feedback');
 
-              // Send request to client for feedback data
-              await sendToClient(createFeedbackRequestMessage(sessionId, requestId));
+              // Send request to client for feedback data (empty array means all runs)
+              await sendToClient(createFeedbackRequestMessage(sessionId, requestId, []));
 
               // Create pending request that will be resolved when client responds
               const resultPromise = new Promise((resolve, reject) => {
@@ -264,8 +320,8 @@ export function createBuiltInToolsServer(sessionManager, sessionId, sendToClient
 
               const requestId = generateRequestId('feedback');
 
-              // Send request to client for comparative feedback data
-              await sendToClient(createFeedbackRequestMessage(sessionId, requestId, runName, true));
+              // Send request to client for comparative feedback data (empty array means all runs)
+              await sendToClient(createFeedbackRequestMessage(sessionId, requestId, []));
 
               // Create pending request that will be resolved when client responds
               const resultPromise = new Promise((resolve, reject) => {
@@ -432,12 +488,11 @@ export function createBuiltInToolsServer(sessionManager, sessionId, sendToClient
       },
 
       get_feedback_information: {
-        description: 'Request feedback loop analysis data from the client. MUST be called before using discuss_model_with_seldon or generate_ltm_narrative to ensure feedback information is available. Can request feedback for a single run or for all runs (comparative analysis).',
+        description: 'Request feedback loop analysis data from the client. MUST be called before using discuss_model_with_seldon or generate_ltm_narrative to ensure feedback information is available. Provide a list of run IDs to get feedback for.',
         inputSchema: z.object({
-          runId: z.string().optional().describe('Simulation run ID to get feedback for. If not provided, gets feedback for the most recent run.'),
-          comparative: z.boolean().optional().describe('If true, requests feedback information for all runs to enable comparative analysis. Default: false')
+          runIds: z.array(z.string()).describe('List of simulation run IDs to get feedback for')
         }),
-        handler: async ({ runId, comparative }) => {
+        handler: async ({ runIds }) => {
           try {
             // Create a promise that will be resolved when client responds
             const session = sessionManager.getSession(sessionId);
@@ -448,7 +503,7 @@ export function createBuiltInToolsServer(sessionManager, sessionId, sendToClient
             const requestId = generateRequestId('feedback');
 
             // Send request to client for feedback data
-            await sendToClient(createFeedbackRequestMessage(sessionId, requestId, runId, comparative || false));
+            await sendToClient(createFeedbackRequestMessage(sessionId, requestId, runIds));
 
             // Create pending request that will be resolved when client responds
             const resultPromise = new Promise((resolve, reject) => {
@@ -470,8 +525,7 @@ export function createBuiltInToolsServer(sessionManager, sessionId, sendToClient
                 type: 'text',
                 text: JSON.stringify({
                   feedbackContent: feedbackData.feedbackContent,
-                  runId: feedbackData.runId,
-                  comparative: feedbackData.comparative || false
+                  runIds: feedbackData.runIds
                 }, null, 2)
               }]
             };
@@ -479,6 +533,243 @@ export function createBuiltInToolsServer(sessionManager, sessionId, sendToClient
             logger.error('get_feedback_information error:', error);
             return {
               content: [{ type: 'text', text: `Failed to get feedback information: ${error.message}` }],
+              isError: true
+            };
+          }
+        }
+      },
+
+      get_current_model: {
+        description: 'Get the current model from the client. Returns the model data that is currently loaded in the client.',
+        inputSchema: z.object({}),
+        handler: async () => {
+          try {
+            const session = sessionManager.getSession(sessionId);
+            if (!session) {
+              throw new Error(`Session not found: ${sessionId}`);
+            }
+
+            const requestId = generateRequestId('model');
+
+            // Send request to client for current model
+            await sendToClient(createGetCurrentModelMessage(sessionId, requestId));
+
+            // Create pending request that will be resolved when client responds
+            const resultPromise = new Promise((resolve, reject) => {
+              const timeout = setTimeout(() => {
+                reject(new Error('Get current model timeout: Client did not respond within 30 seconds'));
+              }, 30000);
+
+              if (!session.pendingModelRequests) {
+                session.pendingModelRequests = new Map();
+              }
+              session.pendingModelRequests.set(requestId, { resolve, reject, timeout });
+            });
+
+            const modelData = await resultPromise;
+
+            return {
+              content: [{
+                type: 'text',
+                text: JSON.stringify(modelData, null, 2)
+              }]
+            };
+          } catch (error) {
+            logger.error('get_current_model error:', error);
+            return {
+              content: [{ type: 'text', text: `Failed to get current model: ${error.message}` }],
+              isError: true
+            };
+          }
+        }
+      },
+
+      update_model: {
+        description: 'Update the model in the client with new model data. This replaces the current model.',
+        inputSchema: z.object({
+          modelData: z.any().describe('The model data to update in the client')
+        }),
+        handler: async ({ modelData }) => {
+          try {
+            const session = sessionManager.getSession(sessionId);
+            if (!session) {
+              throw new Error(`Session not found: ${sessionId}`);
+            }
+
+            const requestId = generateRequestId('model');
+
+            // Send update request to client
+            await sendToClient(createUpdateModelMessage(sessionId, requestId, modelData));
+
+            // Create pending request that will be resolved when client responds
+            const resultPromise = new Promise((resolve, reject) => {
+              const timeout = setTimeout(() => {
+                reject(new Error('Update model timeout: Client did not respond within 30 seconds'));
+              }, 30000);
+
+              if (!session.pendingModelRequests) {
+                session.pendingModelRequests = new Map();
+              }
+              session.pendingModelRequests.set(requestId, { resolve, reject, timeout });
+            });
+
+            const result = await resultPromise;
+
+            return {
+              content: [{
+                type: 'text',
+                text: JSON.stringify({ success: true, ...result }, null, 2)
+              }]
+            };
+          } catch (error) {
+            logger.error('update_model error:', error);
+            return {
+              content: [{ type: 'text', text: `Failed to update model: ${error.message}` }],
+              isError: true
+            };
+          }
+        }
+      },
+
+      run_model: {
+        description: 'Run the model simulation in the client. Returns a runId for the completed run.',
+        inputSchema: z.object({}),
+        handler: async () => {
+          try {
+            const session = sessionManager.getSession(sessionId);
+            if (!session) {
+              throw new Error(`Session not found: ${sessionId}`);
+            }
+
+            const requestId = generateRequestId('run');
+
+            // Send run request to client
+            await sendToClient(createRunModelMessage(sessionId, requestId));
+
+            // Create pending request that will be resolved when client responds
+            const resultPromise = new Promise((resolve, reject) => {
+              const timeout = setTimeout(() => {
+                reject(new Error('Run model timeout: Client did not respond within 60 seconds'));
+              }, 60000); // Longer timeout for model runs
+
+              if (!session.pendingModelRequests) {
+                session.pendingModelRequests = new Map();
+              }
+              session.pendingModelRequests.set(requestId, { resolve, reject, timeout });
+            });
+
+            const result = await resultPromise;
+
+            return {
+              content: [{
+                type: 'text',
+                text: JSON.stringify({
+                  runId: result.runId,
+                  success: true,
+                  ...result
+                }, null, 2)
+              }]
+            };
+          } catch (error) {
+            logger.error('run_model error:', error);
+            return {
+              content: [{ type: 'text', text: `Failed to run model: ${error.message}` }],
+              isError: true
+            };
+          }
+        }
+      },
+
+      get_run_info: {
+        description: 'Get information about all simulation runs. Returns a list of run objects, where each run object contains an id, name, and optional metadata.',
+        inputSchema: z.object({}),
+        handler: async () => {
+          try {
+            const session = sessionManager.getSession(sessionId);
+            if (!session) {
+              throw new Error(`Session not found: ${sessionId}`);
+            }
+
+            const requestId = generateRequestId('runinfo');
+
+            // Send request to client for run info
+            await sendToClient(createGetRunInfoMessage(sessionId, requestId));
+
+            // Create pending request that will be resolved when client responds
+            const resultPromise = new Promise((resolve, reject) => {
+              const timeout = setTimeout(() => {
+                reject(new Error('Get run info timeout: Client did not respond within 30 seconds'));
+              }, 30000);
+
+              if (!session.pendingModelRequests) {
+                session.pendingModelRequests = new Map();
+              }
+              session.pendingModelRequests.set(requestId, { resolve, reject, timeout });
+            });
+
+            const runInfo = await resultPromise;
+
+            return {
+              content: [{
+                type: 'text',
+                text: JSON.stringify({
+                  runs: runInfo.runs || [],
+                  count: runInfo.runs?.length || 0
+                }, null, 2)
+              }]
+            };
+          } catch (error) {
+            logger.error('get_run_info error:', error);
+            return {
+              content: [{ type: 'text', text: `Failed to get run info: ${error.message}` }],
+              isError: true
+            };
+          }
+        }
+      },
+
+      get_variable_data: {
+        description: 'Get data for specific variables from specific runs. Returns the time-series data for the requested variables from the requested runs.',
+        inputSchema: z.object({
+          variableNames: z.array(z.string()).describe('List of variable names to get data for'),
+          runIds: z.array(z.string()).describe('List of run IDs to get variable data from')
+        }),
+        handler: async ({ variableNames, runIds }) => {
+          try {
+            const session = sessionManager.getSession(sessionId);
+            if (!session) {
+              throw new Error(`Session not found: ${sessionId}`);
+            }
+
+            const requestId = generateRequestId('vardata');
+
+            // Send request to client for variable data
+            await sendToClient(createGetVariableDataMessage(sessionId, requestId, variableNames, runIds));
+
+            // Create pending request that will be resolved when client responds
+            const resultPromise = new Promise((resolve, reject) => {
+              const timeout = setTimeout(() => {
+                reject(new Error('Get variable data timeout: Client did not respond within 30 seconds'));
+              }, 30000);
+
+              if (!session.pendingModelRequests) {
+                session.pendingModelRequests = new Map();
+              }
+              session.pendingModelRequests.set(requestId, { resolve, reject, timeout });
+            });
+
+            const variableData = await resultPromise;
+
+            return {
+              content: [{
+                type: 'text',
+                text: JSON.stringify(variableData, null, 2)
+              }]
+            };
+          } catch (error) {
+            logger.error('get_variable_data error:', error);
+            return {
+              content: [{ type: 'text', text: `Failed to get variable data: ${error.message}` }],
               isError: true
             };
           }
@@ -539,22 +830,28 @@ Use useAICustom=true to have AI generate custom matplotlib code for complex visu
 
             // Wrap base64 string in proper visualization message object
             const vizMessage = {
-              visualizationId,
-              title: title || 'Visualization',
-              description: description || '',
-              format: 'image',
-              data: {
-                base64: base64Image,
-                mimeType: 'image/png'
-              }
-            };
-
-            // Send visualization to client
-            await sendToClient({
               type: 'visualization',
               sessionId: sessionId,
-              ...vizMessage
-            });
+              visualizationId,
+              title: title || 'Visualization',
+              format: 'image',
+              data: {
+                encoding: 'base64',
+                mimeType: 'image/png',
+                content: base64Image,
+                width: 800,
+                height: 600
+              },
+              timestamp: new Date().toISOString()
+            };
+
+            // Add description if provided
+            if (description) {
+              vizMessage.description = description;
+            }
+
+            // Send visualization to client
+            await sendToClient(vizMessage);
 
             return {
               content: [{
@@ -588,6 +885,11 @@ export function getBuiltInToolNames() {
     'generate_documentation',
     'generate_ltm_narrative',
     'get_feedback_information',
+    'get_current_model',
+    'update_model',
+    'run_model',
+    'get_run_info',
+    'get_variable_data',
     'create_visualization'
   ];
 }

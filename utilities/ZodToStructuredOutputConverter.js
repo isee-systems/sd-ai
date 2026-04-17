@@ -31,6 +31,10 @@ export class ZodToStructuredOutputConverter {
         // For Claude's structured outputs, optional fields are handled via the 'required' array
         // in the parent object, not via a 'nullable' property
         return this.convert(zodSchema._def.innerType);
+      case 'ZodDefault':
+        // For ZodDefault, we ignore the default value and just convert the inner type
+        // Default values are handled by the application logic, not the schema
+        return this.convert(zodSchema._def.innerType);
       case 'ZodUnion':
         return this.convertZodUnionToStructuredOutput(zodSchema._def);
       case 'ZodLiteral':

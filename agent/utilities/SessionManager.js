@@ -1,7 +1,7 @@
 import { randomBytes } from 'crypto';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { existsSync, mkdirSync, readdirSync, unlinkSync, rmdirSync, statSync } from 'fs';
+import { existsSync, mkdirSync, readdirSync, statSync, rmSync } from 'fs';
 import logger from '../../utilities/logger.js';
 import config from '../../config.js';
 
@@ -278,18 +278,8 @@ export class SessionManager {
   cleanupSessionTempDir(tempDir) {
     try {
       if (existsSync(tempDir)) {
-        // Remove all files in the directory
-        const files = readdirSync(tempDir);
-        for (const file of files) {
-          try {
-            unlinkSync(join(tempDir, file));
-          } catch (err) {
-            logger.warn(`Failed to delete temp file ${file}:`, err.message);
-          }
-        }
-
-        // Remove the directory itself
-        rmdirSync(tempDir);
+        // Remove directory and all its contents recursively
+        rmSync(tempDir, { recursive: true, force: true });
         logger.log(`Cleaned up temp directory: ${tempDir}`);
       }
     } catch (err) {

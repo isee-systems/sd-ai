@@ -49,10 +49,10 @@ function getAvailableAgents() {
     logger.error('Failed to scan agent config directory:', err);
   }
 
-  // Hardcoded defaults - ganos-lal is the default agent for all model types
+  // Hardcoded defaults - myrddin is the default agent for all model types
   const defaults = {
-    sfd: 'ganos-lal',
-    cld: 'ganos-lal'
+    sfd: 'myrddin',
+    cld: 'myrddin'
   };
 
   return { agents, defaults };
@@ -187,6 +187,50 @@ export function handleWebSocketConnection(ws, sessionManager) {
         message.context
       );
 
+      // Process historical messages if provided
+      if (message.historicalMessages && message.historicalMessages.length > 0) {
+        for (const histMsg of message.historicalMessages) {
+          let role = 'assistant'; // Default to assistant
+          let content = '';
+
+          switch (histMsg.type) {
+            case 'user_text':
+              role = 'user';
+              content = histMsg.content || '';
+              break;
+
+            case 'agent_text':
+              role = 'assistant';
+              content = histMsg.content || '';
+              break;
+
+            case 'agent_complete':
+              role = 'assistant';
+              content = histMsg.content || '';
+              break;
+
+            case 'visualization':
+              // For visualizations, create a summary message
+              role = 'assistant';
+              content = `[Created visualization: ${histMsg.visualizationTitle || 'Untitled'}]`;
+              if (histMsg.visualizationDescription) {
+                content += ` ${histMsg.visualizationDescription}`;
+              }
+              break;
+          }
+
+          if (content) {
+            // Add to conversation history
+            sessionManager.addToConversationHistory(sessionId, {
+              role: role,
+              content: content
+            });
+          }
+        }
+
+        logger.log(`Loaded ${message.historicalMessages.length} historical messages for session ${sessionId}`);
+      }
+
       // Get available agents from config directory
       const { agents, defaults } = getAvailableAgents();
 
@@ -306,6 +350,19 @@ export function handleWebSocketConnection(ws, sessionManager) {
 
           session.pendingFeedbackRequests.delete(message.callId);
           logger.log(`Resolved feedback request: ${message.callId}`);
+        } else if (session?.pendingModelRequests?.has(message.callId)) {
+          // Check if it's a model request response (get_current_model, update_model, run_model, get_run_info, get_variable_data)
+          const pending = session.pendingModelRequests.get(message.callId);
+          clearTimeout(pending.timeout);
+
+          if (message.isError) {
+            pending.reject(new Error(message.result));
+          } else {
+            pending.resolve(message.result);
+          }
+
+          session.pendingModelRequests.delete(message.callId);
+          logger.log(`Resolved model request: ${message.callId}`);
         } else {
           logger.warn(`Received response for unknown call ID: ${message.callId}`);
         }

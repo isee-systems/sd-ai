@@ -166,15 +166,24 @@ ${options.customRequirements ? `\n## Additional Requirements\n${options.customRe
 Generate ONLY the Python code, no explanations. The code should be complete and ready to execute.`;
 
     try {
-      const response = await llm.generateResponse({
-        systemPrompt,
-        messages: [{ role: 'user', content: userPrompt }],
-        temperature: 0.3,
-        model: LLMWrapper.NON_BUILD_DEFAULT_MODEL
-      });
+      // Get LLM parameters
+      const { underlyingModel, temperature } = llm.getLLMParameters(0.3);
 
-      // Extract Python code from response
-      let pythonCode = response.trim();
+      // Create messages array
+      const messages = [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ];
+
+      const response = await llm.createChatCompletion(
+        messages,
+        underlyingModel,
+        null, // no zodSchema
+        temperature
+      );
+
+      // Extract Python code from response content
+      let pythonCode = response.content.trim();
 
       // Remove markdown code blocks if present
       if (pythonCode.startsWith('```python')) {

@@ -40,14 +40,27 @@ app.use("/api/v1/leaderboard", v1Leaderboard);
 // Create HTTP server for REST API
 const server = createServer(app);
 
-// Create separate HTTP server for WebSocket
-const wsHttpServer = createServer();
+// Determine if WebSocket should run on same or separate port
+const useSamePort = config.port === config.websocketPort;
 
-// Create WebSocket server on separate port
-const wss = new WebSocketServer({
-  server: wsHttpServer,
-  path: '/api/v1/agent'
-});
+// Create WebSocket server (either on same server or separate server)
+let wsHttpServer;
+let wss;
+
+if (useSamePort) {
+  // WebSocket on the same HTTP server as REST API
+  wss = new WebSocketServer({
+    server: server,
+    path: '/api/v1'
+  });
+} else {
+  // WebSocket on a separate HTTP server and port
+  wsHttpServer = createServer();
+  wss = new WebSocketServer({
+    server: wsHttpServer,
+    path: '/api/v1'
+  });
+}
 
 wss.on('connection', (ws) => {
   handleWebSocketConnection(ws, sessionManager);
@@ -71,10 +84,15 @@ process.on('SIGINT', () => {
 // Start HTTP server
 server.listen(config.port, () => {
   logger.log(`ai-proxy-service listening on port ${config.port}`);
+  if (useSamePort) {
+    logger.log(`WebSocket server available at ws://localhost:${config.port}/api/v1`);
+  }
 });
 
-// Start WebSocket server on separate port
-wsHttpServer.listen(config.websocketPort, () => {
-  logger.log(`WebSocket server listening on port ${config.websocketPort}`);
-  logger.log(`WebSocket server available at ws://localhost:${config.websocketPort}/api/v1/agent`);
-});
+// Start WebSocket server on separate port if needed
+if (!useSamePort) {
+  wsHttpServer.listen(config.websocketPort, () => {
+    logger.log(`WebSocket server listening on port ${config.websocketPort}`);
+    logger.log(`WebSocket server available at ws://localhost:${config.websocketPort}/api/v1`);
+  });
+}

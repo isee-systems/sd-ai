@@ -22,13 +22,13 @@ This WebSocket server provides an AI agent (powered by Claude) that helps users 
 The **client** owns and maintains:
 - Complete model state (SD-JSON format)
 - All simulation run data
-- Full conversation history
-- Visualization history
+- Full conversation history (including user messages, agent responses, and visualizations)
+- Message log for session resumption
 
 The **server** maintains (in-memory only):
 - Active WebSocket sessions
 - Model type (CLD or SFD) - set once, never changes
-- Conversation context
+- Conversation context (can be seeded with historical messages)
 - Pending tool calls and feedback requests
 - Session-specific temp folders
 
@@ -134,11 +134,77 @@ Establishes a session with authentication, model type, initial model, client too
       }
     }
   ],
+  "historicalMessages": [
+    {
+      "type": "user_text",
+      "content": "Build me a population model"
+    },
+    {
+      "type": "agent_text",
+      "content": "I'll help you build a population model...",
+      "isThinking": false
+    }
+  ],
   "context": {
     "description": "Optional context about the modeling task"
   }
 }
 ```
+
+### Historical Messages
+
+The `historicalMessages` field allows clients to provide conversation history from a previous session, enabling context continuity across reconnections or new sessions.
+
+**Message Types:**
+
+1. **user_text** - User chat message
+```json
+{
+  "type": "user_text",
+  "content": "Build me a population model"
+}
+```
+
+2. **agent_text** - Agent response or thinking
+```json
+{
+  "type": "agent_text",
+  "content": "I'll create a simple population model with births and deaths",
+  "isThinking": false
+}
+```
+
+3. **visualization** - Previous visualization (optional, for display purposes)
+```json
+{
+  "type": "visualization",
+  "visualizationId": "viz_123",
+  "visualizationTitle": "Population Growth",
+  "visualizationDescription": "Shows exponential growth",
+  "imageData": "base64-encoded-png-data..."
+}
+```
+
+4. **agent_complete** - Agent completion message
+```json
+{
+  "type": "agent_complete",
+  "content": "I've completed building your model",
+  "status": "success"
+}
+```
+
+**Use Cases:**
+- Resume conversation after client restart
+- Provide context when switching agents mid-session
+- Share conversation history across devices
+- Load saved modeling sessions
+
+**Important Notes:**
+- Historical messages are converted to agent conversation context
+- Visualizations in history are logged but not re-rendered
+- Server uses messages to understand previous context but doesn't persist them
+- Client is responsible for maintaining and providing the complete history
 
 **Fields:**
 - `authenticationKey` - Server authentication (can be disabled in config)
@@ -147,6 +213,7 @@ Establishes a session with authentication, model type, initial model, client too
 - `modelType` - Either `"cld"` or `"sfd"` - **cannot be changed during session**
 - `model` - Initial model state (can be empty)
 - `tools` - Array of client tool definitions (see Client Tool Registration below)
+- `historicalMessages` - Optional array of previous messages to provide context (see Historical Messages below)
 - `context` - Optional contextual information
 
 #### 2. Select Agent
@@ -271,8 +338,8 @@ Sent after successful initialization. Lists available agents for selection.
     }
   ],
   "defaults": {
-    "sfd": "ganos-lal",
-    "cld": "ganos-lal"
+    "sfd": "myrddin",
+    "cld": "myrddin"
   },
   "timestamp": "2025-01-15T10:30:00.100Z"
 }
@@ -404,10 +471,12 @@ Sends visualization data to the client as base64 encoded PNG images.
   "title": "Population Growth Over Time",
   "description": "Shows exponential growth pattern",
   "format": "image",
-  "data": "iVBORw0KGgoAAAANSUhEUgAAA...",
-  "metadata": {
-    "createdBy": "generate_quantitative_model",
-    "variables": ["Population"]
+  "data": {
+    "encoding": "base64",
+    "mimeType": "image/png",
+    "content": "iVBORw0KGgoAAAANSUhEUgAAA...",
+    "width": 800,
+    "height": 600
   },
   "timestamp": "2025-01-15T10:30:05.000Z"
 }
@@ -415,7 +484,13 @@ Sends visualization data to the client as base64 encoded PNG images.
 
 **Format:**
 - All visualizations are returned as base64-encoded PNG images
-- The `data` field contains the base64 string directly
+- The `data` field is an object containing:
+  - `encoding`: Always "base64"
+  - `mimeType`: Image MIME type (e.g., "image/png")
+  - `content`: Base64-encoded image data
+  - `width`: Image width in pixels
+  - `height`: Image height in pixels
+- `description` is optional
 
 #### 9. Show Intermediate Model
 
@@ -450,17 +525,17 @@ Requests feedback loop analysis data from the client (used by Seldon engine for 
   "type": "feedback_request",
   "sessionId": "sess_abc123",
   "requestId": "feedback_xyz789",
-  "runId": "run_12345",
-  "comparative": false,
+  "runIds": ["run_baseline", "run_policy"],
   "timestamp": "2025-01-15T10:30:07.000Z"
 }
 ```
 
 **Fields:**
-- `runId` - Specific run ID for single-run feedback (optional)
-- `comparative` - If `true`, request feedback for ALL runs for comparison
+- `runIds` - Array of simulation run IDs to get feedback for
+  - Empty array `[]` means the current/most recent run
+  - Multiple run IDs means request comparative feedback for those runs
 
-**Client Response:** Send `tool_call_response` with:
+**Client Response (Single Run):** Send `tool_call_response` with:
 ```json
 {
   "type": "tool_call_response",
@@ -482,7 +557,33 @@ Requests feedback loop analysis data from the client (used by Seldon engine for 
           ]
         }
       ]
-    }
+    },
+    "runIds": ["run_current"]
+  }
+}
+```
+
+**Client Response (Multiple Runs):** Send `tool_call_response` with:
+```json
+{
+  "type": "tool_call_response",
+  "sessionId": "sess_abc123",
+  "callId": "feedback_xyz789",
+  "result": {
+    "feedbackContent": {
+      "runs": {
+        "run_baseline": {
+          "loops": [...]
+        },
+        "run_policy": {
+          "loops": [...]
+        }
+      },
+      "comparison": {
+        "differenceExplanation": "Policy intervention shifts dominance..."
+      }
+    },
+    "runIds": ["run_baseline", "run_policy"]
   }
 }
 ```
@@ -872,7 +973,8 @@ ws.on('message', (data) => {
 
     case 'visualization':
       console.log('Received visualization:', message.title);
-      // Display visualization using message.data
+      // Display visualization using message.data.content
+      // Example: <img src="data:image/png;base64,${message.data.content}" />
       break;
 
     case 'agent_complete':
