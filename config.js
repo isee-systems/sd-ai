@@ -5,6 +5,7 @@
 
 const config = {
     "port": 3000,
+    "websocketPort": 3001,
     "reporterURL": process.env.REPORTER_URL || null, // Optional URL to POST engine usage metrics
 };
 

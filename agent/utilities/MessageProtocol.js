@@ -296,11 +296,12 @@ export function createSessionCreatedMessage(sessionId) {
   };
 }
 
-export function createSessionReadyMessage(sessionId, availableAgents) {
+export function createSessionReadyMessage(sessionId, availableAgents, defaults) {
   return {
     type: 'session_ready',
     sessionId,
     availableAgents,
+    defaults,
     timestamp: new Date().toISOString()
   };
 }

@@ -260,17 +260,27 @@ Sent after successful initialization. Lists available agents for selection.
     {
       "id": "ganos-lal",
       "name": "Ganos Lal",
+      "supports": ["sfd", "cld"],
       "description": "A helpful mentor who guides you through building models"
     },
     {
       "id": "myrddin",
       "name": "Myrddin",
+      "supports": ["sfd", "cld"],
       "description": "An expert modeler focused on technical excellence"
     }
   ],
+  "defaults": {
+    "sfd": "ganos-lal",
+    "cld": "ganos-lal"
+  },
   "timestamp": "2025-01-15T10:30:00.100Z"
 }
 ```
+
+**Fields:**
+- `availableAgents` - Array of agent definitions with their supported model types
+- `defaults` - Object mapping model types to their default agent IDs
 
 #### 3. Agent Selected
 

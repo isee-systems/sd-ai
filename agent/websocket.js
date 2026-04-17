@@ -49,7 +49,13 @@ function getAvailableAgents() {
     logger.error('Failed to scan agent config directory:', err);
   }
 
-  return agents;
+  // Hardcoded defaults - ganos-lal is the default agent for all model types
+  const defaults = {
+    sfd: 'ganos-lal',
+    cld: 'ganos-lal'
+  };
+
+  return { agents, defaults };
 }
 
 /**
@@ -182,10 +188,10 @@ export function handleWebSocketConnection(ws, sessionManager) {
       );
 
       // Get available agents from config directory
-      const availableAgents = getAvailableAgents();
+      const { agents, defaults } = getAvailableAgents();
 
-      // Send session ready with available agents
-      await sendToClient(createSessionReadyMessage(sessionId, availableAgents));
+      // Send session ready with available agents and defaults
+      await sendToClient(createSessionReadyMessage(sessionId, agents, defaults));
 
       logger.log(`Session initialized: ${sessionId}`);
     } catch (error) {
@@ -199,21 +205,24 @@ export function handleWebSocketConnection(ws, sessionManager) {
     }
   }
 
-  // Handle select_agent
+  // Handle select_agent (also handles switching agents mid-session)
   async function handleSelectAgent(message) {
     try {
       // Validate that the agent exists
-      const availableAgents = getAvailableAgents();
-      const selectedAgent = availableAgents.find(agent => agent.id === message.agentId);
+      const { agents } = getAvailableAgents();
+      const selectedAgent = agents.find(agent => agent.id === message.agentId);
 
       if (!selectedAgent) {
-        throw new Error(`Agent '${message.agentId}' not found. Available agents: ${availableAgents.map(a => a.id).join(', ')}`);
+        throw new Error(`Agent '${message.agentId}' not found. Available agents: ${agents.map(a => a.id).join(', ')}`);
       }
 
       // Get the agent config path
       const configPath = join(__dirname, 'config', `${message.agentId}.yaml`);
 
-      // Create agent orchestrator
+      // Check if we're switching agents (orchestrator already exists)
+      const isSwitching = orchestrator !== null;
+
+      // Create new agent orchestrator (replaces existing if switching)
       orchestrator = new AgentOrchestrator(
         sessionManager,
         sessionId,
@@ -227,10 +236,15 @@ export function handleWebSocketConnection(ws, sessionManager) {
       // Send agent selected message
       await sendToClient(createAgentSelectedMessage(sessionId, selectedAgent.id, selectedAgent.name));
 
-      // Send initial greeting message
-      await sendToClient(createAgentTextMessage(sessionId, 'What can I do for you today?', false));
+      // Send appropriate greeting message
+      if (isSwitching) {
+        await sendToClient(createAgentTextMessage(sessionId, `I've switched to ${selectedAgent.name}. How can I help you?`, false));
+        logger.log(`Agent switched to: ${message.agentId} for session ${sessionId}`);
+      } else {
+        await sendToClient(createAgentTextMessage(sessionId, 'What can I do for you today?', false));
+        logger.log(`Agent selected: ${message.agentId} for session ${sessionId}`);
+      }
 
-      logger.log(`Agent selected: ${message.agentId} for session ${sessionId}`);
     } catch (error) {
       logger.error(`Failed to select agent for session ${sessionId}:`, error);
       await sendToClient(createErrorMessage(

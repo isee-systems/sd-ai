@@ -37,12 +37,15 @@ app.use("/api/v1/evals", v1EvalsList);
 app.use("/api/v1/evals", v1EvalsTestDetails);
 app.use("/api/v1/leaderboard", v1Leaderboard);
 
-// Create HTTP server
+// Create HTTP server for REST API
 const server = createServer(app);
 
-// Create WebSocket server
+// Create separate HTTP server for WebSocket
+const wsHttpServer = createServer();
+
+// Create WebSocket server on separate port
 const wss = new WebSocketServer({
-  server,
+  server: wsHttpServer,
   path: '/api/v1/agent'
 });
 
@@ -65,8 +68,13 @@ process.on('SIGINT', () => {
   process.exit(0);
 });
 
-// Start server
+// Start HTTP server
 server.listen(config.port, () => {
   logger.log(`ai-proxy-service listening on port ${config.port}`);
-  logger.log(`WebSocket server available at ws://localhost:${config.port}/api/v1/agent`);
+});
+
+// Start WebSocket server on separate port
+wsHttpServer.listen(config.websocketPort, () => {
+  logger.log(`WebSocket server listening on port ${config.websocketPort}`);
+  logger.log(`WebSocket server available at ws://localhost:${config.websocketPort}/api/v1/agent`);
 });

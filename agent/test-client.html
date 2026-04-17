@@ -290,7 +290,7 @@
           <h2><span class="step-number">1</span>Connection</h2>
           <div class="form-group">
             <label for="wsUrl">WebSocket URL</label>
-            <input type="text" id="wsUrl" value="ws://localhost:3000/api/v1/agent" />
+            <input type="text" id="wsUrl" value="ws://localhost:3001/api/v1/agent" />
           </div>
           <div class="button-group">
             <button id="connectBtn">Connect</button>
@@ -298,29 +298,41 @@
           </div>
         </div>
 
-        <!-- Step 2: Session Panel -->
+        <!-- Step 2: Session Initialization -->
         <div class="panel">
           <h2><span class="step-number">2</span>Session Initialization</h2>
           <div class="form-group">
-            <label for="agentType">Agent Type</label>
-            <select id="agentType">
-              <option value="ganos-lal">Ganos Lal (Helpful Mentor)</option>
-              <option value="myrddin">Myrddin (Expert Modeler)</option>
-            </select>
-          </div>
-          <div class="form-group">
             <label for="modelType">Model Type</label>
             <select id="modelType">
-              <option value="cld">CLD (Causal Loop Diagram)</option>
               <option value="sfd">SFD (Stock Flow Diagram)</option>
+              <option value="cld">CLD (Causal Loop Diagram)</option>
             </select>
           </div>
           <button id="initBtn" disabled>Initialize Session</button>
         </div>
 
-        <!-- Step 3: User Message Panel -->
+        <!-- Step 3: Agent Selection -->
         <div class="panel">
-          <h2><span class="step-number">3</span>Send User Message</h2>
+          <h2><span class="step-number">3</span>Agent Selection</h2>
+          <div class="info-box">
+            Session must be initialized first. Agent dropdown will populate after session is ready.
+          </div>
+          <div id="currentAgentInfo" style="background: #e8f4f8; border-left: 4px solid #27ae60; padding: 10px; margin-bottom: 15px; display: none;">
+            <strong>Current Agent:</strong> <span id="currentAgentName">None</span>
+          </div>
+          <div class="form-group">
+            <label for="agentType">Agent</label>
+            <select id="agentType" disabled>
+              <option value="">Waiting for session...</option>
+            </select>
+          </div>
+          <div id="agentDescription" style="font-size: 13px; color: #555; margin-top: 8px; font-style: italic; min-height: 20px;"></div>
+          <button id="selectAgentBtn" disabled>Select Agent</button>
+        </div>
+
+        <!-- Step 4: Send User Message -->
+        <div class="panel">
+          <h2><span class="step-number">4</span>Send User Message</h2>
           <div class="form-group">
             <label for="userMessage">Message</label>
             <textarea id="userMessage" placeholder="Build me a simple population model..."></textarea>
@@ -371,22 +383,30 @@
     let ws = null;
     let sessionId = null;
     let pendingToolCalls = new Map();
+    let availableAgents = [];
+    let agentDefaults = {};
+    let currentAgentId = null;
+    let currentAgentName = null;
 
     const elements = {
       status: document.getElementById('status'),
       connectBtn: document.getElementById('connectBtn'),
       disconnectBtn: document.getElementById('disconnectBtn'),
       initBtn: document.getElementById('initBtn'),
+      selectAgentBtn: document.getElementById('selectAgentBtn'),
       sendBtn: document.getElementById('sendBtn'),
       stopBtn: document.getElementById('stopBtn'),
       updateModelBtn: document.getElementById('updateModelBtn'),
       wsUrl: document.getElementById('wsUrl'),
       agentType: document.getElementById('agentType'),
+      agentDescription: document.getElementById('agentDescription'),
       modelType: document.getElementById('modelType'),
       userMessage: document.getElementById('userMessage'),
       modelData: document.getElementById('modelData'),
       log: document.getElementById('log'),
-      clearLogBtn: document.getElementById('clearLogBtn')
+      clearLogBtn: document.getElementById('clearLogBtn'),
+      currentAgentInfo: document.getElementById('currentAgentInfo'),
+      currentAgentName: document.getElementById('currentAgentName')
     };
 
     // Logging functions
@@ -492,18 +512,37 @@
           break;
 
         case 'session_ready':
-          log(`Session ready! Available agents: ${message.availableAgents.map(a => a.name).join(', ')}`);
-          // Automatically select the agent specified in the UI
-          const agentId = elements.agentType.value;
-          send({
-            type: 'select_agent',
-            sessionId: sessionId,
-            agentId: agentId
-          });
+          // Store available agents and defaults
+          availableAgents = message.availableAgents || [];
+          agentDefaults = message.defaults || {};
+
+          log(`Session ready! Available agents: ${availableAgents.map(a => a.name).join(', ')}`);
+          log(`Defaults: ${JSON.stringify(agentDefaults)}`);
+
+          // Populate agent dropdown
+          populateAgentDropdown();
+
+          // Enable the select agent button
+          elements.selectAgentBtn.disabled = false;
           break;
 
         case 'agent_selected':
+          currentAgentId = message.agentId;
+          currentAgentName = message.agentName;
           log(`Agent selected: ${message.agentName}`);
+
+          // Update current agent display
+          elements.currentAgentName.textContent = message.agentName;
+          elements.currentAgentInfo.style.display = 'block';
+
+          // Re-enable agent selection for switching
+          elements.selectAgentBtn.disabled = false;
+          elements.agentType.disabled = false;
+
+          // Update button text to indicate switching
+          elements.selectAgentBtn.textContent = 'Switch Agent';
+
+          // Enable chat controls
           elements.sendBtn.disabled = false;
           elements.stopBtn.disabled = false;
           elements.updateModelBtn.disabled = false;
@@ -1044,6 +1083,100 @@
         e.preventDefault();
         elements.sendBtn.click();
       }
+    };
+
+    // Function to populate agent dropdown based on model type
+    function populateAgentDropdown() {
+      const modelType = elements.modelType.value;
+      const agentSelect = elements.agentType;
+
+      // Clear existing options
+      agentSelect.innerHTML = '';
+
+      // Filter agents that support the current model type
+      const supportedAgents = availableAgents.filter(agent =>
+        agent.supports && agent.supports.includes(modelType)
+      );
+
+      if (supportedAgents.length === 0) {
+        agentSelect.innerHTML = '<option value="">No agents available</option>';
+        agentSelect.disabled = true;
+        elements.agentDescription.textContent = '';
+        return;
+      }
+
+      // Add options for each supported agent (name only)
+      supportedAgents.forEach(agent => {
+        const option = document.createElement('option');
+        option.value = agent.id;
+        option.textContent = agent.name;
+        agentSelect.appendChild(option);
+      });
+
+      // Select the default agent for this model type
+      const defaultAgentId = agentDefaults[modelType];
+      if (defaultAgentId && supportedAgents.find(a => a.id === defaultAgentId)) {
+        agentSelect.value = defaultAgentId;
+      }
+
+      agentSelect.disabled = false;
+
+      // Update description for selected agent
+      updateAgentDescription();
+    }
+
+    // Function to update agent description
+    function updateAgentDescription() {
+      const selectedAgentId = elements.agentType.value;
+      const selectedAgent = availableAgents.find(a => a.id === selectedAgentId);
+
+      if (selectedAgent && selectedAgent.description) {
+        elements.agentDescription.textContent = selectedAgent.description;
+      } else {
+        elements.agentDescription.textContent = '';
+      }
+    }
+
+    // Handle model type change
+    elements.modelType.addEventListener('change', () => {
+      if (availableAgents.length > 0) {
+        populateAgentDropdown();
+      }
+    });
+
+    // Handle agent selection change
+    elements.agentType.addEventListener('change', () => {
+      updateAgentDescription();
+    });
+
+    // Handle select agent button (also handles switching)
+    elements.selectAgentBtn.onclick = () => {
+      const agentId = elements.agentType.value;
+      if (!agentId) {
+        log('Please select an agent', 'error');
+        return;
+      }
+
+      // Check if we're switching to a different agent
+      const isSwitching = currentAgentId !== null;
+
+      if (isSwitching && agentId === currentAgentId) {
+        log('Already using this agent', 'error');
+        return;
+      }
+
+      send({
+        type: 'select_agent',
+        sessionId: sessionId,
+        agentId: agentId
+      });
+
+      if (isSwitching) {
+        log(`Switching from ${currentAgentName} to ${agentId}...`);
+      }
+
+      // Temporarily disable button while switching
+      elements.selectAgentBtn.disabled = true;
     };
 
     log('Test client loaded. Click Connect to start.');
