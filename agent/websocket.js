@@ -131,6 +131,13 @@ export function handleWebSocketConnection(ws, sessionManager) {
           break;
 
         case 'disconnect':
+          // Destroy orchestrator if it exists
+          if (orchestrator) {
+            orchestrator.destroy();
+            orchestrator = null;
+          }
+
+          // Delete session (this cleans up pending calls, temp dirs, etc.)
           sessionManager.deleteSession(sessionId);
           ws.close(1000, 'Client requested disconnect');
           break;
@@ -394,6 +401,13 @@ export function handleWebSocketConnection(ws, sessionManager) {
   ws.on('close', (code, reason) => {
     logger.log(`WebSocket closed: ${sessionId} (code: ${code}, reason: ${reason})`);
     if (sessionId) {
+      // Destroy orchestrator if it exists
+      if (orchestrator) {
+        orchestrator.destroy();
+        orchestrator = null;
+      }
+
+      // Delete session (this cleans up pending calls, temp dirs, etc.)
       sessionManager.deleteSession(sessionId);
     }
   });
@@ -402,6 +416,13 @@ export function handleWebSocketConnection(ws, sessionManager) {
   ws.on('error', (error) => {
     logger.error(`WebSocket error for session ${sessionId}:`, error);
     if (sessionId) {
+      // Destroy orchestrator if it exists
+      if (orchestrator) {
+        orchestrator.destroy();
+        orchestrator = null;
+      }
+
+      // Delete session (this cleans up pending calls, temp dirs, etc.)
       sessionManager.deleteSession(sessionId);
     }
   });

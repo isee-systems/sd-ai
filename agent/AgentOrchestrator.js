@@ -361,4 +361,19 @@ export class AgentOrchestrator {
       clientTools: this.dynamicToolServer.getClientToolNames()
     };
   }
+
+  /**
+   * Destroy the orchestrator and cleanup resources
+   */
+  destroy() {
+    logger.log(`AgentOrchestrator destroyed for session ${this.sessionId}`);
+
+    // Clear any references
+    this.sessionManager = null;
+    this.sendToClient = null;
+    this.dynamicToolServer = null;
+    this.anthropic = null;
+    this.configManager = null;
+    this.schemaConverter = null;
+  }
 }
