@@ -78,20 +78,10 @@ func main() {
 	}
 
 	model := strings.ToLower(strings.TrimSpace(input.Parameters.UnderlyingModel))
-
-	// Configure API base URL - use LM Studio for local models
-	apiBase := ""
-	if strings.Contains(model, "qwen") || strings.Contains(model, "llama") ||
-		strings.Contains(model, "deepseek") || strings.Contains(model, "hermes") ||
-		strings.Contains(model, "glm") || strings.Contains(model, "kimi") {
-		apiBase = "http://localhost:1234/v1"
-	}
-
 	c, thinkingLevel, err := provider.NewClient(provider.Config{
-		Model:   input.Parameters.UnderlyingModel,
-		APIBase: apiBase,
-		APIKey:  selectAPIKey(model, input.Parameters),
-		Debug:   os.Getenv("SD_AI_DEBUG") != "",
+		Model:  input.Parameters.UnderlyingModel,
+		APIKey: selectAPIKey(model, input.Parameters),
+		Debug:  os.Getenv("SD_AI_DEBUG") != "",
 	})
 	if err != nil {
 		log.Fatalf("provider.NewClient: %s", err)

@@ -4,6 +4,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { zodResponseFormat } from "openai/helpers/zod";
 import { ZodToStructuredOutputConverter } from "./ZodToStructuredOutputConverter.js";
+import { extractJsonFromContent } from "./jsonUtils.js";
 
 export const ModelType = Object.freeze({
   GEMINI:   Symbol("Gemini"),
@@ -620,46 +621,10 @@ export class LLMWrapper {
     // so callers receive parseable content rather than raw prose.
     const reasoningText = message.reasoning_content ?? message.reasoning;
     if (!message.content && reasoningText) {
-      const extracted = LLMWrapper.#extractJsonFromReasoning(reasoningText);
-      return { ...message, content: extracted ?? reasoningText };
+      const extracted = extractJsonFromContent(reasoningText);
+      return { ...message, content: extracted ? JSON.stringify(extracted) : reasoningText };
     }
     return message;
-
-  }
-
-  static #extractJsonFromReasoning(text) {
-    // Strategy 1: the whole text is already valid JSON
-    try { JSON.parse(text); return text; } catch {}
-
-    // Strategy 2: last ```json ... ``` code block
-    const codeBlocks = [...text.matchAll(/```json\s*([\s\S]*?)```/g)];
-    if (codeBlocks.length) {
-      const candidate = codeBlocks[codeBlocks.length - 1][1].trim();
-      try { JSON.parse(candidate); return candidate; } catch {}
-    }
-
-    // Strategy 3: last top-level { ... } block in the text
-    const lastBrace = text.lastIndexOf('{');
-    if (lastBrace !== -1) {
-      const candidate = text.slice(lastBrace);
-      try { JSON.parse(candidate); return candidate; } catch {}
-    }
-
-    // Strategy 4: scan backwards for a complete JSON object
-    let depth = 0, end = -1;
-    for (let i = text.length - 1; i >= 0; i--) {
-      if (text[i] === '}') { if (end === -1) end = i; depth++; }
-      else if (text[i] === '{') {
-        depth--;
-        if (depth === 0) {
-          const candidate = text.slice(i, end + 1);
-          try { JSON.parse(candidate); return candidate; } catch {}
-          break;
-        }
-      }
-    }
-
-    return null; // caller falls back to raw reasoning_content
   }
 
   async #createGeminiChatCompletion(messages, model, zodSchema = null, temperature = null, reasoningEffort = null) {
@@ -860,30 +825,6 @@ export class LLMWrapper {
             saveForUser: "local",
             label: "LLM Model",
             description: "The LLM model that you want to use to process your queries."
-        },{
-            name: "temperature",
-            type: "number",
-            required: false,
-            uiElement: "lineedit",
-            saveForUser: "local",
-            label: "Temperature",
-            description: "Optional sampling temperature override for supported models."
-        },{
-            name: "top_p",
-            type: "number",
-            required: false,
-            uiElement: "lineedit",
-            saveForUser: "local",
-            label: "Top-p",
-            description: "Optional nucleus sampling value (top_p)."
-        },{
-            name: "top_k",
-            type: "number",
-            required: false,
-            uiElement: "lineedit",
-            saveForUser: "local",
-            label: "Top-k",
-            description: "Optional top-k sampling value for local models."
         }];
     }
 };

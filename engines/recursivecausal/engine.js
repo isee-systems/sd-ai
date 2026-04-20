@@ -99,7 +99,7 @@ It uses the "Brain" from the qualitative engine in a recursive fashion making th
 
         const inferencePrompt = `Text:\n"""\n${prompt}\n"""`;
 
-        const result = await topicBrain.generateDiagram(inferencePrompt, currentModel);
+        const result = await topicBrain.generateDiagram(inferencePrompt, { relationships: [] });
         if (Array.isArray(result.relationships) && result.relationships.length > 0) {
           mainTopics = result.relationships.map(r => r.from.toLowerCase());
         } else {
@@ -124,7 +124,7 @@ It uses the "Brain" from the qualitative engine in a recursive fashion making th
 
         const topicPrompt = `Given the following user-provided text:"""\n${prompt}\n"""\nIdentify causes (drivers) and effects (impacts) of the topic: "${topic}" present in the text.`;
 
-        const result = await recursiveBrain.generateDiagram(topicPrompt, currentModel);
+        const result = await recursiveBrain.generateDiagram(topicPrompt, { relationships: [] });
 
         if (!result.relationships || result.relationships.length === 0) return;
 
@@ -147,8 +147,8 @@ It uses the "Brain" from the qualitative engine in a recursive fashion making th
         await exploreTopic(topic, 1);
       }
 
-      const cleaned = await this.cleanRelationships(allRelationships, prompt, parameters, currentModel);
-      const polished = await this.adjustPolarities(cleaned, prompt, parameters, currentModel);
+      const cleaned = await this.cleanRelationships(allRelationships, prompt, parameters);
+      const polished = await this.adjustPolarities(cleaned, prompt, parameters);
       const variables = [...new Set(polished.flatMap(r => [r.from, r.to]))].map((v)=> {
           return {
               name: v,
@@ -172,7 +172,7 @@ It uses the "Brain" from the qualitative engine in a recursive fashion making th
     }
   }
 
-  async cleanRelationships(relationships, prompt, parameters, currentModel) {
+  async cleanRelationships(relationships, prompt, parameters) {
     if (!relationships || relationships.length === 0) return relationships;
 
     const cleaningBrain = new QualitativeEngineBrain({
@@ -183,11 +183,11 @@ It uses the "Brain" from the qualitative engine in a recursive fashion making th
 
     const cleanPrompt = `Given the following text: """${prompt}"""\nAnd the following causal relationships:\n${JSON.stringify(relationships, null, 2)}\n\nPlease:\n1. Normalize variable names (short, neutral phrases, 3 words or fewer)\n2. Merge variables that refer to the same thing\n3. Remove duplicate or redundant relationships\nReturn the cleaned relationships as a JSON array in the same format.`;
 
-    const result = await cleaningBrain.generateDiagram(cleanPrompt, currentModel);
+    const result = await cleaningBrain.generateDiagram(cleanPrompt, { relationships });
     return result.relationships || [];
   }
 
-  async adjustPolarities(relationships, prompt, parameters, currentModel) {
+  async adjustPolarities(relationships, prompt, parameters) {
     if (!relationships || relationships.length === 0) return relationships;
 
     const polarityBrain = new QualitativeEngineBrain({
@@ -198,7 +198,7 @@ It uses the "Brain" from the qualitative engine in a recursive fashion making th
 
     const polishPrompt = `Given the following text: """${prompt}"""\nAnd the following causal relationships:\n${JSON.stringify(relationships, null, 2)}\n\nCheck the polarity and reasoning with repect to the text for each relationship based on the cause and effect. Make sure:\n- "+" means they change in the same direction\n- "-" means they change in opposite directions\nUpdate polarityReasoning if needed.\nReturn the adjusted relationships as a JSON array in the same format.`;
 
-    const result = await polarityBrain.generateDiagram(polishPrompt, currentModel);
+    const result = await polarityBrain.generateDiagram(polishPrompt, { relationships });
     return result.relationships || [];
   }
 }
