@@ -296,8 +296,9 @@ Requests the agent to stop iterating immediately, interrupting the current conve
 - Useful for interrupting lengthy tool chains or when the agent is stuck in a loop
 
 **Behavior:**
-- Agent stops at the next iteration checkpoint (after completing the current API call)
-- No agent_complete message is sent when stopped
+- Agent stops immediately, interrupting any in-progress work
+- Stops after the current API call completes or during tool execution
+- Sends an `agent_complete` message with status `awaiting_user` and message "Agent stopped by user request"
 - Session state is preserved - conversation history remains intact
 - Client can immediately send a new chat message
 

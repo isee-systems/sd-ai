@@ -32,6 +32,9 @@ export class VisualizationEngine {
 
     // Normalize and resolve the session temp directory for security checks
     this.resolvedTempDir = resolve(normalize(this.sessionTempDir));
+
+    // Cache LLM wrapper to avoid recreating it for each visualization
+    this.llm = new LLMWrapper();
   }
 
   /**
@@ -121,53 +124,37 @@ export class VisualizationEngine {
    * Use AI to generate custom Python visualization script
    */
   async generateAIVisualizationScript(dataPath, outputPath, data, variables, options) {
-    const llm = new LLMWrapper();
-
     // Prepare data description
     const dataDescription = options.dataDescription || this.describeData(data, variables);
 
     // Prepare visualization requirements
     const visualizationGoal = options.visualizationGoal || options.title || 'Visualize the data in an insightful way';
 
-    const systemPrompt = `You are an expert data visualization specialist using Python and matplotlib.
-Generate Python code to create visualizations based on user requirements.
+    const systemPrompt = `You are a Python matplotlib code generator. Generate working Python visualization code.
 
 Requirements:
-- Use matplotlib with Agg backend (no display)
-- Load data from JSON file
-- Save figure to specified output path
-- Create clear, professional visualizations
-- Include appropriate labels, titles, legends
-- Use good color schemes
-- Handle edge cases gracefully`;
+- Use matplotlib with Agg backend
+- Load JSON data and create the visualization
+- Save to specified path
+- Include labels, titles, legends
+- Make it clear and professional`;
 
-    const userPrompt = `Generate Python code to visualize this data:
+    const userPrompt = `Generate Python code for this visualization:
 
-## Data Description
-${dataDescription}
+Data: ${dataPath}
+Variables: ${variables.join(', ')}
+Goal: ${visualizationGoal}
+Output: ${outputPath}
+Size: ${(options.width || 800)/100}x${(options.height || 600)/100} inches, 100 DPI
 
-## Data Structure
-The data is available in JSON format at: ${dataPath}
-Variables available: ${variables.join(', ')}
-Time series data structure: {time: [...], ${variables.map(v => `'${v}': [...]`).join(', ')}}
+Data structure: JSON with 'time' array and variable arrays: ${variables.map(v => `'${v}'`).join(', ')}
 
-## Visualization Goal
-${visualizationGoal}
-
-${options.customRequirements ? `\n## Additional Requirements\n${options.customRequirements}` : ''}
-
-## Output Requirements
-- Save the figure to: ${outputPath}
-- Figure size: ${(options.width || 800)/100} x ${(options.height || 600)/100} inches
-- DPI: 100
-- Use matplotlib.use('Agg') backend
-- Close figure after saving
-
-Generate ONLY the Python code, no explanations. The code should be complete and ready to execute.`;
+${options.customRequirements ? `Requirements: ${options.customRequirements}\n` : ''}
+Generate ONLY working Python code with matplotlib.use('Agg'), no explanations.`;
 
     try {
-      // Get LLM parameters
-      const { underlyingModel, temperature } = llm.getLLMParameters(0.3);
+      // Get LLM parameters with lower temperature for faster, more deterministic responses
+      const { underlyingModel, temperature } = this.llm.getLLMParameters(0.1);
 
       // Create messages array
       const messages = [
@@ -175,7 +162,7 @@ Generate ONLY the Python code, no explanations. The code should be complete and 
         { role: 'user', content: userPrompt }
       ];
 
-      const response = await llm.createChatCompletion(
+      const response = await this.llm.createChatCompletion(
         messages,
         underlyingModel,
         null, // no zodSchema

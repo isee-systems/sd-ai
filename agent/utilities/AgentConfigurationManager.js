@@ -211,16 +211,16 @@ ALWAYS share feedback loop information with Seldon in all of its forms when disc
 
     for (const [toolName, policy] of Object.entries(policies)) {
       lines.push(`\n### ${toolName}`);
-      if (policy.whenToUse) {
-        lines.push(`**When to use:** ${policy.whenToUse}`);
+      if (policy.when_to_use) {
+        lines.push(`**When to use:** ${policy.when_to_use}`);
       }
       if (policy.frequency) {
         lines.push(`**Frequency:** ${policy.frequency}`);
       }
-      if (policy.alwaysExplain) {
+      if (policy.always_explain) {
         lines.push(`**Always explain** your reasoning when using this tool`);
       }
-      if (policy.autoSuggest) {
+      if (policy.auto_suggest) {
         lines.push(`**Auto-suggest** this tool when appropriate`);
       }
       if (policy.parameters) {
@@ -271,21 +271,21 @@ ALWAYS share feedback loop information with Seldon in all of its forms when disc
     const lines = [];
 
     lines.push(`**Style:** ${communication.style}`);
-    if (communication.explainReasoning) {
+    if (communication.explain_reasoning) {
       lines.push('- Always explain your reasoning');
     }
-    if (communication.useExamples) {
+    if (communication.use_examples) {
       lines.push('- Use examples to clarify concepts');
     }
-    if (communication.avoidJargon !== undefined) {
-      lines.push(communication.avoidJargon
+    if (communication.avoid_jargon !== undefined) {
+      lines.push(communication.avoid_jargon
         ? '- Avoid technical jargon'
         : '- System Dynamics terminology is acceptable');
     }
 
-    if (communication.responseFormat) {
+    if (communication.response_format) {
       lines.push('\n**Response Format:**');
-      for (const [aspect, guideline] of Object.entries(communication.responseFormat)) {
+      for (const [aspect, guideline] of Object.entries(communication.response_format)) {
         lines.push(`- ${aspect}: ${guideline}`);
       }
     }
@@ -386,6 +386,6 @@ ALWAYS share feedback loop information with Seldon in all of its forms when disc
    * @returns {number} Maximum iterations (default: 20)
    */
   getMaxIterations() {
-    return this.baseConfig?.maxIterations || 20;
+    return this.baseConfig?.max_iterations || 20;
   }
 }

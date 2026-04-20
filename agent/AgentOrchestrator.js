@@ -136,8 +136,20 @@ export class AgentOrchestrator {
           tools: tools.length > 0 ? tools : undefined
         });
 
+        // Check if stop was requested during the API call
+        if (this.stopRequested) {
+          logger.log(`Stop requested during API call for session ${this.sessionId}`);
+          break;
+        }
+
         // Process response
         continueLoop = await this.processAgentResponse(response, messages, builtInTools, dynamicTools);
+
+        // Check if stop was requested during response processing
+        if (this.stopRequested) {
+          logger.log(`Stop requested during response processing for session ${this.sessionId}`);
+          break;
+        }
 
       } catch (error) {
         logger.error('Error in agent conversation loop:', error);
@@ -154,8 +166,22 @@ export class AgentOrchestrator {
     if (this.stopRequested) {
       logger.log(`Agent iteration stopped by user request for session ${this.sessionId}`);
       this.stopRequested = false; // Reset for next conversation
+
+      // Send agent_complete message to notify client that agent has stopped
+      await this.sendToClient(createAgentCompleteMessage(
+        this.sessionId,
+        'awaiting_user',
+        'Agent stopped by user request'
+      ));
     } else if (iteration >= maxIterations) {
       logger.warn(`Agent conversation reached max iterations (${maxIterations})`);
+
+      // Send agent_complete message when max iterations reached
+      await this.sendToClient(createAgentCompleteMessage(
+        this.sessionId,
+        'awaiting_user',
+        `Reached maximum iterations (${maxIterations})`
+      ));
     }
   }
 
@@ -168,6 +194,12 @@ export class AgentOrchestrator {
 
     // Process each content block
     for (const block of response.content) {
+      // Check if stop was requested before processing each block
+      if (this.stopRequested) {
+        logger.log(`Stop requested during content block processing for session ${this.sessionId}`);
+        return false; // Stop processing immediately
+      }
+
       if (block.type === 'text') {
         // Send text content to client
         const text =  await marked.parse(block.text);
@@ -196,8 +228,47 @@ export class AgentOrchestrator {
           isBuiltIn
         ));
 
+        // Send additional text notification for slow tools
+        if (block.name === 'create_visualization') {
+          const vizType = block.input.useAICustom ? 'AI-generated custom' : (block.input.type || 'standard');
+          const title = block.input.title || 'visualization';
+          await this.sendToClient(createAgentTextMessage(
+            this.sessionId,
+            `Creating ${vizType} visualization: "${title}"... This may take a moment.`,
+            false
+          ));
+        } else if (block.name === 'get_variable_data') {
+          const varCount = block.input.variableNames?.length || 0;
+          const runCount = block.input.runIds?.length || 0;
+          await this.sendToClient(createAgentTextMessage(
+            this.sessionId,
+            `Retrieving data for ${varCount} variable${varCount !== 1 ? 's' : ''} from ${runCount} run${runCount !== 1 ? 's' : ''}...`,
+            false
+          ));
+        } else if (block.name === 'get_feedback_information') {
+          const runCount = block.input.runIds?.length || 0;
+          const runText = runCount === 0 ? 'all runs' : `${runCount} run${runCount !== 1 ? 's' : ''}`;
+          await this.sendToClient(createAgentTextMessage(
+            this.sessionId,
+            `Analyzing feedback loops for ${runText}... This may take a moment.`,
+            false
+          ));
+        } else if (block.name === 'run_model') {
+          await this.sendToClient(createAgentTextMessage(
+            this.sessionId,
+            `Running model simulation...`,
+            false
+          ));
+        }
+
         // Execute tool
         const toolResult = await this.executeToolCall(block, builtInTools, dynamicTools);
+
+        // Check if stop was requested during tool execution
+        if (this.stopRequested) {
+          logger.log(`Stop requested during tool execution for session ${this.sessionId}`);
+          return false; // Stop processing immediately
+        }
 
         // Determine response type based on tool name
         let responseType = 'other';

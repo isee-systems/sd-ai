@@ -752,7 +752,7 @@ export function createBuiltInToolsServer(sessionManager, sessionId, sendToClient
       },
 
       get_variable_data: {
-        description: 'Get data for specific variables from specific runs. Returns the time-series data for the requested variables from the requested runs.',
+        description: 'Get data for specific variables from specific runs. Returns the time-series data for the requested variables from the requested runs. NOTE: This operation can be slow for large datasets - consider requesting only essential variables and runs. For visualization or analysis, consider requesting a small subset of key variables first.',
         inputSchema: z.object({
           variableNames: z.array(z.string()).describe('List of variable names to get data for'),
           runIds: z.array(z.string()).describe('List of run IDs to get variable data from')
@@ -815,7 +815,7 @@ Use useAICustom=true to have AI generate custom matplotlib code for complex visu
           variables: z.array(z.string()).describe('Variables to include in visualization'),
           title: z.string().describe('Visualization title'),
           description: z.string().optional().describe('Description of what the visualization shows'),
-          usePython: z.boolean().optional().describe('Use Python/matplotlib instead of Plotly. Default: false'),
+          usePython: z.boolean().optional().describe('Use Python/matplotlib. Default: true'),
           useAICustom: z.boolean().optional().describe('Use AI to generate custom Python visualization code. Default: false'),
           dataDescription: z.string().optional().describe('Description of the data for AI (when useAICustom=true)'),
           visualizationGoal: z.string().optional().describe('What insight to convey (when useAICustom=true)'),
@@ -883,7 +883,7 @@ Use useAICustom=true to have AI generate custom matplotlib code for complex visu
               }]
             };
           } catch (error) {
-            logger.error('Visualization error:', error);
+            logger.debug('Visualization error:', error);
             return {
               content: [{ type: 'text', text: `Failed to create visualization: ${error.message}` }],
               isError: true
