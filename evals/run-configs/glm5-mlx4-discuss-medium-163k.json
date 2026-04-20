@@ -1,0 +1,19 @@
+{
+  "modelProfile": "evals/model-profiles/glm5-mlx4.json",
+  "baseExperiment": "evals/experiments/leaderboardDiscuss.json",
+  "engines": [
+    {
+      "name": "seldon",
+      "limits": { "tokensPerMinute": 15000, "requestsPerMinute": 5, "baselineTokenUsage": 10000 }
+    }
+  ],
+  "seed": 4242,
+  "concurrency": 1,
+  "sequential": true,
+  "verbose": false,
+  "leaderboard": "DISCUSS",
+  "includeGroups": ["mediumFeedbackExplanation", "mediumModelBuildingSteps"],
+  "variations": [
+    { "temperature": 0.1, "top_p": 0.95, "top_k": -1 }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "alias": "DeepSeek-V3_2-MLX-4",
+  "lmStudioModelId": "/Volumes/AI_Model_Drive/model/lmstudio/mlx-community/DeepSeek-V3.2-4bit",
+  "quantization": "MLX-4bit",
+  "parameterCount": "671B",
+  "inferenceBackend": "mlx_lm",
+  "contextLoaded": 163840,
+  "timeoutMinutes": 100,
+  "maxTokens": 8000,
+  "kvCacheQuant": "off",
+  "baseURL": "http://localhost:8282/v1",
+  "lenientJsonParsing": true,
+  "structuredOutput": false,
+  "lmStudioSettings": {
+    "structuredOutput": false,
+    "reasoningParsing": false
+  },
+  "notes": "DeepSeek V3.2 mlx-community 4bit via mlx_lm server on port 8282. thinking_mode=chat (disabled). ~58 t/s prefill — 2x faster than llama-server. Config patched: rope_theta added to rope_scaling, ints converted to floats."
+}

@@ -1,4 +1,4 @@
-import {LLMWrapper, ModelType} from "../../utilities/LLMWrapper.js";
+import {LLMWrapper} from "../../utilities/LLMWrapper.js";
 import projectUtils from "../../utilities/utils.js";
 
 class ResponseFormatError extends Error {
@@ -199,45 +199,9 @@ You will conduct a multistep process:
             responseFormat = undefined;
         }
 
-        // For local LM Studio models, use a simplified message structure to avoid Jinja template errors
-        const isLocalModel = this.#llmWrapper.model.kind === ModelType.LLAMA || this.#llmWrapper.model.kind === ModelType.DEEPSEEK;
-        
         let messages; // Declare messages variable in outer scope
-        
-        if (isLocalModel) {
-            // Simplified structure for LM Studio compatibility
-            let combinedPrompt = systemPrompt;
-            
-            if (this.#data.backgroundKnowledge) {
-                combinedPrompt += "\n\nBackground Information:\n" +
-                    this.#data.backgroundPrompt.replaceAll("{backgroundKnowledge}", this.#data.backgroundKnowledge);
-            }
-            
-            if (this.#data.problemStatement) {
-                combinedPrompt += "\n\nProblem Statement:\n" +
-                    this.#data.problemStatementPrompt.replaceAll("{problemStatement}", this.#data.problemStatement);
-            }
 
-            messages = [{
-                role: "system",
-                content: combinedPrompt
-            }];
-
-            if (lastModel && lastModel.relationships && lastModel.relationships.length > 0) {
-                messages.push({ role: "assistant", content: JSON.stringify(lastModel.relationships, null, 2) });
-
-                if (this.#data.assistantPrompt)
-                    messages.push({ role: "user", content: this.#data.assistantPrompt });
-            }
-
-            // Ensure the final message is always from user with clear query
-            let finalUserPrompt = userPrompt;
-            if (this.#data.feedbackPrompt) {
-                finalUserPrompt += "\n\n" + this.#data.feedbackPrompt;
-            }
-            messages.push({ role: "user", content: finalUserPrompt });
-            
-        } else {
+        {
             // Original structure for cloud models
             messages = [{
                 role: systemRole,
@@ -299,12 +263,41 @@ You will conduct a multistep process:
             try {
                 parsedObj = JSON.parse(originalResponse.content);
             } catch (err) {
-                throw new ResponseFormatError("Bad JSON returned by underlying LLM");
+                if (this.#data.lenientJsonParsing) {
+                    const extracted = QualitativeEngineBrain.#extractJsonFromContent(originalResponse.content);
+                    if (extracted) {
+                        parsedObj = extracted;
+                    } else {
+                        throw new ResponseFormatError("Bad JSON returned by underlying LLM");
+                    }
+                } else {
+                    throw new ResponseFormatError("Bad JSON returned by underlying LLM");
+                }
             }
             return this.processResponse(parsedObj);
         } else {
             throw new ResponseFormatError("LLM response did not contain any recognized format (no refusal, parsed, or content fields)");
         }
+    }
+
+    static #extractJsonFromContent(text) {
+        if (!text) return null;
+        const codeBlocks = [...text.matchAll(/```json\s*([\s\S]*?)```/g)];
+        for (const [, block] of codeBlocks.reverse()) {
+            try { return JSON.parse(block.trim()); } catch {}
+        }
+        const lastBrace = text.lastIndexOf('{');
+        if (lastBrace !== -1) {
+            let depth = 0, end = -1;
+            for (let i = lastBrace; i < text.length; i++) {
+                if (text[i] === '{') depth++;
+                else if (text[i] === '}') { depth--; if (depth === 0) { end = i; break; } }
+            }
+            if (end !== -1) {
+                try { return JSON.parse(text.slice(lastBrace, end + 1)); } catch {}
+            }
+        }
+        return null;
     }
 }
 

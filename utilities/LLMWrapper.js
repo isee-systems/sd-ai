@@ -24,11 +24,12 @@ export class ModelCapabilities {
 
   constructor(modelName) {
       this.name = modelName;
+      const lowerModelName = modelName.toLowerCase();
 
-      this.hasStructuredOutput = modelName !== 'o1-mini';
-      this.hasSystemMode = modelName !== 'o1-mini';
-      this.hasTemperature = !modelName.startsWith('o') && !modelName.startsWith('gpt-5');
-      if (modelName.includes('gemini') || modelName.includes('llama') || modelName.includes('claude')) {
+      this.hasStructuredOutput = lowerModelName !== 'o1-mini';
+      this.hasSystemMode = lowerModelName !== 'o1-mini';
+      this.hasTemperature = !lowerModelName.startsWith('o') && !lowerModelName.startsWith('gpt-5');
+      if (lowerModelName.includes('gemini') || lowerModelName.includes('llama') || lowerModelName.includes('claude') || lowerModelName.includes('deepseek')) {
           this.systemModeUser = 'system';
       } else {
           this.systemModeUser = 'developer';
@@ -36,16 +37,15 @@ export class ModelCapabilities {
   }
 
   get kind() {
-      if (this.name.includes('gemini')) {
+      const lowerModelName = this.name.toLowerCase();
+      if (lowerModelName.includes('gemini')) {
           return ModelType.GEMINI;
-      } else if (this.name.includes('llama')) {
+      } else if (lowerModelName.includes('llama') || lowerModelName.includes('glm') || lowerModelName.includes('kimi') || lowerModelName.includes('qwen') || lowerModelName.includes('mistral')) {
           return ModelType.LLAMA;
-      } else if (this.name.includes('deepseek')) {
+      } else if (lowerModelName.includes('deepseek')) {
           return ModelType.DEEPSEEK;
-      } else if (this.name.includes('claude')) {
+      } else if (lowerModelName.includes('claude')) {
           return ModelType.CLAUDE;
-      } else if (this.name.includes('qwen') || this.name.includes('glm') || this.name.includes('hermes') || this.name.includes('kimi')) {
-          return ModelType.LLAMA; // Use local LM Studio endpoint for these models
       } else {
           return ModelType.OPEN_AI;
       }
@@ -57,6 +57,14 @@ export class LLMWrapper {
   #openAIKey;
   #googleKey;
   #anthropicKey;
+  #temperatureOverride;
+  #topP;
+  #topK;
+  #seed;
+  #maxTokens;
+  #thinking;
+  #jsonObjectMode = false;
+  #localBaseURL;
   #openAIAPI = null;
   #geminiAPI = null;
   #anthropicAPI = null;
@@ -83,8 +91,22 @@ export class LLMWrapper {
       this.#anthropicKey = parameters.anthropicKey;
     }
 
+    this.#temperatureOverride = parameters.temperature ?? parameters.temp ?? parameters.temperatureOverride;
+    this.#topP = parameters.top_p ?? parameters.topP;
+    this.#topK = parameters.top_k ?? parameters.topK;
+    this.#seed = parameters.seed ?? parameters.randomSeed;
+    this.#maxTokens = parameters.max_tokens ?? parameters.maxTokens;
+    this.#thinking = parameters.thinking;
+    this.#localBaseURL = parameters.baseURL ?? 'http://localhost:1234/v1';
+
     if (parameters.underlyingModel)
       this.model = new ModelCapabilities(parameters.underlyingModel);
+
+    if (parameters.structuredOutput === false)
+      this.model.hasStructuredOutput = false;
+
+    if (parameters.jsonObjectMode === true)
+      this.#jsonObjectMode = true;
 
     switch (this.model.kind) {
         case ModelType.GEMINI:
@@ -116,9 +138,8 @@ export class LLMWrapper {
         case ModelType.LLAMA:
             this.#openAIAPI = new OpenAI({
                 apiKey: 'junk', // required but unused
-                baseURL: 'http://localhost:1234/v1',
-                timeout: 600000, // 10 minutes for local LLMs (complex tests need more time)
-                maxRetries: 2,
+                baseURL: this.#localBaseURL,
+                timeout: (parameters.timeoutMinutes ?? 30) * 60 * 1000,
             });
             break;
     }
@@ -158,7 +179,7 @@ export class LLMWrapper {
 
   static BUILD_DEFAULT_MODEL = 'gemini-3-flash-preview low'; //'claude-opus-4-6';
   static NON_BUILD_DEFAULT_MODEL = 'gemini-3-flash-preview low'; //'claude-opus-4-6';
-  static EVAL_MODEL = 'qwen3.5-397b-a17b'; // Temporarily changed to local model for testing
+  static EVAL_MODEL = process.env.EVAL_MODEL ?? 'gemini-2.5-flash';
   
   static SCHEMA_STRINGS = {
     "from": "This is a variable which causes the to variable in this relationship that is between two variables, from and to.  The from variable is the equivalent of a cause.  The to variable is the equivalent of an effect",
@@ -457,7 +478,7 @@ export class LLMWrapper {
     let systemRole = this.model.hasSystemMode ? this.model.systemModeUser : 'user';
 
     // Determine temperature
-    let temperature = defaultTemperature;
+    let temperature = this.#temperatureOverride ?? defaultTemperature;
     if (!this.model.hasSystemMode) {
       temperature = 1;
     }
@@ -472,14 +493,53 @@ export class LLMWrapper {
     return { underlyingModel, systemRole, temperature, reasoningEffort };
   }
 
-  async createChatCompletion(messages, model, zodSchema = null, temperature = null, reasoningEffort = null) {
-    if (this.model.kind === ModelType.GEMINI) {
-      return await this.#createGeminiChatCompletion(messages, model, zodSchema, temperature, reasoningEffort);
-    } else if (this.model.kind === ModelType.CLAUDE) {
-      return await this.#createClaudeChatCompletion(messages, model, zodSchema, temperature);
+  #collapseUserMessages(messages) {
+    const userContents = [];
+    let nonUserCount = 0;
+    let nonUserCountAtLastUser = -1;
+
+    messages.forEach((message) => {
+      if (message.role === "user") {
+        if (message.content) {
+          userContents.push(message.content);
+        }
+        nonUserCountAtLastUser = nonUserCount;
+      } else {
+        nonUserCount += 1;
+      }
+    });
+
+    if (userContents.length === 0) {
+      return messages;
     }
 
-    return await this.#createOpenAIChatCompletion(messages, model, zodSchema, temperature, reasoningEffort);
+    const collapsedMessages = messages.filter((message) => message.role !== "user");
+    const insertIndex = Math.min(
+      nonUserCountAtLastUser < 0 ? collapsedMessages.length : nonUserCountAtLastUser,
+      collapsedMessages.length
+    );
+
+    collapsedMessages.splice(insertIndex, 0, {
+      role: "user",
+      content: userContents.join("\n\n")
+    });
+
+    return collapsedMessages;
+  }
+
+  async createChatCompletion(messages, model, zodSchema = null, temperature = null, reasoningEffort = null) {
+    let normalizedMessages = messages;
+    if (this.model.kind === ModelType.LLAMA || this.model.kind === ModelType.DEEPSEEK) {
+      normalizedMessages = this.#collapseUserMessages(messages);
+    }
+
+    if (this.model.kind === ModelType.GEMINI) {
+      return await this.#createGeminiChatCompletion(normalizedMessages, model, zodSchema, temperature, reasoningEffort);
+    } else if (this.model.kind === ModelType.CLAUDE) {
+      return await this.#createClaudeChatCompletion(normalizedMessages, model, zodSchema, temperature);
+    }
+
+    return await this.#createOpenAIChatCompletion(normalizedMessages, model, zodSchema, temperature, reasoningEffort);
   }
 
   async #createOpenAIChatCompletion(messages, model, zodSchema = null, temperature = null, reasoningEffort = null) {
@@ -490,6 +550,8 @@ export class LLMWrapper {
 
     if (zodSchema) {
       completionParams.response_format = zodResponseFormat(zodSchema, "sdai_schema");
+    } else if (this.#jsonObjectMode) {
+      completionParams.response_format = { type: "json_object" };
     }
 
     if (temperature !== null && temperature !== undefined) {
@@ -500,21 +562,76 @@ export class LLMWrapper {
       completionParams.reasoning_effort = reasoningEffort;
     }
 
-    // Add seed for reproducibility with local models
-    if (this.model.kind === ModelType.LLAMA || this.model.kind === ModelType.DEEPSEEK) {
-      completionParams.seed = 4242;
+    if (this.#topP !== null && this.#topP !== undefined) {
+      completionParams.top_p = this.#topP;
+    }
+
+    if ((this.model.kind === ModelType.LLAMA || this.model.kind === ModelType.DEEPSEEK)
+      && this.#topK !== null && this.#topK !== undefined) {
+      completionParams.top_k = this.#topK;
+    }
+
+    if ((this.model.kind === ModelType.LLAMA || this.model.kind === ModelType.DEEPSEEK)
+      && this.#seed !== null && this.#seed !== undefined) {
+      completionParams.seed = this.#seed;
+    }
+
+    if (this.#maxTokens !== null && this.#maxTokens !== undefined) {
+      completionParams.max_tokens = this.#maxTokens;
+    }
+
+    if ((this.model.kind === ModelType.LLAMA || this.model.kind === ModelType.DEEPSEEK)
+      && this.#thinking !== null && this.#thinking !== undefined) {
+      completionParams.thinking = this.#thinking;
     }
 
     const completion = await this.#openAIAPI.chat.completions.create(completionParams);
     const message = completion.choices[0].message;
-    
-    // Handle LM Studio quirk: when using structured output, it puts JSON in reasoning_content instead of content
-    if (this.model.kind === ModelType.LLAMA && zodSchema && message.reasoning_content && (!message.content || message.content.trim() === '')) {
-      // For LM Studio, move reasoning_content to content when using structured output
-      message.content = message.reasoning_content;
+    // Reasoning models (e.g. GLM-5) emit chain-of-thought in reasoning_content and
+    // leave content null. Try to extract a valid JSON block from the reasoning text
+    // so callers receive parseable content rather than raw prose.
+    const reasoningText = message.reasoning_content ?? message.reasoning;
+    if (!message.content && reasoningText) {
+      const extracted = LLMWrapper.#extractJsonFromReasoning(reasoningText);
+      return { ...message, content: extracted ?? reasoningText };
     }
-    
     return message;
+
+  }
+
+  static #extractJsonFromReasoning(text) {
+    // Strategy 1: the whole text is already valid JSON
+    try { JSON.parse(text); return text; } catch {}
+
+    // Strategy 2: last ```json ... ``` code block
+    const codeBlocks = [...text.matchAll(/```json\s*([\s\S]*?)```/g)];
+    if (codeBlocks.length) {
+      const candidate = codeBlocks[codeBlocks.length - 1][1].trim();
+      try { JSON.parse(candidate); return candidate; } catch {}
+    }
+
+    // Strategy 3: last top-level { ... } block in the text
+    const lastBrace = text.lastIndexOf('{');
+    if (lastBrace !== -1) {
+      const candidate = text.slice(lastBrace);
+      try { JSON.parse(candidate); return candidate; } catch {}
+    }
+
+    // Strategy 4: scan backwards for a complete JSON object
+    let depth = 0, end = -1;
+    for (let i = text.length - 1; i >= 0; i--) {
+      if (text[i] === '}') { if (end === -1) end = i; depth++; }
+      else if (text[i] === '{') {
+        depth--;
+        if (depth === 0) {
+          const candidate = text.slice(i, end + 1);
+          try { JSON.parse(candidate); return candidate; } catch {}
+          break;
+        }
+      }
+    }
+
+    return null; // caller falls back to raw reasoning_content
   }
 
   async #createGeminiChatCompletion(messages, model, zodSchema = null, temperature = null, reasoningEffort = null) {
@@ -715,6 +832,30 @@ export class LLMWrapper {
             saveForUser: "local",
             label: "LLM Model",
             description: "The LLM model that you want to use to process your queries."
+        },{
+            name: "temperature",
+            type: "number",
+            required: false,
+            uiElement: "lineedit",
+            saveForUser: "local",
+            label: "Temperature",
+            description: "Optional sampling temperature override for supported models."
+        },{
+            name: "top_p",
+            type: "number",
+            required: false,
+            uiElement: "lineedit",
+            saveForUser: "local",
+            label: "Top-p",
+            description: "Optional nucleus sampling value (top_p)."
+        },{
+            name: "top_k",
+            type: "number",
+            required: false,
+            uiElement: "lineedit",
+            saveForUser: "local",
+            label: "Top-k",
+            description: "Optional top-k sampling value for local models."
         }];
     }
 };

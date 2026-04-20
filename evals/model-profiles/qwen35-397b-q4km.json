@@ -1,0 +1,15 @@
+{
+  "alias": "Qwen3.5-397B-Q4_K_M",
+  "lmStudioModelId": "qwen3.5-397b-a17b",
+  "quantization": "Q4_K_M",
+  "parameterCount": "397B",
+  "inferenceBackend": "llama.cpp",
+  "contextLoaded": 64000,
+  "kvCacheQuant": "off",
+  "structuredOutput": false,
+  "lmStudioSettings": {
+    "structuredOutput": false,
+    "reasoningParsing": false
+  },
+  "notes": "Qwen 3.5 397B (MoE A17B active) loaded via llama.cpp with Q4_K_M quantization. Structured output was OFF during benchmark runs — zodResponseFormat sent but not grammar-enforced."
+}

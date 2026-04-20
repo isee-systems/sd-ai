@@ -182,7 +182,13 @@ As the world's best System Dynamics Modeler, you will consider and apply the Sys
         //start with the system prompt
         const { underlyingModel, systemRole, temperature, reasoningEffort } = this.#llmWrapper.getLLMParameters();
         let systemPrompt = this.#data.systemPrompt;
-        let responseFormat = this.#llmWrapper.generateSeldonResponseSchema();
+        let responseFormat = this.#llmWrapper.model.hasStructuredOutput
+            ? this.#llmWrapper.generateSeldonResponseSchema()
+            : null;
+
+        if (!this.#llmWrapper.model.hasStructuredOutput) {
+            systemPrompt += '\n\nCRITICAL: Your entire response MUST be a single valid JSON object with no text before or after it. No markdown, no explanation, no code fences. Only output this exact structure:\n{"response": "<your HTML response here>", "feedbackInformationRequired": <true or false>}';
+        }
         let messages;
 
         // Check if this is a local model (LLAMA/DEEPSEEK) that needs simplified message structure
@@ -297,12 +303,41 @@ As the world's best System Dynamics Modeler, you will consider and apply the Sys
             try {
                 parsedObj = JSON.parse(originalResponse.content);
             } catch (err) {
-                throw new ResponseFormatError("Bad JSON returned by underlying LLM");
+                if (this.#data.lenientJsonParsing) {
+                    const extracted = SeldonEngineBrain.#extractJsonFromContent(originalResponse.content);
+                    if (extracted) {
+                        parsedObj = extracted;
+                    } else {
+                        throw new ResponseFormatError("Bad JSON returned by underlying LLM");
+                    }
+                } else {
+                    throw new ResponseFormatError("Bad JSON returned by underlying LLM");
+                }
             }
             return this.#processResponse(parsedObj);
         } else {
             throw new ResponseFormatError("LLM response did not contain any recognized format (no refusal, parsed, or content fields)");
         }
+    }
+
+    static #extractJsonFromContent(text) {
+        if (!text) return null;
+        const codeBlocks = [...text.matchAll(/```json\s*([\s\S]*?)```/g)];
+        for (const [, block] of codeBlocks.reverse()) {
+            try { return JSON.parse(block.trim()); } catch {}
+        }
+        const lastBrace = text.lastIndexOf('{');
+        if (lastBrace !== -1) {
+            let depth = 0, end = -1;
+            for (let i = lastBrace; i < text.length; i++) {
+                if (text[i] === '{') depth++;
+                else if (text[i] === '}') { depth--; if (depth === 0) { end = i; break; } }
+            }
+            if (end !== -1) {
+                try { return JSON.parse(text.slice(lastBrace, end + 1)); } catch {}
+            }
+        }
+        return null;
     }
 }
 

@@ -14,7 +14,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { LLMWrapper } from '../../utilities/LLMWrapper.js';
 import { z } from 'zod';
-import { validateEvaluationResult } from '../evaluationSchema.js';
+import { validateEvaluationResult, withRetry } from '../evaluationSchema.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -108,13 +108,13 @@ export const evaluate = async function(generatedResponse, expectations) {
         // Get LLM parameters
         const { underlyingModel, temperature } = llm.getLLMParameters(0);
 
-        // Call the LLM with structured output
-        const response = await llm.createChatCompletion(
+        // Call the LLM with structured output, with retry for transient API errors
+        const response = await withRetry(() => llm.createChatCompletion(
             messages,
             underlyingModel,
             structuredOutputSchema,
             temperature
-        );
+        ));
 
         // Parse the structured response
         let explainedErrors = [];

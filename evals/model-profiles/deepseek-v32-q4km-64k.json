@@ -1,0 +1,17 @@
+{
+  "alias": "DeepSeek-V3_2-Q4_K_M",
+  "lmStudioModelId": "deepseek-v3.2",
+  "quantization": "Q4_K_M",
+  "parameterCount": "671B",
+  "inferenceBackend": "llama.cpp",
+  "contextLoaded": 81920,
+  "timeoutMinutes": 30,
+  "maxTokens": 8000,
+  "kvCacheQuant": "off",
+  "structuredOutput": false,
+  "lmStudioSettings": {
+    "structuredOutput": false,
+    "reasoningParsing": false
+  },
+  "notes": "DeepSeek V3.2 at 64k context — for simple and error test groups only (prompts < 64k tokens). Stable and fast."
+}
