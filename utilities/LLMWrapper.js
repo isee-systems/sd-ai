@@ -440,7 +440,7 @@ export class LLMWrapper {
       return Model;
   }
 
-    static DEFAULT_TEMPERATURE = 0;
+    static DEFAULT_TEMPERATURE = undefined; //by default keep temperature undefined
 
   /**
    * Gets the LLM parameters based on model capabilities
