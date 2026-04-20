@@ -453,7 +453,7 @@ describe('LLMWrapper', () => {
         expect(params.underlyingModel).toBe('gpt-4o');
         expect(params.reasoningEffort).toBeUndefined();
         expect(params.systemRole).toBe('developer');
-        expect(params.temperature).toBe(0);
+        expect(params.temperature).toBeUndefined();
       });
 
       it('should handle gemini models', () => {
@@ -469,7 +469,7 @@ describe('LLMWrapper', () => {
         expect(params.underlyingModel).toBe('gemini-2.5-flash');
         expect(params.reasoningEffort).toBeUndefined();
         expect(params.systemRole).toBe('system');
-        expect(params.temperature).toBe(0);
+        expect(params.temperature).toBeUndefined();
       });
 
       it('should handle claude models', () => {
@@ -483,7 +483,7 @@ describe('LLMWrapper', () => {
         expect(params.underlyingModel).toBe('claude-sonnet-4-5-20250929');
         expect(params.reasoningEffort).toBeUndefined();
         expect(params.systemRole).toBe('system');
-        expect(params.temperature).toBe(0);
+        expect(params.temperature).toBeUndefined();
       });
     });
 
@@ -542,7 +542,7 @@ describe('LLMWrapper', () => {
         });
 
         const params = wrapper.getLLMParameters();
-        expect(params.temperature).toBe(0);
+        expect(params.temperature).toBeUndefined();
       });
 
       it('should return custom default temperature when specified', () => {

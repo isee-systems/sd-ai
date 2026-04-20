@@ -110,7 +110,7 @@ describe('LTMNarrativeBrain', () => {
       const result = brainWithoutSystemMode.setupLLMParameters('Test prompt', null);
 
       expect(result.messages[0].role).toBe('system');
-      expect(result.temperature).toBe(0);
+      expect(result.temperature).toBeUndefined();
     });
 
     it('should set temperature to undefined when model lacks temperature support', () => {
