@@ -135,9 +135,10 @@ export class VisualizationEngine {
 Requirements:
 - Use matplotlib with Agg backend
 - Load JSON data and create the visualization
-- Save to specified path
+- Save to specified path as PNG with broadly-compatible settings
 - Include labels, titles, legends
-- Make it clear and professional`;
+- Make it clear and professional
+- Set white background for broad compatibility`;
 
     const userPrompt = `Generate Python code for this visualization:
 
@@ -150,7 +151,13 @@ Size: ${(options.width || 800)/100}x${(options.height || 600)/100} inches, 100 D
 Data structure: JSON with 'time' array and variable arrays: ${variables.map(v => `'${v}'`).join(', ')}
 
 ${options.customRequirements ? `Requirements: ${options.customRequirements}\n` : ''}
-Generate ONLY working Python code with matplotlib.use('Agg'), no explanations.`;
+IMPORTANT:
+- Use matplotlib.use('Agg')
+- Suppress warnings with warnings.filterwarnings('ignore')
+- Set fig.set_facecolor('white') for broad compatibility
+- Save with: plt.savefig(path, format='png', dpi=100, bbox_inches='tight', facecolor='white', edgecolor='none')
+
+Generate ONLY working Python code, no explanations.`;
 
     try {
       // Get LLM parameters with lower temperature for faster, more deterministic responses
@@ -305,6 +312,8 @@ Generate ONLY working Python code with matplotlib.use('Agg'), no explanations.`;
         return this.generateTimeSeriesScript(dataPath, outputPath, variables, options);
       case 'phase_portrait':
         return this.generatePhasePortraitScript(dataPath, outputPath, variables, options);
+      case 'feedback_dominance':
+        return this.generateFeedbackDominanceScript(dataPath, outputPath, variables, options);
       case 'comparison':
         return this.generateComparisonScript(dataPath, outputPath, variables, options);
       default:
@@ -325,13 +334,16 @@ import json
 import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use('Agg')
+import warnings
+warnings.filterwarnings('ignore')
 
 # Load data
 with open('${dataPath}', 'r') as f:
     data = json.load(f)
 
-# Create figure
+# Create figure with most-compatible settings
 fig, ax = plt.subplots(figsize=(${(options.width || 800)/100}, ${(options.height || 600)/100}), dpi=100)
+fig.set_facecolor('white')
 
 # Plot each variable
 ${variables.map((v, idx) => `
@@ -349,7 +361,8 @@ ax.grid(True, alpha=0.3)
 ${highlightPeriodsCode}
 
 plt.tight_layout()
-plt.savefig('${outputPath}', dpi=100, bbox_inches='tight')
+# most-compatible PNG output
+plt.savefig('${outputPath}', format='png', dpi=100, bbox_inches='tight', facecolor='white', edgecolor='none')
 plt.close()
 print('Visualization saved')
 `.trim();
@@ -366,11 +379,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')
+import warnings
+warnings.filterwarnings('ignore')
 
 with open('${dataPath}', 'r') as f:
     data = json.load(f)
 
 fig, ax = plt.subplots(figsize=(8, 6), dpi=100)
+fig.set_facecolor('white')
 
 time = np.array(data['time'])
 x = np.array(data['${xVar}'])
@@ -392,7 +408,140 @@ cbar = plt.colorbar(scatter, ax=ax)
 cbar.set_label('Time', fontsize=10)
 
 plt.tight_layout()
-plt.savefig('${outputPath}', dpi=100, bbox_inches='tight')
+plt.savefig('${outputPath}', format='png', dpi=100, bbox_inches='tight', facecolor='white', edgecolor='none')
+plt.close()
+print('Visualization saved')
+`.trim();
+  }
+
+  /**
+   * Generate feedback dominance script (stacked area chart)
+   */
+  generateFeedbackDominanceScript(dataPath, outputPath, variables, options) {
+    return `
+import json
+import matplotlib.pyplot as plt
+import numpy as np
+import matplotlib
+matplotlib.use('Agg')
+import warnings
+warnings.filterwarnings('ignore')
+
+with open('${dataPath}', 'r') as f:
+    data = json.load(f)
+
+fig, ax = plt.subplots(figsize=(${(options.width || 800)/100}, ${(options.height || 600)/100}), dpi=100)
+fig.set_facecolor('white')
+
+# Get time array from data or from loop data
+time = data.get('time', [])
+
+# Prepare loop data with metadata for sorting
+loops_with_data = []
+
+# Handle feedbackLoops structure
+feedback_loops = data.get('feedbackLoops', [])
+for loop in feedback_loops:
+    loop_name = loop.get('name', 'Unnamed Loop')
+    identifier = loop.get('identifier', loop_name)
+    polarity = loop.get('polarity', 'unknown')  # '+' or '-' or '?'
+
+    # Get loop influence data from "Percent of Model Behavior Explained By Loop"
+    dominance_data = None
+    if 'Percent of Model Behavior Explained By Loop' in loop:
+        behavior_data = loop['Percent of Model Behavior Explained By Loop']
+        # Extract values and ensure time array matches
+        if isinstance(behavior_data, list) and len(behavior_data) > 0:
+            if isinstance(behavior_data[0], dict):
+                # Format: [{ time: x, value: y }, ...]
+                times = [item['time'] for item in behavior_data]
+                values = [item['value'] for item in behavior_data]
+                dominance_data = np.array(values)
+                if not time:  # If time not set globally, use from loop
+                    time = times
+            else:
+                # Format: direct array
+                dominance_data = np.array(behavior_data)
+    elif 'dominance' in loop:
+        dominance_data = np.array(loop['dominance'])
+    elif 'influence' in loop:
+        dominance_data = np.array(loop['influence'])
+
+    # Skip if no data
+    if dominance_data is None or len(dominance_data) == 0:
+        continue
+
+    # Calculate total for sorting
+    total = np.sum(dominance_data)
+
+    # Determine if balancing or reinforcing
+    # Balancing: polarity is '-'
+    # Reinforcing: polarity is '+'
+    is_balancing = (polarity == '-')
+
+    loops_with_data.append({
+        'name': loop_name,
+        'identifier': identifier,
+        'data': dominance_data,
+        'total': total,
+        'is_balancing': is_balancing,
+        'polarity': polarity
+    })
+
+# Sort loops: balancing first (polarity '-' < '+'), then by total
+# Within balancing: higher total first (descending)
+# Within reinforcing: lower total first (ascending)
+def sort_key(loop):
+    # First sort by polarity: balancing (True) comes before reinforcing (False)
+    polarity_order = 0 if loop['is_balancing'] else 1
+
+    # Second sort by total: balancing loops by descending total, reinforcing by ascending
+    if loop['is_balancing']:
+        total_order = -loop['total']  # Negative for descending
+    else:
+        total_order = loop['total']   # Positive for ascending
+
+    return (polarity_order, total_order)
+
+loops_with_data.sort(key=sort_key)
+
+# Extract sorted data
+loop_data = [loop['data'] for loop in loops_with_data]
+loop_labels = [loop['name'] for loop in loops_with_data]
+
+# Create stacked area plot
+if len(loop_data) > 0 and len(time) > 0:
+    time = np.array(time)
+
+    # Add dominant periods as background shading (if provided)
+    dominant_periods = data.get('dominantLoopsByPeriod', [])
+    for period in dominant_periods:
+        start_time = period.get('startTime', 0)
+        end_time = period.get('endTime', 0)
+        dominant_loops = period.get('dominantLoops', [])
+
+        if dominant_loops and start_time < end_time:
+            # Create label from dominant loop identifiers
+            label = ', '.join(dominant_loops) if len(dominant_loops) <= 3 else f'{len(dominant_loops)} loops'
+            # Use subtle background color for dominant periods
+            ax.axvspan(start_time, end_time, alpha=0.1, color='gray',
+                      label=f'Dominant: {label}', zorder=0)
+
+    # Plot the stacked areas on top of background shading
+    colors = plt.cm.tab10(np.linspace(0, 1, len(loop_data)))
+    ax.stackplot(time, *loop_data, labels=loop_labels, colors=colors, alpha=0.7)
+
+    ax.set_xlabel('Time (${options.timeUnits || 'units'})', fontsize=12)
+    ax.set_ylabel('Loop Dominance', fontsize=12)
+    ax.set_title('${options.title || 'Feedback Loop Dominance Over Time'}', fontsize=14, fontweight='bold')
+    ax.legend(loc='upper left', bbox_to_anchor=(1.02, 1), borderaxespad=0)
+    ax.grid(True, alpha=0.3)
+else:
+    ax.text(0.5, 0.5, 'No feedback loop data available',
+            ha='center', va='center', transform=ax.transAxes, fontsize=12)
+
+plt.tight_layout()
+plt.savefig('${outputPath}', format='png', dpi=100, bbox_inches='tight', facecolor='white', edgecolor='none')
 plt.close()
 print('Visualization saved')
 `.trim();
@@ -410,11 +559,14 @@ import json
 import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use('Agg')
+import warnings
+warnings.filterwarnings('ignore')
 
 with open('${dataPath}', 'r') as f:
     data = json.load(f)
 
 fig, ax = plt.subplots(figsize=(${(options.width || 800)/100}, ${(options.height || 600)/100}), dpi=100)
+fig.set_facecolor('white')
 
 runs = data.get('runs', [])
 colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
@@ -436,7 +588,7 @@ ax.legend(loc='best')
 ax.grid(True, alpha=0.3)
 
 plt.tight_layout()
-plt.savefig('${outputPath}', dpi=100, bbox_inches='tight')
+plt.savefig('${outputPath}', format='png', dpi=100, bbox_inches='tight', facecolor='white', edgecolor='none')
 plt.close()
 print('Visualization saved')
 `.trim();

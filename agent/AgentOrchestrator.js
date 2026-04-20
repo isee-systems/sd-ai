@@ -259,6 +259,24 @@ export class AgentOrchestrator {
             `Running model simulation...`,
             false
           ));
+        } else if (block.name === 'discuss_model_with_seldon') {
+          await this.sendToClient(createAgentTextMessage(
+            this.sessionId,
+            `Consulting Seldon for expert analysis...`,
+            false
+          ));
+        } else if (block.name === 'discuss_model_across_runs') {
+          await this.sendToClient(createAgentTextMessage(
+            this.sessionId,
+            `Analyzing model behavior across runs...`,
+            false
+          ));
+        } else if (block.name === 'discuss_with_mentor') {
+          await this.sendToClient(createAgentTextMessage(
+            this.sessionId,
+            `Consulting Seldon mentor for guidance...`,
+            false
+          ));
         }
 
         // Execute tool
