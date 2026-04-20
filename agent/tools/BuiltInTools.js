@@ -394,6 +394,29 @@ export function createBuiltInToolsServer(sessionManager, sessionId, sendToClient
               };
             }
 
+            // Automatically push the generated model to the client
+            const session = sessionManager.getSession(sessionId);
+            if (!session) {
+              throw new Error(`Session not found: ${sessionId}`);
+            }
+
+            const requestId = generateRequestId('model');
+            await sendToClient(createUpdateModelMessage(sessionId, requestId, result.model));
+
+            // Wait for client confirmation
+            const updatePromise = new Promise((resolve, reject) => {
+              const timeout = setTimeout(() => {
+                reject(new Error('Update model timeout: Client did not respond within 30 seconds'));
+              }, 30000);
+
+              if (!session.pendingModelRequests) {
+                session.pendingModelRequests = new Map();
+              }
+              session.pendingModelRequests.set(requestId, { resolve, reject, timeout });
+            });
+
+            await updatePromise;
+
             return {
               content: [{
                 type: 'text',

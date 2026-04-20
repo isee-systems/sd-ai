@@ -216,16 +216,6 @@ export const ErrorMessageSchema = z.object({
   timestamp: z.string().optional().describe('ISO 8601 timestamp of when the message was created')
 });
 
-export const ShowIntermediateModelMessageSchema = z.object({
-  type: z.literal('show_intermediate_model').describe('Message type identifier'),
-  sessionId: z.string().describe('Unique session identifier'),
-  modelType: z.enum(['cld', 'sfd']).describe('Model type: CLD (Causal Loop Diagram) or SFD (Stock Flow Diagram)'),
-  model: SDModelSchema.describe('The intermediate model to display'),
-  purpose: z.string().describe('Why this intermediate model is being shown (e.g., "showing iteration 3 of model refinement")'),
-  displayMode: z.enum(['separate_window', 'inline', 'background']).describe('How the client should display this: separate_window (new window/tab), inline (in chat), or background (store without immediate display)'),
-  timestamp: z.string().optional().describe('ISO 8601 timestamp of when the message was created')
-});
-
 export const FeedbackRequestMessageSchema = z.object({
   type: z.literal('feedback_request').describe('Message type identifier'),
   sessionId: z.string().describe('Unique session identifier'),
@@ -281,7 +271,6 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   ToolCallRequestMessageSchema,
   ToolCallCompletedMessageSchema,
   VisualizationMessageSchema,
-  ShowIntermediateModelMessageSchema,
   FeedbackRequestMessageSchema,
   GetCurrentModelMessageSchema,
   UpdateModelMessageSchema,
@@ -435,18 +424,6 @@ export function createErrorMessage(sessionId, error, errorCode, recoverable = tr
     error: typeof error === 'string' ? error : error.message,
     errorCode,
     recoverable,
-    timestamp: new Date().toISOString()
-  };
-}
-
-export function createShowIntermediateModelMessage(sessionId, modelType, model, purpose, displayMode = 'separate_window') {
-  return {
-    type: 'show_intermediate_model',
-    sessionId,
-    modelType,
-    model,
-    purpose,
-    displayMode,
     timestamp: new Date().toISOString()
   };
 }

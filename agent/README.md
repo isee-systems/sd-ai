@@ -121,17 +121,6 @@ Establishes a session with authentication, model type, initial model, client too
           "timeRange": { "type": "object" }
         }
       }
-    },
-    {
-      "name": "show_intermediate_model",
-      "description": "Shows an intermediate model in a separate window",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "model": { "type": "object" },
-          "displayMode": { "type": "string" }
-        }
-      }
     }
   ],
   "historicalMessages": [
@@ -530,31 +519,7 @@ Sends visualization data to the client as base64 encoded PNG images.
   - `height`: Image height in pixels
 - `description` is optional
 
-#### 9. Show Intermediate Model
-
-Asks the client to display an intermediate model (e.g., a CLD created before building an SFD).
-
-```json
-{
-  "type": "show_intermediate_model",
-  "sessionId": "sess_abc123",
-  "modelType": "cld",
-  "model": {
-    "variables": [...],
-    "relationships": [...]
-  },
-  "purpose": "This CLD shows the conceptual structure before we build the quantitative SFD",
-  "displayMode": "separate_window",
-  "timestamp": "2025-01-15T10:30:06.000Z"
-}
-```
-
-**Display Modes:**
-- `"separate_window"` - Show in a new window/dialog
-- `"inline"` - Display within the conversation
-- `"background"` - Load silently without interrupting
-
-#### 10. Feedback Request
+#### 9. Feedback Request
 
 Requests feedback loop analysis data from the client (used by Seldon engine for enhanced discussions).
 
@@ -778,24 +743,6 @@ Clients register their tools during `initialize_session`. Each tool must follow 
 }
 ```
 
-#### 4. show_intermediate_model
-
-**Purpose:** Displays an intermediate model in a separate window.
-
-```json
-{
-  "name": "show_intermediate_model",
-  "description": "Show intermediate model in separate window",
-  "inputSchema": {
-    "type": "object",
-    "properties": {
-      "model": { "type": "object" },
-      "displayMode": { "type": "string" }
-    }
-  }
-}
-```
-
 ## Built-In Tools
 
 The agent has access to these SD-AI engine tools:
@@ -874,7 +821,6 @@ toolPolicies:
   generate_quantitative_model:
     when: "Building or significantly modifying an SFD model"
     bestPractices:
-      - "Always show intermediate CLD first"
       - "Validate all equations"
 ```
 

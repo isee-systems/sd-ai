@@ -604,14 +604,6 @@
           handleGetVariableData(message);
           break;
 
-        case 'show_intermediate_model':
-          log(`Server wants to show intermediate model: ${message.purpose}`);
-          log(`Display mode: ${message.displayMode}`);
-          // For now, just log the intermediate model - client could implement UI to display it
-          elements.modelData.value = JSON.stringify(message.model, null, 2);
-          log('✓ Intermediate model displayed', 'received');
-          break;
-
         default:
           log(`Unknown message type: ${message.type}`);
       }
