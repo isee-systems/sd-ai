@@ -4,6 +4,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { zodResponseFormat } from "openai/helpers/zod";
 import { ZodToStructuredOutputConverter } from "./ZodToStructuredOutputConverter.js";
+import { extractJsonFromContent } from "./jsonUtils.js";
 
 export const ModelType = Object.freeze({
   GEMINI:   Symbol("Gemini"),
@@ -24,11 +25,12 @@ export class ModelCapabilities {
 
   constructor(modelName) {
       this.name = modelName;
+      const lowerModelName = modelName.toLowerCase();
 
-      this.hasStructuredOutput = modelName !== 'o1-mini';
-      this.hasSystemMode = modelName !== 'o1-mini';
-      this.hasTemperature = !modelName.startsWith('o') && !modelName.startsWith('gpt-5');
-      if (modelName.includes('gemini') || modelName.includes('llama') || modelName.includes('claude')) {
+      this.hasStructuredOutput = lowerModelName !== 'o1-mini';
+      this.hasSystemMode = lowerModelName !== 'o1-mini';
+      this.hasTemperature = !lowerModelName.startsWith('o') && !lowerModelName.startsWith('gpt-5');
+      if (lowerModelName.includes('gemini') || lowerModelName.includes('llama') || lowerModelName.includes('claude') || lowerModelName.includes('deepseek')) {
           this.systemModeUser = 'system';
       } else {
           this.systemModeUser = 'developer';
@@ -36,13 +38,14 @@ export class ModelCapabilities {
   }
 
   get kind() {
-      if (this.name.includes('gemini')) {
+      const lowerModelName = this.name.toLowerCase();
+      if (lowerModelName.includes('gemini')) {
           return ModelType.GEMINI;
-      } else if (this.name.includes('llama')) {
+      } else if (lowerModelName.includes('llama') || lowerModelName.includes('glm') || lowerModelName.includes('kimi') || lowerModelName.includes('qwen') || lowerModelName.includes('mistral')) {
           return ModelType.LLAMA;
-      } else if (this.name.includes('deepseek')) {
+      } else if (lowerModelName.includes('deepseek')) {
           return ModelType.DEEPSEEK;
-      } else if (this.name.includes('claude')) {
+      } else if (lowerModelName.includes('claude')) {
           return ModelType.CLAUDE;
       } else {
           return ModelType.OPEN_AI;
@@ -55,6 +58,14 @@ export class LLMWrapper {
   #openAIKey;
   #googleKey;
   #anthropicKey;
+  #temperatureOverride;
+  #topP;
+  #topK;
+  #seed;
+  #maxTokens;
+  #thinking;
+  #jsonObjectMode = false;
+  #localBaseURL;
   #openAIAPI = null;
   #geminiAPI = null;
   #anthropicAPI = null;
@@ -81,8 +92,22 @@ export class LLMWrapper {
       this.#anthropicKey = parameters.anthropicKey;
     }
 
+    this.#temperatureOverride = parameters.temperature ?? parameters.temp ?? parameters.temperatureOverride;
+    this.#topP = parameters.top_p ?? parameters.topP;
+    this.#topK = parameters.top_k ?? parameters.topK;
+    this.#seed = parameters.seed ?? parameters.randomSeed;
+    this.#maxTokens = parameters.max_tokens ?? parameters.maxTokens;
+    this.#thinking = parameters.thinking;
+    this.#localBaseURL = parameters.baseURL ?? 'http://localhost:1234/v1';
+
     if (parameters.underlyingModel)
       this.model = new ModelCapabilities(parameters.underlyingModel);
+
+    if (parameters.structuredOutput === false)
+      this.model.hasStructuredOutput = false;
+
+    if (parameters.jsonObjectMode === true)
+      this.#jsonObjectMode = true;
 
     switch (this.model.kind) {
         case ModelType.GEMINI:
@@ -114,7 +139,8 @@ export class LLMWrapper {
         case ModelType.LLAMA:
             this.#openAIAPI = new OpenAI({
                 apiKey: 'junk', // required but unused
-                baseURL: 'http://localhost:11434/v1',
+                baseURL: this.#localBaseURL,
+                timeout: (parameters.timeoutMinutes ?? 30) * 60 * 1000,
             });
             break;
     }
@@ -154,7 +180,7 @@ export class LLMWrapper {
 
   static BUILD_DEFAULT_MODEL = 'gemini-3-flash-preview low'; //'claude-opus-4-6';
   static NON_BUILD_DEFAULT_MODEL = 'gemini-3-flash-preview low'; //'claude-opus-4-6';
-  static EVAL_MODEL = 'gemini-2.5-flash';
+  static EVAL_MODEL = process.env.EVAL_MODEL ?? 'gemini-2.5-flash';
   
   static SCHEMA_STRINGS = {
     "from": "This is a variable which causes the to variable in this relationship that is between two variables, from and to.  The from variable is the equivalent of a cause.  The to variable is the equivalent of an effect",
@@ -453,7 +479,7 @@ export class LLMWrapper {
     let systemRole = this.model.hasSystemMode ? this.model.systemModeUser : 'user';
 
     // Determine temperature
-    let temperature = defaultTemperature;
+    let temperature = this.#temperatureOverride ?? defaultTemperature;
     if (!this.model.hasSystemMode) {
       temperature = 1;
     }
@@ -468,14 +494,81 @@ export class LLMWrapper {
     return { underlyingModel, systemRole, temperature, reasoningEffort };
   }
 
-  async createChatCompletion(messages, model, zodSchema = null, temperature = null, reasoningEffort = null) {
-    if (this.model.kind === ModelType.GEMINI) {
-      return await this.#createGeminiChatCompletion(messages, model, zodSchema, temperature, reasoningEffort);
-    } else if (this.model.kind === ModelType.CLAUDE) {
-      return await this.#createClaudeChatCompletion(messages, model, zodSchema, temperature);
+  #collapseUserMessages(messages) {
+    const userContents = [];
+    let nonUserCount = 0;
+    let nonUserCountAtLastUser = -1;
+
+    messages.forEach((message) => {
+      if (message.role === "user") {
+        if (message.content) {
+          userContents.push(message.content);
+        }
+        nonUserCountAtLastUser = nonUserCount;
+      } else {
+        nonUserCount += 1;
+      }
+    });
+
+    if (userContents.length === 0) {
+      return messages;
     }
 
-    return await this.#createOpenAIChatCompletion(messages, model, zodSchema, temperature, reasoningEffort);
+    const collapsedMessages = messages.filter((message) => message.role !== "user");
+    const insertIndex = Math.min(
+      nonUserCountAtLastUser < 0 ? collapsedMessages.length : nonUserCountAtLastUser,
+      collapsedMessages.length
+    );
+
+    collapsedMessages.splice(insertIndex, 0, {
+      role: "user",
+      content: userContents.join("\n\n")
+    });
+
+    return collapsedMessages;
+  }
+
+  // When a model lacks native structured output support, inject an explicit JSON
+  // instruction into the system message so the model knows what to return.
+  // This keeps all local-vs-remote awareness inside LLMWrapper.
+  #injectJsonFallback(messages, zodSchema) {
+    if (!zodSchema?.shape) return messages;
+    const fields = Object.entries(zodSchema.shape).map(([k, v]) => {
+      const t = v._def?.typeName?.replace('Zod', '').toLowerCase() ?? 'value';
+      return `"${k}": <${t}>`;
+    });
+    const instruction = `\n\nCRITICAL: Your entire response MUST be a single valid JSON object with no text before or after it. No markdown, no explanation, no code fences. Only output this exact structure:\n{${fields.join(', ')}}`;
+    const result = messages.map(m => ({ ...m }));
+    const sys = result.find(m => m.role === 'system' || m.role === 'developer');
+    if (sys) {
+      sys.content = (sys.content ?? '') + instruction;
+    } else {
+      result.unshift({ role: 'system', content: instruction.trim() });
+    }
+    return result;
+  }
+
+  async createChatCompletion(messages, model, zodSchema = null, temperature = null, reasoningEffort = null) {
+    let normalizedMessages = messages;
+    if (this.model.kind === ModelType.LLAMA || this.model.kind === ModelType.DEEPSEEK) {
+      normalizedMessages = this.#collapseUserMessages(messages);
+    }
+
+    // For models that don't support structured output, fall back to prompt-level
+    // JSON enforcement and drop the schema so the API doesn't reject it.
+    let effectiveSchema = zodSchema;
+    if (zodSchema && !this.model.hasStructuredOutput) {
+      normalizedMessages = this.#injectJsonFallback(normalizedMessages, zodSchema);
+      effectiveSchema = null;
+    }
+
+    if (this.model.kind === ModelType.GEMINI) {
+      return await this.#createGeminiChatCompletion(normalizedMessages, model, effectiveSchema, temperature, reasoningEffort);
+    } else if (this.model.kind === ModelType.CLAUDE) {
+      return await this.#createClaudeChatCompletion(normalizedMessages, model, effectiveSchema, temperature);
+    }
+
+    return await this.#createOpenAIChatCompletion(normalizedMessages, model, effectiveSchema, temperature, reasoningEffort);
   }
 
   async #createOpenAIChatCompletion(messages, model, zodSchema = null, temperature = null, reasoningEffort = null) {
@@ -486,6 +579,8 @@ export class LLMWrapper {
 
     if (zodSchema) {
       completionParams.response_format = zodResponseFormat(zodSchema, "sdai_schema");
+    } else if (this.#jsonObjectMode) {
+      completionParams.response_format = { type: "json_object" };
     }
 
     if (temperature !== null && temperature !== undefined) {
@@ -496,8 +591,40 @@ export class LLMWrapper {
       completionParams.reasoning_effort = reasoningEffort;
     }
 
+    if (this.#topP !== null && this.#topP !== undefined) {
+      completionParams.top_p = this.#topP;
+    }
+
+    if ((this.model.kind === ModelType.LLAMA || this.model.kind === ModelType.DEEPSEEK)
+      && this.#topK !== null && this.#topK !== undefined) {
+      completionParams.top_k = this.#topK;
+    }
+
+    if ((this.model.kind === ModelType.LLAMA || this.model.kind === ModelType.DEEPSEEK)
+      && this.#seed !== null && this.#seed !== undefined) {
+      completionParams.seed = this.#seed;
+    }
+
+    if (this.#maxTokens !== null && this.#maxTokens !== undefined) {
+      completionParams.max_tokens = this.#maxTokens;
+    }
+
+    if ((this.model.kind === ModelType.LLAMA || this.model.kind === ModelType.DEEPSEEK)
+      && this.#thinking !== null && this.#thinking !== undefined) {
+      completionParams.thinking = this.#thinking;
+    }
+
     const completion = await this.#openAIAPI.chat.completions.create(completionParams);
-    return completion.choices[0].message;
+    const message = completion.choices[0].message;
+    // Reasoning models (e.g. GLM-5) emit chain-of-thought in reasoning_content and
+    // leave content null. Try to extract a valid JSON block from the reasoning text
+    // so callers receive parseable content rather than raw prose.
+    const reasoningText = message.reasoning_content ?? message.reasoning;
+    if (!message.content && reasoningText) {
+      const extracted = extractJsonFromContent(reasoningText);
+      return { ...message, content: extracted ? JSON.stringify(extracted) : reasoningText };
+    }
+    return message;
   }
 
   async #createGeminiChatCompletion(messages, model, zodSchema = null, temperature = null, reasoningEffort = null) {

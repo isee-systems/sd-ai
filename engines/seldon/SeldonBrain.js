@@ -1,5 +1,6 @@
 import utils from '../../utilities/utils.js'
 import { LLMWrapper } from '../../utilities/LLMWrapper.js'
+import { extractJsonFromContent } from '../../utilities/jsonUtils.js'
 import { marked } from 'marked';
 
 class ResponseFormatError extends Error {
@@ -179,33 +180,19 @@ As the world's best System Dynamics Modeler, you will consider and apply the Sys
     }
 
     setupLLMParameters(userPrompt, lastModel) {
-        //start with the system prompt
         const { underlyingModel, systemRole, temperature, reasoningEffort } = this.#llmWrapper.getLLMParameters();
-        let systemPrompt = this.#data.systemPrompt;
-        let responseFormat = this.#llmWrapper.generateSeldonResponseSchema();
+        const responseFormat = this.#llmWrapper.generateSeldonResponseSchema();
 
-        let messages = [{ 
-            role: systemRole, 
-            content: systemPrompt 
-        }];
+        const messages = [{ role: systemRole, content: this.#data.systemPrompt }];
 
-        if (this.#data.backgroundKnowledge) {
-            messages.push({
-                role: "user",
-                content:  this.#data.backgroundPrompt.replaceAll("{backgroundKnowledge}", this.#data.backgroundKnowledge),
-            });
-        }
+        if (this.#data.backgroundKnowledge)
+            messages.push({ role: "user", content: this.#data.backgroundPrompt.replaceAll("{backgroundKnowledge}", this.#data.backgroundKnowledge) });
 
-        if (this.#data.problemStatement) {
-            messages.push({
-                role: systemRole,
-                content: this.#data.problemStatementPrompt.replaceAll("{problemStatement}", this.#data.problemStatement),
-            });
-        }
+        if (this.#data.problemStatement)
+            messages.push({ role: systemRole, content: this.#data.problemStatementPrompt.replaceAll("{problemStatement}", this.#data.problemStatement) });
 
         if (lastModel && lastModel.variables && lastModel.variables.length > 0) {
             const filteredModel = this.#filterModelForErrors(lastModel);
-
             messages.push({ role: "assistant", content: JSON.stringify(filteredModel, null, 2) });
 
             if (this.#data.structurePrompt)
@@ -217,22 +204,13 @@ As the world's best System Dynamics Modeler, you will consider and apply the Sys
             if (this.#isValidFeedbackContent())
                 messages.push({ role: "user", content: this.#data.feedbackPrompt.replaceAll("{feedbackContent}", JSON.stringify(this.#data.feedbackContent, null, 2)) });
         } else {
-
             if (this.#data.behaviorPrompt && this.#data.behaviorContent)
                 messages.push({ role: "user", content: this.#data.behaviorPrompt.replaceAll("{behaviorContent}", this.#data.behaviorContent) });
-
         }
 
-        //give it the user prompt
         messages.push({ role: "user", content: userPrompt });
 
-        return {
-            messages,
-            model: underlyingModel,
-            temperature: temperature,
-            reasoningEffort: reasoningEffort,
-            responseFormat: responseFormat
-        };
+        return { messages, model: underlyingModel, temperature, reasoningEffort, responseFormat };
     }
 
     async converse(userPrompt, lastModel) {
@@ -256,13 +234,23 @@ As the world's best System Dynamics Modeler, you will consider and apply the Sys
             try {
                 parsedObj = JSON.parse(originalResponse.content);
             } catch (err) {
-                throw new ResponseFormatError("Bad JSON returned by underlying LLM");
+                if (this.#data.lenientJsonParsing) {
+                    const extracted = extractJsonFromContent(originalResponse.content);
+                    if (extracted) {
+                        parsedObj = extracted;
+                    } else {
+                        throw new ResponseFormatError("Bad JSON returned by underlying LLM");
+                    }
+                } else {
+                    throw new ResponseFormatError("Bad JSON returned by underlying LLM");
+                }
             }
             return this.#processResponse(parsedObj);
         } else {
             throw new ResponseFormatError("LLM response did not contain any recognized format (no refusal, parsed, or content fields)");
         }
     }
+
 }
 
 export default SeldonEngineBrain;

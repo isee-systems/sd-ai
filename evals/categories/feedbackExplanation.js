@@ -87,7 +87,6 @@ export const evaluate = async function(generatedResponse, expectations) {
     // Iterate through each expected fact
     for (const expectedFact of expectedFacts) {
         try {
-            // Create messages for the LLM
             const messages = [
                 {
                     role: 'system',
