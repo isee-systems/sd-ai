@@ -416,8 +416,16 @@ print('Visualization saved')
 
   /**
    * Generate feedback dominance script (stacked area chart)
+   *
+   * Expected format:
+   * - data: { time: [...], loopId1: [...], loopId2: [...], ... }
+   * - variables: ['loopId1', 'loopId2', ...]
+   * - options.highlightPeriods: [{ loopIds: [...], startTime: x, endTime: y, label: '...', color: '...' }, ...]
    */
   generateFeedbackDominanceScript(dataPath, outputPath, variables, options) {
+    // Generate the loop variable names for Python script
+    const loopVarsList = variables.map(v => `'${v}'`).join(', ');
+
     return `
 import json
 import matplotlib.pyplot as plt
@@ -433,99 +441,47 @@ with open('${dataPath}', 'r') as f:
 fig, ax = plt.subplots(figsize=(${(options.width || 800)/100}, ${(options.height || 600)/100}), dpi=100)
 fig.set_facecolor('white')
 
-# Get time array from data or from loop data
+# Get time array
 time = data.get('time', [])
 
-# Prepare loop data with metadata for sorting
-loops_with_data = []
+# Loop IDs to plot (from variables parameter)
+loop_ids = [${loopVarsList}]
 
-# Handle feedbackLoops structure
-feedback_loops = data.get('feedbackLoops', [])
-for loop in feedback_loops:
-    loop_name = loop.get('name', 'Unnamed Loop')
-    identifier = loop.get('identifier', loop_name)
-    polarity = loop.get('polarity', 'unknown')  # '+' or '-' or '?'
+# Collect loop data
+loop_data = []
+loop_labels = []
 
-    # Get loop influence data from "Percent of Model Behavior Explained By Loop"
-    dominance_data = None
-    if 'Percent of Model Behavior Explained By Loop' in loop:
-        behavior_data = loop['Percent of Model Behavior Explained By Loop']
-        # Extract values and ensure time array matches
-        if isinstance(behavior_data, list) and len(behavior_data) > 0:
-            if isinstance(behavior_data[0], dict):
-                # Format: [{ time: x, value: y }, ...]
-                times = [item['time'] for item in behavior_data]
-                values = [item['value'] for item in behavior_data]
-                dominance_data = np.array(values)
-                if not time:  # If time not set globally, use from loop
-                    time = times
-            else:
-                # Format: direct array
-                dominance_data = np.array(behavior_data)
-    elif 'dominance' in loop:
-        dominance_data = np.array(loop['dominance'])
-    elif 'influence' in loop:
-        dominance_data = np.array(loop['influence'])
-
-    # Skip if no data
-    if dominance_data is None or len(dominance_data) == 0:
-        continue
-
-    # Calculate total for sorting
-    total = np.sum(dominance_data)
-
-    # Determine if balancing or reinforcing
-    # Balancing: polarity is '-'
-    # Reinforcing: polarity is '+'
-    is_balancing = (polarity == '-')
-
-    loops_with_data.append({
-        'name': loop_name,
-        'identifier': identifier,
-        'data': dominance_data,
-        'total': total,
-        'is_balancing': is_balancing,
-        'polarity': polarity
-    })
-
-# Sort loops: balancing first (polarity '-' < '+'), then by total
-# Within balancing: higher total first (descending)
-# Within reinforcing: lower total first (ascending)
-def sort_key(loop):
-    # First sort by polarity: balancing (True) comes before reinforcing (False)
-    polarity_order = 0 if loop['is_balancing'] else 1
-
-    # Second sort by total: balancing loops by descending total, reinforcing by ascending
-    if loop['is_balancing']:
-        total_order = -loop['total']  # Negative for descending
-    else:
-        total_order = loop['total']   # Positive for ascending
-
-    return (polarity_order, total_order)
-
-loops_with_data.sort(key=sort_key)
-
-# Extract sorted data
-loop_data = [loop['data'] for loop in loops_with_data]
-loop_labels = [loop['name'] for loop in loops_with_data]
+for loop_id in loop_ids:
+    if loop_id in data:
+        loop_values = data[loop_id]
+        if loop_values and len(loop_values) > 0:
+            loop_data.append(np.array(loop_values))
+            loop_labels.append(loop_id)
 
 # Create stacked area plot
 if len(loop_data) > 0 and len(time) > 0:
     time = np.array(time)
 
-    # Add dominant periods as background shading (if provided)
-    dominant_periods = data.get('dominantLoopsByPeriod', [])
-    for period in dominant_periods:
+    # Add highlight periods for dominant loops (from options.highlightPeriods)
+    highlight_periods = ${JSON.stringify(options.highlightPeriods || [])}
+
+    for period in highlight_periods:
         start_time = period.get('startTime', 0)
         end_time = period.get('endTime', 0)
-        dominant_loops = period.get('dominantLoops', [])
+        dominant_loops = period.get('loopIds', [])
+        label = period.get('label', '')
+        color = period.get('color', 'yellow')
 
-        if dominant_loops and start_time < end_time:
-            # Create label from dominant loop identifiers
-            label = ', '.join(dominant_loops) if len(dominant_loops) <= 3 else f'{len(dominant_loops)} loops'
-            # Use subtle background color for dominant periods
-            ax.axvspan(start_time, end_time, alpha=0.1, color='gray',
-                      label=f'Dominant: {label}', zorder=0)
+        if start_time < end_time:
+            # Create label from dominant loop IDs if not provided
+            if not label and dominant_loops:
+                label = ', '.join(dominant_loops[:3])
+                if len(dominant_loops) > 3:
+                    label += f' (+{len(dominant_loops)-3} more)'
+
+            # Add background shading for this period
+            ax.axvspan(start_time, end_time, alpha=0.15, color=color,
+                      label=f'Dominant: {label}' if label else 'Dominant period', zorder=0)
 
     # Plot the stacked areas on top of background shading
     colors = plt.cm.tab10(np.linspace(0, 1, len(loop_data)))
