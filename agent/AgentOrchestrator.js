@@ -30,6 +30,7 @@ export class AgentOrchestrator {
     this.sessionManager = sessionManager;
     this.sessionId = sessionId;
     this.sendToClient = sendToClient;
+    this.stopRequested = false;
 
     // Load configuration
     this.configManager = new AgentConfigurationManager(configPath);
@@ -119,10 +120,10 @@ export class AgentOrchestrator {
     const tools = this.convertToolsToAnthropicFormat(builtInTools, dynamicTools);
 
     let continueLoop = true;
-    const maxIterations = 20; // Prevent infinite loops
+    const maxIterations = this.configManager.getMaxIterations();
     let iteration = 0;
 
-    while (continueLoop && iteration < maxIterations) {
+    while (continueLoop && iteration < maxIterations && !this.stopRequested) {
       iteration++;
 
       try {
@@ -150,7 +151,10 @@ export class AgentOrchestrator {
       }
     }
 
-    if (iteration >= maxIterations) {
+    if (this.stopRequested) {
+      logger.log(`Agent iteration stopped by user request for session ${this.sessionId}`);
+      this.stopRequested = false; // Reset for next conversation
+    } else if (iteration >= maxIterations) {
       logger.warn(`Agent conversation reached max iterations (${maxIterations})`);
     }
   }
@@ -201,7 +205,7 @@ export class AgentOrchestrator {
           responseType = 'ltm-discuss';
         } else if (['discuss_model_with_seldon', 'discuss_model_across_runs', 'discuss_with_mentor'].includes(block.name)) {
           responseType = 'discuss';
-        } else if (['generate_quantitative_model', 'generate_qualitative_model', 'generate_documentation', 'update_model', 'get_current_model'].includes(block.name)) {
+        } else if (['generate_quantitative_model', 'generate_qualitative_model', 'generate_documentation'].includes(block.name)) {
           responseType = 'model';
         }
 
@@ -365,6 +369,14 @@ export class AgentOrchestrator {
   /**
    * Destroy the orchestrator and cleanup resources
    */
+  /**
+   * Request the agent to stop iterating
+   */
+  stopIteration() {
+    logger.log(`Stop iteration requested for session ${this.sessionId}`);
+    this.stopRequested = true;
+  }
+
   destroy() {
     logger.log(`AgentOrchestrator destroyed for session ${this.sessionId}`);
 

@@ -93,6 +93,12 @@ export const ModelUpdatedNotificationSchema = z.object({
   timestamp: z.string().optional().describe('ISO 8601 timestamp of when the message was created')
 });
 
+export const StopIterationMessageSchema = z.object({
+  type: z.literal('stop_iteration').describe('Message type identifier'),
+  sessionId: z.string().describe('Unique session identifier'),
+  timestamp: z.string().optional().describe('ISO 8601 timestamp of when the message was created')
+});
+
 export const DisconnectMessageSchema = z.object({
   type: z.literal('disconnect').describe('Message type identifier'),
   sessionId: z.string().describe('Unique session identifier for the session to disconnect')
@@ -104,6 +110,7 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   ChatMessageSchema,
   ToolCallResponseMessageSchema,
   ModelUpdatedNotificationSchema,
+  StopIterationMessageSchema,
   DisconnectMessageSchema
 ]);
 

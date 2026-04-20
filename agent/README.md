@@ -290,9 +290,31 @@ Notifies the server when the client updates the model externally (e.g., user man
 }
 ```
 
-#### 6. Disconnect
+#### 6. Stop Iteration
 
-Gracefully closes the session.
+Requests the agent to stop iterating immediately, interrupting the current conversation loop without disconnecting the session.
+
+```json
+{
+  "type": "stop_iteration",
+  "sessionId": "sess_abc123"
+}
+```
+
+**Purpose:**
+- Stops the agent mid-execution (e.g., if it's taking too long or heading in the wrong direction)
+- Session remains active - you can send new chat messages after stopping
+- Useful for interrupting lengthy tool chains or when the agent is stuck in a loop
+
+**Behavior:**
+- Agent stops at the next iteration checkpoint (after completing the current API call)
+- No agent_complete message is sent when stopped
+- Session state is preserved - conversation history remains intact
+- Client can immediately send a new chat message
+
+#### 7. Disconnect
+
+Gracefully closes the session and cleans up all server-side resources.
 
 ```json
 {
@@ -300,6 +322,22 @@ Gracefully closes the session.
   "sessionId": "sess_abc123"
 }
 ```
+
+**Purpose:**
+- Ends the session completely and closes the WebSocket connection
+- Cleans up all server-side resources (session data, temp folders, pending calls)
+- Use when the user is done with the session or closing the application
+
+**Behavior:**
+- Agent orchestrator is destroyed
+- Session is deleted from the session manager
+- All temp files and session-specific folders are cleaned up
+- WebSocket connection is closed with code 1000 (normal closure)
+- After disconnect, a new session must be initialized to continue
+
+**Comparison with Stop Iteration:**
+- `stop_iteration` - Interrupts agent but keeps session alive for new messages
+- `disconnect` - Completely ends the session and closes the connection
 
 ### Server → Client Messages
 
@@ -980,8 +1018,20 @@ ws.on('message', (data) => {
     case 'agent_complete':
       console.log('Agent finished:', message.status);
       break;
+
+    case 'error':
+      console.error('Error:', message.error);
+      break;
   }
 });
+
+// Stop agent iteration (e.g., on button click)
+function stopAgent() {
+  ws.send(JSON.stringify({
+    type: 'stop_iteration',
+    sessionId: sessionId
+  }));
+}
 
 function executeClientTool(toolName, args) {
   switch (toolName) {

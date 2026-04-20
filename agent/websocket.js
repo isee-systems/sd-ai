@@ -130,6 +130,10 @@ export function handleWebSocketConnection(ws, sessionManager) {
           await handleModelUpdated(message);
           break;
 
+        case 'stop_iteration':
+          await handleStopIteration(message);
+          break;
+
         case 'disconnect':
           // Destroy orchestrator if it exists
           if (orchestrator) {
@@ -394,6 +398,27 @@ export function handleWebSocketConnection(ws, sessionManager) {
       logger.log(`Model updated for session ${sessionId}: ${message.changeReason}`);
     } catch (error) {
       logger.error(`Error updating model for session ${sessionId}:`, error);
+    }
+  }
+
+  // Handle stop_iteration
+  async function handleStopIteration(message) {
+    try {
+      if (!orchestrator) {
+        throw new Error('No active agent to stop');
+      }
+
+      logger.log(`Stop iteration requested for session ${sessionId}`);
+      orchestrator.stopIteration();
+
+    } catch (error) {
+      logger.error(`Error stopping iteration for session ${sessionId}:`, error);
+      await sendToClient(createErrorMessage(
+        sessionId,
+        error.message,
+        'STOP_ITERATION_ERROR',
+        true
+      ));
     }
   }
 

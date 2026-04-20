@@ -380,4 +380,12 @@ ALWAYS share feedback loop information with Seldon in all of its forms when disc
   getBaseConfig() {
     return this.baseConfig;
   }
+
+  /**
+   * Get maximum iterations for agent conversation loop
+   * @returns {number} Maximum iterations (default: 20)
+   */
+  getMaxIterations() {
+    return this.baseConfig?.maxIterations || 20;
+  }
 }
