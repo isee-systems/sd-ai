@@ -527,19 +527,47 @@ export class LLMWrapper {
     return collapsedMessages;
   }
 
+  // When a model lacks native structured output support, inject an explicit JSON
+  // instruction into the system message so the model knows what to return.
+  // This keeps all local-vs-remote awareness inside LLMWrapper.
+  #injectJsonFallback(messages, zodSchema) {
+    if (!zodSchema?.shape) return messages;
+    const fields = Object.entries(zodSchema.shape).map(([k, v]) => {
+      const t = v._def?.typeName?.replace('Zod', '').toLowerCase() ?? 'value';
+      return `"${k}": <${t}>`;
+    });
+    const instruction = `\n\nCRITICAL: Your entire response MUST be a single valid JSON object with no text before or after it. No markdown, no explanation, no code fences. Only output this exact structure:\n{${fields.join(', ')}}`;
+    const result = messages.map(m => ({ ...m }));
+    const sys = result.find(m => m.role === 'system' || m.role === 'developer');
+    if (sys) {
+      sys.content = (sys.content ?? '') + instruction;
+    } else {
+      result.unshift({ role: 'system', content: instruction.trim() });
+    }
+    return result;
+  }
+
   async createChatCompletion(messages, model, zodSchema = null, temperature = null, reasoningEffort = null) {
     let normalizedMessages = messages;
     if (this.model.kind === ModelType.LLAMA || this.model.kind === ModelType.DEEPSEEK) {
       normalizedMessages = this.#collapseUserMessages(messages);
     }
 
-    if (this.model.kind === ModelType.GEMINI) {
-      return await this.#createGeminiChatCompletion(normalizedMessages, model, zodSchema, temperature, reasoningEffort);
-    } else if (this.model.kind === ModelType.CLAUDE) {
-      return await this.#createClaudeChatCompletion(normalizedMessages, model, zodSchema, temperature);
+    // For models that don't support structured output, fall back to prompt-level
+    // JSON enforcement and drop the schema so the API doesn't reject it.
+    let effectiveSchema = zodSchema;
+    if (zodSchema && !this.model.hasStructuredOutput) {
+      normalizedMessages = this.#injectJsonFallback(normalizedMessages, zodSchema);
+      effectiveSchema = null;
     }
 
-    return await this.#createOpenAIChatCompletion(normalizedMessages, model, zodSchema, temperature, reasoningEffort);
+    if (this.model.kind === ModelType.GEMINI) {
+      return await this.#createGeminiChatCompletion(normalizedMessages, model, effectiveSchema, temperature, reasoningEffort);
+    } else if (this.model.kind === ModelType.CLAUDE) {
+      return await this.#createClaudeChatCompletion(normalizedMessages, model, effectiveSchema, temperature);
+    }
+
+    return await this.#createOpenAIChatCompletion(normalizedMessages, model, effectiveSchema, temperature, reasoningEffort);
   }
 
   async #createOpenAIChatCompletion(messages, model, zodSchema = null, temperature = null, reasoningEffort = null) {

@@ -182,13 +182,7 @@ As the world's best System Dynamics Modeler, you will consider and apply the Sys
         //start with the system prompt
         const { underlyingModel, systemRole, temperature, reasoningEffort } = this.#llmWrapper.getLLMParameters();
         let systemPrompt = this.#data.systemPrompt;
-        let responseFormat = this.#llmWrapper.model.hasStructuredOutput
-            ? this.#llmWrapper.generateSeldonResponseSchema()
-            : null;
-
-        if (!this.#llmWrapper.model.hasStructuredOutput) {
-            systemPrompt += '\n\nCRITICAL: Your entire response MUST be a single valid JSON object with no text before or after it. No markdown, no explanation, no code fences. Only output this exact structure:\n{"response": "<your HTML response here>", "feedbackInformationRequired": <true or false>}';
-        }
+        let responseFormat = this.#llmWrapper.generateSeldonResponseSchema();
         let messages;
 
         // Check if this is a local model (LLAMA/DEEPSEEK) that needs simplified message structure

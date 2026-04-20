@@ -13,7 +13,7 @@ import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { LLMWrapper } from '../../utilities/LLMWrapper.js';
-import { validateEvaluationResult, withRetry } from '../evaluationSchema.js';
+import { validateEvaluationResult } from '../evaluationSchema.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -105,13 +105,13 @@ export const evaluate = async function(generatedResponse, expectations) {
             // Get LLM parameters
             const { underlyingModel, temperature } = llm.getLLMParameters(0);
 
-            // Call the LLM with retry for transient API errors
-            const response = await withRetry(() => llm.createChatCompletion(
+            // Call the LLM
+            const response = await llm.createChatCompletion(
                 messages,
                 underlyingModel,
                 null,
                 temperature
-            ));
+            );
 
             // Check if the response indicates the fact is not present
             const isTrue = response.content.toLowerCase().trim().includes('true');

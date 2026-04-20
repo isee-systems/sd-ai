@@ -11,7 +11,7 @@
 
 import { LLMWrapper } from '../../utilities/LLMWrapper.js';
 import { z } from 'zod';
-import { validateEvaluationResult, withRetry } from '../evaluationSchema.js';
+import { validateEvaluationResult } from '../evaluationSchema.js';
 
 // Test data: Each contains a problem statement, background knowledge, and ground truth steps
 const armsRaceProblem = {
@@ -139,13 +139,13 @@ export const evaluate = async function(generatedResponse, expectations) {
         // Get LLM parameters
         const { underlyingModel, temperature } = llm.getLLMParameters(0);
 
-        // Call the LLM with structured output, with retry for transient API errors
-        const response = await withRetry(() => llm.createChatCompletion(
+        // Call the LLM with structured output
+        const response = await llm.createChatCompletion(
             messages,
             underlyingModel,
             stepEvaluationSchema,
             temperature
-        ));
+        );
 
         // Parse the structured response
         const evaluationResults = JSON.parse(response.content);
