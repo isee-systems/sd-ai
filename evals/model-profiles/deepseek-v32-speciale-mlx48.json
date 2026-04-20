@@ -1,0 +1,17 @@
+{
+  "alias": "DeepSeek-V3_2-Speciale-MLX-4.8",
+  "lmStudioModelId": "deepseek-v3.2-speciale-mlx-4.8bit",
+  "quantization": "MLX-4.8bit",
+  "parameterCount": "671B",
+  "inferenceBackend": "mlx_lm",
+  "contextLoaded": 81920,
+  "timeoutMinutes": 60,
+  "kvCacheQuant": "off",
+  "maxTokens": 8000,
+  "structuredOutput": false,
+  "lmStudioSettings": {
+    "structuredOutput": false,
+    "reasoningParsing": false
+  },
+  "notes": "DeepSeek V3.2 Speciale 4.8bit hybrid MLX from inferencerlabs. Higher quality quant than 4bit — better instruction following. MLX backend should be significantly faster at prefill for long prompts vs llama.cpp Q4_K_M."
+}

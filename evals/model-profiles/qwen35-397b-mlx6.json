@@ -1,0 +1,14 @@
+{
+  "alias": "Qwen3.5-397B-MLX-6",
+  "lmStudioModelId": "qwen3.5-397b-a17b-mlx",
+  "quantization": "MLX-6",
+  "parameterCount": "397B",
+  "inferenceBackend": "mlx_lm",
+  "contextLoaded": 64000,
+  "kvCacheQuant": "off",
+  "lmStudioSettings": {
+    "structuredOutput": true,
+    "reasoningParsing": true
+  },
+  "notes": "Qwen 3.5 397B (MoE A17B active) loaded via LM Studio MLX 6-bit quantization. Structured output ON (grammar-enforced). Reasoning parsing ON — thinking mode active, avoid t=0 to prevent spirals."
+}

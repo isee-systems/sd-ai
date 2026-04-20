@@ -1,0 +1,21 @@
+{
+  "modelProfile": "evals/model-profiles/deepseek-v32-mlx4-direct.json",
+  "baseExperiment": "evals/experiments/leaderboardDiscuss.json",
+  "engines": [
+    {
+      "name": "seldon",
+      "limits": { "tokensPerMinute": 15000, "requestsPerMinute": 5, "baselineTokenUsage": 10000 }
+    }
+  ],
+  "seed": 4242,
+  "concurrency": 1,
+  "sequential": true,
+  "verbose": false,
+  "leaderboard": "DISCUSS",
+  "includeGroups": ["mediumFeedbackExplanation", "mediumModelBuildingSteps"],
+  "variations": [
+    { "temperature": 0, "top_p": 1.0, "top_k": -1 },
+    { "temperature": 0, "top_p": 0.9, "top_k": 20 },
+    { "temperature": 0.1, "top_p": 0.95, "top_k": -1 }
+  ]
+}

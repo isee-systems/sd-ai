@@ -1,0 +1,17 @@
+{
+  "alias": "Kimi-K2.5-GGUF-Q3",
+  "lmStudioModelId": "moonshotai_kimi-k2.5",
+  "quantization": "Q3",
+  "parameterCount": "671B",
+  "inferenceBackend": "llama.cpp",
+  "contextLoaded": 196608,
+  "kvCacheQuant": "off",
+  "maxTokens": 8000,
+  "timeoutMinutes": 60,
+  "structuredOutput": false,
+  "lmStudioSettings": {
+    "structuredOutput": false,
+    "reasoningParsing": false
+  },
+  "notes": "Kimi K2.5 196k context profile — used for mediumFeedbackExplanation targeted run only (149-150k token prompts)."
+}

@@ -1,0 +1,20 @@
+{
+  "alias": "Kimi-K2.5-MLX-3bit",
+  "lmStudioModelId": "/Volumes/Data/model/lmstudio/mlx-community/Kimi-K2.5-3bit",
+  "baseURL": "http://localhost:8282/v1",
+  "quantization": "MLX-3bit",
+  "parameterCount": "671B",
+  "inferenceBackend": "mlx_lm",
+  "contextLoaded": 163840,
+  "kvCacheQuant": "off",
+  "maxTokens": 8000,
+  "timeoutMinutes": 60,
+  "lenientJsonParsing": true,
+  "jsonObjectMode": true,
+  "structuredOutput": false,
+  "lmStudioSettings": {
+    "structuredOutput": false,
+    "reasoningParsing": false
+  },
+  "notes": "Kimi K2.5 671B 3-bit MLX from mlx-community on /Volumes/Data. Server: python3.13 -m mlx_lm server --model /Volumes/Data/model/lmstudio/mlx-community/Kimi-K2.5-3bit --port 8282 --host 0.0.0.0 --chat-template-args '{\"thinking\": false}'. thinking=false disables reasoning mode."
+}
