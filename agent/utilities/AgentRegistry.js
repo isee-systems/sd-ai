@@ -1,7 +1,6 @@
 import { readdirSync, readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import yaml from 'js-yaml';
 import logger from '../../utilities/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -11,6 +10,60 @@ const __dirname = dirname(__filename);
  * AgentRegistry
  * Scans the agent/config directory and provides a list of available agents
  */
+
+/**
+ * Parse YAML frontmatter from MD file
+ * @param {string} content - The file content
+ * @returns {object} Parsed metadata
+ */
+function parseFrontmatter(content) {
+  const frontmatterRegex = /^---\n([\s\S]*?)\n---/;
+  const match = content.match(frontmatterRegex);
+
+  if (!match) {
+    return {};
+  }
+
+  const metadata = {};
+  const lines = match[1].split('\n');
+  let currentKey = null;
+  let currentArray = null;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    // Check for array item
+    if (trimmed.startsWith('- ') && currentArray) {
+      currentArray.push(trimmed.substring(2).trim());
+    }
+    // Check for key-value pair
+    else if (trimmed.includes(':')) {
+      const colonIndex = trimmed.indexOf(':');
+      const key = trimmed.substring(0, colonIndex).trim();
+      const value = trimmed.substring(colonIndex + 1).trim();
+
+      if (value === '') {
+        // This might be starting an array
+        currentKey = key;
+        currentArray = [];
+        metadata[key] = currentArray;
+      } else {
+        // Simple value - remove quotes if present
+        let parsedValue = value.replace(/^["']|["']$/g, '');
+        // Try to parse as number
+        if (!isNaN(parsedValue) && parsedValue !== '') {
+          parsedValue = Number(parsedValue);
+        }
+        metadata[key] = parsedValue;
+        currentKey = null;
+        currentArray = null;
+      }
+    }
+  }
+
+  return metadata;
+}
 
 /**
  * Get all available agents by scanning the config directory
@@ -24,24 +77,24 @@ export function getAvailableAgents() {
     const files = readdirSync(configDir);
 
     for (const file of files) {
-      // Skip non-YAML files
-      if (!file.endsWith('.yaml') && !file.endsWith('.yml')) {
+      // Skip non-MD files
+      if (!file.endsWith('.md')) {
         continue;
       }
 
       try {
         const filePath = join(configDir, file);
         const content = readFileSync(filePath, 'utf8');
-        const config = yaml.load(content);
+        const metadata = parseFrontmatter(content);
 
         // Extract agent metadata
-        if (config.agent) {
-          const agentId = file.replace(/\.(yaml|yml)$/, '');
+        if (metadata.name) {
+          const agentId = file.replace(/\.md$/, '');
           agents.push({
             id: agentId,
-            name: config.agent.name,
-            description: config.agent.description,
-            version: config.agent.version || '1.0',
+            name: metadata.name,
+            description: metadata.description || '',
+            version: metadata.version || '1.0',
             configFile: file
           });
         }
@@ -65,13 +118,13 @@ export function getAvailableAgents() {
  */
 export function getAgentConfig(agentId) {
   const configDir = join(__dirname, '../config');
-  const configFile = `${agentId}.yaml`;
+  const configFile = `${agentId}.md`;
   const filePath = join(configDir, configFile);
 
   try {
     const content = readFileSync(filePath, 'utf8');
-    const config = yaml.load(content);
-    return config;
+    const metadata = parseFrontmatter(content);
+    return { agent: metadata };
   } catch (error) {
     logger.error(`Failed to load agent config for ${agentId}:`, error);
     return null;

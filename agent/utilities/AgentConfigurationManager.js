@@ -1,14 +1,13 @@
 import { readFileSync } from 'fs';
-import yaml from 'js-yaml';
 import logger from '../../utilities/logger.js';
 
 /**
  * AgentConfigurationManager
- * Loads and manages agent configuration from YAML files
+ * Loads and manages agent configuration from Markdown files
  *
  * Key Features:
- * - Loads agent configuration from YAML files (e.g., ganos-lal.yaml, myrddin.yaml)
- * - Generates system prompts for Claude Agent SDK
+ * - Loads agent configuration from MD files (e.g., ganos-lal.md, myrddin.md)
+ * - Provides system prompts for Claude Agent SDK
  * - NO filesystem writes - all modifications in memory only
  */
 export class AgentConfigurationManager {
@@ -112,20 +111,57 @@ ALWAYS share feedback loop information with Seldon in all of its forms when disc
 
   constructor(configPath) {
     this.configPath = configPath;
-    this.baseConfig = this.loadConfig(configPath);
-    // Expose config for tests
-    this.config = { agent: this.baseConfig };
+    const { metadata, content } = this.loadConfig(configPath);
+    this.metadata = metadata;
+    this.systemPrompt = content;
+    // Store a basic config structure for backwards compatibility
+    this.config = {
+      agent: {
+        name: metadata.name,
+        description: metadata.description,
+        version: metadata.version,
+        max_iterations: metadata.max_iterations || 20,
+        supports: metadata.supports || ['sfd', 'cld']
+      }
+    };
+    this.baseConfig = this.config.agent;
   }
 
   /**
-   * Load configuration from YAML file (READ-ONLY)
+   * Load configuration from MD file (READ-ONLY)
+   * Parses YAML frontmatter and returns metadata + content
    */
   loadConfig(path) {
     try {
-      const content = readFileSync(path, 'utf8');
-      const config = yaml.load(content);
-      logger.log(`Loaded agent configuration from ${path}`);
-      return config.agent;  // Get the 'agent' key from YAML
+      const fileContent = readFileSync(path, 'utf8');
+
+      // Parse YAML frontmatter if present
+      const frontmatterRegex = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/;
+      const match = fileContent.match(frontmatterRegex);
+
+      if (match) {
+        const metadataText = match[1];
+        const content = match[2];
+
+        // Simple YAML parser for our metadata
+        const metadata = this.parseSimpleYAML(metadataText);
+
+        logger.log(`Loaded agent configuration from ${path}`);
+        return { metadata, content };
+      } else {
+        // No frontmatter, use defaults
+        logger.log(`Loaded agent configuration from ${path} (no frontmatter)`);
+        return {
+          metadata: {
+            name: 'Unknown',
+            description: '',
+            version: '1.0',
+            max_iterations: 20,
+            supports: ['sfd', 'cld']
+          },
+          content: fileContent
+        };
+      }
     } catch (err) {
       logger.error(`Failed to load config from ${path}:`, err);
       throw new Error(`Configuration file not found or invalid: ${path}`);
@@ -133,231 +169,91 @@ ALWAYS share feedback loop information with Seldon in all of its forms when disc
   }
 
   /**
-   * Build system prompt by merging configs
+   * Simple YAML parser for frontmatter metadata
    */
-  buildSystemPrompt(modelType = null) {
-    const merged = this.baseConfig;
-    merged.modelType = modelType;
-    return this.formatSystemPrompt(this.baseConfig);
+  parseSimpleYAML(yamlText) {
+    const metadata = {};
+    const lines = yamlText.split('\n');
+    let currentKey = null;
+    let currentArray = null;
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+
+      // Check for array item
+      if (trimmed.startsWith('- ') && currentArray) {
+        currentArray.push(trimmed.substring(2).trim());
+      }
+      // Check for key-value pair
+      else if (trimmed.includes(':')) {
+        const colonIndex = trimmed.indexOf(':');
+        const key = trimmed.substring(0, colonIndex).trim();
+        const value = trimmed.substring(colonIndex + 1).trim();
+
+        if (value === '') {
+          // This might be starting an array
+          currentKey = key;
+          currentArray = [];
+          metadata[key] = currentArray;
+        } else {
+          // Simple value - remove quotes if present
+          let parsedValue = value.replace(/^["']|["']$/g, '');
+          // Try to parse as number
+          if (!isNaN(parsedValue) && parsedValue !== '') {
+            parsedValue = Number(parsedValue);
+          }
+          metadata[key] = parsedValue;
+          currentKey = null;
+          currentArray = null;
+        }
+      }
+    }
+
+    return metadata;
   }
 
   /**
-   * Format merged config into system prompt
+   * Build system prompt with optional model type
+   * Combines universal instructions with agent-specific content
    */
-  formatSystemPrompt(config) {
+  buildSystemPrompt(modelType = null) {
+    // Start with universal instructions
     let prompt = AgentConfigurationManager.UNIVERSAL_AGENT_INSTRUCTIONS;
 
-    // Model type declaration
-    if (config.modelType) {
-      prompt += `\n\n## SESSION MODEL TYPE: ${config.modelType.toUpperCase()}`;
-      prompt += `\nThis session is working with ${config.modelType === 'cld' ? 'Causal Loop Diagrams (CLD)' : 'Stock Flow Diagrams (SFD)'}.`;
+    // Add model type section if specified
+    if (modelType) {
+      prompt += `\n\n## SESSION MODEL TYPE: ${modelType.toUpperCase()}`;
+      prompt += `\nThis session is working with ${modelType === 'cld' ? 'Causal Loop Diagrams (CLD)' : 'Stock Flow Diagrams (SFD)'}.`;
       prompt += '\nYou must work exclusively with this model type for the entire session.';
     }
 
-    prompt += '\n\n' + config.instructions.general;
+    // Append agent-specific content from the MD file
+    // Skip the duplicate universal instructions section if present in the MD file
+    let agentContent = this.systemPrompt;
 
-    // Session role override
-    if (config.sessionRole) {
-      prompt += '\n\n## Your Role';
-      prompt += '\n' + config.sessionRole;
+    // Remove the universal instructions section from agent content if it exists
+    const universalSectionEnd = agentContent.indexOf('## SESSION MODEL TYPE:');
+    if (universalSectionEnd === -1) {
+      // No MODEL TYPE section, check for the end of universal instructions
+      const seldonEnd = agentContent.indexOf('ALWAYS share feedback loop information');
+      if (seldonEnd !== -1) {
+        const nextSection = agentContent.indexOf('\n\n##', seldonEnd);
+        if (nextSection !== -1) {
+          agentContent = agentContent.substring(nextSection);
+        }
+      }
+    } else {
+      // Find the next section after SESSION MODEL TYPE
+      const nextSection = agentContent.indexOf('\n\n##', universalSectionEnd + 20);
+      if (nextSection !== -1) {
+        agentContent = agentContent.substring(nextSection);
+      }
     }
 
-    // Modeling workflow
-    prompt += '\n\n## Modeling Workflow';
-    prompt += '\n' + config.instructions.modeling_workflow;
-
-    // Modification workflow
-    prompt += '\n\n## Modification Workflow';
-    prompt += '\n' + config.instructions.modification_workflow;
-
-    // Validation rules
-    prompt += '\n\n## Validation Rules';
-    prompt += '\n' + config.instructions.validation_rules;
-
-    // Visualization guidelines
-    if (config.instructions.visualization_guidelines) {
-      prompt += '\n\n## Visualization Guidelines';
-      prompt += '\n' + config.instructions.visualization_guidelines;
-    }
-
-    // Tool policies
-    prompt += '\n\n## Tool Usage Policies';
-    prompt += '\n' + this.formatToolPolicies(config.tool_policies);
-
-    // Action sequences
-    prompt += '\n\n## Action Sequences';
-    prompt += '\n' + this.formatActionSequences(config.action_sequence);
-
-    // Communication style
-    prompt += '\n\n## Communication Style';
-    prompt += '\n' + this.formatCommunicationGuidelines(config.communication);
-
-    // Error handling
-    prompt += '\n\n## Error Handling';
-    prompt += '\n' + this.formatErrorHandling(config.error_handling);
-
-    // Constraints
-    prompt += '\n\n## Constraints';
-    prompt += '\n' + this.formatConstraints(config.constraints);
+    prompt += agentContent;
 
     return prompt;
-  }
-
-  /**
-   * Format tool policies
-   */
-  formatToolPolicies(policies) {
-    const lines = [];
-
-    for (const [toolName, policy] of Object.entries(policies)) {
-      lines.push(`\n### ${toolName}`);
-      if (policy.when_to_use) {
-        lines.push(`**When to use:** ${policy.when_to_use}`);
-      }
-      if (policy.frequency) {
-        lines.push(`**Frequency:** ${policy.frequency}`);
-      }
-      if (policy.always_explain) {
-        lines.push(`**Always explain** your reasoning when using this tool`);
-      }
-      if (policy.auto_suggest) {
-        lines.push(`**Auto-suggest** this tool when appropriate`);
-      }
-      if (policy.parameters) {
-        lines.push(`**Default parameters:** ${JSON.stringify(policy.parameters)}`);
-      }
-    }
-
-    return lines.join('\n');
-  }
-
-  /**
-   * Format action sequences
-   */
-  formatActionSequences(sequences) {
-    const lines = [];
-
-    // Handle missing or null sequences
-    if (!sequences) {
-      return '';
-    }
-
-    for (const [triggerType, steps] of Object.entries(sequences)) {
-      lines.push(`\n### ${triggerType}`);
-      steps.forEach((step, idx) => {
-        lines.push(`${idx + 1}. **${step.step}**`);
-        if (step.description) {
-          lines.push(`   ${step.description}`);
-        }
-        if (step.tools) {
-          lines.push(`   Tools: ${step.tools.join(', ')}`);
-        }
-        if (step.alwaysExecute) {
-          lines.push(`   Always execute this step`);
-        }
-        if (step.condition) {
-          lines.push(`   Condition: ${step.condition}`);
-        }
-      });
-    }
-
-    return lines.join('\n');
-  }
-
-  /**
-   * Format communication guidelines
-   */
-  formatCommunicationGuidelines(communication) {
-    const lines = [];
-
-    lines.push(`**Style:** ${communication.style}`);
-    if (communication.explain_reasoning) {
-      lines.push('- Always explain your reasoning');
-    }
-    if (communication.use_examples) {
-      lines.push('- Use examples to clarify concepts');
-    }
-    if (communication.avoid_jargon !== undefined) {
-      lines.push(communication.avoid_jargon
-        ? '- Avoid technical jargon'
-        : '- System Dynamics terminology is acceptable');
-    }
-
-    if (communication.response_format) {
-      lines.push('\n**Response Format:**');
-      for (const [aspect, guideline] of Object.entries(communication.response_format)) {
-        lines.push(`- ${aspect}: ${guideline}`);
-      }
-    }
-
-    if (communication.verbosity) {
-      lines.push(`\n**Verbosity level:** ${communication.verbosity}`);
-    }
-    if (communication.tone) {
-      lines.push(`**Tone:** ${communication.tone}`);
-    }
-
-    return lines.join('\n');
-  }
-
-  /**
-   * Format error handling
-   */
-  formatErrorHandling(errorHandling) {
-    const lines = [];
-
-    if (!errorHandling) {
-      return '';
-    }
-
-    if (errorHandling.on_tool_failure) {
-      lines.push('**On tool failure:**');
-      Object.entries(errorHandling.on_tool_failure).forEach(([key, value]) => {
-        lines.push(`- ${key}: ${value}`);
-      });
-    }
-
-    if (errorHandling.on_invalid_model) {
-      lines.push('\n**On invalid model:**');
-      Object.entries(errorHandling.on_invalid_model).forEach(([key, value]) => {
-        lines.push(`- ${key}: ${value}`);
-      });
-    }
-
-    if (errorHandling.on_simulation_failure) {
-      lines.push('\n**On simulation failure:**');
-      Object.entries(errorHandling.on_simulation_failure).forEach(([key, value]) => {
-        lines.push(`- ${key}: ${value}`);
-      });
-    }
-
-    return lines.join('\n');
-  }
-
-  /**
-   * Format constraints
-   */
-  formatConstraints(constraints) {
-    const lines = [];
-
-    if (constraints.max_model_complexity) {
-      lines.push('**Maximum model complexity:**');
-      Object.entries(constraints.max_model_complexity).forEach(([key, value]) => {
-        lines.push(`- ${key}: ${value}`);
-      });
-    }
-
-    if (constraints.require_documentation) {
-      lines.push('- All variables must have documentation');
-    }
-    if (constraints.enforce_units) {
-      lines.push('- All variables must have units');
-    }
-    if (constraints.validate_equations) {
-      lines.push('- All equations must be validated');
-    }
-
-    return lines.join('\n');
   }
 
   /**

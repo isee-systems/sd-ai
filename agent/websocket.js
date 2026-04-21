@@ -11,12 +11,60 @@ import { join } from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { readdirSync, readFileSync } from 'fs';
-import yaml from 'js-yaml';
 import logger from '../utilities/logger.js';
 import utils from '../utilities/utils.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+/**
+ * Parse YAML frontmatter from MD file
+ */
+function parseFrontmatter(content) {
+  const frontmatterRegex = /^---\n([\s\S]*?)\n---/;
+  const match = content.match(frontmatterRegex);
+
+  if (!match) {
+    return {};
+  }
+
+  const metadata = {};
+  const lines = match[1].split('\n');
+  let currentArray = null;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    // Check for array item
+    if (trimmed.startsWith('- ') && currentArray) {
+      currentArray.push(trimmed.substring(2).trim());
+    }
+    // Check for key-value pair
+    else if (trimmed.includes(':')) {
+      const colonIndex = trimmed.indexOf(':');
+      const key = trimmed.substring(0, colonIndex).trim();
+      const value = trimmed.substring(colonIndex + 1).trim();
+
+      if (value === '') {
+        // This might be starting an array
+        currentArray = [];
+        metadata[key] = currentArray;
+      } else {
+        // Simple value - remove quotes if present
+        let parsedValue = value.replace(/^["']|["']$/g, '');
+        // Try to parse as number
+        if (!isNaN(parsedValue) && parsedValue !== '') {
+          parsedValue = Number(parsedValue);
+        }
+        metadata[key] = parsedValue;
+        currentArray = null;
+      }
+    }
+  }
+
+  return metadata;
+}
 
 /**
  * Scan the config directory and return available agents
@@ -26,19 +74,19 @@ function getAvailableAgents() {
   const agents = [];
 
   try {
-    const files = readdirSync(configDir).filter(f => f.endsWith('.yaml'));
+    const files = readdirSync(configDir).filter(f => f.endsWith('.md'));
 
     for (const file of files) {
       try {
         const content = readFileSync(join(configDir, file), 'utf8');
-        const config = yaml.load(content);
+        const metadata = parseFrontmatter(content);
 
-        if (config?.agent) {
+        if (metadata?.name) {
           agents.push({
-            id: file.replace('.yaml', ''),
-            name: config.agent.name || file.replace('.yaml', ''),
-            supports: config.agent.supports || [],
-            description: config.agent.description || ''
+            id: file.replace('.md', ''),
+            name: metadata.name || file.replace('.md', ''),
+            supports: metadata.supports || [],
+            description: metadata.description || ''
           });
         }
       } catch (err) {
@@ -272,7 +320,7 @@ export function handleWebSocketConnection(ws, sessionManager) {
       }
 
       // Get the agent config path
-      const configPath = join(__dirname, 'config', `${message.agentId}.yaml`);
+      const configPath = join(__dirname, 'config', `${message.agentId}.md`);
 
       // Check if we're switching agents (orchestrator already exists)
       const isSwitching = orchestrator !== null;

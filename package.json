@@ -10,7 +10,6 @@
     "data-forge": "^1.10.2",
     "express": "^4.21.2",
     "js-tiktoken": "^1.0.19",
-    "js-yaml": "^4.1.0",
     "limiter": "^3.0.0",
     "marked": "^15.0.12",
     "openai": "^4.73.1",

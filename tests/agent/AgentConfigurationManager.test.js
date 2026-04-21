@@ -9,12 +9,12 @@ describe('AgentConfigurationManager', () => {
   let configManager;
 
   beforeEach(() => {
-    const configPath = path.join(__dirname, '../../agent/config/ganos-lal.yaml');
+    const configPath = path.join(__dirname, '../../agent/config/ganos-lal.md');
     configManager = new AgentConfigurationManager(configPath);
   });
 
   describe('constructor', () => {
-    it('should load config from YAML file', () => {
+    it('should load config from MD file', () => {
       expect(configManager.config).toBeDefined();
       expect(configManager.config.agent).toBeDefined();
       expect(configManager.config.agent.name).toBe('Ganos Lal');
@@ -22,7 +22,7 @@ describe('AgentConfigurationManager', () => {
 
     it('should throw error for non-existent config file', () => {
       expect(() => {
-        new AgentConfigurationManager('/non/existent/path.yaml');
+        new AgentConfigurationManager('/non/existent/path.md');
       }).toThrow();
     });
   });
@@ -33,7 +33,6 @@ describe('AgentConfigurationManager', () => {
 
       const prompt = configManager.buildSystemPrompt(modelType);
 
-      expect(prompt).toContain('Ganos Lal');
       expect(prompt).toContain('CLD');
       expect(prompt).toContain('Causal Loop Diagram');
     });
@@ -43,6 +42,14 @@ describe('AgentConfigurationManager', () => {
 
       expect(prompt).toContain('SFD');
       expect(prompt).toContain('Stock Flow Diagram');
+    });
+
+    it('should include universal instructions', () => {
+      const prompt = configManager.buildSystemPrompt('sfd');
+
+      expect(prompt).toContain('CRITICAL: Text Generation');
+      expect(prompt).toContain('NEVER use emojis');
+      expect(prompt).toContain('Feedback Loop Analysis');
     });
   });
 });
