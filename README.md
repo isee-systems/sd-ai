@@ -111,11 +111,11 @@ Contains the engines used by [Stella](https://www.iseesystems.com/store/products
         stopTime: <number>,
         dt?: <number>,
         timeUnits?: <string>,
-        arrayDimensions?: [{ # Array dimension definitions
-            name: <string>, # Singular, alphanumeric dimension name
-            type: <string>, # "labels" or "numeric"
-            size: <number>, # Number of elements in dimension
-            elements: Array<string> # Element names for this dimension
+        arrayDimensions?: [{ # Array dimension definitions (all four fields required)
+            type: <string>, # "numeric" or "labels" - numeric auto-generates element names as strings ('1','2','3'), labels use user-defined meaningful names
+            name: <string>, # Singular, alphanumeric dimension name (e.g., "region" not "regions")
+            size: <number>, # Positive integer - number of elements in dimension
+            elements: Array<string> # Element names - for numeric: auto-generated ['1','2','3'], for labels: user-defined ['North','South','East','West']
         }]
     }
 }
@@ -124,11 +124,16 @@ Contains the engines used by [Stella](https://www.iseesystems.com/store/products
 
 ### Arrays in SD-JSON
 Variables can be arrayed over one or more dimensions to create multi-dimensional arrays:
-- **Dimensions**: Defined in `specs.arrayDimensions` with name, type (labels/numeric), size, and elements
+- **Dimensions**: Defined in `specs.arrayDimensions` with all four required fields:
+  - `type`: Either "numeric" (auto-generates elements as '1','2','3') or "labels" (user-defined element names)
+  - `name`: Singular, alphanumeric dimension name (e.g., "region" not "regions")
+  - `size`: Positive integer count of elements
+  - `elements`: Array of element names matching the size
 - **Arrayed Variables**: Reference dimensions by name in their `dimensions` array (order matters)
 - **Array Equations**:
   - If all elements use the SAME formula: uses `equation` field only
-  - If elements have DIFFERENT formulas: uses `arrayEquations` array with element-specific equations
+  - If elements have DIFFERENT formulas OR for arrayed STOCKS: uses `arrayEquations` array with element-specific equations
+  - Each `arrayEquations` entry has `equation` and `forElements` (ordered to match the variable's dimensions list)
 
 ### Modules in SD-JSON
 Models can be organized into modules for better structure and encapsulation:

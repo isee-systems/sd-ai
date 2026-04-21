@@ -1,5 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { marked } from 'marked';
+import { countTokens } from '@anthropic-ai/tokenizer';
+import { writeFileSync } from 'fs';
+import { join } from 'path';
 import { AgentConfigurationManager } from './utilities/AgentConfigurationManager.js';
 import { createBuiltInToolsServer, getBuiltInToolNames } from './tools/BuiltInTools.js';
 import { DynamicToolServer } from './tools/DynamicToolServer.js';
@@ -12,6 +15,7 @@ import {
 } from './utilities/MessageProtocol.js';
 import { ZodToStructuredOutputConverter } from '../utilities/ZodToStructuredOutputConverter.js';
 import logger from '../utilities/logger.js';
+import config from '../config.js';
 
 /**
  * AgentOrchestrator
@@ -116,8 +120,41 @@ export class AgentOrchestrator {
       content: msg.content
     }));
 
-    // Convert tool servers to Anthropic tool format
-    const tools = this.convertToolsToAnthropicFormat(builtInTools, dynamicTools);
+    // Check model token count and update session state (only for SFD models)
+    const session = this.sessionManager.getSession(this.sessionId);
+    const currentModel = session?.clientModel;
+    const modelType = session?.modelType;
+    let modelExceedsLimit = false;
+
+    if (currentModel && modelType === 'sfd') {
+      const modelJson = JSON.stringify(currentModel, null, 2);
+      const tokenCount = countTokens(modelJson);
+      this.sessionManager.updateModelTokenCount(this.sessionId, tokenCount);
+      modelExceedsLimit = this.sessionManager.modelExceedsTokenLimit(this.sessionId);
+
+      logger.log(`SFD Model token count: ${tokenCount} (limit: ${config.maxTokensForEngines}, exceeds: ${modelExceedsLimit})`);
+
+      // If this is the first time exceeding the limit, write model to disk
+      if (modelExceedsLimit && tokenCount > 0) {
+        const sessionTempDir = this.sessionManager.getSessionTempDir(this.sessionId);
+        const modelPath = join(sessionTempDir, 'model.sdjson');
+
+        try {
+          writeFileSync(modelPath, modelJson);
+          logger.log(`Model exceeds token limit. Written to: ${modelPath}`);
+
+          // Add system message to inform Claude about the switch
+          const systemMessage = `\n\n**IMPORTANT: Model Size Notice**\n\nThe current model has exceeded ${config.maxTokensForEngines} tokens (${tokenCount} tokens). The \`generate_quantitative_model\` tool has been disabled.\n\nThe model has been saved to: \`${modelPath}\`\n\nYou can now work with the model using these tools:\n- \`read_model_section\`: Read specific sections of the model (metadata, specs, variables, relationships, modules) with optional filtering\n- \`edit_model_section\`: Edit specific sections by adding, updating, or removing items\n\nThese tools allow you to work with large models efficiently without loading the entire model into memory. Use read_model_section first to inspect the parts you need, then use edit_model_section to make targeted changes.`;
+
+          systemPrompt += systemMessage;
+        } catch (err) {
+          logger.error(`Failed to write model to disk: ${err.message}`);
+        }
+      }
+    }
+
+    // Convert tool servers to Anthropic tool format (with conditional filtering)
+    const tools = this.convertToolsToAnthropicFormat(builtInTools, dynamicTools, modelExceedsLimit);
 
     let continueLoop = true;
     const maxIterations = this.configManager.getMaxIterations();
@@ -400,9 +437,14 @@ export class AgentOrchestrator {
   /**
    * Convert MCP tool servers to Anthropic tool format
    */
-  convertToolsToAnthropicFormat(builtInTools, dynamicTools) {
+  convertToolsToAnthropicFormat(builtInTools, dynamicTools, modelExceedsLimit = false) {
     const tools = [];
     const toolNames = new Set();
+
+    // Tools to exclude when model exceeds token limit (only quantitative model generation)
+    const excludedToolsWhenOverLimit = new Set([
+      'generate_quantitative_model'
+    ]);
 
     // Convert built-in tools
     for (const [toolName, toolDef] of Object.entries(builtInTools.tools)) {
@@ -410,6 +452,13 @@ export class AgentOrchestrator {
         logger.warn(`Duplicate tool name detected: ${toolName} (from built-in tools)`);
         continue;
       }
+
+      // Skip model generation tools if model exceeds token limit
+      if (modelExceedsLimit && excludedToolsWhenOverLimit.has(toolName)) {
+        logger.log(`Excluding tool ${toolName} - model exceeds token limit`);
+        continue;
+      }
+
       toolNames.add(toolName);
 
       tools.push({

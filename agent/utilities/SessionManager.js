@@ -83,6 +83,10 @@ export class SessionManager {
       sessionConfig: null,
       context: {},
 
+      // Model token tracking
+      modelTokenCount: 0,
+      modelExceedsTokenLimit: false,
+
       // Active tool calls awaiting client response
       pendingToolCalls: new Map(),
 
@@ -147,6 +151,33 @@ export class SessionManager {
     if (session) {
       session.clientModel = model;
     }
+  }
+
+  /**
+   * Update model token count and check if it exceeds limit
+   */
+  updateModelTokenCount(sessionId, tokenCount) {
+    const session = this.getSession(sessionId);
+    if (session) {
+      session.modelTokenCount = tokenCount;
+      session.modelExceedsTokenLimit = tokenCount > config.maxTokensForEngines;
+    }
+  }
+
+  /**
+   * Check if model exceeds token limit
+   */
+  modelExceedsTokenLimit(sessionId) {
+    const session = this.getSession(sessionId);
+    return session?.modelExceedsTokenLimit || false;
+  }
+
+  /**
+   * Get model token count
+   */
+  getModelTokenCount(sessionId) {
+    const session = this.getSession(sessionId);
+    return session?.modelTokenCount || 0;
   }
 
   /**

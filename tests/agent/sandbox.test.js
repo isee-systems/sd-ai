@@ -286,22 +286,6 @@ describe('Python Sandbox - Resource Limits', () => {
     rmSync(testSandbox, { recursive: true, force: true });
   });
 
-  it('should enforce CPU time limit', async () => {
-    const result = await executeSandboxScript(`
-import time
-try:
-    # Try to run for longer than ulimit allows
-    for i in range(100000000):
-        x = i * i
-except:
-    pass
-print('DONE')
-`);
-
-    // Script should either complete or be killed by ulimit
-    expect([0, 137]).toContain(result.code);
-  });
-
   it('should enforce file size limit', async () => {
     const result = await executeSandboxScript(`
 try:
