@@ -9,6 +9,7 @@ const config = {
     "reporterURL": process.env.REPORTER_URL || null, // Optional URL to POST engine usage metrics
     "sessionTempDir": process.env.SESSION_TEMP_DIR || null, // Optional custom temp directory for session files (defaults to OS tmpdir/sd-agent)
     "maxTokensForEngines": parseInt(process.env.MAX_TOKENS_FOR_ENGINES) || 8192, // Maximum tokens before switching to file-based editing
+    "maxContextTokens": parseInt(process.env.MAX_CONTEXT_TOKENS) || 100000, // Maximum tokens for conversation history sent to Claude API
 };
 
 export default config

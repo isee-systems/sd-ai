@@ -36,6 +36,9 @@ export class AgentOrchestrator {
     this.sendToClient = sendToClient;
     this.stopRequested = false;
 
+    // Track indices of model results in message history for removal
+    this.modelResultIndices = [];
+
     // Load configuration
     this.configManager = new AgentConfigurationManager(configPath);
 
@@ -120,6 +123,9 @@ export class AgentOrchestrator {
       content: msg.content
     }));
 
+    // Clean up message history at session start: remove old models and enforce token limits
+    this.cleanupMessageHistory(messages);
+
     // Check model token count and update session state (only for SFD models)
     const session = this.sessionManager.getSession(this.sessionId);
     const currentModel = session?.clientModel;
@@ -162,6 +168,42 @@ export class AgentOrchestrator {
 
     while (continueLoop && iteration < maxIterations && !this.stopRequested) {
       iteration++;
+
+      // Limit message history to prevent context overflow based on token count
+      // Keep only recent messages that fit within token budget
+      const MAX_CONTEXT_TOKENS = config.maxContextTokens;
+
+      // Calculate current message history token count
+      const messagesJson = JSON.stringify(messages);
+      const currentTokens = countTokens(messagesJson);
+
+      if (currentTokens > MAX_CONTEXT_TOKENS) {
+        logger.log(`Message history exceeds token limit: ${currentTokens} tokens (limit: ${MAX_CONTEXT_TOKENS})`);
+
+        // Keep the first message (user's initial request) for context
+        const firstMessage = messages[0];
+        const firstMessageTokens = countTokens(JSON.stringify(firstMessage));
+
+        let remainingTokenBudget = MAX_CONTEXT_TOKENS - firstMessageTokens;
+        const keptMessages = [firstMessage];
+
+        // Add messages from most recent backwards until we hit the token budget
+        for (let i = messages.length - 1; i >= 1; i--) {
+          const messageTokens = countTokens(JSON.stringify(messages[i]));
+
+          if (remainingTokenBudget - messageTokens >= 0) {
+            keptMessages.unshift(messages[i]); // Add at beginning (after firstMessage)
+            remainingTokenBudget -= messageTokens;
+          } else {
+            // No more room, stop adding messages
+            break;
+          }
+        }
+
+        messages = [firstMessage, ...keptMessages.slice(1)]; // Avoid duplicating firstMessage
+        const newTokenCount = countTokens(JSON.stringify(messages));
+        logger.log(`Trimmed message history: ${messages.length} messages, ${newTokenCount} tokens (saved ${currentTokens - newTokenCount} tokens)`);
+      }
 
       try {
         // Call Claude API
@@ -361,15 +403,27 @@ export class AgentOrchestrator {
           input: block.input
         });
 
-        // Add tool_result
+        // Check if this is a model result and remove old models if so
+        const isModelResult = this.isModelResult(toolResult);
+        if (isModelResult) {
+          this.removeOldModelsFromMessages(messages);
+        }
+
+        // Add tool_result (truncated if too large)
+        const messageIndex = messages.length;
         messages.push({
           role: 'user',
           content: [{
             type: 'tool_result',
             tool_use_id: block.id,
-            content: JSON.stringify(toolResult.content)
+            content: this.truncateToolResult(toolResult, block.name)
           }]
         });
+
+        // Track this message index if it's a model result
+        if (isModelResult) {
+          this.modelResultIndices.push(messageIndex);
+        }
       }
     }
 
@@ -390,6 +444,183 @@ export class AgentOrchestrator {
 
     // Continue if stop_reason is max_tokens or other reasons
     return response.stop_reason === 'max_tokens';
+  }
+
+  /**
+   * Clean up message history at session initialization
+   * Removes all but the most recent model and enforces token limits
+   * @param {Array} messages - The messages array to clean
+   */
+  cleanupMessageHistory(messages) {
+    if (messages.length === 0) {
+      return;
+    }
+
+    logger.log(`Cleaning up message history (${messages.length} messages)`);
+
+    // Find all model results in the messages
+    const modelIndices = [];
+    for (let i = 0; i < messages.length; i++) {
+      const message = messages[i];
+      if (message.role === 'user' && message.content && Array.isArray(message.content)) {
+        for (const content of message.content) {
+          if (content.type === 'tool_result' && content.content) {
+            try {
+              const parsed = JSON.parse(content.content);
+              if (this.isModelResult(parsed)) {
+                modelIndices.push(i);
+                break; // Only count this message once
+              }
+            } catch (e) {
+              // Not parseable, skip
+            }
+          }
+        }
+      }
+    }
+
+    // Remove all but the most recent model
+    if (modelIndices.length > 1) {
+      // Keep only the last model index, remove all others
+      const indicesToRemove = modelIndices.slice(0, -1).sort((a, b) => b - a);
+      for (const index of indicesToRemove) {
+        messages.splice(index, 1);
+        logger.log(`Removed old model result from message history at index ${index}`);
+      }
+      logger.log(`Kept most recent model, removed ${indicesToRemove.length} older model(s)`);
+    }
+
+    // Now enforce token limits (this happens in the main loop, but do it here too for cleanup)
+    const MAX_CONTEXT_TOKENS = config.maxContextTokens;
+    const messagesJson = JSON.stringify(messages);
+    const currentTokens = countTokens(messagesJson);
+
+    if (currentTokens > MAX_CONTEXT_TOKENS) {
+      logger.log(`Message history after cleanup still exceeds token limit: ${currentTokens} tokens (limit: ${MAX_CONTEXT_TOKENS})`);
+
+      // Keep the first message (user's initial request) for context
+      const firstMessage = messages[0];
+      const firstMessageTokens = countTokens(JSON.stringify(firstMessage));
+
+      let remainingTokenBudget = MAX_CONTEXT_TOKENS - firstMessageTokens;
+      const keptMessages = [firstMessage];
+
+      // Add messages from most recent backwards until we hit the token budget
+      for (let i = messages.length - 1; i >= 1; i--) {
+        const messageTokens = countTokens(JSON.stringify(messages[i]));
+
+        if (remainingTokenBudget - messageTokens >= 0) {
+          keptMessages.unshift(messages[i]);
+          remainingTokenBudget -= messageTokens;
+        } else {
+          break;
+        }
+      }
+
+      // Replace messages array contents
+      messages.splice(0, messages.length, ...([firstMessage, ...keptMessages.slice(1)]));
+      const newTokenCount = countTokens(JSON.stringify(messages));
+      logger.log(`Trimmed message history to fit token budget: ${messages.length} messages, ${newTokenCount} tokens`);
+    }
+  }
+
+  /**
+   * Check if a tool result contains a model
+   * @param {Object} toolResult - The tool result object
+   * @returns {boolean} True if this is a model result
+   */
+  isModelResult(toolResult) {
+    if (toolResult.content && Array.isArray(toolResult.content)) {
+      const firstContent = toolResult.content[0];
+      if (firstContent && firstContent.type === 'text') {
+        try {
+          const parsedContent = JSON.parse(firstContent.text);
+          return !!(parsedContent.model || parsedContent.variables);
+        } catch (e) {
+          return false;
+        }
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Remove old model results from messages array
+   * @param {Array} messages - The messages array to clean
+   */
+  removeOldModelsFromMessages(messages) {
+    if (this.modelResultIndices.length === 0) {
+      return; // No old models to remove
+    }
+
+    // Sort indices in descending order to remove from end first
+    const indicesToRemove = [...this.modelResultIndices].sort((a, b) => b - a);
+
+    for (const index of indicesToRemove) {
+      if (index < messages.length) {
+        messages.splice(index, 1);
+        logger.log(`Removed old model result from message history at index ${index}`);
+      }
+    }
+
+    // Clear the tracking array
+    this.modelResultIndices = [];
+  }
+
+  /**
+   * Truncate large tool results to prevent context overflow
+   * @param {Object} toolResult - The tool result object
+   * @param {string} toolName - Name of the tool
+   * @returns {string} Truncated result suitable for conversation context
+   */
+  truncateToolResult(toolResult, toolName) {
+    const resultStr = JSON.stringify(toolResult);
+    const tokenCount = countTokens(resultStr);
+    const MAX_TOOL_RESULT_TOKENS = 10000;
+
+    // If result is small enough, return as-is
+    if (tokenCount <= MAX_TOOL_RESULT_TOKENS) {
+      return resultStr;
+    }
+
+    // For large results, check if it's a model
+    let isModelResult = false;
+    let model = null;
+
+    if (toolResult.content && Array.isArray(toolResult.content)) {
+      const firstContent = toolResult.content[0];
+      if (firstContent && firstContent.type === 'text') {
+        try {
+          const parsedContent = JSON.parse(firstContent.text);
+          if (parsedContent.model || parsedContent.variables) {
+            isModelResult = true;
+            model = parsedContent.model || parsedContent;
+          }
+        } catch (e) {
+          // Not JSON, not a model result
+        }
+      }
+    }
+
+    // For large model results, return a summary
+    if (isModelResult && model) {
+      logger.log(`Tool result for ${toolName} is ${tokenCount} tokens, truncating to summary`);
+      const summary = {
+        type: 'text',
+        text: `[Large model result truncated for context - ${tokenCount} tokens]\n\nModel summary:\n- Variables: ${model.variables?.length || 0}\n- Relationships: ${model.relationships?.length || 0}\n- Modules: ${model.modules?.length || 0}\n- Specs: ${model.specs ? 'present' : 'absent'}\n\nThe full model has been sent to the client and is available via read_model_section tool.`
+      };
+      return JSON.stringify({ content: [summary] });
+    }
+
+    // Generic truncation for other large results
+    logger.log(`Tool result for ${toolName} is ${tokenCount} tokens, truncating to summary`);
+    const truncated = {
+      content: [{
+        type: 'text',
+        text: `[Result truncated - original was ${tokenCount} tokens]\n\n${resultStr.substring(0, 2000)}...\n\n[Truncated]`
+      }]
+    };
+    return JSON.stringify(truncated);
   }
 
   /**

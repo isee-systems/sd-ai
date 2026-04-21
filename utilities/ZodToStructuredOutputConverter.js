@@ -31,6 +31,10 @@ export class ZodToStructuredOutputConverter {
         // For Claude's structured outputs, optional fields are handled via the 'required' array
         // in the parent object, not via a 'nullable' property
         return this.convert(zodSchema._def.innerType);
+      case 'ZodNullable':
+        // For nullable types, we unwrap the inner type
+        // Nullability is handled by making the field optional in the parent object
+        return this.convert(zodSchema._def.innerType);
       case 'ZodDefault':
         // For ZodDefault, we ignore the default value and just convert the inner type
         // Default values are handled by the application logic, not the schema
@@ -162,6 +166,23 @@ export class ZodToStructuredOutputConverter {
       };
     }
 
+    // For complex unions (multiple types), use anyOf
+    // This allows Claude to accept any of the union types
+    const anyOfSchemas = options.map(option => this.convert(option));
+
+    // If all schemas are objects or arrays, use anyOf
+    const hasComplexTypes = anyOfSchemas.some(schema =>
+      schema.type === 'object' || schema.type === 'array'
+    );
+
+    if (hasComplexTypes) {
+      return {
+        anyOf: anyOfSchemas,
+        description: def.description || 'One of the following types'
+      };
+    }
+
+    // Fallback for other cases
     logger.warn('Complex union types not fully supported, defaulting to string');
     return { type: 'string' };
   }
