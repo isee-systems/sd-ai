@@ -241,7 +241,7 @@ export class LLMWrapper {
     "arrayDimensions": "The complete list of all array dimension definitions used anywhere in this model. Each dimension must be fully defined here in the simulation specs before it can be referenced by variables in their 'dimensions' field. All dimensions must have all four required fields: type, name, size, and elements.",
     "variableDimensions": "An ordered list of dimension names that define the subscript structure for this arrayed variable. The order matters: each element in the forElements arrays must correspond positionally to the dimensions listed here (first element matches first dimension, second element matches second dimension, etc.). If empty or omitted, this is a scalar (non-arrayed) variable.",
     "arrayElementEquation": "Specifies the equation for a specific subset of array elements in an arrayed variable. The 'equation' field contains the XMILE equation, and the 'forElements' field specifies which array elements this equation applies to (ordered to match the variable's dimensions list).",
-    "arrayEquationForElements": "A comma-separated string of array element names that identifies which specific array element(s) use this equation. Each element name corresponds positionally to the dimensions in the variable's 'dimensions' field (first element name matches first dimension, second matches second, etc.). For single-dimension arrays, this has one element name. For multi-dimensional arrays, this has multiple element names separated by commas in the same order as the dimensions. Example: 'North,Q1' or 'South,Q2'.",
+    "arrayEquationForElements": "An array of element names that identifies which specific array element(s) use this equation. Each element name corresponds positionally to the dimensions in the variable's 'dimensions' field (first element name matches first dimension, second matches second, etc.). For single-dimension arrays, this has one element name. For multi-dimensional arrays, this has multiple element names in the same order as the dimensions. Example: ['North','Q1'] or ['South','Q2'].",
     "variableArrayEquation": "CRITICAL: Used for arrayed variables when elements need different equations OR for arrayed stocks to specify initial values. Every variable MUST have either this array non-empty OR the 'equation' field non-empty - never both non-empty, never both empty. For arrayed variables: if elements have DIFFERENT formulas, you MUST populate this array with equation objects and leave 'equation' empty (empty string). This is a list of equation objects, where each object specifies an equation and the array elements it applies to (via the forElements field). You MUST provide equations that cover EVERY valid combination of array elements across all dimensions. For arrayed STOCKS, you MUST use this field to provide initial values for each stock element.",
 
     "moduleName": "The name of a module. Must follow variable naming rules: contains only alphanumeric characters and underscores, no spaces or special characters. Should never be module-qualified (do not include parent module names with dots). This is a simple identifier for the module itself.",
@@ -372,6 +372,10 @@ export class LLMWrapper {
         y: z.number().describe(LLMWrapper.SCHEMA_STRINGS.gfPointY)
       }).describe(LLMWrapper.SCHEMA_STRINGS.gfPoint);
 
+      const GraphicalFunction = z.object({
+        points: z.array(GFPoint)
+      }).describe(LLMWrapper.SCHEMA_STRINGS.gfEquation);
+
       const Relationship = z.object({
           from: z.string().describe(LLMWrapper.SCHEMA_STRINGS.from),
           to: z.string().describe(LLMWrapper.SCHEMA_STRINGS.to),
@@ -382,11 +386,9 @@ export class LLMWrapper {
 
       const Relationships = z.array(Relationship).describe(LLMWrapper.SCHEMA_STRINGS.relationships);
 
-      // Flattened: forElements is a comma-separated string instead of array of strings
-      // This reduces nesting depth from 6 to 5 levels for array support
       const ArrayElementEquation = z.object({
         equation: z.string().describe(LLMWrapper.SCHEMA_STRINGS.equation),
-        forElements: z.string().describe(LLMWrapper.SCHEMA_STRINGS.arrayEquationForElements)
+        forElements: z.array(z.string()).describe(LLMWrapper.SCHEMA_STRINGS.arrayEquationForElements)
       }).describe(LLMWrapper.SCHEMA_STRINGS.arrayElementEquation);
 
       const variableObj = {
@@ -394,7 +396,7 @@ export class LLMWrapper {
         equation: z.string().describe(LLMWrapper.SCHEMA_STRINGS.equation),
         inflows: z.array(z.string()).describe(LLMWrapper.SCHEMA_STRINGS.inflows),
         outflows: z.array(z.string()).describe(LLMWrapper.SCHEMA_STRINGS.outflows),
-        graphicalFunction: z.array(GFPoint).describe(LLMWrapper.SCHEMA_STRINGS.gfEquation),
+        graphicalFunction: GraphicalFunction,
         type: TypeEnum,
         uniflow: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.uniflow),
         crossLevelGhostOf: z.string().describe(LLMWrapper.SCHEMA_STRINGS.crossLevelGhostOf),

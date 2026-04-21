@@ -636,33 +636,6 @@ NEVER identify feedback loops for the user in explanatory text. Let users discov
         response.relationships = relationships;
     }
 
-    #expandGraphicalFunctionsAndArrayEquations(response) {
-        // Re-expand flattened graphicalFunction format from LLM
-        // LLM sends: graphicalFunction: [{x, y}, ...]
-        // We need: graphicalFunction: {points: [{x, y}, ...]}
-        response.variables.forEach((v) => {
-            if (v.graphicalFunction && Array.isArray(v.graphicalFunction)) {
-                if (v.graphicalFunction.length > 0) {
-                    v.graphicalFunction = {
-                        points: v.graphicalFunction
-                    };
-                } else {
-                    delete v.graphicalFunction;
-                }
-            }
-
-            // Re-expand flattened arrayEquations forElements from comma-separated string to array
-            // LLM sends: forElements: "North,Q1"
-            // We need: forElements: ["North", "Q1"]
-            if (v.arrayEquations && Array.isArray(v.arrayEquations)) {
-                v.arrayEquations.forEach((eq) => {
-                    if (eq.forElements && typeof eq.forElements === 'string') {
-                        eq.forElements = eq.forElements.split(',').map(s => s.trim());
-                    }
-                });
-            }
-        });
-    }
 
     #cleanStockFlows(response) {
         // Go through all variables -- for any stock with inflows/outflows remove dimensions from inflow/outflow names
@@ -908,9 +881,6 @@ NEVER identify feedback loops for the user in explanatory text. Let users discov
         // Filter and clean relationships
         this.#filterInvalidRelationships(originalResponse);
 
-        // Expand graphical functions and array equations from flattened LLM format
-        this.#expandGraphicalFunctionsAndArrayEquations(originalResponse);
-
         // Clean stock inflows/outflows
         this.#cleanStockFlows(originalResponse);
 
@@ -970,31 +940,7 @@ NEVER identify feedback loops for the user in explanatory text. Let users discov
         }
 
         if (lastModel) {
-            // Flatten graphicalFunction and arrayEquations for LLM schema compatibility
-            // Convert: graphicalFunction: {points: [{x, y}, ...]}
-            // To: graphicalFunction: [{x, y}, ...]
-            // Convert: forElements: ["North", "Q1"]
-            // To: forElements: "North,Q1"
-            const flattenedModel = JSON.parse(JSON.stringify(lastModel)); // deep clone
-            if (flattenedModel.variables) {
-                flattenedModel.variables.forEach((v) => {
-                    // Flatten graphicalFunction
-                    if (v.graphicalFunction && v.graphicalFunction.points && Array.isArray(v.graphicalFunction.points)) {
-                        v.graphicalFunction = v.graphicalFunction.points;
-                    }
-
-                    // Flatten arrayEquations forElements from array to comma-separated string
-                    if (v.arrayEquations && Array.isArray(v.arrayEquations)) {
-                        v.arrayEquations.forEach((eq) => {
-                            if (eq.forElements && Array.isArray(eq.forElements)) {
-                                eq.forElements = eq.forElements.join(',');
-                            }
-                        });
-                    }
-                });
-            }
-
-            messages.push({ role: "assistant", content: JSON.stringify(flattenedModel, null, 2) });
+            messages.push({ role: "assistant", content: JSON.stringify(lastModel, null, 2) });
 
             if (this.#data.assistantPrompt)
                 messages.push({ role: "user", content: this.#data.assistantPrompt });
