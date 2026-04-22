@@ -16,7 +16,7 @@ import { z } from 'zod';
  */
 export const SDVariableSchema = z.object({
   name: z.string(),
-  type: z.enum(["stock", "flow", "variable"])
+  type: z.string()
 }).catchall(z.any());
 
 export const SDRelationshipSchema = z.object({
