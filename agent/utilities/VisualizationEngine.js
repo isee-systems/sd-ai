@@ -101,8 +101,18 @@ export class VisualizationEngine {
       // 3. Execute Python script
       await this.executePythonScript(scriptPath);
 
-      // 4. Read generated image and return as base64 string only
+      // 4. Read generated image and validate it's a PNG
       const imageBuffer = readFileSync(outputPath);
+
+      // Validate PNG signature (first 8 bytes: 89 50 4E 47 0D 0A 1A 0A)
+      if (imageBuffer.length < 8 ||
+          imageBuffer[0] !== 0x89 || imageBuffer[1] !== 0x50 ||
+          imageBuffer[2] !== 0x4E || imageBuffer[3] !== 0x47 ||
+          imageBuffer[4] !== 0x0D || imageBuffer[5] !== 0x0A ||
+          imageBuffer[6] !== 0x1A || imageBuffer[7] !== 0x0A) {
+        throw new Error('Generated file is not a valid PNG image');
+      }
+
       base64Image = imageBuffer.toString('base64');
 
     } catch (err) {
@@ -133,12 +143,12 @@ export class VisualizationEngine {
     const systemPrompt = `You are a Python matplotlib code generator. Generate working Python visualization code.
 
 Requirements:
-- Use matplotlib with Agg backend
+- Use matplotlib with Agg backend (set BEFORE importing pyplot)
 - Load JSON data and create the visualization
-- Save to specified path as PNG with broadly-compatible settings
+- Save as PNG with maximum compatibility for image display widgets
 - Include labels, titles, legends
 - Make it clear and professional
-- Set white background for broad compatibility`;
+- CRITICAL: Set opaque white backgrounds at ALL levels (figure, axes, and savefig)`;
 
     const userPrompt = `Generate Python code for this visualization:
 
@@ -151,11 +161,12 @@ Size: ${(options.width || 800)/100}x${(options.height || 600)/100} inches, 300 D
 Data structure: JSON with 'time' array and variable arrays: ${variables.map(v => `'${v}'`).join(', ')}
 
 ${options.customRequirements ? `Requirements: ${options.customRequirements}\n` : ''}
-IMPORTANT:
-- Use matplotlib.use('Agg')
-- Suppress warnings with warnings.filterwarnings('ignore')
-- Set fig.set_facecolor('white') for broad compatibility
-- Save with: plt.savefig(path, format='png', dpi=300, bbox_inches='tight', facecolor='white', edgecolor='none')
+CRITICAL - Background settings (REQUIRED for proper display):
+1. Import order: matplotlib.use('Agg') BEFORE import matplotlib.pyplot
+2. Suppress warnings: warnings.filterwarnings('ignore')
+3. After creating figure: fig.patch.set_facecolor('white') AND fig.patch.set_alpha(1.0)
+4. For each axes: ax.set_facecolor('white') AND ax.patch.set_alpha(1.0)
+5. Save with: plt.savefig(path, format='png', dpi=300, bbox_inches='tight', facecolor='white', edgecolor='none', transparent=False)
 
 Generate ONLY working Python code, no explanations.`;
 
@@ -261,8 +272,18 @@ Generate ONLY working Python code, no explanations.`;
       // 3. Execute Python script
       await this.executePythonScript(scriptPath);
 
-      // 4. Read generated image and return as base64 string only
+      // 4. Read generated image and validate it's a PNG
       const imageBuffer = readFileSync(outputPath);
+
+      // Validate PNG signature (first 8 bytes: 89 50 4E 47 0D 0A 1A 0A)
+      if (imageBuffer.length < 8 ||
+          imageBuffer[0] !== 0x89 || imageBuffer[1] !== 0x50 ||
+          imageBuffer[2] !== 0x4E || imageBuffer[3] !== 0x47 ||
+          imageBuffer[4] !== 0x0D || imageBuffer[5] !== 0x0A ||
+          imageBuffer[6] !== 0x1A || imageBuffer[7] !== 0x0A) {
+        throw new Error('Generated file is not a valid PNG image');
+      }
+
       base64Image = imageBuffer.toString('base64');
 
     } catch (err) {
@@ -330,10 +351,10 @@ ax.axvspan(${period.start}, ${period.end}, alpha=0.2, color='${period.color || '
 `).join('');
 
     return `
-import json
-import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import json
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -341,9 +362,12 @@ warnings.filterwarnings('ignore')
 with open('${dataPath}', 'r') as f:
     data = json.load(f)
 
-# Create figure with high-resolution settings
+# Create figure with high-resolution settings and explicit white background
 fig, ax = plt.subplots(figsize=(${(options.width || 800)/100}, ${(options.height || 600)/100}), dpi=300)
-fig.set_facecolor('white')
+fig.patch.set_facecolor('white')
+fig.patch.set_alpha(1.0)
+ax.set_facecolor('white')
+ax.patch.set_alpha(1.0)
 
 # Plot each variable
 ${variables.map((v, idx) => `
@@ -361,8 +385,8 @@ ax.grid(True, alpha=0.3)
 ${highlightPeriodsCode}
 
 plt.tight_layout()
-# High-resolution PNG output
-plt.savefig('${outputPath}', format='png', dpi=300, bbox_inches='tight', facecolor='white', edgecolor='none')
+# Save with explicit white background and no transparency
+plt.savefig('${outputPath}', format='png', dpi=300, bbox_inches='tight', facecolor='white', edgecolor='none', transparent=False)
 plt.close()
 print('Visualization saved')
 `.trim();
@@ -374,11 +398,11 @@ print('Visualization saved')
   generatePhasePortraitScript(dataPath, outputPath, variables, options) {
     const [xVar, yVar] = variables;
     return `
-import json
-import matplotlib.pyplot as plt
-import numpy as np
 import matplotlib
 matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import numpy as np
+import json
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -386,7 +410,10 @@ with open('${dataPath}', 'r') as f:
     data = json.load(f)
 
 fig, ax = plt.subplots(figsize=(8, 6), dpi=300)
-fig.set_facecolor('white')
+fig.patch.set_facecolor('white')
+fig.patch.set_alpha(1.0)
+ax.set_facecolor('white')
+ax.patch.set_alpha(1.0)
 
 time = np.array(data['time'])
 x = np.array(data['${xVar}'])
@@ -408,7 +435,7 @@ cbar = plt.colorbar(scatter, ax=ax)
 cbar.set_label('Time', fontsize=10)
 
 plt.tight_layout()
-plt.savefig('${outputPath}', format='png', dpi=300, bbox_inches='tight', facecolor='white', edgecolor='none')
+plt.savefig('${outputPath}', format='png', dpi=300, bbox_inches='tight', facecolor='white', edgecolor='none', transparent=False)
 plt.close()
 print('Visualization saved')
 `.trim();
@@ -427,11 +454,11 @@ print('Visualization saved')
     const loopVarsList = variables.map(v => `'${v}'`).join(', ');
 
     return `
-import json
-import matplotlib.pyplot as plt
-import numpy as np
 import matplotlib
 matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import numpy as np
+import json
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -439,7 +466,10 @@ with open('${dataPath}', 'r') as f:
     data = json.load(f)
 
 fig, ax = plt.subplots(figsize=(${(options.width || 800)/100}, ${(options.height || 600)/100}), dpi=300)
-fig.set_facecolor('white')
+fig.patch.set_facecolor('white')
+fig.patch.set_alpha(1.0)
+ax.set_facecolor('white')
+ax.patch.set_alpha(1.0)
 
 # Get time array
 time = data.get('time', [])
@@ -497,7 +527,7 @@ else:
             ha='center', va='center', transform=ax.transAxes, fontsize=12)
 
 plt.tight_layout()
-plt.savefig('${outputPath}', format='png', dpi=300, bbox_inches='tight', facecolor='white', edgecolor='none')
+plt.savefig('${outputPath}', format='png', dpi=300, bbox_inches='tight', facecolor='white', edgecolor='none', transparent=False)
 plt.close()
 print('Visualization saved')
 `.trim();
@@ -511,10 +541,10 @@ print('Visualization saved')
     const variable = Array.isArray(variables) ? variables[0] : variables;
 
     return `
-import json
-import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import json
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -522,7 +552,10 @@ with open('${dataPath}', 'r') as f:
     data = json.load(f)
 
 fig, ax = plt.subplots(figsize=(${(options.width || 800)/100}, ${(options.height || 600)/100}), dpi=300)
-fig.set_facecolor('white')
+fig.patch.set_facecolor('white')
+fig.patch.set_alpha(1.0)
+ax.set_facecolor('white')
+ax.patch.set_alpha(1.0)
 
 runs = data.get('runs', [])
 colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
@@ -544,7 +577,7 @@ ax.legend(loc='best')
 ax.grid(True, alpha=0.3)
 
 plt.tight_layout()
-plt.savefig('${outputPath}', format='png', dpi=300, bbox_inches='tight', facecolor='white', edgecolor='none')
+plt.savefig('${outputPath}', format='png', dpi=300, bbox_inches='tight', facecolor='white', edgecolor='none', transparent=False)
 plt.close()
 print('Visualization saved')
 `.trim();
