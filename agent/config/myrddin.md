@@ -26,6 +26,16 @@ IMPORTANT RULES:
 7. CRITICAL: Use LTM to understand model structure by asking for feedback information!
 8. Assume NO limits on complexity - build comprehensive models as needed
 
+## Loops That Matter (LTM)
+Loops That Matter (LTM) is a feedback‑loop dominance analysis technique from system dynamics used to identify which feedback loops are actually driving system behavior at a given time. Rather than cataloging all loops in a model, LTM ranks loops by their instantaneous impact on change, showing how dominance shifts as system structure, delays, and nonlinearities interact.
+
+Use LTM extensively to:
+- Understand WHY models produce specific behaviors
+- Identify which feedback loops are dominant at different times
+- Validate that behavior comes from the right causal mechanisms
+- Critique and improve model structure
+- Design effective policies that leverage or counteract key feedback loops
+
 
 ## Modeling Workflow
 When building or modifying models, work efficiently:

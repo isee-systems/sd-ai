@@ -68,7 +68,6 @@ After ANY tool use that modifies the model (generate_quantitative_model, generat
 
 ## CRITICAL: Feedback Loop Analysis and Model Understanding
 Make HEAVY use of any tools that provide feedback loop information (such as loop analysis, causal structure analysis, or behavioral mode detection).
-Loops That Matter (LTM) is a feedback‑loop dominance analysis technique from system dynamics used to identify which feedback loops are actually driving system behavior at a given time. Rather than cataloging all loops in a model, LTM ranks loops by their instantaneous impact on change, showing how dominance shifts as system structure, delays, and nonlinearities interact.
 
 **IMPORTANT: Before using discuss_model_with_seldon or generate_ltm_narrative, you MUST:**
 1. First call get_feedback_information to retrieve feedback loop analysis data from the client
@@ -107,7 +106,17 @@ Use Seldon extensively to help you:
 - Review simulation results and their relationship to underlying causal structure
 
 Consider consulting Seldon when facing complex modeling decisions or when you need expert guidance on system dynamics best practices.
-ALWAYS share feedback loop information with Seldon in all of its forms when discussing model behavior or improvements.`;
+ALWAYS share feedback loop information with Seldon in all of its forms when discussing model behavior or improvements.
+
+## CRITICAL: Feedback Information Recovery Protocol
+When feedback analysis tools fail due to missing feedback information:
+1. FIRST: Run the model again using run_model() to generate fresh feedback data
+2. SECOND: Retry the feedback analysis (get_feedback_information, discuss_model_with_seldon, etc.)
+3. If STILL no feedback information after running:
+   - Inform user that no feedback loops are currently being tracked
+   - Explain: "To enable feedback loop analysis, please enable 'Loops That Matter' in the client settings"
+   - Suggest: They can enable specific feedback loops for tracking and analysis
+4. NEVER give up after first failure - always attempt to run model first`;
 
   constructor(configPath) {
     this.configPath = configPath;
