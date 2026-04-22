@@ -1,7 +1,22 @@
 /**
  * Helper utilities shared across built-in tools
  */
+import { tool as sdkTool } from '@anthropic-ai/claude-agent-sdk';
 import logger from '../../../utilities/logger.js';
+
+/**
+ * Wrapper for the SDK tool() function for use with Claude Agent SDK
+ * Note: inputSchema should be a Zod schema
+ * @param {Object} config - Tool configuration
+ * @param {string} config.name - Tool name
+ * @param {string} config.description - Tool description
+ * @param {Object} config.inputSchema - Zod schema for input validation
+ * @param {Function} config.execute - Tool execution function
+ * @returns {Object} SDK tool instance
+ */
+export function tool({ name, description, inputSchema, execute }) {
+  return sdkTool(name, description, inputSchema, execute);
+}
 
 /**
  * Generate a unique request ID for async operations

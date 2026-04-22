@@ -189,7 +189,7 @@ export const ToolCallNotificationMessageSchema = z.object({
   sessionId: z.string().describe('Unique session identifier'),
   callId: z.string().describe('Unique identifier for this tool call'),
   toolName: z.string().describe('Name of the tool being called'),
-  arguments: z.record(z.any()).describe('Map of argument names to values being passed to the tool'),
+  arguments: z.record(z.string(), z.any()).describe('Map of argument names to values being passed to the tool'),
   isBuiltIn: z.boolean().describe('Whether this is a built-in tool (true) or client tool (false)'),
   timestamp: z.string().optional().describe('ISO 8601 timestamp of when the message was created')
 });
@@ -199,7 +199,7 @@ export const ToolCallRequestMessageSchema = z.object({
   sessionId: z.string().describe('Unique session identifier'),
   callId: z.string().describe('Unique identifier for this tool call, used to match with the response'),
   toolName: z.string().describe('Name of the client tool to execute'),
-  arguments: z.record(z.any()).describe('Map of argument names to values to pass to the tool'),
+  arguments: z.record(z.string(), z.any()).describe('Map of argument names to values to pass to the tool'),
   timeout: z.number().optional().default(30000).describe('Timeout for client tool execution in milliseconds'),
   timestamp: z.string().optional().describe('ISO 8601 timestamp of when the message was created')
 });

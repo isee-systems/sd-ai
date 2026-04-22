@@ -1,4 +1,7 @@
 import { VisualizationEngine } from '../utilities/VisualizationEngine.js';
+import { createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk';
+import { tool } from './builtin/toolHelpers.js';
+import logger from '../../utilities/logger.js';
 import {
   createGenerateQuantitativeModelTool,
   createGenerateQualitativeModelTool,
@@ -85,6 +88,49 @@ export class BuiltInToolProvider {
    */
   getTools() {
     return this.createToolCollection();
+  }
+
+  /**
+   * Create MCP server from tool instances (for SDK mode)
+   * Wraps the existing tool collection into SDK MCP server format
+   * @param {boolean} modelExceedsLimit - Whether to exclude generate_quantitative_model
+   * @returns {Object} MCP server instance
+   */
+  getMcpServer(modelExceedsLimit = false) {
+    const toolCollection = this.createToolCollection();
+    const toolsArr = [];
+
+    // Wrap each tool for SDK mode
+    for (const [toolName, toolDef] of Object.entries(toolCollection.tools)) {
+      // Skip generate_quantitative_model if model exceeds limit
+      if (modelExceedsLimit && toolName === 'generate_quantitative_model') {
+        continue;
+      }
+
+      // Tools in SDK mode need to throw errors instead of returning error responses
+      const sdkHandler = async (args) => {
+        const result = await toolDef.handler(args);
+        if (result.isError) {
+          throw new Error(result.content[0].text);
+        }
+        return result;
+      };
+
+      // Use the tool() helper to create SDK tool instances
+      toolsArr.push(tool({
+        name: toolName,
+        description: toolDef.description,
+        inputSchema: toolDef.inputSchema,
+        execute: sdkHandler
+      }));
+    }
+
+    logger.log(`Creating builtin MCP server with ${toolsArr.length} tools (modelExceedsLimit: ${modelExceedsLimit})`);
+    return createSdkMcpServer({
+      name: 'builtin',
+      version: '1.0.0',
+      tools: toolsArr
+    });
   }
 
   /**

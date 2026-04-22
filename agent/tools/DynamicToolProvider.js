@@ -1,4 +1,6 @@
 import { StructuredOutputToZodConverter } from '../../utilities/StructuredOutputToZodConverter.js';
+import { tool } from './builtin/toolHelpers.js';
+import { createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk';
 import logger from '../../utilities/logger.js';
 
 /**
@@ -200,5 +202,43 @@ export class DynamicToolProvider {
    */
   isClientTool(toolName) {
     return this.getClientToolNames().includes(toolName);
+  }
+
+  /**
+   * Create MCP server from client tool definitions (for SDK mode)
+   * Wraps existing tool collection into SDK MCP server format
+   * @returns {Object|null} MCP server instance or null if no tools
+   */
+  getMcpServer() {
+    if (!this.toolCollection) {
+      return null;
+    }
+
+    const tools = [];
+
+    // Convert tool collection to SDK tool instances
+    for (const [toolName, toolDef] of Object.entries(this.toolCollection.tools)) {
+      // Remove 'client_' prefix for SDK (SDK will add 'mcp__client__' prefix)
+      const unprefixedName = toolName.replace(/^client_/, '');
+
+      tools.push(tool({
+        name: unprefixedName,
+        description: toolDef.description,
+        inputSchema: toolDef.inputSchema,
+        execute: toolDef.handler
+      }));
+    }
+
+    if (tools.length === 0) {
+      return null;
+    }
+
+    logger.log(`Creating client MCP server with ${tools.length} tools`);
+
+    return createSdkMcpServer({
+      name: 'client',
+      version: '1.0.0',
+      tools
+    });
   }
 }

@@ -10,6 +10,7 @@ const config = {
     "sessionTempDir": process.env.SESSION_TEMP_DIR || null, // Optional custom temp directory for session files (defaults to OS tmpdir/sd-agent)
     "maxTokensForEngines": parseInt(process.env.MAX_TOKENS_FOR_ENGINES) || 100000, // Maximum tokens before switching to file-based editing
     "maxContextTokens": parseInt(process.env.MAX_CONTEXT_TOKENS) || 100000, // Maximum tokens for conversation history sent to Claude API
+    "useAgentSDK": process.env.USE_AGENT_SDK === 'true' || false, // Use Claude Agent SDK instead of manual agent loop
 };
 
 export default config

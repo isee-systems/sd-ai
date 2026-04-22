@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { query } from '@anthropic-ai/claude-agent-sdk';
 import { marked } from 'marked';
 import { countTokens } from '@anthropic-ai/tokenizer';
 import { writeFileSync } from 'fs';
@@ -35,6 +36,11 @@ export class AgentOrchestrator {
     this.sendToClient = sendToClient;
     this.stopRequested = false;
 
+    // SDK-specific properties (for SDK mode)
+    this.abortController = null;
+    this.sdkSessionId = null; // SDK session ID for conversation continuity
+    this.pendingToolCalls = new Map(); // Track tool_use_id -> tool_name mapping
+
     // Load configuration
     this.configManager = new AgentConfigurationManager(configPath);
 
@@ -42,12 +48,12 @@ export class AgentOrchestrator {
     this.builtInToolProvider = new BuiltInToolProvider(sessionManager, sessionId, sendToClient);
     this.dynamicToolProvider = new DynamicToolProvider(sessionManager, sessionId, sendToClient);
 
-    // Initialize Anthropic client
+    // Initialize Anthropic client (for non-SDK mode)
     this.anthropic = new Anthropic({
       apiKey: process.env.ANTHROPIC_API_KEY
     });
 
-    logger.log(`AgentOrchestrator initialized for session ${sessionId}`);
+    logger.log(`AgentOrchestrator initialized for session ${sessionId} (useAgentSDK: ${config.useAgentSDK})`);
   }
 
   /**
@@ -67,26 +73,16 @@ export class AgentOrchestrator {
         throw new Error(`Session not found: ${this.sessionId}`);
       }
 
-      // Add user message to conversation history
-      this.sessionManager.addToConversationHistory(this.sessionId, {
-        role: 'user',
-        content: userMessage
-      });
-
-      // Build system prompt from config
-      const modelType = session.modelType;
-      const systemPrompt = this.configManager.buildSystemPrompt(modelType);
-
-      // Get tool collections
-      const builtInTools = this.builtInToolProvider.getTools();
-      const dynamicTools = this.dynamicToolProvider.getTools();
-
-      logger.log(`Starting conversation for session ${this.sessionId}`);
+      logger.log(`Starting conversation for session ${this.sessionId} (mode: ${config.useAgentSDK ? 'SDK' : 'manual'})`);
       logger.log(`Built-in tools: ${this.builtInToolProvider.getToolNames().join(', ')}`);
       logger.log(`Client tools: ${this.dynamicToolProvider.getToolNames().join(', ')}`);
 
-      // Start agent conversation loop
-      await this.runAgentConversation(userMessage, systemPrompt, builtInTools, dynamicTools);
+      // Branch based on configuration
+      if (config.useAgentSDK) {
+        await this.startConversationWithSDK(userMessage);
+      } else {
+        await this.startConversationManual(userMessage);
+      }
 
     } catch (error) {
       logger.error(`Error in agent conversation for session ${this.sessionId}:`, error);
@@ -98,6 +94,389 @@ export class AgentOrchestrator {
         true
       ));
     }
+  }
+
+  /**
+   * Start conversation using manual agent loop (original implementation)
+   */
+  async startConversationManual(userMessage) {
+    const session = this.sessionManager.getSession(this.sessionId);
+
+    // Add user message to conversation history
+    this.sessionManager.addToConversationHistory(this.sessionId, {
+      role: 'user',
+      content: userMessage
+    });
+
+    // Build system prompt from config
+    const modelType = session.modelType;
+    const systemPrompt = this.configManager.buildSystemPrompt(modelType);
+
+    // Get tool collections
+    const builtInTools = this.builtInToolProvider.getTools();
+    const dynamicTools = this.dynamicToolProvider.getTools();
+
+    // Start agent conversation loop
+    await this.runAgentConversation(userMessage, systemPrompt, builtInTools, dynamicTools);
+  }
+
+  /**
+   * Start conversation using Claude Agent SDK
+   */
+  async startConversationWithSDK(userMessage) {
+    const session = this.sessionManager.getSession(this.sessionId);
+    const modelType = session.modelType;
+    let systemPrompt = this.configManager.buildSystemPrompt(modelType);
+
+    // Check model token count and handle large models (for SDK mode)
+    const currentModel = session?.clientModel;
+    let modelExceedsLimit = false;
+
+    if (currentModel && modelType === 'sfd') {
+      const modelJson = JSON.stringify(currentModel, null, 2);
+      const tokenCount = countTokens(modelJson);
+      this.sessionManager.updateModelTokenCount(this.sessionId, tokenCount);
+      modelExceedsLimit = this.sessionManager.modelExceedsTokenLimit(this.sessionId);
+
+      logger.log(`SFD Model token count: ${tokenCount} (limit: ${config.maxTokensForEngines}, exceeds: ${modelExceedsLimit})`);
+
+      // If model exceeds limit, write to disk
+      if (modelExceedsLimit && tokenCount > 0) {
+        const sessionTempDir = this.sessionManager.getSessionTempDir(this.sessionId);
+        const modelPath = join(sessionTempDir, 'model.sdjson');
+
+        try {
+          writeFileSync(modelPath, modelJson);
+          logger.log(`Model exceeds token limit. Written to: ${modelPath}`);
+
+          // Add system message to inform Claude about filesystem tools
+          const systemMessage = `\n\n**IMPORTANT: Model Size Notice**\n\nThe current model has exceeded ${config.maxTokensForEngines} tokens (${tokenCount} tokens). The \`generate_quantitative_model\` tool has been disabled.\n\nThe model has been saved to: \`${modelPath}\`\n\nYou can now work with the model using these tools:\n- \`read_model_section\`: Read specific sections of the model (metadata, specs, variables, relationships, modules) with optional filtering\n- \`edit_model_section\`: Edit specific sections by adding, updating, or removing items\n- **Read, Edit, Write**: Use the built-in filesystem tools to directly read and edit the model file at the path above\n\nThese tools allow you to work with large models efficiently without loading the entire model into memory.`;
+
+          systemPrompt += systemMessage;
+        } catch (err) {
+          logger.error(`Failed to write model to disk: ${err.message}`);
+        }
+      }
+    }
+
+    // Start SDK conversation loop
+    await this.runAgentConversationWithSDK(userMessage, systemPrompt, modelExceedsLimit);
+  }
+
+  /**
+   * Run agent conversation using Claude Agent SDK
+   */
+  async runAgentConversationWithSDK(userMessage, systemPrompt, modelExceedsLimit) {
+    // Create abort controller for stop iteration
+    this.abortController = new AbortController();
+
+    const maxIterations = this.configManager.getMaxIterations();
+
+    try {
+      // Build tools list - combine SDK filesystem tools with MCP servers
+      const builtInSdkTools = ['Read', 'Edit', 'Write', 'Glob', 'Grep'];
+
+      let mcpServers = {
+        builtin: this.builtInToolProvider.getMcpServer(modelExceedsLimit)
+      };
+
+      // Get client MCP server
+      const clientMcpServer = this.dynamicToolProvider.getMcpServer();
+      if (clientMcpServer) {
+        mcpServers.client = clientMcpServer;
+      }
+
+      // Build allowed tools list with MCP prefixes
+      const builtInToolNames = this.builtInToolProvider.getToolNames().map(name => `mcp__builtin__${name}`);
+      let allowedTools = [
+        ...builtInSdkTools,      // SDK filesystem tools (no prefix)
+        ...builtInToolNames      // Built-in tools with mcp__builtin__ prefix
+      ];
+
+      // Add client tools if any
+      const clientToolNames = this.dynamicToolProvider.getToolNames();
+      if (clientToolNames.length > 0) {
+        // Remove 'client_' prefix and add 'mcp__client__' prefix
+        const prefixedClientTools = clientToolNames.map(name =>
+          `mcp__client__${name.replace(/^client_/, '')}`
+        );
+        allowedTools.push(...prefixedClientTools);
+      }
+
+      // Prefix tool names in system prompt
+      systemPrompt = this.prefixToolNamesInSystemPrompt(systemPrompt, builtInToolNames, clientToolNames);
+
+      // Build query options with MCP servers
+      const queryOptions = {
+        abortController: this.abortController,
+        systemPrompt: systemPrompt,
+        model: 'claude-sonnet-4-6',
+        maxTokens: 8192,
+        maxTurns: maxIterations,
+        mcpServers: mcpServers,
+        allowedTools: allowedTools,
+        permissionMode: 'bypassPermissions',
+        compact: true  // Enable automatic compaction
+      };
+
+      // If we have an SDK session ID, resume the conversation
+      if (this.sdkSessionId) {
+        queryOptions.resume = this.sdkSessionId;
+        logger.log(`Resuming SDK conversation with session_id: ${this.sdkSessionId}`);
+      } else {
+        logger.log(`Starting new SDK conversation`);
+      }
+
+      // Create query iterator with Agent SDK
+      const queryIterator = query({
+        prompt: userMessage,
+        options: queryOptions
+      });
+
+      // Process messages from SDK
+      for await (const message of queryIterator) {
+        await this.handleSdkMessage(message);
+      }
+
+      // Normal completion
+      logger.log(`Agent conversation completed successfully for session ${this.sessionId}`);
+      await this.sendToClient(createAgentCompleteMessage(
+        this.sessionId,
+        'success',
+        'Task completed successfully'
+      ));
+
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        logger.log(`Agent iteration stopped by user request for session ${this.sessionId}`);
+        await this.sendToClient(createAgentCompleteMessage(
+          this.sessionId,
+          'awaiting_user',
+          'Agent stopped by user request'
+        ));
+      } else {
+        logger.error('Error in agent conversation loop:', error);
+        await this.sendToClient(createErrorMessage(
+          this.sessionId,
+          `Agent error: ${error.message}`,
+          'AGENT_ERROR',
+          true
+        ));
+      }
+    } finally {
+      this.abortController = null;
+    }
+  }
+
+  /**
+   * Remove MCP prefix from tool names for client display
+   */
+  stripMcpPrefix(toolName) {
+    if (toolName.startsWith('mcp__builtin__')) {
+      return toolName.substring('mcp__builtin__'.length);
+    }
+    if (toolName.startsWith('mcp__client__')) {
+      return toolName.substring('mcp__client__'.length);
+    }
+    return toolName;
+  }
+
+  /**
+   * Handle messages from Agent SDK
+   */
+  async handleSdkMessage(message) {
+    switch (message.type) {
+      case 'assistant':
+        await this.handleAssistantMessage(message);
+        break;
+
+      case 'result':
+        await this.handleResultMessage(message);
+        break;
+
+      case 'system':
+        if (message.subtype === 'init') {
+          if (message.session_id) {
+            this.sdkSessionId = message.session_id;
+            logger.log(`SDK initialized for session ${this.sessionId}, SDK session_id: ${this.sdkSessionId}`);
+          }
+        } else if (message.subtype === 'error') {
+          logger.error(`SDK system error for session ${this.sessionId}:`, message.error || message);
+          await this.sendToClient(createErrorMessage(
+            this.sessionId,
+            message.error?.message || 'SDK system error',
+            'SDK_SYSTEM_ERROR',
+            true
+          ));
+        } else {
+          logger.log(`Unhandled system message subtype: ${message.subtype}`, message);
+        }
+        break;
+
+      case 'user':
+        await this.handleUserMessage(message);
+        break;
+
+      default:
+        logger.log(`Unhandled SDK message type: ${message.type}`, message);
+    }
+  }
+
+  /**
+   * Handle assistant messages (text from Claude)
+   */
+  async handleAssistantMessage(message) {
+    const content = message.message?.content;
+
+    if (content && Array.isArray(content)) {
+      for (const block of content) {
+        if (block.type === 'text' && block.text) {
+          const html = await marked.parse(block.text);
+          await this.sendToClient(createAgentTextMessage(this.sessionId, html, false));
+        }
+        else if (block.type === 'thinking' && block.thinking) {
+          //claude code is too chatty -- don't send these!
+          /*const html = await marked.parse(block.thinking);
+          await this.sendToClient(createAgentTextMessage(this.sessionId, html, true));*/
+        }
+        else if (block.type === 'tool_use' && block.name) {
+          this.pendingToolCalls.set(block.id, block.name);
+
+          const isFilesystemTool = ['Read', 'Edit', 'Write', 'Glob', 'Grep'].includes(block.name);
+          const isBuiltInMcpTool = block.name.startsWith('mcp__builtin__');
+          const isBuiltIn = isFilesystemTool || isBuiltInMcpTool;
+
+          const displayName = this.stripMcpPrefix(block.name);
+
+          await this.sendToClient(createToolCallNotificationMessage(
+            this.sessionId,
+            block.id,
+            displayName,
+            block.input || {},
+            isBuiltIn
+          ));
+
+          logger.log(`Tool use notification sent: ${block.name} (${block.id}) - isBuiltIn: ${isBuiltIn}`);
+        }
+        else if (block.type === 'tool_result' && block.tool_use_id) {
+          const toolName = this.pendingToolCalls.get(block.tool_use_id) || 'unknown';
+          const displayName = this.stripMcpPrefix(toolName);
+
+          // Log errors more prominently
+          if (block.is_error) {
+            logger.error(`Tool error for ${toolName} (${block.tool_use_id}):`, block.content);
+          } else {
+            logger.log(`Tool result received in assistant message for ${toolName} (${block.tool_use_id})`);
+          }
+
+          await this.sendToClient(createToolCallCompletedMessage(
+            this.sessionId,
+            block.tool_use_id,
+            displayName,
+            block.content,
+            block.is_error || false,
+            'other'
+          ));
+
+          this.pendingToolCalls.delete(block.tool_use_id);
+        }
+      }
+    }
+  }
+
+  /**
+   * Handle user messages (tool results being sent back to Claude)
+   */
+  async handleUserMessage(message) {
+    const content = message.message?.content;
+
+    if (content && Array.isArray(content)) {
+      for (const block of content) {
+        if (block.type === 'tool_result' && block.tool_use_id) {
+          const toolName = this.pendingToolCalls.get(block.tool_use_id) || 'unknown';
+          const displayName = this.stripMcpPrefix(toolName);
+
+          // Log errors more prominently
+          if (block.is_error) {
+            logger.error(`Tool error for ${toolName} (${block.tool_use_id}):`, block.content);
+          } else {
+            logger.log(`Tool result received for ${toolName} (${block.tool_use_id})`);
+          }
+
+          await this.sendToClient(createToolCallCompletedMessage(
+            this.sessionId,
+            block.tool_use_id,
+            displayName,
+            block.content,
+            block.is_error || false,
+            'other'
+          ));
+
+          this.pendingToolCalls.delete(block.tool_use_id);
+        }
+      }
+    }
+  }
+
+  /**
+   * Handle result messages (conversation completion)
+   */
+  async handleResultMessage(message) {
+    if (message.subtype === 'success') {
+      logger.log(`SDK conversation completed successfully for session ${this.sessionId}`);
+    } else if (message.subtype === 'error') {
+      logger.error(`SDK conversation error for session ${this.sessionId}:`, message.error || message);
+    } else if (message.subtype === 'tool_error') {
+      logger.error(`SDK tool error for session ${this.sessionId}:`, message);
+    } else {
+      logger.log(`Unhandled result message subtype: ${message.subtype}`, message);
+    }
+  }
+
+  /**
+   * Prefix tool names in system prompt for SDK mode
+   * Scans the system prompt and adds mcp__ prefixes to tool names
+   */
+  prefixToolNamesInSystemPrompt(systemPrompt, builtInToolNames, clientToolNames) {
+    let modifiedPrompt = systemPrompt;
+
+    // Create mapping of unprefixed tool names to prefixed versions
+    const toolNameMapping = {};
+
+    // Built-in tools: tool_name -> mcp__builtin__tool_name
+    for (const prefixedName of builtInToolNames) {
+      const unprefixedName = prefixedName.replace(/^mcp__builtin__/, '');
+      toolNameMapping[unprefixedName] = prefixedName;
+    }
+
+    // Client tools: client_tool_name -> mcp__client__tool_name
+    for (const clientToolName of clientToolNames) {
+      const unprefixedName = clientToolName.replace(/^client_/, '');
+      const prefixedName = `mcp__client__${unprefixedName}`;
+      toolNameMapping[clientToolName] = prefixedName;
+      // Also map the unprefixed name
+      toolNameMapping[unprefixedName] = prefixedName;
+    }
+
+    // Replace tool names in the system prompt
+    // Look for patterns like `tool_name` or **tool_name** or tool_name (surrounded by word boundaries)
+    for (const [unprefixed, prefixed] of Object.entries(toolNameMapping)) {
+      // Match tool names in backticks, bold, or standalone
+      const patterns = [
+        new RegExp(`\`${unprefixed}\``, 'g'),           // `tool_name`
+        new RegExp(`\\*\\*${unprefixed}\\*\\*`, 'g'),   // **tool_name**
+        new RegExp(`\\b${unprefixed}\\b`, 'g')          // tool_name (word boundary)
+      ];
+
+      for (const pattern of patterns) {
+        modifiedPrompt = modifiedPrompt.replace(pattern, (match) => {
+          // Preserve the formatting around the tool name
+          return match.replace(unprefixed, prefixed);
+        });
+      }
+    }
+
+    return modifiedPrompt;
   }
 
   /**
