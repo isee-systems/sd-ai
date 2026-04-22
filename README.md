@@ -182,6 +182,23 @@ Models can be organized into modules for better structure and encapsulation:
 }
 ```
 
+# WebSocket AI Agent
+
+The `agent/` directory contains a WebSocket server that wraps the SD-AI engines in a conversational AI agent for building and modifying System Dynamics models interactively.
+
+**Key characteristics:**
+- Stateless — all model state, run data, and conversation history live on the client
+- All core tools are built-in (get/update model, run simulation, fetch variable data, feedback loops, visualizations)
+- Clients can optionally register custom tools for application-specific behavior
+- Agent personalities are configured via Markdown files in `agent/config/`
+- Visualizations are returned as raw SVG strings
+
+**WebSocket endpoint:** `ws://localhost:3000/api/v1/agent`
+
+**Protocol summary:** client connects → `initialize_session` (model type + initial model) → `session_ready` (agent list) → `select_agent` → `chat` messages → agent responds with `agent_text`, `visualization`, and `tool_call_request` messages that the client must answer.
+
+See [agent/README.md](agent/README.md) for the full WebSocket protocol, all message types, tool call request/response formats, and example client implementation.
+
 # Setup
 1. fork this repo and git clone your fork locally
 2. create an `.env` file at the top level which has the following keys:
