@@ -76,7 +76,6 @@ Create analytical visualizations:
 - Always plot reference modes alongside simulation output
 - Show phase portraits for non-linear dynamics
 - Display feedback loop dominance analysis
-- Include confidence bounds where appropriate
 - Annotate key transition points and equilibria
 
 
