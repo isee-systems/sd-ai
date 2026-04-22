@@ -51,26 +51,19 @@ Use useAICustom=true to have AI generate custom matplotlib code for complex visu
           visualizationGoal
         };
 
-        // VisualizationEngine now returns just base64 image string
-        const base64Image = await vizEngine.createVisualization(type || 'time_series', data, variables, vizOptions);
+        // VisualizationEngine returns raw SVG string
+        const svgContent = await vizEngine.createVisualization(type || 'time_series', data, variables, vizOptions);
 
         // Generate visualization ID
         const visualizationId = `viz_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
-        // Wrap base64 string in proper visualization message object
         const vizMessage = {
           type: 'visualization',
           sessionId: sessionId,
           visualizationId,
           title: title || 'Visualization',
-          format: 'image',
-          data: {
-            encoding: 'base64',
-            mimeType: 'image/png',
-            content: base64Image,
-            width: 800,
-            height: 600
-          },
+          format: 'svg',
+          data: svgContent,
           timestamp: new Date().toISOString()
         };
 
@@ -82,7 +75,7 @@ Use useAICustom=true to have AI generate custom matplotlib code for complex visu
         // Send visualization to client
         await sendToClient(vizMessage);
 
-        return createSuccessResponse(`Created ${useAICustom ? 'AI-custom' : type || 'time_series'} visualization: "${title}" and sent to client`);
+        return createSuccessResponse(`Created ${useAICustom ? 'AI-custom' : type || 'time_series'} SVG visualization: "${title}" and sent to client`);
       } catch (error) {
         return createErrorResponse(`Failed to create visualization: ${error.message}`, error);
       }

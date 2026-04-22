@@ -14,7 +14,7 @@ const __dirname = dirname(__filename);
  * Creates visualizations using Python/matplotlib
  *
  * Key Features:
- * - Always returns base64 encoded PNG images
+ * - Always returns SVG string
  * - Python/matplotlib for template-based visualizations
  * - AI-generated custom Python code for unique requirements
  * - Session-specific temp folder management
@@ -64,7 +64,7 @@ export class VisualizationEngine {
   }
 
   /**
-   * Create visualization - always returns base64 encoded PNG image
+   * Create visualization - always returns SVG string
    */
   async createVisualization(type, data, variables, options = {}) {
     const useAICustom = options.useAICustom || false;
@@ -77,15 +77,15 @@ export class VisualizationEngine {
   }
 
   /**
-   * Create custom visualization using AI to write Python/matplotlib code - returns base64 image only
+   * Create custom visualization using AI to write Python/matplotlib code - returns SVG string
    */
   async createAICustomVisualization(data, variables, options) {
     const vizId = this.generateVizId();
     const scriptPath = this.validatePath(join(this.sessionTempDir, `visualization-${vizId}.py`));
     const dataPath = this.validatePath(join(this.sessionTempDir, `data-${vizId}.json`));
-    const outputPath = this.validatePath(join(this.sessionTempDir, `visualization-${vizId}.png`));
+    const outputPath = this.validatePath(join(this.sessionTempDir, `visualization-${vizId}.svg`));
 
-    let base64Image = null;
+    let svgContent = null;
     let error = null;
 
     try {
@@ -101,19 +101,14 @@ export class VisualizationEngine {
       // 3. Execute Python script
       await this.executePythonScript(scriptPath);
 
-      // 4. Read generated image and validate it's a PNG
-      const imageBuffer = readFileSync(outputPath);
+      // 4. Read generated SVG and validate
+      const fileContent = readFileSync(outputPath, 'utf8');
 
-      // Validate PNG signature (first 8 bytes: 89 50 4E 47 0D 0A 1A 0A)
-      if (imageBuffer.length < 8 ||
-          imageBuffer[0] !== 0x89 || imageBuffer[1] !== 0x50 ||
-          imageBuffer[2] !== 0x4E || imageBuffer[3] !== 0x47 ||
-          imageBuffer[4] !== 0x0D || imageBuffer[5] !== 0x0A ||
-          imageBuffer[6] !== 0x1A || imageBuffer[7] !== 0x0A) {
-        throw new Error('Generated file is not a valid PNG image');
+      if (!fileContent.includes('<svg') && !fileContent.includes('<?xml')) {
+        throw new Error('Generated file is not a valid SVG image');
       }
 
-      base64Image = imageBuffer.toString('base64');
+      svgContent = fileContent;
 
     } catch (err) {
       error = err;
@@ -127,7 +122,7 @@ export class VisualizationEngine {
       }
     }
 
-    return base64Image;
+    return svgContent;
   }
 
   /**
@@ -145,10 +140,9 @@ export class VisualizationEngine {
 Requirements:
 - Use matplotlib with Agg backend (set BEFORE importing pyplot)
 - Load JSON data and create the visualization
-- Save as PNG with maximum compatibility for image display widgets
+- Save as SVG using plt.savefig with format='svg'
 - Include labels, titles, legends
-- Make it clear and professional
-- CRITICAL: Set opaque white backgrounds at ALL levels (figure, axes, and savefig)`;
+- Make it clear and professional`;
 
     const userPrompt = `Generate Python code for this visualization:
 
@@ -156,17 +150,15 @@ Data: ${dataPath}
 Variables: ${variables.join(', ')}
 Goal: ${visualizationGoal}
 Output: ${outputPath}
-Size: ${(options.width || 800)/100}x${(options.height || 600)/100} inches, 300 DPI
+Size: ${(options.width || 800)/100}x${(options.height || 600)/100} inches
 
 Data structure: JSON with 'time' array and variable arrays: ${variables.map(v => `'${v}'`).join(', ')}
 
 ${options.customRequirements ? `Requirements: ${options.customRequirements}\n` : ''}
-CRITICAL - Background settings (REQUIRED for proper display):
+Required:
 1. Import order: matplotlib.use('Agg') BEFORE import matplotlib.pyplot
 2. Suppress warnings: warnings.filterwarnings('ignore')
-3. After creating figure: fig.patch.set_facecolor('white') AND fig.patch.set_alpha(1.0)
-4. For each axes: ax.set_facecolor('white') AND ax.patch.set_alpha(1.0)
-5. Save with: plt.savefig(path, format='png', dpi=300, bbox_inches='tight', facecolor='white', edgecolor='none', transparent=False)
+3. Save with: plt.savefig(path, format='svg', bbox_inches='tight')
 
 Generate ONLY working Python code, no explanations.`;
 
@@ -248,15 +240,15 @@ Generate ONLY working Python code, no explanations.`;
   }
 
   /**
-   * Create visualization using Python (matplotlib) - returns base64 image only
+   * Create visualization using Python (matplotlib) - returns SVG string
    */
   async createVisualizationWithPython(type, data, variables, options) {
     const vizId = this.generateVizId();
     const scriptPath = this.validatePath(join(this.sessionTempDir, `visualization-${vizId}.py`));
     const dataPath = this.validatePath(join(this.sessionTempDir, `data-${vizId}.json`));
-    const outputPath = this.validatePath(join(this.sessionTempDir, `visualization-${vizId}.png`));
+    const outputPath = this.validatePath(join(this.sessionTempDir, `visualization-${vizId}.svg`));
 
-    let base64Image = null;
+    let svgContent = null;
     let error = null;
 
     try {
@@ -272,19 +264,14 @@ Generate ONLY working Python code, no explanations.`;
       // 3. Execute Python script
       await this.executePythonScript(scriptPath);
 
-      // 4. Read generated image and validate it's a PNG
-      const imageBuffer = readFileSync(outputPath);
+      // 4. Read generated SVG and validate
+      const fileContent = readFileSync(outputPath, 'utf8');
 
-      // Validate PNG signature (first 8 bytes: 89 50 4E 47 0D 0A 1A 0A)
-      if (imageBuffer.length < 8 ||
-          imageBuffer[0] !== 0x89 || imageBuffer[1] !== 0x50 ||
-          imageBuffer[2] !== 0x4E || imageBuffer[3] !== 0x47 ||
-          imageBuffer[4] !== 0x0D || imageBuffer[5] !== 0x0A ||
-          imageBuffer[6] !== 0x1A || imageBuffer[7] !== 0x0A) {
-        throw new Error('Generated file is not a valid PNG image');
+      if (!fileContent.includes('<svg') && !fileContent.includes('<?xml')) {
+        throw new Error('Generated file is not a valid SVG image');
       }
 
-      base64Image = imageBuffer.toString('base64');
+      svgContent = fileContent;
 
     } catch (err) {
       error = err;
@@ -298,7 +285,7 @@ Generate ONLY working Python code, no explanations.`;
       }
     }
 
-    return base64Image;
+    return svgContent;
   }
 
   /**
@@ -308,7 +295,7 @@ Generate ONLY working Python code, no explanations.`;
     const filesToDelete = [
       join(this.sessionTempDir, `visualization-${vizId}.py`),
       join(this.sessionTempDir, `data-${vizId}.json`),
-      join(this.sessionTempDir, `visualization-${vizId}.png`)
+      join(this.sessionTempDir, `visualization-${vizId}.svg`)
     ];
 
     for (const file of filesToDelete) {
@@ -362,12 +349,7 @@ warnings.filterwarnings('ignore')
 with open('${dataPath}', 'r') as f:
     data = json.load(f)
 
-# Create figure with high-resolution settings and explicit white background
-fig, ax = plt.subplots(figsize=(${(options.width || 800)/100}, ${(options.height || 600)/100}), dpi=300)
-fig.patch.set_facecolor('white')
-fig.patch.set_alpha(1.0)
-ax.set_facecolor('white')
-ax.patch.set_alpha(1.0)
+fig, ax = plt.subplots(figsize=(${(options.width || 800)/100}, ${(options.height || 600)/100}))
 
 # Plot each variable
 ${variables.map((v, idx) => `
@@ -385,8 +367,7 @@ ax.grid(True, alpha=0.3)
 ${highlightPeriodsCode}
 
 plt.tight_layout()
-# Save with explicit white background and no transparency
-plt.savefig('${outputPath}', format='png', dpi=300, bbox_inches='tight', facecolor='white', edgecolor='none', transparent=False)
+plt.savefig('${outputPath}', format='svg', bbox_inches='tight')
 plt.close()
 print('Visualization saved')
 `.trim();
@@ -409,11 +390,7 @@ warnings.filterwarnings('ignore')
 with open('${dataPath}', 'r') as f:
     data = json.load(f)
 
-fig, ax = plt.subplots(figsize=(8, 6), dpi=300)
-fig.patch.set_facecolor('white')
-fig.patch.set_alpha(1.0)
-ax.set_facecolor('white')
-ax.patch.set_alpha(1.0)
+fig, ax = plt.subplots(figsize=(8, 6))
 
 time = np.array(data['time'])
 x = np.array(data['${xVar}'])
@@ -435,7 +412,7 @@ cbar = plt.colorbar(scatter, ax=ax)
 cbar.set_label('Time', fontsize=10)
 
 plt.tight_layout()
-plt.savefig('${outputPath}', format='png', dpi=300, bbox_inches='tight', facecolor='white', edgecolor='none', transparent=False)
+plt.savefig('${outputPath}', format='svg', bbox_inches='tight')
 plt.close()
 print('Visualization saved')
 `.trim();
@@ -465,11 +442,7 @@ warnings.filterwarnings('ignore')
 with open('${dataPath}', 'r') as f:
     data = json.load(f)
 
-fig, ax = plt.subplots(figsize=(${(options.width || 800)/100}, ${(options.height || 600)/100}), dpi=300)
-fig.patch.set_facecolor('white')
-fig.patch.set_alpha(1.0)
-ax.set_facecolor('white')
-ax.patch.set_alpha(1.0)
+fig, ax = plt.subplots(figsize=(${(options.width || 800)/100}, ${(options.height || 600)/100}))
 
 # Get time array
 time = data.get('time', [])
@@ -527,7 +500,7 @@ else:
             ha='center', va='center', transform=ax.transAxes, fontsize=12)
 
 plt.tight_layout()
-plt.savefig('${outputPath}', format='png', dpi=300, bbox_inches='tight', facecolor='white', edgecolor='none', transparent=False)
+plt.savefig('${outputPath}', format='svg', bbox_inches='tight')
 plt.close()
 print('Visualization saved')
 `.trim();
@@ -551,11 +524,7 @@ warnings.filterwarnings('ignore')
 with open('${dataPath}', 'r') as f:
     data = json.load(f)
 
-fig, ax = plt.subplots(figsize=(${(options.width || 800)/100}, ${(options.height || 600)/100}), dpi=300)
-fig.patch.set_facecolor('white')
-fig.patch.set_alpha(1.0)
-ax.set_facecolor('white')
-ax.patch.set_alpha(1.0)
+fig, ax = plt.subplots(figsize=(${(options.width || 800)/100}, ${(options.height || 600)/100}))
 
 runs = data.get('runs', [])
 colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
@@ -577,7 +546,7 @@ ax.legend(loc='best')
 ax.grid(True, alpha=0.3)
 
 plt.tight_layout()
-plt.savefig('${outputPath}', format='png', dpi=300, bbox_inches='tight', facecolor='white', edgecolor='none', transparent=False)
+plt.savefig('${outputPath}', format='svg', bbox_inches='tight')
 plt.close()
 print('Visualization saved')
 `.trim();

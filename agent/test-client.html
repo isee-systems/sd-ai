@@ -258,16 +258,6 @@
       color: #2c3e50;
     }
 
-    .visualization-item img {
-      max-width: 100%;
-      width: 100%;
-      height: auto;
-      border-radius: 4px;
-      border: 1px solid #e0e0e0;
-      display: block;
-      object-fit: contain;
-    }
-
     .visualization-meta {
       font-size: 12px;
       color: #7f8c8d;
@@ -369,7 +359,7 @@
         <div class="panel">
           <h2>Visualizations</h2>
           <div class="info-box">
-            Base64-encoded PNG images from create_visualization tool
+            SVG figures from create_visualization tool
           </div>
           <div id="visualizations" style="display: flex; flex-direction: column; gap: 15px;">
             <p style="color: #7f8c8d; font-style: italic;">No visualizations yet</p>
@@ -708,14 +698,20 @@
         vizItem.appendChild(descEl);
       }
 
-      // Display the image (new format: data.content with data.encoding)
-      if (format === 'image' && data && data.content && data.encoding === 'base64') {
-        const img = document.createElement('img');
-        img.src = `data:${data.mimeType || 'image/png'};base64,${data.content}`;
-        img.alt = title || 'Visualization';
-        if (data.width) img.width = data.width;
-        if (data.height) img.height = data.height;
-        vizItem.appendChild(img);
+      // Display inline SVG
+      if (format === 'svg' && data) {
+        const svgContainer = document.createElement('div');
+        svgContainer.style.width = '100%';
+        svgContainer.style.overflow = 'hidden';
+        svgContainer.innerHTML = data;
+        const svgEl = svgContainer.querySelector('svg');
+        if (svgEl) {
+          svgEl.removeAttribute('width');
+          svgEl.removeAttribute('height');
+          svgEl.style.width = '100%';
+          svgEl.style.height = 'auto';
+        }
+        vizItem.appendChild(svgContainer);
       } else {
         const errorMsg = document.createElement('p');
         errorMsg.textContent = 'Unsupported visualization format or missing data';
