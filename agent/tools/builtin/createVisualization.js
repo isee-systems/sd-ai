@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import logger from '../../../utilities/logger.js';
+import { createSuccessResponse, createErrorResponse } from './toolHelpers.js';
 
 /**
  * Create a data visualization and send it to the client
@@ -82,18 +82,9 @@ Use useAICustom=true to have AI generate custom matplotlib code for complex visu
         // Send visualization to client
         await sendToClient(vizMessage);
 
-        return {
-          content: [{
-            type: 'text',
-            text: `Created ${useAICustom ? 'AI-custom' : type || 'time_series'} visualization: "${title}" and sent to client`
-          }]
-        };
+        return createSuccessResponse(`Created ${useAICustom ? 'AI-custom' : type || 'time_series'} visualization: "${title}" and sent to client`);
       } catch (error) {
-        logger.debug('Visualization error:', error);
-        return {
-          content: [{ type: 'text', text: `Failed to create visualization: ${error.message}` }],
-          isError: true
-        };
+        return createErrorResponse(`Failed to create visualization: ${error.message}`, error);
       }
     }
   };

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { SDModelSchema } from '../../utilities/MessageProtocol.js';
 import { callLTMEngine } from '../../utilities/EngineWrapper.js';
+import { createSuccessResponse, createErrorResponse } from './toolHelpers.js';
 
 /**
  * Generate a narrative explanation of feedback loops and their influence on model behavior
@@ -20,26 +21,15 @@ export function createGenerateLtmNarrativeTool() {
         const result = await callLTMEngine(model, feedbackLoops, parameters);
 
         if (!result.success) {
-          return {
-            content: [{ type: 'text', text: `Error: ${result.error}` }],
-            isError: true
-          };
+          return createErrorResponse(result.error);
         }
 
-        return {
-          content: [{
-            type: 'text',
-            text: JSON.stringify({
-              feedbackLoops: result.feedbackLoops,
-              output: result.output
-            }, null, 2)
-          }]
-        };
+        return createSuccessResponse({
+          feedbackLoops: result.feedbackLoops,
+          output: result.output
+        });
       } catch (error) {
-        return {
-          content: [{ type: 'text', text: `Error: ${error.message}` }],
-          isError: true
-        };
+        return createErrorResponse(error.message);
       }
     }
   };

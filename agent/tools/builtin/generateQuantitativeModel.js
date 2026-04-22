@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { SDModelSchema, createUpdateModelMessage } from '../../utilities/MessageProtocol.js';
 import { callQuantitativeEngine } from '../../utilities/EngineWrapper.js';
-import { generateRequestId } from './toolHelpers.js';
+import { generateRequestId, createSuccessResponse, createErrorResponse } from './toolHelpers.js';
 import config from '../../../config.js';
 
 /**
@@ -25,22 +25,15 @@ export function createGenerateQuantitativeModelTool(sessionManager, sessionId, s
       try {
         // Check if model exceeds token limit - if so, refuse to call this tool
         if (sessionManager.modelExceedsTokenLimit(sessionId)) {
-          return {
-            content: [{
-              type: 'text',
-              text: `Error: Cannot use generate_quantitative_model when the model exceeds the token limit (${config.maxTokensForEngines} tokens). The model is currently ${sessionManager.getModelTokenCount(sessionId)} tokens. Please use read_model_section and edit_model_section tools instead to work with large models.`
-            }],
-            isError: true
-          };
+          return createErrorResponse(
+            `Cannot use generate_quantitative_model when the model exceeds the token limit (${config.maxTokensForEngines} tokens). The model is currently ${sessionManager.getModelTokenCount(sessionId)} tokens. Please use read_model_section and edit_model_section tools instead to work with large models.`
+          );
         }
 
         const result = await callQuantitativeEngine(prompt, currentModel, parameters);
 
         if (!result.success) {
-          return {
-            content: [{ type: 'text', text: `Error: ${result.error}` }],
-            isError: true
-          };
+          return createErrorResponse(result.error);
         }
 
         // Automatically push the generated model to the client
@@ -67,23 +60,13 @@ export function createGenerateQuantitativeModelTool(sessionManager, sessionId, s
         await updatePromise;
 
         // Build response
-        const responseText = JSON.stringify({
+        return createSuccessResponse({
           model: result.model,
           supportingInfo: result.supportingInfo,
           pushedToClient: true
-        }, null, 2);
-
-        return {
-          content: [{
-            type: 'text',
-            text: responseText
-          }]
-        };
+        });
       } catch (error) {
-        return {
-          content: [{ type: 'text', text: `Error: ${error.message}` }],
-          isError: true
-        };
+        return createErrorResponse(error.message);
       }
     }
   };

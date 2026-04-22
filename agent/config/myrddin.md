@@ -120,7 +120,7 @@ Create analytical visualizations:
 4. **validate_structure**
    Check dimensional consistency, conservation laws, boundary adequacy
 5. **recommend_tests**
-   Suggest extreme conditions tests and sensitivity analysis
+   Suggest extreme conditions tests
 
 ### on_modification_request
 1. **inspect_current_model**
@@ -147,8 +147,6 @@ Create analytical visualizations:
    Tools: discuss_model_with_seldon
 5. **interpret_results**
    Explain behavior in terms of feedback loop dominance and SD theory
-6. **suggest_policy_tests**
-   Recommend policy experiments based on loop analysis
 
 ## Communication Style
 **Style:** direct, technical, efficient

@@ -12,16 +12,49 @@ import { z } from 'zod';
 /**
  * SD-JSON Model Schema
  * Accepts any model structure (CLD or SFD) with minimal validation
- * Uses passthrough to allow additional fields defined by LLMWrapper schemas
+ * Uses catchall to allow additional fields defined by LLMWrapper schemas
  */
+export const SDVariableSchema = z.object({
+  name: z.string(),
+  type: z.enum(["stock", "flow", "variable"])
+}).catchall(z.any());
+
+export const SDRelationshipSchema = z.object({
+  from: z.string(),
+  to: z.string()
+}).catchall(z.any());
+
 export const SDModelSchema = z.object({
-  variables: z.array(z.any()).optional().describe('Array of variables in the model (stocks, flows, auxiliaries, or CLD nodes)'),
-  relationships: z.array(z.any()).optional().describe('Array of relationships between variables (links, flows, or causal connections)'),
-  specs: z.object({}).passthrough().optional().describe('Model specifications including simulation settings, time bounds, and units'),
-  modules: z.array(z.any()).optional().describe('Array of modules or subsystems within the model'),
-  explanation: z.string().optional().describe('Natural language explanation of the model purpose and structure'),
-  title: z.string().optional().describe('Human-readable title of the model')
-}).passthrough().describe('SD-JSON model structure (CLD or SFD)');
+  variables: z.array(SDVariableSchema).optional(),
+  relationships: z.array(SDRelationshipSchema).optional(),
+  specs: z.record(z.string(), z.any()).optional(),
+  modules: z.array(z.any()).optional(),
+  errors: z.array(z.any()).optional(),
+  explanation: z.string().optional(),
+  title: z.string().optional()
+}).catchall(z.any()).describe('SD-JSON model structure (CLD or SFD)');
+
+/**
+ * Feedback Content Schema
+ * Used for feedback loop analysis data
+ */
+export const FeedbackContentSchema = z.object({
+  feedbackLoops: z.array(z.object({
+    identifier: z.string(),
+    name: z.string(),
+    links: z.array(z.object({
+      from: z.string(),
+      to: z.string(),
+      polarity: z.enum(['+', '-', '?'])
+    }).catchall(z.any())),
+    polarity: z.enum(['+', '-', '?'])
+  }).catchall(z.any())),
+  dominantLoopsByPeriod: z.array(z.object({
+    dominantLoops: z.array(z.string()),
+    startTime: z.number(),
+    endTime: z.number()
+  })).optional()
+}).catchall(z.any()).describe('Feedback loop analysis data including loops and optional dominant loops by period');
 
 // ============================================================================
 // CLIENT → SERVER MESSAGES
@@ -32,7 +65,7 @@ export const ToolDefinitionSchema = z.object({
   description: z.string().describe('Human-readable description of what the tool does'),
   inputSchema: z.object({
     type: z.literal('object').describe('Schema type, must be "object"'),
-    properties: z.record(z.any()).describe('Map of parameter names to their schema definitions'),
+    properties: z.record(z.string(), z.any()).describe('Map of parameter names to their schema definitions'),
     required: z.array(z.string()).optional().describe('Array of required parameter names')
   }).describe('JSON Schema defining the tool input parameters')
 });
@@ -55,10 +88,10 @@ export const InitializeSessionMessageSchema = z.object({
   clientProduct: z.string().describe('Client product name (e.g., "sd-web", "sd-desktop")'),
   clientVersion: z.string().describe('Client version (e.g., "1.0.0")'),
   modelType: z.enum(['cld', 'sfd']).describe('Model type: CLD (Causal Loop Diagram) or SFD (Stock Flow Diagram). This cannot be changed during the session.'),
-  model: SDModelSchema.describe('The initial model to work with'),
+  model: SDModelSchema,
   tools: z.array(ToolDefinitionSchema).describe('Array of client-side tools available for the agent to call'),
   historicalMessages: z.array(HistoricalMessageSchema).optional().describe('Optional array of historical messages from a previous session to provide context'),
-  context: z.record(z.any()).optional().describe('Optional context information (metadata, user preferences, etc.)'),
+  context: z.record(z.string(), z.any()).optional().describe('Optional context information (metadata, user preferences, etc.)'),
   timestamp: z.string().optional().describe('ISO 8601 timestamp of when the message was created')
 });
 
@@ -88,7 +121,7 @@ export const ToolCallResponseMessageSchema = z.object({
 export const ModelUpdatedNotificationSchema = z.object({
   type: z.literal('model_updated_notification').describe('Message type identifier'),
   sessionId: z.string().describe('Unique session identifier'),
-  model: SDModelSchema.describe('The updated model data'),
+  model: SDModelSchema,
   changeReason: z.string().describe('Human-readable explanation of why the model was updated'),
   timestamp: z.string().optional().describe('ISO 8601 timestamp of when the message was created')
 });

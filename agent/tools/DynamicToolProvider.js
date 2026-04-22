@@ -2,21 +2,21 @@ import { StructuredOutputToZodConverter } from '../../utilities/StructuredOutput
 import logger from '../../utilities/logger.js';
 
 /**
- * DynamicToolServer
- * Creates an MCP server from client-registered tools
+ * DynamicToolProvider
+ * Provides tools from client-registered tool definitions
  *
  * Handles:
- * - Converting client tool definitions to MCP format
+ * - Converting client tool definitions to tool collection format
  * - Proxying tool calls to client via WebSocket
  * - Waiting for client responses with timeout
  * - Special handling for get_current_model and update_model
  */
-export class DynamicToolServer {
+export class DynamicToolProvider {
   constructor(sessionManager, sessionId, sendToClient) {
     this.sessionManager = sessionManager;
     this.sessionId = sessionId;
     this.sendToClient = sendToClient;
-    this.mcpServer = null;
+    this.toolCollection = null;
 
     // Initialize schema converter
     this.schemaConverter = new StructuredOutputToZodConverter();
@@ -34,16 +34,16 @@ export class DynamicToolServer {
     // Store registered tools
     session.registeredTools = clientTools;
 
-    // Create MCP server from client tools
-    this.mcpServer = this.createMcpServerFromClientTools(clientTools);
+    // Create tool collection from client tools
+    this.toolCollection = this.createToolCollectionFromClientTools(clientTools);
 
     logger.log(`Updated dynamic tools for session ${this.sessionId}: ${clientTools.map(t => `client_${t.name}`).join(', ')}`);
   }
 
   /**
-   * Create MCP server from client tool definitions
+   * Create tool collection from client tool definitions
    */
-  createMcpServerFromClientTools(clientTools) {
+  createToolCollectionFromClientTools(clientTools) {
     const tools = {};
 
     for (const toolDef of clientTools) {
@@ -181,16 +181,16 @@ export class DynamicToolServer {
   }
 
   /**
-   * Get the MCP server
+   * Get the tool collection
    */
-  getMcpServer() {
-    return this.mcpServer;
+  getTools() {
+    return this.toolCollection;
   }
 
   /**
    * Get list of registered client tool names (with client_ prefix)
    */
-  getClientToolNames() {
+  getToolNames() {
     const session = this.sessionManager.getSession(this.sessionId);
     return session?.registeredTools.map(t => `client_${t.name}`) || [];
   }

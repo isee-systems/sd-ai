@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { SDModelSchema } from '../../utilities/MessageProtocol.js';
 import { callSeldonMentorEngine } from '../../utilities/EngineWrapper.js';
+import { createSuccessResponse, createErrorResponse } from './toolHelpers.js';
 
 /**
  * Ask thoughtful questions to the user to guide their learning
@@ -22,23 +23,12 @@ export function createDiscussWithMentorTool() {
         const result = await callSeldonMentorEngine(prompt, model, parameters);
 
         if (!result.success) {
-          return {
-            content: [{ type: 'text', text: `Error: ${result.error}` }],
-            isError: true
-          };
+          return createErrorResponse(result.error);
         }
 
-        return {
-          content: [{
-            type: 'text',
-            text: JSON.stringify(result.output, null, 2)
-          }]
-        };
+        return createSuccessResponse(result.output);
       } catch (error) {
-        return {
-          content: [{ type: 'text', text: `Error: ${error.message}` }],
-          isError: true
-        };
+        return createErrorResponse(error.message);
       }
     }
   };

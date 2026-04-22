@@ -921,9 +921,9 @@ NEVER identify feedback loops for the user in explanatory text. Let users discov
             throw new Error("Unsupported LLM " + this.#data.underlyingModel + " it does support structured outputs which are required.");
         }
 
-        let messages = [{ 
-            role: systemRole, 
-            content: systemPrompt 
+        let messages = [{
+            role: systemRole,
+            content: systemPrompt
         }];
 
         if (this.#data.backgroundKnowledge) {
@@ -939,7 +939,8 @@ NEVER identify feedback loops for the user in explanatory text. Let users discov
             });
         }
 
-        if (lastModel) {
+        // Check if lastModel has actual content (variables or relationships)
+        if (lastModel && (lastModel.variables?.length > 0 || lastModel.relationships?.length > 0)) {
             messages.push({ role: "assistant", content: JSON.stringify(lastModel, null, 2) });
 
             if (this.#data.assistantPrompt)
@@ -959,6 +960,15 @@ NEVER identify feedback loops for the user in explanatory text. Let users discov
     }
 
     async generateModel(userPrompt, lastModel) {
+        // Ensure lastModel is always defined as an empty model structure if undefined or null
+        if (!lastModel || typeof lastModel !== 'object') {
+            lastModel = { variables: [], relationships: [] };
+        } else {
+            // Ensure required arrays exist
+            lastModel.variables = lastModel.variables || [];
+            lastModel.relationships = lastModel.relationships || [];
+        }
+
         const llmParams = this.setupLLMParameters(userPrompt, lastModel);
 
         //get what it thinks the relationships are with this information

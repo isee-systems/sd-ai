@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { SDModelSchema, createUpdateModelMessage } from '../../utilities/MessageProtocol.js';
 import { callDocumentationEngine } from '../../utilities/EngineWrapper.js';
-import { generateRequestId } from './toolHelpers.js';
+import { generateRequestId, createSuccessResponse, createErrorResponse } from './toolHelpers.js';
 
 /**
  * Auto-generate documentation for model variables
@@ -20,10 +20,7 @@ export function createGenerateDocumentationTool(sessionManager, sessionId, sendT
         const result = await callDocumentationEngine(model, parameters);
 
         if (!result.success) {
-          return {
-            content: [{ type: 'text', text: `Error: ${result.error}` }],
-            isError: true
-          };
+          return createErrorResponse(result.error);
         }
 
         // Automatically push the generated model to the client
@@ -49,20 +46,12 @@ export function createGenerateDocumentationTool(sessionManager, sessionId, sendT
 
         await updatePromise;
 
-        return {
-          content: [{
-            type: 'text',
-            text: JSON.stringify({
-              model: result.model,
-              supportingInfo: result.supportingInfo
-            }, null, 2)
-          }]
-        };
+        return createSuccessResponse({
+          model: result.model,
+          supportingInfo: result.supportingInfo
+        });
       } catch (error) {
-        return {
-          content: [{ type: 'text', text: `Error: ${error.message}` }],
-          isError: true
-        };
+        return createErrorResponse(error.message);
       }
     }
   };

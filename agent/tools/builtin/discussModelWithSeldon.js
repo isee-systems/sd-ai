@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { SDModelSchema, createFeedbackRequestMessage } from '../../utilities/MessageProtocol.js';
 import { callSeldonEngine } from '../../utilities/EngineWrapper.js';
-import { generateRequestId } from './toolHelpers.js';
+import { generateRequestId, createSuccessResponse, createErrorResponse } from './toolHelpers.js';
 
 /**
  * Have an expert-level discussion about the model using System Dynamics terminology
@@ -25,10 +25,7 @@ export function createDiscussModelWithSeldonTool(sessionManager, sessionId, send
         const result = await callSeldonEngine(prompt, model, feedbackLoops, parameters);
 
         if (!result.success) {
-          return {
-            content: [{ type: 'text', text: `Error: ${result.error}` }],
-            isError: true
-          };
+          return createErrorResponse(result.error);
         }
 
         // Check if feedback information is required but not provided
@@ -62,31 +59,15 @@ export function createDiscussModelWithSeldonTool(sessionManager, sessionId, send
           const retryResult = await callSeldonEngine(prompt, model, feedbackData.feedbackContent.loops, parameters);
 
           if (!retryResult.success) {
-            return {
-              content: [{ type: 'text', text: `Error: ${retryResult.error}` }],
-              isError: true
-            };
+            return createErrorResponse(retryResult.error);
           }
 
-          return {
-            content: [{
-              type: 'text',
-              text: JSON.stringify(retryResult.output, null, 2)
-            }]
-          };
+          return createSuccessResponse(retryResult.output);
         }
 
-        return {
-          content: [{
-            type: 'text',
-            text: JSON.stringify(result.output, null, 2)
-          }]
-        };
+        return createSuccessResponse(result.output);
       } catch (error) {
-        return {
-          content: [{ type: 'text', text: `Error: ${error.message}` }],
-          isError: true
-        };
+        return createErrorResponse(error.message);
       }
     }
   };

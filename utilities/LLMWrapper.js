@@ -3,7 +3,6 @@ import { GoogleGenAI } from "@google/genai";
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { zodResponseFormat } from "openai/helpers/zod";
-import { ZodToStructuredOutputConverter } from "./ZodToStructuredOutputConverter.js";
 import { extractJsonFromContent } from "./jsonUtils.js";
 
 export const ModelType = Object.freeze({
@@ -69,7 +68,6 @@ export class LLMWrapper {
   #openAIAPI = null;
   #geminiAPI = null;
   #anthropicAPI = null;
-  #zodToStructuredOutputConverter = new ZodToStructuredOutputConverter();
 
   model = new ModelCapabilities(LLMWrapper.BUILD_DEFAULT_MODEL);
 
@@ -656,12 +654,8 @@ export class LLMWrapper {
     }
 
     if (zodSchema) {
-      this.#zodToStructuredOutputConverter.setOptions({
-        emitOptionalProperties: false
-      });
-
       config.responseMimeType = "application/json";
-      config.responseJsonSchema = this.#zodToStructuredOutputConverter.convert(zodSchema);
+      config.responseJsonSchema = zodSchema.toJSONSchema();
     }
 
     if (Object.keys(config).length > 0) {
@@ -697,7 +691,7 @@ export class LLMWrapper {
     if (zodSchema) {
       completionParams.output_format = {
         type: "json_schema",
-        schema: this.#zodToStructuredOutputConverter.convert(zodSchema)
+        schema: zodSchema.toJSONSchema()
       };
     }
 

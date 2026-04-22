@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { SDModelSchema, createUpdateModelMessage } from '../../utilities/MessageProtocol.js';
 import { callQualitativeEngine } from '../../utilities/EngineWrapper.js';
-import { generateRequestId } from './toolHelpers.js';
+import { generateRequestId, createSuccessResponse, createErrorResponse } from './toolHelpers.js';
 
 /**
  * Generate a Causal Loop Diagram (CLD) showing feedback loops and causal relationships
@@ -23,10 +23,7 @@ export function createGenerateQualitativeModelTool(sessionManager, sessionId, se
         const result = await callQualitativeEngine(prompt, currentModel, parameters);
 
         if (!result.success) {
-          return {
-            content: [{ type: 'text', text: `Error: ${result.error}` }],
-            isError: true
-          };
+          return createErrorResponse(result.error);
         }
 
         // Automatically push the generated model to the client
@@ -53,23 +50,13 @@ export function createGenerateQualitativeModelTool(sessionManager, sessionId, se
         await updatePromise;
 
         // Build response
-        const responseText = JSON.stringify({
+        return createSuccessResponse({
           model: result.model,
           supportingInfo: result.supportingInfo,
           pushedToClient: true
-        }, null, 2);
-
-        return {
-          content: [{
-            type: 'text',
-            text: responseText
-          }]
-        };
+        });
       } catch (error) {
-        return {
-          content: [{ type: 'text', text: `Error: ${error.message}` }],
-          isError: true
-        };
+        return createErrorResponse(error.message);
       }
     }
   };

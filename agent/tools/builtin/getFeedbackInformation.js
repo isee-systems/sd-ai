@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import { createFeedbackRequestMessage } from '../../utilities/MessageProtocol.js';
-import { generateRequestId } from './toolHelpers.js';
-import logger from '../../../utilities/logger.js';
+import { generateRequestId, createSuccessResponse, createErrorResponse } from './toolHelpers.js';
 
 /**
  * Request feedback loop analysis data from the client
@@ -40,21 +39,12 @@ export function createGetFeedbackInformationTool(sessionManager, sessionId, send
 
         const feedbackData = await resultPromise;
 
-        return {
-          content: [{
-            type: 'text',
-            text: JSON.stringify({
-              feedbackContent: feedbackData.feedbackContent,
-              runIds: feedbackData.runIds
-            }, null, 2)
-          }]
-        };
+        return createSuccessResponse({
+          feedbackContent: feedbackData.feedbackContent,
+          runIds: feedbackData.runIds
+        });
       } catch (error) {
-        logger.error('get_feedback_information error:', error);
-        return {
-          content: [{ type: 'text', text: `Failed to get feedback information: ${error.message}` }],
-          isError: true
-        };
+        return createErrorResponse(`Failed to get feedback information: ${error.message}`, error);
       }
     }
   };

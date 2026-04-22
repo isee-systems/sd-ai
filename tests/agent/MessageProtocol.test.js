@@ -124,7 +124,7 @@ describe('MessageProtocol', () => {
       const message = {
         type: 'model_updated_notification',
         sessionId: 'test-123',
-        model: { variables: [{ name: 'X' }] },
+        model: { variables: [{ name: 'X', type: 'stock' }] },
         changeReason: 'User requested change'
       };
 

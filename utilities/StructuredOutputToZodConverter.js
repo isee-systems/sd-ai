@@ -5,7 +5,7 @@ import logger from './logger.js';
  * StructuredOutputToZodConverter
  * Converts JSON Schema (structured output format) to Zod schemas
  *
- * This is the inverse of ZodToStructuredOutputConverter.
+ * This is the inverse of Zod's toJSONSchema() method.
  * Used primarily for converting client-registered tool schemas
  * (which come in JSON Schema format) to Zod schemas for validation.
  */
@@ -91,8 +91,13 @@ export class StructuredOutputToZodConverter {
    * @returns {import('zod').ZodString|import('zod').ZodEnum} Zod string or enum
    */
   convertStringType(propDef) {
-    if (propDef.enum && propDef.enum.length > 0) {
-      return z.enum(propDef.enum);
+    if (propDef.enum && Array.isArray(propDef.enum) && propDef.enum.length > 0) {
+      // Zod v4 z.enum requires at least one value
+      // For safety, ensure we have at least one string value
+      const enumValues = propDef.enum.filter(v => typeof v === 'string');
+      if (enumValues.length > 0) {
+        return z.enum(enumValues);
+      }
     }
     return z.string();
   }
@@ -118,6 +123,6 @@ export class StructuredOutputToZodConverter {
     if (propDef.properties) {
       return this.convertObjectSchema(propDef);
     }
-    return z.object({}).passthrough();
+    return z.object({}).catchall(z.any());
   }
 }

@@ -6,8 +6,7 @@ import {
   createGetRunInfoMessage,
   createGetVariableDataMessage
 } from '../../utilities/MessageProtocol.js';
-import { generateRequestId } from './toolHelpers.js';
-import logger from '../../../utilities/logger.js';
+import { generateRequestId, createSuccessResponse, createErrorResponse } from './toolHelpers.js';
 
 /**
  * Get the current model from the client
@@ -42,18 +41,9 @@ export function createGetCurrentModelTool(sessionManager, sessionId, sendToClien
 
         const modelData = await resultPromise;
 
-        return {
-          content: [{
-            type: 'text',
-            text: JSON.stringify(modelData, null, 2)
-          }]
-        };
+        return createSuccessResponse(modelData);
       } catch (error) {
-        logger.error('get_current_model error:', error);
-        return {
-          content: [{ type: 'text', text: `Failed to get current model: ${error.message}` }],
-          isError: true
-        };
+        return createErrorResponse(`Failed to get current model: ${error.message}`, error);
       }
     }
   };
@@ -94,18 +84,9 @@ export function createUpdateModelTool(sessionManager, sessionId, sendToClient) {
 
         const result = await resultPromise;
 
-        return {
-          content: [{
-            type: 'text',
-            text: JSON.stringify({ success: true, ...result }, null, 2)
-          }]
-        };
+        return createSuccessResponse({ success: true, ...result });
       } catch (error) {
-        logger.error('update_model error:', error);
-        return {
-          content: [{ type: 'text', text: `Failed to update model: ${error.message}` }],
-          isError: true
-        };
+        return createErrorResponse(`Failed to update model: ${error.message}`, error);
       }
     }
   };
@@ -144,22 +125,13 @@ export function createRunModelTool(sessionManager, sessionId, sendToClient) {
 
         const result = await resultPromise;
 
-        return {
-          content: [{
-            type: 'text',
-            text: JSON.stringify({
-              runId: result.runId,
-              success: true,
-              ...result
-            }, null, 2)
-          }]
-        };
+        return createSuccessResponse({
+          runId: result.runId,
+          success: true,
+          ...result
+        });
       } catch (error) {
-        logger.error('run_model error:', error);
-        return {
-          content: [{ type: 'text', text: `Failed to run model: ${error.message}` }],
-          isError: true
-        };
+        return createErrorResponse(`Failed to run model: ${error.message}`, error);
       }
     }
   };
@@ -198,21 +170,12 @@ export function createGetRunInfoTool(sessionManager, sessionId, sendToClient) {
 
         const runInfo = await resultPromise;
 
-        return {
-          content: [{
-            type: 'text',
-            text: JSON.stringify({
-              runs: runInfo.runs || [],
-              count: runInfo.runs?.length || 0
-            }, null, 2)
-          }]
-        };
+        return createSuccessResponse({
+          runs: runInfo.runs || [],
+          count: runInfo.runs?.length || 0
+        });
       } catch (error) {
-        logger.error('get_run_info error:', error);
-        return {
-          content: [{ type: 'text', text: `Failed to get run info: ${error.message}` }],
-          isError: true
-        };
+        return createErrorResponse(`Failed to get run info: ${error.message}`, error);
       }
     }
   };
@@ -254,18 +217,9 @@ export function createGetVariableDataTool(sessionManager, sessionId, sendToClien
 
         const variableData = await resultPromise;
 
-        return {
-          content: [{
-            type: 'text',
-            text: JSON.stringify(variableData, null, 2)
-          }]
-        };
+        return createSuccessResponse(variableData);
       } catch (error) {
-        logger.error('get_variable_data error:', error);
-        return {
-          content: [{ type: 'text', text: `Failed to get variable data: ${error.message}` }],
-          isError: true
-        };
+        return createErrorResponse(`Failed to get variable data: ${error.message}`, error);
       }
     }
   };

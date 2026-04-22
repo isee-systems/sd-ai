@@ -4,8 +4,8 @@ import { countTokens } from '@anthropic-ai/tokenizer';
 import { writeFileSync } from 'fs';
 import { join } from 'path';
 import { AgentConfigurationManager } from './utilities/AgentConfigurationManager.js';
-import { createBuiltInToolsServer, getBuiltInToolNames } from './tools/BuiltInTools.js';
-import { DynamicToolServer } from './tools/DynamicToolServer.js';
+import { BuiltInToolProvider } from './tools/BuiltInToolProvider.js';
+import { DynamicToolProvider } from './tools/DynamicToolProvider.js';
 import {
   createAgentTextMessage,
   createToolCallNotificationMessage,
@@ -13,7 +13,6 @@ import {
   createAgentCompleteMessage,
   createErrorMessage
 } from './utilities/MessageProtocol.js';
-import { ZodToStructuredOutputConverter } from '../utilities/ZodToStructuredOutputConverter.js';
 import logger from '../utilities/logger.js';
 import config from '../config.js';
 
@@ -36,22 +35,17 @@ export class AgentOrchestrator {
     this.sendToClient = sendToClient;
     this.stopRequested = false;
 
-    // Track indices of model results in message history for removal
-    this.modelResultIndices = [];
-
     // Load configuration
     this.configManager = new AgentConfigurationManager(configPath);
 
-    // Create dynamic tool server
-    this.dynamicToolServer = new DynamicToolServer(sessionManager, sessionId, sendToClient);
+    // Create tool providers
+    this.builtInToolProvider = new BuiltInToolProvider(sessionManager, sessionId, sendToClient);
+    this.dynamicToolProvider = new DynamicToolProvider(sessionManager, sessionId, sendToClient);
 
     // Initialize Anthropic client
     this.anthropic = new Anthropic({
       apiKey: process.env.ANTHROPIC_API_KEY
     });
-
-    // Initialize schema converter
-    this.schemaConverter = new ZodToStructuredOutputConverter();
 
     logger.log(`AgentOrchestrator initialized for session ${sessionId}`);
   }
@@ -60,7 +54,7 @@ export class AgentOrchestrator {
    * Initialize with client tools
    */
   initializeTools(clientTools) {
-    this.dynamicToolServer.updateTools(clientTools);
+    this.dynamicToolProvider.updateTools(clientTools);
   }
 
   /**
@@ -83,17 +77,13 @@ export class AgentOrchestrator {
       const modelType = session.modelType;
       const systemPrompt = this.configManager.buildSystemPrompt(modelType);
 
-      // Get tool servers
-      const builtInTools = createBuiltInToolsServer(
-        this.sessionManager,
-        this.sessionId,
-        this.sendToClient
-      );
-      const dynamicTools = this.dynamicToolServer.getMcpServer();
+      // Get tool collections
+      const builtInTools = this.builtInToolProvider.getTools();
+      const dynamicTools = this.dynamicToolProvider.getTools();
 
       logger.log(`Starting conversation for session ${this.sessionId}`);
-      logger.log(`Built-in tools: ${getBuiltInToolNames().join(', ')}`);
-      logger.log(`Client tools: ${this.dynamicToolServer.getClientToolNames().join(', ')}`);
+      logger.log(`Built-in tools: ${this.builtInToolProvider.getToolNames().join(', ')}`);
+      logger.log(`Client tools: ${this.dynamicToolProvider.getToolNames().join(', ')}`);
 
       // Start agent conversation loop
       await this.runAgentConversation(userMessage, systemPrompt, builtInTools, dynamicTools);
@@ -169,8 +159,7 @@ export class AgentOrchestrator {
     while (continueLoop && iteration < maxIterations && !this.stopRequested) {
       iteration++;
 
-      // Limit message history to prevent context overflow based on token count
-      // Keep only recent messages that fit within token budget
+      // Limit message history to prevent context overflow using LLM summarization
       const MAX_CONTEXT_TOKENS = config.maxContextTokens;
 
       // Calculate current message history token count
@@ -184,25 +173,39 @@ export class AgentOrchestrator {
         const firstMessage = messages[0];
         const firstMessageTokens = countTokens(JSON.stringify(firstMessage));
 
-        let remainingTokenBudget = MAX_CONTEXT_TOKENS - firstMessageTokens;
-        const keptMessages = [firstMessage];
+        // Reserve space for first message and summary (estimate ~1000 tokens for summary)
+        const SUMMARY_TOKEN_ESTIMATE = 1000;
+        let remainingTokenBudget = MAX_CONTEXT_TOKENS - firstMessageTokens - SUMMARY_TOKEN_ESTIMATE;
+        const keptRecentMessages = [];
 
-        // Add messages from most recent backwards until we hit the token budget
+        // Collect recent messages that fit in the remaining budget
         for (let i = messages.length - 1; i >= 1; i--) {
           const messageTokens = countTokens(JSON.stringify(messages[i]));
 
           if (remainingTokenBudget - messageTokens >= 0) {
-            keptMessages.unshift(messages[i]); // Add at beginning (after firstMessage)
+            keptRecentMessages.unshift(messages[i]);
             remainingTokenBudget -= messageTokens;
           } else {
-            // No more room, stop adding messages
             break;
           }
         }
 
-        messages = [firstMessage, ...keptMessages.slice(1)]; // Avoid duplicating firstMessage
-        const newTokenCount = countTokens(JSON.stringify(messages));
-        logger.log(`Trimmed message history: ${messages.length} messages, ${newTokenCount} tokens (saved ${currentTokens - newTokenCount} tokens)`);
+        // If we kept all messages except first, no need to summarize
+        if (keptRecentMessages.length < messages.length - 1) {
+          // Get messages to summarize (everything between first and recent)
+          const messagesToSummarize = messages.slice(1, messages.length - keptRecentMessages.length);
+
+          if (messagesToSummarize.length > 0) {
+            // Create summary of old messages
+            const summaryMessage = await this.summarizeMessageHistory(messagesToSummarize);
+
+            // Replace messages: [first, summary, ...recent]
+            messages.splice(0, messages.length, firstMessage, summaryMessage, ...keptRecentMessages);
+
+            const newTokenCount = countTokens(JSON.stringify(messages));
+            logger.log(`Summarized message history: ${messages.length} messages (including summary), ${newTokenCount} tokens (saved ${currentTokens - newTokenCount} tokens)`);
+          }
+        }
       }
 
       try {
@@ -403,26 +406,16 @@ export class AgentOrchestrator {
           input: block.input
         });
 
-        // Check if this is a model result and remove old models if so
-        const isModelResult = this.isModelResult(toolResult);
-        if (isModelResult) {
-          this.removeOldModelsFromMessages(messages);
-        }
-
-        const messageIndex = messages.length;
+        // Add tool_result following Claude's API requirements
         messages.push({
           role: 'user',
           content: [{
             type: 'tool_result',
             tool_use_id: block.id,
-            content: toolResult
+            content: typeof toolResult.content === 'string' ? toolResult.content : JSON.stringify(toolResult.content),
+            is_error: toolResult.isError || false
           }]
         });
-
-        // Track this message index if it's a model result
-        if (isModelResult) {
-          this.modelResultIndices.push(messageIndex);
-        }
       }
     }
 
@@ -446,11 +439,81 @@ export class AgentOrchestrator {
   }
 
   /**
+   * Summarize message history using LLM when it exceeds token limits
+   * @param {Array} messages - The messages array to summarize
+   * @returns {Promise<Object>} The summary message object
+   */
+  async summarizeMessageHistory(messages) {
+    try {
+      // Create a concise representation of the conversation history for summarization
+      const conversationText = messages.map((msg) => {
+        if (msg.role === 'user') {
+          return `User: ${typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)}`;
+        } else if (msg.role === 'assistant') {
+          // For assistant messages, extract text content and skip tool_use blocks
+          if (Array.isArray(msg.content)) {
+            const textContent = msg.content
+              .filter(block => block.type === 'text')
+              .map(block => block.text || block)
+              .join('\n');
+            return textContent ? `Assistant: ${textContent}` : '';
+          }
+          return `Assistant: ${msg.content}`;
+        }
+        return '';
+      }).filter(line => line).join('\n\n');
+
+      // Use a fast, cheap model to create the summary
+      const summaryPrompt = `Please create a concise summary of the following conversation history. Focus on:
+- The main task or goal the user requested
+- Key decisions, findings, or results achieved
+- Important context needed for continuing the conversation
+- Current state of the work
+
+Keep the summary brief but informative (2-4 paragraphs maximum).
+
+Conversation history:
+${conversationText}`;
+
+      const summaryMessages = [
+        {
+          role: 'user',
+          content: summaryPrompt
+        }
+      ];
+
+      // Use Anthropic API directly with a fast model
+      const response = await this.anthropic.messages.create({
+        model: 'claude-haiku-4-5', // Fast, cheap model for summarization
+        max_tokens: 1024,
+        messages: summaryMessages
+      });
+
+      const summaryText = response.content[0].text;
+
+      logger.log(`Created message history summary: ${summaryText.substring(0, 100)}...`);
+
+      return {
+        role: 'user',
+        content: `[Previous conversation summary]\n${summaryText}\n[End of summary - continuing conversation]`
+      };
+
+    } catch (error) {
+      logger.error('Error summarizing message history:', error);
+      // If summarization fails, return a basic summary
+      return {
+        role: 'user',
+        content: '[Previous conversation summary: Earlier messages were condensed to save context. The conversation is continuing from this point.]'
+      };
+    }
+  }
+
+  /**
    * Clean up message history at session initialization
    * Removes all but the most recent model and enforces token limits
    * @param {Array} messages - The messages array to clean
    */
-  cleanupMessageHistory(messages) {
+  async cleanupMessageHistory(messages) {
     if (messages.length === 0) {
       return;
     }
@@ -466,12 +529,12 @@ export class AgentOrchestrator {
           if (content.type === 'tool_result' && content.content) {
             try {
               const parsed = JSON.parse(content.content);
-              if (this.isModelResult(parsed)) {
+              if (parsed.model || parsed.variables) {
                 modelIndices.push(i);
                 break; // Only count this message once
               }
             } catch (e) {
-              // Not parseable, skip
+              // Not parseable or not a model result, skip
             }
           }
         }
@@ -489,81 +552,54 @@ export class AgentOrchestrator {
       logger.log(`Kept most recent model, removed ${indicesToRemove.length} older model(s)`);
     }
 
-    // Now enforce token limits (this happens in the main loop, but do it here too for cleanup)
+    // Now enforce token limits using LLM summarization
     const MAX_CONTEXT_TOKENS = config.maxContextTokens;
     const messagesJson = JSON.stringify(messages);
     const currentTokens = countTokens(messagesJson);
 
     if (currentTokens > MAX_CONTEXT_TOKENS) {
-      logger.log(`Message history after cleanup still exceeds token limit: ${currentTokens} tokens (limit: ${MAX_CONTEXT_TOKENS})`);
+      logger.log(`Message history after cleanup exceeds token limit: ${currentTokens} tokens (limit: ${MAX_CONTEXT_TOKENS})`);
 
       // Keep the first message (user's initial request) for context
       const firstMessage = messages[0];
       const firstMessageTokens = countTokens(JSON.stringify(firstMessage));
 
-      let remainingTokenBudget = MAX_CONTEXT_TOKENS - firstMessageTokens;
-      const keptMessages = [firstMessage];
+      // Reserve space for first message and summary (estimate ~1000 tokens for summary)
+      const SUMMARY_TOKEN_ESTIMATE = 1000;
+      let remainingTokenBudget = MAX_CONTEXT_TOKENS - firstMessageTokens - SUMMARY_TOKEN_ESTIMATE;
+      const keptRecentMessages = [];
 
-      // Add messages from most recent backwards until we hit the token budget
+      // Collect recent messages that fit in the remaining budget
       for (let i = messages.length - 1; i >= 1; i--) {
         const messageTokens = countTokens(JSON.stringify(messages[i]));
 
         if (remainingTokenBudget - messageTokens >= 0) {
-          keptMessages.unshift(messages[i]);
+          keptRecentMessages.unshift(messages[i]);
           remainingTokenBudget -= messageTokens;
         } else {
           break;
         }
       }
 
-      // Replace messages array contents
-      messages.splice(0, messages.length, ...([firstMessage, ...keptMessages.slice(1)]));
-      const newTokenCount = countTokens(JSON.stringify(messages));
-      logger.log(`Trimmed message history to fit token budget: ${messages.length} messages, ${newTokenCount} tokens`);
-    }
-  }
+      // If we kept all messages except first, no need to summarize
+      if (keptRecentMessages.length >= messages.length - 1) {
+        return;
+      }
 
-  /**
-   * Check if a tool result contains a model
-   * @param {Object} toolResult - The tool result object
-   * @returns {boolean} True if this is a model result
-   */
-  isModelResult(toolResult) {
-    if (toolResult.content && Array.isArray(toolResult.content)) {
-      const firstContent = toolResult.content[0];
-      if (firstContent && firstContent.type === 'text') {
-        try {
-          const parsedContent = JSON.parse(firstContent.text);
-          return !!(parsedContent.model || parsedContent.variables);
-        } catch (e) {
-          return false;
-        }
+      // Get messages to summarize (everything between first and recent)
+      const messagesToSummarize = messages.slice(1, messages.length - keptRecentMessages.length);
+
+      if (messagesToSummarize.length > 0) {
+        // Create summary of old messages
+        const summaryMessage = await this.summarizeMessageHistory(messagesToSummarize);
+
+        // Replace messages: [first, summary, ...recent]
+        messages.splice(0, messages.length, firstMessage, summaryMessage, ...keptRecentMessages);
+
+        const newTokenCount = countTokens(JSON.stringify(messages));
+        logger.log(`Summarized message history: ${messages.length} messages (including summary), ${newTokenCount} tokens (saved ${currentTokens - newTokenCount} tokens)`);
       }
     }
-    return false;
-  }
-
-  /**
-   * Remove old model results from messages array
-   * @param {Array} messages - The messages array to clean
-   */
-  removeOldModelsFromMessages(messages) {
-    if (this.modelResultIndices.length === 0) {
-      return; // No old models to remove
-    }
-
-    // Sort indices in descending order to remove from end first
-    const indicesToRemove = [...this.modelResultIndices].sort((a, b) => b - a);
-
-    for (const index of indicesToRemove) {
-      if (index < messages.length) {
-        messages.splice(index, 1);
-        logger.log(`Removed old model result from message history at index ${index}`);
-      }
-    }
-
-    // Clear the tracking array
-    this.modelResultIndices = [];
   }
 
   /**
@@ -575,15 +611,13 @@ export class AgentOrchestrator {
       if (builtInTools.tools[toolUse.name]) {
         const handler = builtInTools.tools[toolUse.name].handler;
         const result = await handler(toolUse.input);
-        return {
-          content: result,
-          isError: result.isError || false
-        };
+        // Handler already returns { content: [...], isError: bool }
+        return result;
       }
 
       // Check if it's a client tool
-      if (this.dynamicToolServer.isClientTool(toolUse.name)) {
-        const result = await this.dynamicToolServer.requestClientExecution(
+      if (this.dynamicToolProvider.isClientTool(toolUse.name)) {
+        const result = await this.dynamicToolProvider.requestClientExecution(
           toolUse.name,
           toolUse.input
         );
@@ -609,7 +643,7 @@ export class AgentOrchestrator {
   }
 
   /**
-   * Convert MCP tool servers to Anthropic tool format
+   * Convert tool servers to Anthropic tool format
    */
   convertToolsToAnthropicFormat(builtInTools, dynamicTools, modelExceedsLimit = false) {
     const tools = [];
@@ -638,7 +672,7 @@ export class AgentOrchestrator {
       tools.push({
         name: toolName,
         description: toolDef.description,
-        input_schema: this.schemaConverter.convert(toolDef.inputSchema)
+        input_schema: toolDef.inputSchema.toJSONSchema()
       });
     }
 
@@ -654,7 +688,7 @@ export class AgentOrchestrator {
         tools.push({
           name: toolName,
           description: toolDef.description,
-          input_schema: this.schemaConverter.convert(toolDef.inputSchema)
+          input_schema: toolDef.inputSchema.toJSONSchema()
         });
       }
     }
@@ -673,8 +707,8 @@ export class AgentOrchestrator {
    */
   getAgentCapabilities() {
     return {
-      builtInTools: getBuiltInToolNames(),
-      clientTools: this.dynamicToolServer.getClientToolNames()
+      builtInTools: this.builtInToolProvider.getToolNames(),
+      clientTools: this.dynamicToolProvider.getToolNames()
     };
   }
 
@@ -695,9 +729,9 @@ export class AgentOrchestrator {
     // Clear any references
     this.sessionManager = null;
     this.sendToClient = null;
-    this.dynamicToolServer = null;
+    this.builtInToolProvider = null;
+    this.dynamicToolProvider = null;
     this.anthropic = null;
     this.configManager = null;
-    this.schemaConverter = null;
   }
 }

@@ -2,8 +2,8 @@ import { z } from 'zod';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { createUpdateModelMessage } from '../../utilities/MessageProtocol.js';
+import { generateRequestId, createSuccessResponse, createErrorResponse } from './toolHelpers.js';
 import logger from '../../../utilities/logger.js';
-import { generateRequestId, createErrorResponse } from './toolHelpers.js';
 
 /**
  * Read a specific section of the large model file
@@ -55,7 +55,7 @@ Filtering:
         const modelPath = join(sessionTempDir, 'model.sdjson');
 
         if (!existsSync(modelPath)) {
-          return createErrorResponse('Error: Model file not found. The model may not have exceeded the token limit yet.', null, logger);
+          return createErrorResponse('Error: Model file not found. The model may not have exceeded the token limit yet.');
         }
 
         const modelContent = readFileSync(modelPath, 'utf-8');
@@ -157,14 +157,9 @@ Filtering:
             break;
         }
 
-        return {
-          content: [{
-            type: 'text',
-            text: JSON.stringify(result, null, 2)
-          }]
-        };
+        return createSuccessResponse(result);
       } catch (error) {
-        return createErrorResponse(`Failed to read model section: ${error.message}`, error, logger);
+        return createErrorResponse(`Failed to read model section: ${error.message}`, error);
       }
     }
   };
@@ -323,7 +318,7 @@ After editing, the model is validated and processed through the quantitative eng
     handler: async ({ section, operation, data }) => {
       // Centralized error handler
       const handleError = (errorMessage, error = null) => {
-        return createErrorResponse(errorMessage, error, logger);
+        return createErrorResponse(errorMessage, error);
       };
 
       try {
@@ -553,12 +548,7 @@ After editing, the model is validated and processed through the quantitative eng
 
         sessionManager.updateClientModel(sessionId, model);
 
-        return {
-          content: [{
-            type: 'text',
-            text: `Successfully edited ${section} section (${operation} operation). The model has been validated, processed, and sent to the client.`
-          }]
-        };
+        return createSuccessResponse(`Successfully edited ${section} section (${operation} operation). The model has been validated, processed, and sent to the client.`);
       } catch (error) {
         return handleError(`Failed to edit model section: ${error.message}`, error);
       }

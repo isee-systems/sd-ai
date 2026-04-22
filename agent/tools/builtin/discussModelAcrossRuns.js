@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { SDModelSchema, createFeedbackRequestMessage } from '../../utilities/MessageProtocol.js';
 import { callSeldonILEEngine } from '../../utilities/EngineWrapper.js';
-import { generateRequestId } from './toolHelpers.js';
+import { generateRequestId, createSuccessResponse, createErrorResponse } from './toolHelpers.js';
 
 /**
  * Have a user-friendly discussion about the model without jargon, with ability to compare runs
@@ -32,10 +32,7 @@ export function createDiscussModelAcrossRunsTool(sessionManager, sessionId, send
         const result = await callSeldonILEEngine(prompt, model, runName, engineParams);
 
         if (!result.success) {
-          return {
-            content: [{ type: 'text', text: `Error: ${result.error}` }],
-            isError: true
-          };
+          return createErrorResponse(result.error);
         }
 
         // Check if feedback information is required but not provided
@@ -74,31 +71,15 @@ export function createDiscussModelAcrossRunsTool(sessionManager, sessionId, send
           const retryResult = await callSeldonILEEngine(prompt, model, runName, retryParams);
 
           if (!retryResult.success) {
-            return {
-              content: [{ type: 'text', text: `Error: ${retryResult.error}` }],
-              isError: true
-            };
+            return createErrorResponse(retryResult.error);
           }
 
-          return {
-            content: [{
-              type: 'text',
-              text: JSON.stringify(retryResult.output, null, 2)
-            }]
-          };
+          return createSuccessResponse(retryResult.output);
         }
 
-        return {
-          content: [{
-            type: 'text',
-            text: JSON.stringify(result.output, null, 2)
-          }]
-        };
+        return createSuccessResponse(result.output);
       } catch (error) {
-        return {
-          content: [{ type: 'text', text: `Error: ${error.message}` }],
-          isError: true
-        };
+        return createErrorResponse(error.message);
       }
     }
   };
