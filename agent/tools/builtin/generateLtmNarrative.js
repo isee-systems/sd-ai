@@ -6,7 +6,7 @@ import { createSuccessResponse, createErrorResponse } from './toolHelpers.js';
 /**
  * Generate a narrative explanation of feedback loops and their influence on model behavior
  */
-export function createGenerateLtmNarrativeTool() {
+export function createGenerateLtmNarrativeTool(sessionManager, sessionId) {
   return {
     description: 'Generate a narrative explanation of feedback loops and their influence on model behavior (Loops That Matter analysis).',
     inputSchema: z.object({

@@ -68,8 +68,8 @@ export class BuiltInToolProvider {
         discuss_model_with_seldon: createDiscussModelWithSeldonTool(this.sessionManager, this.sessionId, this.sendToClient),
         discuss_model_across_runs: createDiscussModelAcrossRunsTool(this.sessionManager, this.sessionId, this.sendToClient),
         generate_documentation: createGenerateDocumentationTool(this.sessionManager, this.sessionId, this.sendToClient),
-        generate_ltm_narrative: createGenerateLtmNarrativeTool(),
-        discuss_with_mentor: createDiscussWithMentorTool(),
+        generate_ltm_narrative: createGenerateLtmNarrativeTool(this.sessionManager, this.sessionId),
+        discuss_with_mentor: createDiscussWithMentorTool(this.sessionManager, this.sessionId),
         get_feedback_information: createGetFeedbackInformationTool(this.sessionManager, this.sessionId, this.sendToClient),
         get_current_model: createGetCurrentModelTool(this.sessionManager, this.sessionId, this.sendToClient),
         update_model: createUpdateModelTool(this.sessionManager, this.sessionId, this.sendToClient),
@@ -137,23 +137,7 @@ export class BuiltInToolProvider {
    * Get list of built-in tool names
    */
   getToolNames() {
-    return [
-      'generate_quantitative_model',
-      'generate_qualitative_model',
-      'discuss_model_with_seldon',
-      'discuss_model_across_runs',
-      'discuss_with_mentor',
-      'generate_documentation',
-      'generate_ltm_narrative',
-      'get_feedback_information',
-      'get_current_model',
-      'update_model',
-      'run_model',
-      'get_run_info',
-      'get_variable_data',
-      'create_visualization',
-      'read_model_section',
-      'edit_model_section'
-    ];
+    const toolCollection = this.createToolCollection();
+    return Object.keys(toolCollection.tools);
   }
 }

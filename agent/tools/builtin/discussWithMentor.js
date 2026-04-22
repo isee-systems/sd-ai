@@ -6,7 +6,7 @@ import { createSuccessResponse, createErrorResponse } from './toolHelpers.js';
 /**
  * Ask thoughtful questions to the user to guide their learning
  */
-export function createDiscussWithMentorTool() {
+export function createDiscussWithMentorTool(sessionManager, sessionId) {
   return {
     description: 'Ask thoughtful questions to the user to guide their learning and help them think through System Dynamics concepts. Use this to engage users in Socratic dialogue about their model.',
     inputSchema: z.object({
