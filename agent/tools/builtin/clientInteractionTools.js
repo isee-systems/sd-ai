@@ -189,9 +189,10 @@ export function createGetVariableDataTool(sessionManager, sessionId, sendToClien
     description: 'Get data for specific variables from specific runs. Returns the time-series data for the requested variables from the requested runs. NOTE: This operation can be slow for large datasets - consider requesting only essential variables and runs. For visualization or analysis, consider requesting a small subset of key variables first.',
     inputSchema: z.object({
       variableNames: z.array(z.string()).describe('List of variable names to get data for'),
-      runIds: z.array(z.string()).describe('List of run IDs to get variable data from')
+      runIds: z.array(z.string()).describe('List of run IDs to get variable data from'),
+      detailed: z.boolean().optional().describe('Whether to return detailed data suitable for plotting (default: false). When true, returns more data points for visualization purposes.')
     }),
-    handler: async ({ variableNames, runIds }) => {
+    handler: async ({ variableNames, runIds, detailed }) => {
       try {
         const session = sessionManager.getSession(sessionId);
         if (!session) {
@@ -201,7 +202,7 @@ export function createGetVariableDataTool(sessionManager, sessionId, sendToClien
         const requestId = generateRequestId('vardata');
 
         // Send request to client for variable data
-        await sendToClient(createGetVariableDataMessage(sessionId, requestId, variableNames, runIds));
+        await sendToClient(createGetVariableDataMessage(sessionId, requestId, variableNames, runIds, detailed));
 
         // Create pending request that will be resolved when client responds
         const resultPromise = new Promise((resolve, reject) => {

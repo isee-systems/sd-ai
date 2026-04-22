@@ -592,6 +592,58 @@ Requests feedback loop analysis data from the client (used by Seldon engine for 
 }
 ```
 
+#### 10. Get Variable Data
+
+Requests time-series data for specific variables from specific simulation runs (used for analysis and visualization).
+
+```json
+{
+  "type": "get_variable_data",
+  "sessionId": "sess_abc123",
+  "requestId": "vardata_xyz789",
+  "variableNames": ["Population", "Births", "Deaths"],
+  "runIds": ["run_baseline", "run_policy"],
+  "detailed": true,
+  "timestamp": "2025-01-15T10:30:07.500Z"
+}
+```
+
+**Fields:**
+- `variableNames` - Array of variable names to retrieve data for
+- `runIds` - Array of simulation run IDs to get data from
+- `detailed` - Optional boolean (default: `false`)
+  - When `false`: Returns sampled/summarized data suitable for quick analysis
+  - When `true`: Returns full detailed data with more data points, suitable for plotting and visualization
+
+**Client Response:** Send `tool_call_response` with:
+```json
+{
+  "type": "tool_call_response",
+  "sessionId": "sess_abc123",
+  "callId": "vardata_xyz789",
+  "result": {
+    "variableData": {
+      "run_baseline": {
+        "Population": [
+          { "time": 0, "value": 1000 },
+          { "time": 1, "value": 1020 },
+          { "time": 2, "value": 1040.4 }
+        ],
+        "Births": [
+          { "time": 0, "value": 20 },
+          { "time": 1, "value": 20.4 },
+          { "time": 2, "value": 20.808 }
+        ]
+      },
+      "run_policy": {
+        "Population": [...],
+        "Births": [...]
+      }
+    }
+  }
+}
+```
+
 #### 11. Agent Complete
 
 Signals that the agent has finished processing the current request.

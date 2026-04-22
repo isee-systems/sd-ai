@@ -292,6 +292,7 @@ export const GetVariableDataMessageSchema = z.object({
   requestId: z.string().describe('Unique request identifier for tracking the response'),
   variableNames: z.array(z.string()).describe('List of variable names to get data for'),
   runIds: z.array(z.string()).describe('List of run IDs to get variable data from'),
+  detailed: z.boolean().optional().describe('Whether to return detailed data suitable for plotting (default: false). When true, returns more data points for visualization purposes.'),
   timestamp: z.string().optional().describe('ISO 8601 timestamp of when the message was created')
 });
 
@@ -508,13 +509,14 @@ export function createGetRunInfoMessage(sessionId, requestId) {
   };
 }
 
-export function createGetVariableDataMessage(sessionId, requestId, variableNames, runIds) {
+export function createGetVariableDataMessage(sessionId, requestId, variableNames, runIds, detailed) {
   return {
     type: 'get_variable_data',
     sessionId,
     requestId,
     variableNames,
     runIds,
+    detailed,
     timestamp: new Date().toISOString()
   };
 }
