@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { SDModelSchema } from '../../utilities/MessageProtocol.js';
+import { SDModelSchema, FeedbackContentSchema } from '../../utilities/MessageProtocol.js';
 import { callSeldonMentorEngine } from '../../utilities/EngineWrapper.js';
 import { createSuccessResponse, createErrorResponse } from './toolHelpers.js';
 
@@ -12,15 +12,16 @@ export function createDiscussWithMentorTool(sessionManager, sessionId) {
     inputSchema: z.object({
       prompt: z.string().describe('The question or guidance to provide to the user'),
       model: SDModelSchema.describe('The model being discussed'),
+      feedbackContent: FeedbackContentSchema.optional(),
       parameters: z.object({
         model: z.string().optional(),
         problemStatement: z.string().optional().describe('Description of dynamic issue to address'),
         backgroundKnowledge: z.string().optional().describe('Background information for LLM')
       }).optional()
     }),
-    handler: async ({ prompt, model, parameters }) => {
+    handler: async ({ prompt, model, feedbackContent, parameters }) => {
       try {
-        const result = await callSeldonMentorEngine(prompt, model, parameters);
+        const result = await callSeldonMentorEngine(prompt, model, feedbackContent, parameters);
 
         if (!result.success) {
           return createErrorResponse(result.error);

@@ -34,7 +34,9 @@ NEVER switch between CLD and SFD during a session.
 - SFDs have equations and can be simulated to produce time series behavior
 - Use run_model, get_run_data, and create_visualization for SFDs only
 - ALWAYS check that stocks and variables that represent physical quantities (population, inventory, resources, etc.) cannot go negative
-- Add appropriate constraints prevent negative values where they are physically impossible
+- Add appropriate constraints to prevent negative values where they are physically impossible
+- Stocks often go negative when there is no first order control on their flows. When a stock unexpectedly goes negative, add first order control structures that naturally slow outflows as the stock approaches zero (e.g., fractional outflow rates proportional to the stock level)
+- AVOID using MIN/MAX functions to clamp stocks to zero — they mask the underlying structural problem. Fix the model structure instead.
 
 ## CRITICAL: Visualization Requests
 When a user requests a visualization:

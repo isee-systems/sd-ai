@@ -1,7 +1,7 @@
 import { randomBytes } from 'crypto';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { existsSync, mkdirSync, readdirSync, statSync, rmSync } from 'fs';
+import { existsSync, mkdirSync, readdirSync, rmSync } from 'fs';
 import logger from '../../utilities/logger.js';
 import config from '../../config.js';
 
@@ -154,6 +154,14 @@ export class SessionManager {
   }
 
   /**
+   * Get the current client model
+   */
+  getClientModel(sessionId) {
+    const session = this.getSession(sessionId);
+    return session?.clientModel;
+  }
+
+  /**
    * Update model token count and check if it exceeds limit
    */
   updateModelTokenCount(sessionId, tokenCount) {
@@ -178,14 +186,6 @@ export class SessionManager {
   getModelTokenCount(sessionId) {
     const session = this.getSession(sessionId);
     return session?.modelTokenCount || 0;
-  }
-
-  /**
-   * Get the current client model
-   */
-  getClientModel(sessionId) {
-    const session = this.getSession(sessionId);
-    return session?.clientModel;
   }
 
   /**
@@ -390,84 +390,6 @@ export class SessionManager {
     } catch (err) {
       logger.error('Failed to cleanup orphaned temp dirs:', err);
     }
-  }
-
-  /**
-   * Get temp directory sizes for monitoring
-   */
-  getTempDirSizes() {
-    const sizes = [];
-
-    for (const [sessionId, session] of this.sessions.entries()) {
-      const size = this.getDirectorySize(session.tempDir);
-      const fileCount = this.getFileCount(session.tempDir);
-
-      sizes.push({
-        sessionId,
-        tempDir: session.tempDir,
-        size,
-        fileCount,
-        age: Date.now() - session.createdAt,
-        lastActivity: Date.now() - session.lastActivity
-      });
-    }
-
-    return sizes;
-  }
-
-  /**
-   * Get directory size in bytes
-   */
-  getDirectorySize(dirPath) {
-    let totalSize = 0;
-
-    try {
-      if (existsSync(dirPath)) {
-        const files = readdirSync(dirPath);
-        for (const file of files) {
-          const stats = statSync(join(dirPath, file));
-          totalSize += stats.size;
-        }
-      }
-    } catch (err) {
-      // Directory doesn't exist or can't be read
-    }
-
-    return totalSize;
-  }
-
-  /**
-   * Get file count in directory
-   */
-  getFileCount(dirPath) {
-    try {
-      if (existsSync(dirPath)) {
-        return readdirSync(dirPath).length;
-      }
-    } catch (err) {
-      // Directory doesn't exist or can't be read
-    }
-    return 0;
-  }
-
-  /**
-   * Get stats (for monitoring endpoint)
-   */
-  getStats() {
-    const totalMessages = Array.from(this.sessions.values())
-      .reduce((sum, s) => sum + s.messageCount, 0);
-    const totalToolCalls = Array.from(this.sessions.values())
-      .reduce((sum, s) => sum + s.toolCallCount, 0);
-    const totalPendingCalls = Array.from(this.sessions.values())
-      .reduce((sum, s) => sum + s.pendingToolCalls.size, 0);
-
-    return {
-      activeSessions: this.sessions.size,
-      totalMessages,
-      totalToolCalls,
-      totalPendingCalls,
-      tempDirInfo: this.getTempDirSizes()
-    };
   }
 
   /**

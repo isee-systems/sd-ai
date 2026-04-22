@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { SDModelSchema } from '../../utilities/MessageProtocol.js';
+import { SDModelSchema, FeedbackContentSchema } from '../../utilities/MessageProtocol.js';
 import { callLTMEngine } from '../../utilities/EngineWrapper.js';
 import { createSuccessResponse, createErrorResponse } from './toolHelpers.js';
 
@@ -11,14 +11,14 @@ export function createGenerateLtmNarrativeTool(sessionManager, sessionId) {
     description: 'Generate a narrative explanation of feedback loops and their influence on model behavior (Loops That Matter analysis).',
     inputSchema: z.object({
       model: SDModelSchema.describe('The model to analyze'),
-      feedbackLoops: z.array(z.any()).describe('Feedback loop analysis data'),
+      feedbackContent: FeedbackContentSchema,
       parameters: z.object({
         model: z.string().optional()
       }).optional()
     }),
-    handler: async ({ model, feedbackLoops, parameters }) => {
+    handler: async ({ model, feedbackContent, parameters }) => {
       try {
-        const result = await callLTMEngine(model, feedbackLoops, parameters);
+        const result = await callLTMEngine(model, feedbackContent, parameters);
 
         if (!result.success) {
           return createErrorResponse(result.error);

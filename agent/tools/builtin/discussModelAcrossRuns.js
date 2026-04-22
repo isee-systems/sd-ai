@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { SDModelSchema, createFeedbackRequestMessage } from '../../utilities/MessageProtocol.js';
+import { SDModelSchema, FeedbackContentSchema, createFeedbackRequestMessage } from '../../utilities/MessageProtocol.js';
 import { callSeldonILEEngine } from '../../utilities/EngineWrapper.js';
 import { generateRequestId, createSuccessResponse, createErrorResponse } from './toolHelpers.js';
 
@@ -13,7 +13,7 @@ export function createDiscussModelAcrossRunsTool(sessionManager, sessionId, send
       prompt: z.string().describe('Question or topic for discussion'),
       model: SDModelSchema.describe('The model to discuss'),
       runName: z.string().optional().describe('Simulation run ID for context'),
-      feedbackContent: z.object({}).passthrough().optional().describe('Feedback loop analysis data'),
+      feedbackContent: z.union([FeedbackContentSchema, z.record(z.string(), FeedbackContentSchema)]).optional().describe('Feedback content: either a single FeedbackContentSchema or a map of runId to FeedbackContentSchema'),
       parameters: z.object({
         model: z.string().optional(),
         problemStatement: z.string().optional().describe('Description of dynamic issue to address'),

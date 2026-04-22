@@ -70,16 +70,15 @@ export async function callQualitativeEngine(prompt, currentModel, parameters = {
 /**
  * Call Seldon (expert discussion)
  */
-export async function callSeldonEngine(prompt, model, feedbackLoops, parameters = {}) {
+export async function callSeldonEngine(prompt, model, feedbackContent, parameters = {}) {
   try {
     const { default: SeldonEngine } = await import('../../engines/seldon/engine.js');
 
     const engine = new SeldonEngine(parameters);
 
-    // Prepare parameters for Seldon
     const seldonParams = {
       ...parameters,
-      feedbackContent: feedbackLoops ? { feedbackLoops } : undefined
+      ...(feedbackContent && { feedbackContent })
     };
 
     const result = await engine.generate(prompt, model, seldonParams);
@@ -159,16 +158,15 @@ export async function callDocumentationEngine(model, parameters = {}) {
 /**
  * Call LTM Narrative Engine
  */
-export async function callLTMEngine(model, feedbackLoops, parameters = {}) {
+export async function callLTMEngine(model, feedbackContent, parameters = {}) {
   try {
     const { default: LTMEngine } = await import('../../engines/ltm-narrative/engine.js');
 
     const engine = new LTMEngine(parameters);
 
-    // LTM needs feedback loop content
     const ltmParams = {
       ...parameters,
-      feedbackContent: { feedbackLoops }
+      feedbackContent
     };
 
     const result = await engine.generate('', model, ltmParams);
@@ -191,13 +189,18 @@ export async function callLTMEngine(model, feedbackLoops, parameters = {}) {
 /**
  * Call Seldon Mentor Engine
  */
-export async function callSeldonMentorEngine(prompt, model, parameters = {}) {
+export async function callSeldonMentorEngine(prompt, model, feedbackContent, parameters = {}) {
   try {
     const { default: SeldonMentorEngine } = await import('../../engines/seldon-mentor/engine.js');
 
     const engine = new SeldonMentorEngine(parameters);
 
-    const result = await engine.generate(prompt, model, parameters);
+    const mentorParams = {
+      ...parameters,
+      ...(feedbackContent && { feedbackContent })
+    };
+
+    const result = await engine.generate(prompt, model, mentorParams);
 
     return {
       success: true,

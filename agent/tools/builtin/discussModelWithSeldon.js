@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { SDModelSchema, createFeedbackRequestMessage } from '../../utilities/MessageProtocol.js';
+import { SDModelSchema, FeedbackContentSchema, createFeedbackRequestMessage } from '../../utilities/MessageProtocol.js';
 import { callSeldonEngine } from '../../utilities/EngineWrapper.js';
 import { generateRequestId, createSuccessResponse, createErrorResponse } from './toolHelpers.js';
 
@@ -12,7 +12,7 @@ export function createDiscussModelWithSeldonTool(sessionManager, sessionId, send
     inputSchema: z.object({
       prompt: z.string().describe('Question or topic for discussion'),
       model: SDModelSchema.describe('The model to discuss'),
-      feedbackLoops: z.array(z.any()).optional().describe('Feedback loop analysis data'),
+      feedbackContent: FeedbackContentSchema.optional(),
       parameters: z.object({
         model: z.string().optional(),
         problemStatement: z.string().optional().describe('Description of dynamic issue to address'),
@@ -20,16 +20,16 @@ export function createDiscussModelWithSeldonTool(sessionManager, sessionId, send
         behaviorContent: z.string().optional().describe('Time series behavior data')
       }).optional()
     }),
-    handler: async ({ prompt, model, feedbackLoops, parameters }) => {
+    handler: async ({ prompt, model, feedbackContent, parameters }) => {
       try {
-        const result = await callSeldonEngine(prompt, model, feedbackLoops, parameters);
+        const result = await callSeldonEngine(prompt, model, feedbackContent, parameters);
 
         if (!result.success) {
           return createErrorResponse(result.error);
         }
 
         // Check if feedback information is required but not provided
-        if (result.output.feedbackInformationRequired && !feedbackLoops) {
+        if (result.output.feedbackInformationRequired && !feedbackContent) {
           // Get feedback information from client
           const session = sessionManager.getSession(sessionId);
           if (!session) {
@@ -56,7 +56,7 @@ export function createDiscussModelWithSeldonTool(sessionManager, sessionId, send
           const feedbackData = await resultPromise;
 
           // Retry the call with feedback information
-          const retryResult = await callSeldonEngine(prompt, model, feedbackData.feedbackContent.loops, parameters);
+          const retryResult = await callSeldonEngine(prompt, model, feedbackData.feedbackContent, parameters);
 
           if (!retryResult.success) {
             return createErrorResponse(retryResult.error);

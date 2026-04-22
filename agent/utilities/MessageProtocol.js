@@ -14,15 +14,40 @@ import { z } from 'zod';
  * Accepts any model structure (CLD or SFD) with minimal validation
  * Uses catchall to allow additional fields defined by LLMWrapper schemas
  */
-export const SDVariableSchema = z.object({
+const SDVariableSchema = z.object({
   name: z.string(),
   type: z.string()
 }).catchall(z.any());
 
-export const SDRelationshipSchema = z.object({
+const SDRelationshipSchema = z.object({
   from: z.string(),
   to: z.string()
 }).catchall(z.any());
+
+const FeedbackLoopSchema = z.object({
+  identifier: z.string(),
+  name: z.string(),
+  links: z.array(z.object({
+    from: z.string(),
+    to: z.string(),
+    polarity: z.string()
+  })),
+  polarity: z.string(),
+  loopset: z.number().optional(),
+  'Percent of Model Behavior Explained By Loop': z.array(z.object({
+    time: z.number(),
+    value: z.number()
+  })).optional()
+});
+
+export const FeedbackContentSchema = z.object({
+  feedbackLoops: z.array(FeedbackLoopSchema),
+  dominantLoopsByPeriod: z.array(z.object({
+    dominantLoops: z.array(z.string()),
+    startTime: z.number(),
+    endTime: z.number()
+  })).optional()
+}).describe('Feedback loop analysis data');
 
 export const SDModelSchema = z.object({
   variables: z.array(SDVariableSchema).optional(),
@@ -34,33 +59,11 @@ export const SDModelSchema = z.object({
   title: z.string().optional()
 }).catchall(z.any()).describe('SD-JSON model structure (CLD or SFD)');
 
-/**
- * Feedback Content Schema
- * Used for feedback loop analysis data
- */
-export const FeedbackContentSchema = z.object({
-  feedbackLoops: z.array(z.object({
-    identifier: z.string(),
-    name: z.string(),
-    links: z.array(z.object({
-      from: z.string(),
-      to: z.string(),
-      polarity: z.enum(['+', '-', '?'])
-    }).catchall(z.any())),
-    polarity: z.enum(['+', '-', '?'])
-  }).catchall(z.any())),
-  dominantLoopsByPeriod: z.array(z.object({
-    dominantLoops: z.array(z.string()),
-    startTime: z.number(),
-    endTime: z.number()
-  })).optional()
-}).catchall(z.any()).describe('Feedback loop analysis data including loops and optional dominant loops by period');
-
 // ============================================================================
 // CLIENT → SERVER MESSAGES
 // ============================================================================
 
-export const ToolDefinitionSchema = z.object({
+const ToolDefinitionSchema = z.object({
   name: z.string().describe('Unique name identifier for the tool'),
   description: z.string().describe('Human-readable description of what the tool does'),
   inputSchema: z.object({
@@ -70,7 +73,7 @@ export const ToolDefinitionSchema = z.object({
   }).describe('JSON Schema defining the tool input parameters')
 });
 
-export const HistoricalMessageSchema = z.object({
+const HistoricalMessageSchema = z.object({
   type: z.enum(['agent_text', 'visualization', 'agent_complete', 'user_text']).describe('Type of historical message'),
   content: z.string().optional().describe('Text content (for agent_text, agent_complete, and user_text messages)'),
   isThinking: z.boolean().optional().describe('Whether this is thinking text (for agent_text messages)'),
@@ -95,7 +98,7 @@ export const InitializeSessionMessageSchema = z.object({
   timestamp: z.string().optional().describe('ISO 8601 timestamp of when the message was created')
 });
 
-export const SelectAgentMessageSchema = z.object({
+const SelectAgentMessageSchema = z.object({
   type: z.literal('select_agent').describe('Message type identifier'),
   sessionId: z.string().describe('Unique session identifier'),
   agentId: z.string().describe('Agent ID to use (e.g., "myrddin", "ganos-lal")'),
@@ -109,7 +112,7 @@ export const ChatMessageSchema = z.object({
   timestamp: z.string().optional().describe('ISO 8601 timestamp of when the message was created')
 });
 
-export const ToolCallResponseMessageSchema = z.object({
+const ToolCallResponseMessageSchema = z.object({
   type: z.literal('tool_call_response').describe('Message type identifier'),
   sessionId: z.string().describe('Unique session identifier'),
   callId: z.string().describe('The call ID from the tool_call_request being responded to'),
@@ -126,18 +129,18 @@ export const ModelUpdatedNotificationSchema = z.object({
   timestamp: z.string().optional().describe('ISO 8601 timestamp of when the message was created')
 });
 
-export const StopIterationMessageSchema = z.object({
+const StopIterationMessageSchema = z.object({
   type: z.literal('stop_iteration').describe('Message type identifier'),
   sessionId: z.string().describe('Unique session identifier'),
   timestamp: z.string().optional().describe('ISO 8601 timestamp of when the message was created')
 });
 
-export const DisconnectMessageSchema = z.object({
+const DisconnectMessageSchema = z.object({
   type: z.literal('disconnect').describe('Message type identifier'),
   sessionId: z.string().describe('Unique session identifier for the session to disconnect')
 });
 
-export const ClientMessageSchema = z.discriminatedUnion('type', [
+const ClientMessageSchema = z.discriminatedUnion('type', [
   InitializeSessionMessageSchema,
   SelectAgentMessageSchema,
   ChatMessageSchema,
@@ -145,174 +148,6 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   ModelUpdatedNotificationSchema,
   StopIterationMessageSchema,
   DisconnectMessageSchema
-]);
-
-// ============================================================================
-// SERVER → CLIENT MESSAGES
-// ============================================================================
-
-export const SessionCreatedMessageSchema = z.object({
-  type: z.literal('session_created').describe('Message type identifier'),
-  sessionId: z.string().describe('Unique session identifier for the newly created session'),
-  timestamp: z.string().optional().describe('ISO 8601 timestamp of when the message was created')
-});
-
-export const SessionReadyMessageSchema = z.object({
-  type: z.literal('session_ready').describe('Message type identifier'),
-  sessionId: z.string().describe('Unique session identifier'),
-  availableAgents: z.array(z.object({
-    id: z.string().describe('Unique agent identifier'),
-    name: z.string().describe('Human-readable agent name'),
-    description: z.string().describe('Description of the agent capabilities and personality')
-  })).describe('List of available agents the client can select from'),
-  timestamp: z.string().optional().describe('ISO 8601 timestamp of when the message was created')
-});
-
-export const AgentSelectedMessageSchema = z.object({
-  type: z.literal('agent_selected').describe('Message type identifier'),
-  sessionId: z.string().describe('Unique session identifier'),
-  agentId: z.string().describe('The ID of the agent that was selected'),
-  agentName: z.string().describe('The human-readable name of the agent that was selected'),
-  timestamp: z.string().optional().describe('ISO 8601 timestamp of when the message was created')
-});
-
-export const AgentTextMessageSchema = z.object({
-  type: z.literal('agent_text').describe('Message type identifier'),
-  sessionId: z.string().describe('Unique session identifier'),
-  content: z.string().describe('The text content from the agent (response, explanation, or thinking process)'),
-  isThinking: z.boolean().optional().default(false).describe('Whether this is thinking/reasoning text (true) or final response text (false)'),
-  timestamp: z.string().optional().describe('ISO 8601 timestamp of when the message was created')
-});
-
-export const ToolCallNotificationMessageSchema = z.object({
-  type: z.literal('tool_call_notification').describe('Message type identifier'),
-  sessionId: z.string().describe('Unique session identifier'),
-  callId: z.string().describe('Unique identifier for this tool call'),
-  toolName: z.string().describe('Name of the tool being called'),
-  arguments: z.record(z.string(), z.any()).describe('Map of argument names to values being passed to the tool'),
-  isBuiltIn: z.boolean().describe('Whether this is a built-in tool (true) or client tool (false)'),
-  timestamp: z.string().optional().describe('ISO 8601 timestamp of when the message was created')
-});
-
-export const ToolCallRequestMessageSchema = z.object({
-  type: z.literal('tool_call_request').describe('Message type identifier'),
-  sessionId: z.string().describe('Unique session identifier'),
-  callId: z.string().describe('Unique identifier for this tool call, used to match with the response'),
-  toolName: z.string().describe('Name of the client tool to execute'),
-  arguments: z.record(z.string(), z.any()).describe('Map of argument names to values to pass to the tool'),
-  timeout: z.number().optional().default(30000).describe('Timeout for client tool execution in milliseconds'),
-  timestamp: z.string().optional().describe('ISO 8601 timestamp of when the message was created')
-});
-
-export const ToolCallCompletedMessageSchema = z.object({
-  type: z.literal('tool_call_completed').describe('Message type identifier'),
-  sessionId: z.string().describe('Unique session identifier'),
-  callId: z.string().describe('The call ID from the tool_call_request or tool_call_notification'),
-  toolName: z.string().describe('Name of the tool that was executed'),
-  result: z.any().describe('The result data from the tool execution, or error message if isError is true'),
-  isError: z.boolean().optional().default(false).describe('Whether the tool execution resulted in an error'),
-  responseType: z.enum(['model', 'discuss', 'ltm-discuss', 'other']).optional().describe('Type of response: model (model generation), discuss (Seldon discussion), ltm-discuss (LTM narrative), or other'),
-  timestamp: z.string().optional().describe('ISO 8601 timestamp of when the message was created')
-});
-
-export const VisualizationMessageSchema = z.object({
-  type: z.literal('visualization').describe('Message type identifier'),
-  sessionId: z.string().describe('Unique session identifier'),
-  visualizationId: z.string().describe('Unique identifier for this visualization'),
-  title: z.string().describe('Human-readable title of the visualization'),
-  description: z.string().optional().describe('Optional detailed description of what the visualization shows'),
-  format: z.literal('image').describe('Visualization format: image (base64-encoded static image)'),
-  data: z.object({
-    encoding: z.literal('base64').describe('Image encoding type'),
-    mimeType: z.string().describe('MIME type of the image (e.g., "image/png")'),
-    content: z.string().describe('Base64-encoded image data'),
-    width: z.number().describe('Image width in pixels'),
-    height: z.number().describe('Image height in pixels')
-  }).describe('Image visualization data'),
-  timestamp: z.string().optional().describe('ISO 8601 timestamp of when the message was created')
-});
-
-export const AgentCompleteMessageSchema = z.object({
-  type: z.literal('agent_complete').describe('Message type identifier'),
-  sessionId: z.string().describe('Unique session identifier'),
-  finalMessage: z.string().optional().describe('Optional final message from the agent summarizing the completion'),
-  status: z.enum(['success', 'error', 'awaiting_user']).describe('Completion status: success (task completed), error (failed), or awaiting_user (waiting for user input)'),
-  timestamp: z.string().optional().describe('ISO 8601 timestamp of when the message was created')
-});
-
-export const ErrorMessageSchema = z.object({
-  type: z.literal('error').describe('Message type identifier'),
-  sessionId: z.string().describe('Unique session identifier'),
-  error: z.string().describe('Human-readable error message'),
-  errorCode: z.string().optional().describe('Optional machine-readable error code for categorizing the error'),
-  recoverable: z.boolean().optional().default(true).describe('Whether the error is recoverable (session can continue) or fatal (session must end)'),
-  timestamp: z.string().optional().describe('ISO 8601 timestamp of when the message was created')
-});
-
-export const FeedbackRequestMessageSchema = z.object({
-  type: z.literal('feedback_request').describe('Message type identifier'),
-  sessionId: z.string().describe('Unique session identifier'),
-  requestId: z.string().describe('Unique request identifier for tracking the response'),
-  runIds: z.array(z.string()).describe('List of simulation run IDs to get feedback for. Empty array means the current/most recent run.'),
-  timestamp: z.string().optional().describe('ISO 8601 timestamp of when the message was created')
-});
-
-export const GetCurrentModelMessageSchema = z.object({
-  type: z.literal('get_current_model').describe('Message type identifier'),
-  sessionId: z.string().describe('Unique session identifier'),
-  requestId: z.string().describe('Unique request identifier for tracking the response'),
-  timestamp: z.string().optional().describe('ISO 8601 timestamp of when the message was created')
-});
-
-export const UpdateModelMessageSchema = z.object({
-  type: z.literal('update_model').describe('Message type identifier'),
-  sessionId: z.string().describe('Unique session identifier'),
-  requestId: z.string().describe('Unique request identifier for tracking the response'),
-  modelData: z.any().describe('The model data to update in the client (can be complete model or partial update)'),
-  timestamp: z.string().optional().describe('ISO 8601 timestamp of when the message was created')
-});
-
-export const RunModelMessageSchema = z.object({
-  type: z.literal('run_model').describe('Message type identifier'),
-  sessionId: z.string().describe('Unique session identifier'),
-  requestId: z.string().describe('Unique request identifier for tracking the response'),
-  timestamp: z.string().optional().describe('ISO 8601 timestamp of when the message was created')
-});
-
-export const GetRunInfoMessageSchema = z.object({
-  type: z.literal('get_run_info').describe('Message type identifier'),
-  sessionId: z.string().describe('Unique session identifier'),
-  requestId: z.string().describe('Unique request identifier for tracking the response'),
-  timestamp: z.string().optional().describe('ISO 8601 timestamp of when the message was created')
-});
-
-export const GetVariableDataMessageSchema = z.object({
-  type: z.literal('get_variable_data').describe('Message type identifier'),
-  sessionId: z.string().describe('Unique session identifier'),
-  requestId: z.string().describe('Unique request identifier for tracking the response'),
-  variableNames: z.array(z.string()).describe('List of variable names to get data for'),
-  runIds: z.array(z.string()).describe('List of run IDs to get variable data from'),
-  detailed: z.boolean().optional().describe('Whether to return detailed data suitable for plotting (default: false). When true, returns more data points for visualization purposes.'),
-  timestamp: z.string().optional().describe('ISO 8601 timestamp of when the message was created')
-});
-
-export const ServerMessageSchema = z.discriminatedUnion('type', [
-  SessionCreatedMessageSchema,
-  SessionReadyMessageSchema,
-  AgentSelectedMessageSchema,
-  AgentTextMessageSchema,
-  ToolCallNotificationMessageSchema,
-  ToolCallRequestMessageSchema,
-  ToolCallCompletedMessageSchema,
-  VisualizationMessageSchema,
-  FeedbackRequestMessageSchema,
-  GetCurrentModelMessageSchema,
-  UpdateModelMessageSchema,
-  RunModelMessageSchema,
-  GetRunInfoMessageSchema,
-  GetVariableDataMessageSchema,
-  AgentCompleteMessageSchema,
-  ErrorMessageSchema
 ]);
 
 // ============================================================================
@@ -324,21 +159,6 @@ export function validateClientMessage(message) {
     return {
       success: true,
       data: ClientMessageSchema.parse(message)
-    };
-  } catch (error) {
-    return {
-      success: false,
-      error: error.message,
-      details: error.errors
-    };
-  }
-}
-
-export function validateServerMessage(message) {
-  try {
-    return {
-      success: true,
-      data: ServerMessageSchema.parse(message)
     };
   } catch (error) {
     return {
@@ -403,18 +223,6 @@ export function createToolCallNotificationMessage(sessionId, callId, toolName, a
   };
 }
 
-export function createToolCallRequestMessage(sessionId, callId, toolName, args, timeout = 30000) {
-  return {
-    type: 'tool_call_request',
-    sessionId,
-    callId,
-    toolName,
-    arguments: args,
-    timeout,
-    timestamp: new Date().toISOString()
-  };
-}
-
 export function createToolCallCompletedMessage(sessionId, callId, toolName, result, isError = false, responseType = null) {
   return {
     type: 'tool_call_completed',
@@ -424,19 +232,6 @@ export function createToolCallCompletedMessage(sessionId, callId, toolName, resu
     result,
     isError,
     ...(responseType && { responseType }),
-    timestamp: new Date().toISOString()
-  };
-}
-
-export function createVisualizationMessage(sessionId, vizId, title, data, description = undefined) {
-  return {
-    type: 'visualization',
-    sessionId,
-    visualizationId: vizId,
-    title,
-    ...(description && { description }),
-    format: 'image',
-    data,
     timestamp: new Date().toISOString()
   };
 }
