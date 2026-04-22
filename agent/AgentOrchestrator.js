@@ -409,14 +409,13 @@ export class AgentOrchestrator {
           this.removeOldModelsFromMessages(messages);
         }
 
-        // Add tool_result (truncated if too large)
         const messageIndex = messages.length;
         messages.push({
           role: 'user',
           content: [{
             type: 'tool_result',
             tool_use_id: block.id,
-            content: this.truncateToolResult(toolResult, block.name)
+            content: toolResult
           }]
         });
 
@@ -565,62 +564,6 @@ export class AgentOrchestrator {
 
     // Clear the tracking array
     this.modelResultIndices = [];
-  }
-
-  /**
-   * Truncate large tool results to prevent context overflow
-   * @param {Object} toolResult - The tool result object
-   * @param {string} toolName - Name of the tool
-   * @returns {string} Truncated result suitable for conversation context
-   */
-  truncateToolResult(toolResult, toolName) {
-    const resultStr = JSON.stringify(toolResult);
-    const tokenCount = countTokens(resultStr);
-    const MAX_TOOL_RESULT_TOKENS = 10000;
-
-    // If result is small enough, return as-is
-    if (tokenCount <= MAX_TOOL_RESULT_TOKENS) {
-      return resultStr;
-    }
-
-    // For large results, check if it's a model
-    let isModelResult = false;
-    let model = null;
-
-    if (toolResult.content && Array.isArray(toolResult.content)) {
-      const firstContent = toolResult.content[0];
-      if (firstContent && firstContent.type === 'text') {
-        try {
-          const parsedContent = JSON.parse(firstContent.text);
-          if (parsedContent.model || parsedContent.variables) {
-            isModelResult = true;
-            model = parsedContent.model || parsedContent;
-          }
-        } catch (e) {
-          // Not JSON, not a model result
-        }
-      }
-    }
-
-    // For large model results, return a summary
-    if (isModelResult && model) {
-      logger.log(`Tool result for ${toolName} is ${tokenCount} tokens, truncating to summary`);
-      const summary = {
-        type: 'text',
-        text: `[Large model result truncated for context - ${tokenCount} tokens]\n\nModel summary:\n- Variables: ${model.variables?.length || 0}\n- Relationships: ${model.relationships?.length || 0}\n- Modules: ${model.modules?.length || 0}\n- Specs: ${model.specs ? 'present' : 'absent'}\n\nThe full model has been sent to the client and is available via read_model_section tool.`
-      };
-      return JSON.stringify({ content: [summary] });
-    }
-
-    // Generic truncation for other large results
-    logger.log(`Tool result for ${toolName} is ${tokenCount} tokens, truncating to summary`);
-    const truncated = {
-      content: [{
-        type: 'text',
-        text: `[Result truncated - original was ${tokenCount} tokens]\n\n${resultStr.substring(0, 2000)}...\n\n[Truncated]`
-      }]
-    };
-    return JSON.stringify(truncated);
   }
 
   /**
