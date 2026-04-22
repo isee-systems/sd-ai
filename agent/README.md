@@ -4,16 +4,16 @@ AI-powered agent for building and modifying System Dynamics models via WebSocket
 
 ## Overview
 
-This WebSocket server provides an AI agent (powered by Claude) that helps users build, modify, and analyze System Dynamics models. The agent uses existing SD-AI engines as tools and allows clients to dynamically register their own tools for model execution and data retrieval.
+This WebSocket server provides an AI agent (powered by Claude) that helps users build, modify, and analyze System Dynamics models. The agent uses built-in SD-AI engine tools and communicates with the client for model state, simulation runs, feedback loop data, and variable time-series.
 
 **Key Features:**
 - Stateless server architecture (all user data lives client-side)
-- Session-specific temp folders for Python visualizations
-- Built-in SD-AI engine tools
-- Dynamic client tool registration
-- Configurable agent behavior via YAML
-- AI-powered custom visualizations
+- Built-in tools for model interaction — no tool registration required for core operations
+- Optional custom client tool registration for application-specific behavior
+- Configurable agent behavior via Markdown files in `agent/config/`
+- AI-powered custom visualizations (SVG)
 - Multiple agent personalities (Ganos Lal, Myrddin, etc.)
+- Per-session temp directory for visualization scratch space
 
 ## Architecture
 
@@ -22,25 +22,23 @@ This WebSocket server provides an AI agent (powered by Claude) that helps users 
 The **client** owns and maintains:
 - Complete model state (SD-JSON format)
 - All simulation run data
-- Full conversation history (including user messages, agent responses, and visualizations)
+- Full conversation history (user messages, agent responses, visualizations)
 - Message log for session resumption
 
 The **server** maintains (in-memory only):
 - Active WebSocket sessions
-- Model type (CLD or SFD) - set once, never changes
+- A per-session temp directory (created on connect, cleaned up on disconnect)
+- Model type (CLD or SFD) — set once, never changes
 - Conversation context (can be seeded with historical messages)
-- Pending tool calls and feedback requests
-- Session-specific temp folders
+- Pending tool calls, feedback requests, and model interaction requests
 
 ### Model Type Enforcement
 
 Each session works with ONE model type that cannot be changed:
-- **CLD** (Causal Loop Diagram) - Conceptual models with feedback loops
-- **SFD** (Stock Flow Diagram) - Quantitative models with stocks, flows, and equations
+- **CLD** (Causal Loop Diagram) — Conceptual models with feedback loops
+- **SFD** (Stock Flow Diagram) — Quantitative models with stocks, flows, and equations
 
-The model type is declared at session initialization and enforced throughout:
-- Agent will only use tools appropriate for that model type
-- If building an SFD requires a conceptual CLD first, the CLD will be shown in a separate window
+The model type is declared at session initialization and enforced throughout.
 
 ### Message Flow
 
@@ -66,9 +64,9 @@ ws://localhost:3000/api/v1/agent
 
 1. **Client connects** to WebSocket endpoint
 2. **Server sends** `session_created` with session ID
-3. **Client sends** `initialize_session` with auth, model type, initial model, and tools
+3. **Client sends** `initialize_session` with auth, model type, initial model, and optional custom tools
 4. **Server validates** and sends `session_ready` with available agents
-5. **Client sends** `select_agent` to choose an agent (e.g., "ganos-lal", "myrddin")
+5. **Client sends** `select_agent` to choose an agent (e.g., `"ganos-lal"`, `"myrddin"`)
 6. **Server sends** `agent_selected` confirmation
 7. **Normal conversation** begins with `chat` messages
 
@@ -78,7 +76,7 @@ All client messages include a `sessionId` (except `initialize_session` which rec
 
 #### 1. Initialize Session
 
-Establishes a session with authentication, model type, initial model, client tools, and context.
+Establishes a session with authentication, model type, initial model, and optional custom tools.
 
 ```json
 {
@@ -94,32 +92,14 @@ Establishes a session with authentication, model type, initial model, client too
   },
   "tools": [
     {
-      "name": "get_current_model",
-      "description": "Returns the current model state from the client",
-      "inputSchema": {
-        "type": "object",
-        "properties": {}
-      }
-    },
-    {
-      "name": "update_model",
-      "description": "Updates the client's model with changes",
+      "name": "open_variable_inspector",
+      "description": "Opens the variable inspector panel in the client UI for a given variable",
       "inputSchema": {
         "type": "object",
         "properties": {
-          "model": { "type": "object" },
-          "explanation": { "type": "string" }
-        }
-      }
-    },
-    {
-      "name": "run_model",
-      "description": "Runs a simulation and returns time series data",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "timeRange": { "type": "object" }
-        }
+          "variableName": { "type": "string" }
+        },
+        "required": ["variableName"]
       }
     }
   ],
@@ -140,21 +120,28 @@ Establishes a session with authentication, model type, initial model, client too
 }
 ```
 
+**Fields:**
+- `authenticationKey` — Server authentication (required only if `AUTHENTICATION_KEY` env var is set)
+- `clientProduct` — Client identifier (e.g., `"sd-web"`, `"sd-desktop"`)
+- `clientVersion` — Client version for compatibility checking
+- `modelType` — Either `"cld"` or `"sfd"` — **cannot be changed during session**
+- `model` — Initial model state (can be empty)
+- `tools` — Optional array of custom client tool definitions (see Client Tool Registration below). Core model operations are all built-in and do not need to be registered here.
+- `historicalMessages` — Optional array of previous messages to seed conversation context
+- `context` — Optional contextual information for the agent
+
 ### Historical Messages
 
-The `historicalMessages` field allows clients to provide conversation history from a previous session, enabling context continuity across reconnections or new sessions.
+The `historicalMessages` field lets clients provide conversation history from a previous session, enabling continuity across reconnections or new sessions.
 
 **Message Types:**
 
-1. **user_text** - User chat message
+1. **user_text** — User chat message
 ```json
-{
-  "type": "user_text",
-  "content": "Build me a population model"
-}
+{ "type": "user_text", "content": "Build me a population model" }
 ```
 
-2. **agent_text** - Agent response or thinking
+2. **agent_text** — Agent response or thinking
 ```json
 {
   "type": "agent_text",
@@ -163,51 +150,28 @@ The `historicalMessages` field allows clients to provide conversation history fr
 }
 ```
 
-3. **visualization** - Previous visualization (optional, for display purposes)
+3. **visualization** — Previous visualization (summarized as context, not re-rendered)
 ```json
 {
   "type": "visualization",
-  "visualizationId": "viz_123",
   "visualizationTitle": "Population Growth",
-  "visualizationDescription": "Shows exponential growth",
-  "imageData": "base64-encoded-png-data..."
+  "visualizationDescription": "Shows exponential growth"
 }
 ```
 
-4. **agent_complete** - Agent completion message
+4. **agent_complete** — Agent completion message
 ```json
-{
-  "type": "agent_complete",
-  "content": "I've completed building your model",
-  "status": "success"
-}
+{ "type": "agent_complete", "content": "I've completed building your model" }
 ```
-
-**Use Cases:**
-- Resume conversation after client restart
-- Provide context when switching agents mid-session
-- Share conversation history across devices
-- Load saved modeling sessions
 
 **Important Notes:**
-- Historical messages are converted to agent conversation context
-- Visualizations in history are logged but not re-rendered
-- Server uses messages to understand previous context but doesn't persist them
-- Client is responsible for maintaining and providing the complete history
-
-**Fields:**
-- `authenticationKey` - Server authentication (can be disabled in config)
-- `clientProduct` - Client identifier (e.g., "sd-web", "sd-desktop")
-- `clientVersion` - Client version for compatibility checking
-- `modelType` - Either `"cld"` or `"sfd"` - **cannot be changed during session**
-- `model` - Initial model state (can be empty)
-- `tools` - Array of client tool definitions (see Client Tool Registration below)
-- `historicalMessages` - Optional array of previous messages to provide context (see Historical Messages below)
-- `context` - Optional contextual information
+- Historical messages seed the agent's conversation context
+- The server does not persist messages — the client is responsible for maintaining history
+- SVG data from past visualizations is not replayed; only the title/description are included as context
 
 #### 2. Select Agent
 
-Chooses which agent personality to use for the session.
+Chooses which agent personality to use.
 
 ```json
 {
@@ -217,9 +181,7 @@ Chooses which agent personality to use for the session.
 }
 ```
 
-**Available Agents:**
-- `ganos-lal` - Helpful mentor who guides users through modeling
-- `myrddin` - Expert modeler focused on technical excellence
+Available agents are returned in `session_ready`. Agents are discovered from `.md` files in `agent/config/`.
 
 #### 3. Chat Message
 
@@ -235,33 +197,30 @@ Sends a user message to the agent.
 
 #### 4. Tool Call Response
 
-Responds to a `tool_call_request` with execution results.
+Responds to any `tool_call_request` or `feedback_request` from the server.
 
 ```json
 {
   "type": "tool_call_response",
   "sessionId": "sess_abc123",
-  "callId": "call_xyz789",
-  "result": {
-    "model": {
-      "variables": [...],
-      "relationships": [...]
-    }
-  },
+  "callId": "req_abc123",
+  "result": {},
   "isError": false
 }
 ```
 
-**Error Response:**
+**Error response:**
 ```json
 {
   "type": "tool_call_response",
   "sessionId": "sess_abc123",
-  "callId": "call_xyz789",
-  "result": "Model validation failed: missing required field 'name'",
+  "callId": "req_abc123",
+  "result": "Simulation failed: division by zero in equation",
   "isError": true
 }
 ```
+
+The `result` shape depends on which request is being answered — see the Server → Client messages below for the expected format per tool.
 
 #### 5. Model Updated Notification
 
@@ -272,8 +231,8 @@ Notifies the server when the client updates the model externally (e.g., user man
   "type": "model_updated_notification",
   "sessionId": "sess_abc123",
   "model": {
-    "variables": [...],
-    "relationships": [...]
+    "variables": [],
+    "relationships": []
   },
   "changeReason": "User manually added a new variable"
 }
@@ -281,7 +240,7 @@ Notifies the server when the client updates the model externally (e.g., user man
 
 #### 6. Stop Iteration
 
-Requests the agent to stop iterating immediately, interrupting the current conversation loop without disconnecting the session.
+Interrupts the current agent loop without disconnecting the session.
 
 ```json
 {
@@ -290,21 +249,11 @@ Requests the agent to stop iterating immediately, interrupting the current conve
 }
 ```
 
-**Purpose:**
-- Stops the agent mid-execution (e.g., if it's taking too long or heading in the wrong direction)
-- Session remains active - you can send new chat messages after stopping
-- Useful for interrupting lengthy tool chains or when the agent is stuck in a loop
-
-**Behavior:**
-- Agent stops immediately, interrupting any in-progress work
-- Stops after the current API call completes or during tool execution
-- Sends an `agent_complete` message with status `awaiting_user` and message "Agent stopped by user request"
-- Session state is preserved - conversation history remains intact
-- Client can immediately send a new chat message
+The agent stops after the current API call completes, then sends `agent_complete` with status `awaiting_user`. The session remains active and can receive new `chat` messages.
 
 #### 7. Disconnect
 
-Gracefully closes the session and cleans up all server-side resources.
+Gracefully closes the session and cleans up all server-side resources including the temp directory.
 
 ```json
 {
@@ -313,27 +262,13 @@ Gracefully closes the session and cleans up all server-side resources.
 }
 ```
 
-**Purpose:**
-- Ends the session completely and closes the WebSocket connection
-- Cleans up all server-side resources (session data, temp folders, pending calls)
-- Use when the user is done with the session or closing the application
-
-**Behavior:**
-- Agent orchestrator is destroyed
-- Session is deleted from the session manager
-- All temp files and session-specific folders are cleaned up
-- WebSocket connection is closed with code 1000 (normal closure)
-- After disconnect, a new session must be initialized to continue
-
-**Comparison with Stop Iteration:**
-- `stop_iteration` - Interrupts agent but keeps session alive for new messages
-- `disconnect` - Completely ends the session and closes the connection
+---
 
 ### Server → Client Messages
 
 #### 1. Session Created
 
-Sent immediately upon WebSocket connection. Provides the session ID for all subsequent messages.
+Sent immediately upon WebSocket connection.
 
 ```json
 {
@@ -345,7 +280,7 @@ Sent immediately upon WebSocket connection. Provides the session ID for all subs
 
 #### 2. Session Ready
 
-Sent after successful initialization. Lists available agents for selection.
+Sent after successful initialization. Lists available agents.
 
 ```json
 {
@@ -356,13 +291,13 @@ Sent after successful initialization. Lists available agents for selection.
       "id": "ganos-lal",
       "name": "Ganos Lal",
       "supports": ["sfd", "cld"],
-      "description": "A helpful mentor who guides you through building models"
+      "description": "System Dynamics mentor who uses Socratic questioning..."
     },
     {
       "id": "myrddin",
       "name": "Myrddin",
       "supports": ["sfd", "cld"],
-      "description": "An expert modeler focused on technical excellence"
+      "description": "..."
     }
   ],
   "defaults": {
@@ -373,13 +308,9 @@ Sent after successful initialization. Lists available agents for selection.
 }
 ```
 
-**Fields:**
-- `availableAgents` - Array of agent definitions with their supported model types
-- `defaults` - Object mapping model types to their default agent IDs
-
 #### 3. Agent Selected
 
-Confirms that an agent has been selected and is ready.
+Confirms the selected agent is ready.
 
 ```json
 {
@@ -393,7 +324,7 @@ Confirms that an agent has been selected and is ready.
 
 #### 4. Agent Text
 
-Text response from the agent (thinking or final response).
+Text response from the agent.
 
 ```json
 {
@@ -405,12 +336,11 @@ Text response from the agent (thinking or final response).
 }
 ```
 
-**Fields:**
-- `isThinking` - `true` if this is internal reasoning (optional to display), `false` for final response
+`isThinking: true` indicates internal reasoning — display is optional.
 
 #### 5. Tool Call Notification
 
-Informs the client that a tool is being called (for UI display purposes). Sent for ALL tools (built-in and client).
+Informs the client that a tool is being called (for UI display). Sent for all tools — built-in and custom.
 
 ```json
 {
@@ -418,50 +348,115 @@ Informs the client that a tool is being called (for UI display purposes). Sent f
   "sessionId": "sess_abc123",
   "callId": "call_abc456",
   "toolName": "generate_quantitative_model",
-  "arguments": {
-    "prompt": "Create a simple population model",
-    "modelType": "sfd"
-  },
   "isBuiltIn": true,
   "timestamp": "2025-01-15T10:30:02.000Z"
 }
 ```
 
-**Fields:**
-- `isBuiltIn` - `true` for server-side tools, `false` for client tools
-- **Client Action:** Display in UI, show loading state, log the tool call
-
 #### 6. Tool Call Request
 
-**Only sent for client tools.** Requests the client to execute one of their registered tools and return results.
+Requests the client to execute a model interaction and return results via `tool_call_response`. Sent for both built-in client interaction tools and any custom registered tools.
 
 ```json
 {
   "type": "tool_call_request",
   "sessionId": "sess_abc123",
-  "callId": "call_xyz789",
-  "toolName": "run_model",
-  "arguments": {
-    "timeRange": {
-      "start": 0,
-      "end": 100,
-      "dt": 1
-    }
-  },
+  "callId": "req_abc123",
+  "toolName": "get_current_model",
+  "arguments": {},
   "timeout": 30000,
   "timestamp": "2025-01-15T10:30:03.000Z"
 }
 ```
 
-**Fields:**
-- `timeout` - Milliseconds before request times out (default: 30000)
-- **Client Action:** Execute the tool and send back `tool_call_response`
+**Built-in tool names and expected `result` shapes:**
 
-**Important:** Client will receive BOTH `tool_call_notification` (for UI) AND `tool_call_request` (for execution) for client tools.
+**`get_current_model`** — return the current model state
+```json
+{
+  "model": {
+    "variables": [
+      {
+        "name": "Population",
+        "type": "stock",
+        "equation": "1000",
+        "documentation": "Total population",
+        "units": "people",
+        "inflows": ["Births"],
+        "outflows": ["Deaths"]
+      },
+      {
+        "name": "Births",
+        "type": "flow",
+        "equation": "Population * Birth Rate",
+        "uniflow": true
+      },
+      {
+        "name": "Birth Rate",
+        "type": "variable",
+        "equation": "0.02"
+      }
+    ],
+    "relationships": [
+      { "from": "Birth Rate", "to": "Births", "polarity": "+" },
+      { "from": "Population", "to": "Births", "polarity": "+" }
+    ],
+    "specs": {
+      "startTime": 0,
+      "stopTime": 100,
+      "dt": 0.25,
+      "timeUnits": "Years"
+    },
+    "errors": []
+  }
+}
+```
+
+`errors` is an array of strings set by the client to report any simulation or validation errors on the current model state. Pass an empty array if there are no errors.
+
+**`update_model`** — apply model changes, confirm success
+```json
+{ "success": true }
+```
+
+**`run_model`** — run the simulation, return the new run ID
+```json
+{ "runId": "run_abc123" }
+```
+
+**`get_run_info`** — return all simulation runs
+```json
+{
+  "runs": [
+    { "id": "run_abc123", "name": "Baseline" },
+    { "id": "run_def456", "name": "Policy" }
+  ]
+}
+```
+
+**`get_variable_data`** — return time-series data for requested variables and runs
+```json
+{
+  "variableData": {
+    "run_abc123": {
+      "Population": [
+        { "time": 0, "value": 1000 },
+        { "time": 1, "value": 1020 }
+      ],
+      "Births": [
+        { "time": 0, "value": 20 },
+        { "time": 1, "value": 20.4 }
+      ]
+    }
+  }
+}
+```
+
+For **custom registered tools**, the `toolName` will match a name from the `tools` array provided in `initialize_session`, and `result` can be any JSON value meaningful to the agent.
 
 #### 7. Tool Call Completed
 
-Sent after a tool completes execution (built-in or client tool).
+Sent after a built-in tool finishes execution.
 
 ```json
 {
@@ -469,27 +464,14 @@ Sent after a tool completes execution (built-in or client tool).
   "sessionId": "sess_abc123",
   "callId": "call_abc456",
   "toolName": "generate_quantitative_model",
-  "result": {
-    "content": [
-      {
-        "type": "text",
-        "text": "{\"model\": {...}, \"supportingInfo\": {...}}"
-      }
-    ]
-  },
   "isError": false,
-  "responseType": "model",
   "timestamp": "2025-01-15T10:30:04.000Z"
 }
 ```
 
-**Fields:**
-- `isError` - Whether the tool execution failed
-- `responseType` - One of: `"model"`, `"discuss"`, `"ltm-discuss"`, `"other"`
-
 #### 8. Visualization
 
-Sends visualization data to the client as base64 encoded PNG images.
+Sends an SVG visualization to the client.
 
 ```json
 {
@@ -498,48 +480,32 @@ Sends visualization data to the client as base64 encoded PNG images.
   "visualizationId": "viz_12345",
   "title": "Population Growth Over Time",
   "description": "Shows exponential growth pattern",
-  "format": "image",
-  "data": {
-    "encoding": "base64",
-    "mimeType": "image/png",
-    "content": "iVBORw0KGgoAAAANSUhEUgAAA...",
-    "width": 800,
-    "height": 600
-  },
+  "format": "svg",
+  "data": "<svg xmlns=\"http://www.w3.org/2000/svg\" ...>...</svg>",
   "timestamp": "2025-01-15T10:30:05.000Z"
 }
 ```
 
-**Format:**
-- All visualizations are returned as base64-encoded PNG images
-- The `data` field is an object containing:
-  - `encoding`: Always "base64"
-  - `mimeType`: Image MIME type (e.g., "image/png")
-  - `content`: Base64-encoded image data
-  - `width`: Image width in pixels
-  - `height`: Image height in pixels
+- `format` is always `"svg"`
+- `data` is a raw SVG string (not base64, not PNG)
 - `description` is optional
 
 #### 9. Feedback Request
 
-Requests feedback loop analysis data from the client (used by Seldon engine for enhanced discussions).
+Requests feedback loop analysis data from the client, used by the Seldon and LTM narrative tools.
 
 ```json
 {
   "type": "feedback_request",
   "sessionId": "sess_abc123",
   "requestId": "feedback_xyz789",
-  "runIds": ["run_baseline", "run_policy"],
+  "runIds": ["run_abc123", "run_def456"],
   "timestamp": "2025-01-15T10:30:07.000Z"
 }
 ```
 
-**Fields:**
-- `runIds` - Array of simulation run IDs to get feedback for
-  - Empty array `[]` means the current/most recent run
-  - Multiple run IDs means request comparative feedback for those runs
+**Client response** — send `tool_call_response` with `callId` set to the `requestId`:
 
-**Client Response (Single Run):** Send `tool_call_response` with:
 ```json
 {
   "type": "tool_call_response",
@@ -547,54 +513,35 @@ Requests feedback loop analysis data from the client (used by Seldon engine for 
   "callId": "feedback_xyz789",
   "result": {
     "feedbackContent": {
-      "loops": [
+      "feedbackLoops": [
         {
-          "id": "loop_1",
+          "identifier": "loop_1",
           "name": "Population Growth Loop",
-          "type": "reinforcing",
-          "polarity": "R",
-          "variables": ["Population", "Births"],
-          "strength": 0.85,
-          "dominance": [
+          "polarity": "+",
+          "links": [
+            { "from": "Population", "to": "Births", "polarity": "+" },
+            { "from": "Births", "to": "Population", "polarity": "+" }
+          ],
+          "loopset": 1,
+          "Percent of Model Behavior Explained By Loop": [
             { "time": 0, "value": 0.3 },
             { "time": 10, "value": 0.8 }
           ]
         }
+      ],
+      "dominantLoopsByPeriod": [
+        { "dominantLoops": ["loop_1"], "startTime": 0, "endTime": 50 }
       ]
     },
-    "runIds": ["run_current"]
-  }
+    "runIds": ["run_abc123"]
+  },
+  "isError": false
 }
 ```
 
-**Client Response (Multiple Runs):** Send `tool_call_response` with:
-```json
-{
-  "type": "tool_call_response",
-  "sessionId": "sess_abc123",
-  "callId": "feedback_xyz789",
-  "result": {
-    "feedbackContent": {
-      "runs": {
-        "run_baseline": {
-          "loops": [...]
-        },
-        "run_policy": {
-          "loops": [...]
-        }
-      },
-      "comparison": {
-        "differenceExplanation": "Policy intervention shifts dominance..."
-      }
-    },
-    "runIds": ["run_baseline", "run_policy"]
-  }
-}
-```
+#### 10. Get Variable Data Request
 
-#### 10. Get Variable Data
-
-Requests time-series data for specific variables from specific simulation runs (used for analysis and visualization).
+Requests time-series data for specific variables from specific runs.
 
 ```json
 {
@@ -602,51 +549,19 @@ Requests time-series data for specific variables from specific simulation runs (
   "sessionId": "sess_abc123",
   "requestId": "vardata_xyz789",
   "variableNames": ["Population", "Births", "Deaths"],
-  "runIds": ["run_baseline", "run_policy"],
+  "runIds": ["run_abc123", "run_def456"],
   "detailed": true,
   "timestamp": "2025-01-15T10:30:07.500Z"
 }
 ```
 
-**Fields:**
-- `variableNames` - Array of variable names to retrieve data for
-- `runIds` - Array of simulation run IDs to get data from
-- `detailed` - Optional boolean (default: `false`)
-  - When `false`: Returns sampled/summarized data suitable for quick analysis
-  - When `true`: Returns full detailed data with more data points, suitable for plotting and visualization
+- `detailed: true` returns more data points suitable for plotting; `false` returns a sampled summary
 
-**Client Response:** Send `tool_call_response` with:
-```json
-{
-  "type": "tool_call_response",
-  "sessionId": "sess_abc123",
-  "callId": "vardata_xyz789",
-  "result": {
-    "variableData": {
-      "run_baseline": {
-        "Population": [
-          { "time": 0, "value": 1000 },
-          { "time": 1, "value": 1020 },
-          { "time": 2, "value": 1040.4 }
-        ],
-        "Births": [
-          { "time": 0, "value": 20 },
-          { "time": 1, "value": 20.4 },
-          { "time": 2, "value": 20.808 }
-        ]
-      },
-      "run_policy": {
-        "Population": [...],
-        "Births": [...]
-      }
-    }
-  }
-}
-```
+**Client response** — send `tool_call_response` with `callId` set to the `requestId` and the `variableData` shape shown in §6 above.
 
 #### 11. Agent Complete
 
-Signals that the agent has finished processing the current request.
+Signals the agent has finished the current request.
 
 ```json
 {
@@ -658,268 +573,130 @@ Signals that the agent has finished processing the current request.
 }
 ```
 
-**Status Values:**
-- `"success"` - Task completed successfully
-- `"error"` - Task failed
-- `"awaiting_user"` - Waiting for user input
+**Status values:** `"success"` | `"error"` | `"awaiting_user"`
 
 #### 12. Error
 
-Reports errors during message processing or tool execution.
+Reports errors during processing.
 
 ```json
 {
   "type": "error",
   "sessionId": "sess_abc123",
-  "error": "Tool 'run_model' timed out after 30 seconds",
+  "error": "Tool 'run_model' timed out after 60 seconds",
   "errorCode": "TOOL_TIMEOUT",
   "recoverable": true,
   "timestamp": "2025-01-15T10:30:09.000Z"
 }
 ```
 
-**Fields:**
-- `recoverable` - If `true`, the session can continue; if `false`, reconnection may be needed
+`recoverable: true` means the session can continue; `false` means reconnection may be needed.
+
+---
 
 ## Client Tool Registration
 
-Clients register their tools during `initialize_session`. Each tool must follow this schema:
+Clients can optionally register custom tools during `initialize_session`. These are application-specific operations the agent can invoke — for example, opening a UI panel, triggering an export, or running a custom analysis.
+
+Core model operations (`get_current_model`, `update_model`, `run_model`, `get_run_info`, `get_variable_data`) are all built-in and do **not** need to be registered.
 
 ```typescript
 {
   name: string,              // Unique tool name
-  description: string,       // What the tool does (for AI)
+  description: string,       // What the tool does (shown to the AI)
   inputSchema: {             // JSON Schema for parameters
     type: "object",
     properties: {
       // Parameter definitions
     },
-    required?: string[]      // Required parameters
+    required?: string[]
   }
 }
 ```
 
-### Recommended Client Tools
+When the agent calls a custom tool, the server sends a `tool_call_request` and the client must respond with `tool_call_response`.
 
-#### 1. get_current_model
-
-**Purpose:** Returns the current model state from the client.
-
-```json
-{
-  "name": "get_current_model",
-  "description": "Get the current model from the client",
-  "inputSchema": {
-    "type": "object",
-    "properties": {}
-  }
-}
-```
-
-**Expected Response:**
-```json
-{
-  "model": {
-    "variables": [...],
-    "relationships": [...],
-    "specs": {...}
-  }
-}
-```
-
-#### 2. update_model
-
-**Purpose:** Updates the client's model with changes or a complete replacement.
-
-```json
-{
-  "name": "update_model",
-  "description": "Update the client model with changes or replace it entirely",
-  "inputSchema": {
-    "type": "object",
-    "properties": {
-      "model": {
-        "type": "object",
-        "description": "Complete model to set (replaces current model)"
-      },
-      "explanation": {
-        "type": "string",
-        "description": "Human-readable explanation of what changed"
-      }
-    },
-    "required": ["model"]
-  }
-}
-```
-
-**Expected Response:**
-```json
-{
-  "success": true,
-  "model": {
-    "variables": [...],
-    "relationships": [...]
-  }
-}
-```
-
-#### 3. run_model
-
-**Purpose:** Executes a simulation and returns time series data.
-
-```json
-{
-  "name": "run_model",
-  "description": "Run model simulation and return time series data",
-  "inputSchema": {
-    "type": "object",
-    "properties": {
-      "timeRange": {
-        "type": "object",
-        "description": "Simulation time configuration"
-      }
-    }
-  }
-}
-```
-
-**Expected Response:**
-```json
-{
-  "success": true,
-  "results": {
-    "series": [
-      { "time": 0, "Population": 1000, "Births": 20 },
-      { "time": 1, "Population": 1020, "Births": 20.4 }
-    ]
-  }
-}
-```
+---
 
 ## Built-In Tools
 
-The agent has access to these SD-AI engine tools:
+All core tools are registered server-side. Clients do not need to register them.
 
 ### Model Generation
-
-1. **generate_quantitative_model** - Generate Stock Flow Diagrams (SFD)
-   - Creates fully quantitative models with stocks, flows, and equations
-   - Returns SD-JSON format model
-
-2. **generate_qualitative_model** - Generate Causal Loop Diagrams (CLD)
-   - Creates conceptual models showing causal relationships
-   - Returns SD-JSON format model
+- **generate_quantitative_model** — Generate Stock Flow Diagrams (SFD)
+- **generate_qualitative_model** — Generate Causal Loop Diagrams (CLD)
 
 ### Discussion & Analysis
-
-3. **discuss_model_with_seldon** - Expert SD discussion with Seldon
-   - Deep technical discussions about model structure and behavior
-   - Can request and use feedback loop analysis for enhanced insights
-
-4. **discuss_model_across_runs** - User-friendly discussion with run comparison
-   - Compare behavior across different simulation runs
-   - Explain why different scenarios produce different outcomes
-
-5. **discuss_with_mentor** - Friendly mentoring discussions
-   - User-friendly explanations without jargon
-   - Educational approach to modeling concepts
+- **discuss_model_with_seldon** — Deep technical discussion with feedback loop analysis
+- **discuss_model_across_runs** — Compare behavior across simulation runs
+- **discuss_with_mentor** — User-friendly mentoring discussion
 
 ### Documentation
-
-6. **generate_documentation** - Auto-document model variables
-   - Generates descriptions and metadata for model elements
-   - Ensures model is well-documented
-
-7. **generate_ltm_narrative** - Feedback loop narratives
-   - Creates Loop Transition Matrices (LTM) narratives
-   - Analyzes feedback loop dominance over time
+- **generate_documentation** — Auto-document model variables
+- **generate_ltm_narrative** — Feedback loop dominance narratives (LTM)
 
 ### Visualization
+- **create_visualization** — Create SVG charts; supports `time_series`, `phase_portrait`, `feedback_dominance`, `comparison`, and AI-custom types
 
-8. **create_visualization** - Create charts and plots
-   - Returns base64-encoded PNG images only
-   - Python/matplotlib for all visualizations
-   - AI-generated custom visualization code
+### Client Model Interaction
+- **get_current_model** — Fetch current model state from client
+- **update_model** — Push model changes to client
+- **run_model** — Trigger simulation run on client
+- **get_run_info** — Get list of all simulation runs from client
+- **get_variable_data** — Fetch time-series variable data from client
+
+### Feedback
+- **get_feedback_information** — Request feedback loop analysis from client (required before Seldon/LTM tools)
+
+### Large Model Utilities
+- **read_model_section** — Read a section of a large model without loading it entirely
+- **edit_model_section** — Edit a section of a large model in place
+
+---
 
 ## Agent Configuration
 
-Each agent is configured via YAML files in `agent/config/`:
+Agents are configured via Markdown files in `agent/config/`. The server automatically discovers any `.md` file with a `name` frontmatter field.
 
-- `ganos-lal.yaml` - Helpful mentor personality
-- `myrddin.yaml` - Expert modeler personality
+```
+agent/config/
+  ganos-lal.md
+  myrddin.md
+```
 
-**Key Configuration Sections:**
+**Frontmatter fields:**
 
 ```yaml
-agent:
-  name: "Ganos Lal"
-  description: "A helpful mentor..."
-
-instructions:
-  role: |
-    You are a friendly Systems Dynamics expert...
-
-  constraints:
-    - "Never modify the model without explaining why"
-    - "Always validate before running simulations"
-
-  workflows:
-    build_model: |
-      1. Understand user requirements
-      2. Create conceptual CLD first
-      3. Build quantitative SFD
-      4. Validate and test
-
-toolPolicies:
-  generate_quantitative_model:
-    when: "Building or significantly modifying an SFD model"
-    bestPractices:
-      - "Validate all equations"
+---
+name: "Ganos Lal"
+description: "System Dynamics mentor who uses Socratic questioning..."
+version: "1.0"
+max_iterations: 20
+supports:
+  - sfd
+  - cld
+---
 ```
+
+The Markdown body below the frontmatter is the agent's full system prompt/instructions.
+
+---
 
 ## Visualization System
 
-The agent creates visualizations using Python/matplotlib and always returns base64-encoded PNG images.
-
-### 1. Template-Based Visualizations (Default)
-
-Generates Python scripts using predefined templates for common visualization types.
-
-```javascript
-{
-  type: 'time_series',
-  variables: ['Population', 'Births'],
-  title: 'Population Dynamics'
-}
-```
+Visualizations are generated using Python/matplotlib and sent as raw SVG strings.
 
 **Supported types:**
-- `time_series` - Time series line plots
-- `phase_portrait` - Phase space diagrams
-- `comparison` - Compare runs side-by-side
+- `time_series` — Line plots of variables over time
+- `phase_portrait` — State-space (stock vs. stock) diagrams
+- `feedback_dominance` — Stacked area chart of loop influence over time
+- `comparison` — Multi-run side-by-side comparison
 
-### 2. AI-Custom Visualizations
+**AI-custom visualizations:** Set `useAICustom: true` to have the AI generate custom matplotlib code for unique requirements.
 
-Uses AI to write custom Python/matplotlib code for unique requirements.
+**Output:** All visualizations are raw SVG strings — the `data` field in the `visualization` message is the SVG directly, not base64 or PNG.
 
-```javascript
-{
-  variables: ['Population', 'Births'],
-  useAICustom: true,
-  dataDescription: 'Population shows exponential growth...',
-  visualizationGoal: 'Highlight the divergence between births and deaths',
-  customRequirements: 'Use a log scale for the y-axis'
-}
-```
-
-**Temp File Management:**
-- Session-specific folder: `/tmp/sd-agent-{sessionId}/`
-- Files deleted immediately after visualization creation
-- Folder cleaned up on session disconnect
-
-**Output:**
-- All visualizations return base64-encoded PNG strings
-- No JSON specs or other formats - images only
+---
 
 ## Example Client Implementation
 
@@ -931,77 +708,42 @@ import WebSocket from 'ws';
 const ws = new WebSocket('ws://localhost:3000/api/v1/agent');
 let sessionId = null;
 
-ws.on('open', () => {
-  console.log('Connected to agent server');
-});
-
 ws.on('message', (data) => {
   const message = JSON.parse(data);
-  console.log('Received:', message.type);
 
   switch (message.type) {
     case 'session_created':
       sessionId = message.sessionId;
-      // Send initialization
       ws.send(JSON.stringify({
         type: 'initialize_session',
         authenticationKey: 'your-key',
         clientProduct: 'my-client',
         clientVersion: '1.0.0',
         modelType: 'sfd',
-        model: {},
-        tools: [
-          {
-            name: 'get_current_model',
-            description: 'Get current model',
-            inputSchema: { type: 'object', properties: {} }
-          },
-          {
-            name: 'update_model',
-            description: 'Update model',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                model: { type: 'object' }
-              }
-            }
-          }
-        ]
+        model: {}
+        // Optionally include custom tools here
       }));
       break;
 
     case 'session_ready':
-      // Select agent
-      ws.send(JSON.stringify({
-        type: 'select_agent',
-        sessionId: sessionId,
-        agentId: 'ganos-lal'
-      }));
+      const agentId = message.defaults?.sfd || message.availableAgents[0]?.id;
+      ws.send(JSON.stringify({ type: 'select_agent', sessionId, agentId }));
       break;
 
     case 'agent_selected':
-      // Start conversation
       ws.send(JSON.stringify({
         type: 'chat',
-        sessionId: sessionId,
+        sessionId,
         message: 'Build me a simple population model'
       }));
       break;
 
-    case 'tool_call_notification':
-      console.log(`Tool ${message.toolName} is being called (built-in: ${message.isBuiltIn})`);
+    case 'tool_call_request':
+      handleToolCallRequest(message);
       break;
 
-    case 'tool_call_request':
-      // Execute client tool
-      const result = executeClientTool(message.toolName, message.arguments);
-      ws.send(JSON.stringify({
-        type: 'tool_call_response',
-        sessionId: sessionId,
-        callId: message.callId,
-        result: result,
-        isError: false
-      }));
+    case 'feedback_request':
+      handleFeedbackRequest(message);
       break;
 
     case 'agent_text':
@@ -1009,13 +751,12 @@ ws.on('message', (data) => {
       break;
 
     case 'visualization':
-      console.log('Received visualization:', message.title);
-      // Display visualization using message.data.content
-      // Example: <img src="data:image/png;base64,${message.data.content}" />
+      // message.format === 'svg', message.data is a raw SVG string
+      displaySVG(message.data, message.title, message.description);
       break;
 
     case 'agent_complete':
-      console.log('Agent finished:', message.status);
+      console.log('Done:', message.status, message.finalMessage);
       break;
 
     case 'error':
@@ -1024,28 +765,55 @@ ws.on('message', (data) => {
   }
 });
 
-// Stop agent iteration (e.g., on button click)
-function stopAgent() {
+function handleToolCallRequest(message) {
+  let result;
+  switch (message.toolName) {
+    case 'get_current_model':
+      result = { model: currentModel };
+      break;
+    case 'update_model':
+      currentModel = message.arguments.modelData;
+      result = { success: true };
+      break;
+    case 'run_model':
+      result = { runId: runSimulation() };
+      break;
+    case 'get_run_info':
+      result = { runs: getAllRuns() };
+      break;
+    case 'get_variable_data':
+      result = { variableData: getVariableData(message.arguments) };
+      break;
+    default:
+      // Custom registered tool
+      result = executeCustomTool(message.toolName, message.arguments);
+  }
   ws.send(JSON.stringify({
-    type: 'stop_iteration',
-    sessionId: sessionId
+    type: 'tool_call_response',
+    sessionId,
+    callId: message.callId,
+    result,
+    isError: false
   }));
 }
 
-function executeClientTool(toolName, args) {
-  switch (toolName) {
-    case 'get_current_model':
-      return { model: currentModel };
+function handleFeedbackRequest(message) {
+  const feedbackContent = getFeedbackLoops(message.runIds);
+  ws.send(JSON.stringify({
+    type: 'tool_call_response',
+    sessionId,
+    callId: message.requestId,
+    result: { feedbackContent, runIds: message.runIds },
+    isError: false
+  }));
+}
 
-    case 'update_model':
-      currentModel = args.model;
-      return { success: true, model: currentModel };
-
-    default:
-      return { error: `Unknown tool: ${toolName}` };
-  }
+function stopAgent() {
+  ws.send(JSON.stringify({ type: 'stop_iteration', sessionId }));
 }
 ```
+
+---
 
 ## Security & Scalability
 
@@ -1057,53 +825,20 @@ Set `AUTHENTICATION_KEY` environment variable to enable authentication:
 export AUTHENTICATION_KEY="your-secret-key"
 ```
 
-Clients must include this in `initialize_session`.
+Clients must include this in `initialize_session`. If the env var is not set, authentication is disabled.
 
 ### Stateless Design
 
 - No user data persisted server-side
-- Sessions exist only in RAM
-- Automatic cleanup on disconnect
+- Sessions exist only in RAM, but do make use of a temporary directory for large model edits and visualization generation
+- Per-session temp directory created on connect, deleted on disconnect
 - Safe for multi-user deployment
-
-### Resource Limits
-
-- Max sessions: 1000 (configurable)
-- Session timeout: 30 minutes inactive
-- Max session age: 8 hours
-- Temp folder monitoring
 
 ### Scaling
 
-- Horizontal scaling supported
-- Use sticky sessions at load balancer
-- OR: Use shared session store (Redis)
+- Horizontal scaling supported with sticky sessions at the load balancer
 
-## Troubleshooting
-
-### WebSocket won't connect
-
-- Check firewall allows WebSocket connections
-- Verify path is `/api/v1/agent`
-- Check server logs for errors
-
-### Tool call timeout
-
-- Client must respond within 30 seconds (configurable)
-- Check client tool implementation
-- Verify WebSocket connection is stable
-
-### Temp files not cleaned up
-
-- Check session cleanup logs
-- Verify graceful shutdown handlers
-- Monitor `/tmp/sd-agent-*/` directories
-
-### Visualization fails
-
-- Python 3 must be available
-- matplotlib must be installed
-- Check temp folder permissions
+---
 
 ## Development
 
@@ -1114,7 +849,6 @@ npm start
 ```
 
 WebSocket server available at: `ws://localhost:3000/api/v1/agent`
-
 
 ### Testing
 
