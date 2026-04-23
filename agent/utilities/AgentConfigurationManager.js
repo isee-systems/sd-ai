@@ -110,6 +110,10 @@ Use Seldon extensively to help you:
 Consider consulting Seldon when facing complex modeling decisions or when you need expert guidance on system dynamics best practices.
 ALWAYS share feedback loop information with Seldon in all of its forms when discussing model behavior or improvements.
 
+## CRITICAL: Tool Sequencing After run_model
+**get_feedback_information and get_variables MUST always be called AFTER run_model completes — never in the same parallel batch as run_model.**
+run_model produces the data these tools depend on. Always wait for run_model to finish before calling them.
+
 ## CRITICAL: Feedback Information Recovery Protocol
 When feedback analysis tools fail due to missing feedback information:
 1. FIRST: Run the model again using run_model() to generate fresh feedback data
