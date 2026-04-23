@@ -561,7 +561,7 @@ Requests time-series data for specific variables from specific runs.
 
 #### 11. Agent Complete
 
-Signals the agent has finished the current request.
+Signals the agent has finished the current request. **Agent execution only stops when the client disconnects or when this message is received** — clients should treat `agent_complete` as the authoritative signal that the agent is idle and ready for the next input.
 
 ```json
 {
@@ -590,7 +590,7 @@ Reports errors during processing.
 }
 ```
 
-`recoverable: true` means the session can continue; `false` means reconnection may be needed.
+`recoverable: true` means the session can continue; `false` means reconnection may be needed. Note that receiving an `error` message does not mean the agent has stopped — the agent may still continue iterating. Wait for `agent_complete` before treating the agent as idle.
 
 ---
 

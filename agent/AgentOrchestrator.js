@@ -280,6 +280,11 @@ export class AgentOrchestrator {
           'AGENT_ERROR',
           true
         ));
+        await this.sendToClient(createAgentCompleteMessage(
+          this.sessionId,
+          'awaiting_user',
+          `Agent error: ${error.message}`
+        ));
       }
     } finally {
       this.abortController = null;
@@ -562,6 +567,7 @@ export class AgentOrchestrator {
     let continueLoop = true;
     const maxIterations = this.configManager.getMaxIterations();
     let iteration = 0;
+    let overloadedRetries = 0; // max 3 total per conversation turn
 
     while (continueLoop && iteration < maxIterations && !this.stopRequested) {
       iteration++;
@@ -641,14 +647,44 @@ export class AgentOrchestrator {
         }
 
       } catch (error) {
-        logger.error('Error in agent conversation loop:', error);
-        await this.sendToClient(createErrorMessage(
-          this.sessionId,
-          `Agent error: ${error.message}`,
-          'AGENT_ERROR',
-          true
-        ));
-        continueLoop = false;
+        const isOverloaded = error?.status === 529 || error?.error?.type === 'overloaded_error';
+        if (isOverloaded && overloadedRetries < 3) {
+          overloadedRetries++;
+          logger.warn(`Anthropic API overloaded (529), retry ${overloadedRetries}/3`);
+          await this.sendToClient(createAgentTextMessage(
+            this.sessionId,
+            'The AI service is temporarily overloaded. Retrying...'
+          ));
+          await new Promise(resolve => setTimeout(resolve, 5000));
+        } else if (isOverloaded) {
+          logger.error('Anthropic API overloaded (529) after 3 retries, giving up');
+          await this.sendToClient(createErrorMessage(
+            this.sessionId,
+            'The AI service is overloaded. Please try again later.',
+            'AGENT_ERROR',
+            true
+          ));
+          await this.sendToClient(createAgentCompleteMessage(
+            this.sessionId,
+            'awaiting_user',
+            'Agent stopped due to overloaded API'
+          ));
+          continueLoop = false;
+        } else {
+          logger.error('Error in agent conversation loop:', error);
+          await this.sendToClient(createErrorMessage(
+            this.sessionId,
+            `Agent error: ${error.message}`,
+            'AGENT_ERROR',
+            true
+          ));
+          await this.sendToClient(createAgentCompleteMessage(
+            this.sessionId,
+            'awaiting_user',
+            'Agent stopped due to error'
+          ));
+          continueLoop = false;
+        }
       }
     }
 
