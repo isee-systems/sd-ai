@@ -26,7 +26,7 @@ export function createGenerateQuantitativeModelTool(sessionManager, sessionId, s
         // Check if model exceeds token limit - if so, refuse to call this tool
         if (sessionManager.modelExceedsTokenLimit(sessionId)) {
           return createErrorResponse(
-            `Cannot use generate_quantitative_model when the model exceeds the token limit (${config.maxTokensForEngines} tokens). The model is currently ${sessionManager.getModelTokenCount(sessionId)} tokens. Please use read_model_section and edit_model_section tools instead to work with large models.`
+            `Cannot use generate_quantitative_model when the model exceeds the token limit (${config.agentMaxTokensForEngines} tokens). The model is currently ${sessionManager.getModelTokenCount(sessionId)} tokens. Please use read_model_section and edit_model_section tools instead to work with large models.`
           );
         }
 

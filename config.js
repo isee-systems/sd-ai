@@ -5,12 +5,13 @@
 
 const config = {
     "port": 3000,
-    "websocketPort": 3000,
     "reporterURL": process.env.REPORTER_URL || null, // Optional URL to POST engine usage metrics
+    "websocketPort": 3000,
     "sessionTempDir": process.env.SESSION_TEMP_DIR || null, // Optional custom temp directory for session files (defaults to OS tmpdir/sd-agent)
-    "maxTokensForEngines": parseInt(process.env.MAX_TOKENS_FOR_ENGINES) || 100000, // Maximum tokens before switching to file-based editing
-    "maxContextTokens": parseInt(process.env.MAX_CONTEXT_TOKENS) || 100000, // Maximum tokens for conversation history sent to Claude API
-    "useAgentSDK": process.env.USE_AGENT_SDK === 'true' || false, // Use Claude Agent SDK instead of manual agent loop
+    "agentMaxTokensForEngines": parseInt(process.env.MAX_TOKENS_FOR_ENGINES) || 100000, // Maximum tokens before switching to file-based editing
+    "agentMaxContextTokens": parseInt(process.env.MAX_CONTEXT_TOKENS) || 100000, // Maximum tokens for conversation history sent to Claude API
+    "agentModel": process.env.AGENT_MODEL || 'claude-sonnet-4-6', // Model used for agent conversations MUST BE Anthropic models
+    "agentSummaryModel": process.env.SUMMARY_MODEL || 'claude-haiku-4-5', // Model used for conversation history summarization MUST BE Anthropic models
 };
 
 export default config

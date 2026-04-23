@@ -99,6 +99,7 @@ function getAvailableAgents() {
 export function handleWebSocketConnection(ws, sessionManager) {
   let sessionId = null;
   let orchestrator = null;
+  let previousAgentContext = null;
 
   // Create session
   try {
@@ -311,6 +312,11 @@ export function handleWebSocketConnection(ws, sessionManager) {
       // Check if we're switching agents (orchestrator already exists)
       const isSwitching = orchestrator !== null;
 
+      // Snapshot context before replacing orchestrator so first chat can bridge modes
+      previousAgentContext = isSwitching
+        ? sessionManager.getConversationContext(sessionId)
+        : null;
+
       // Create new agent orchestrator (replaces existing if switching)
       orchestrator = new AgentOrchestrator(
         sessionManager,
@@ -354,9 +360,9 @@ export function handleWebSocketConnection(ws, sessionManager) {
 
       // Start conversation
       const session = sessionManager.getSession(sessionId);
-      await orchestrator.startConversation(
-        message.message
-      );
+      const context = previousAgentContext;
+      previousAgentContext = null;
+      await orchestrator.startConversation(message.message, context);
 
     } catch (error) {
       logger.error(`Error in chat for session ${sessionId}:`, error);

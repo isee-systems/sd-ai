@@ -168,7 +168,7 @@ export class SessionManager {
     const session = this.getSession(sessionId);
     if (session) {
       session.modelTokenCount = tokenCount;
-      session.modelExceedsTokenLimit = tokenCount > config.maxTokensForEngines;
+      session.modelExceedsTokenLimit = tokenCount > config.agentMaxTokensForEngines;
     }
   }
 

@@ -3,6 +3,7 @@ name: "Ganos Lal"
 description: "System Dynamics mentor who uses Socratic questioning to teach concepts. Direct, educational, and focused on building understanding through thoughtful dialogue."
 version: "1.0"
 max_iterations: 20
+use_agent_sdk: false
 supports:
   - sfd
   - cld

@@ -53,7 +53,7 @@ export class AgentOrchestrator {
       apiKey: process.env.ANTHROPIC_API_KEY
     });
 
-    logger.log(`AgentOrchestrator initialized for session ${sessionId} (useAgentSDK: ${config.useAgentSDK})`);
+    logger.log(`AgentOrchestrator initialized for session ${sessionId} (useAgentSDK: ${this.configManager.getUseAgentSDK()})`);
   }
 
   /**
@@ -66,21 +66,25 @@ export class AgentOrchestrator {
   /**
    * Start a conversation with the agent
    */
-  async startConversation(userMessage) {
+  async startConversation(userMessage, previousAgentContext = null) {
     try {
       const session = this.sessionManager.getSession(this.sessionId);
       if (!session) {
         throw new Error(`Session not found: ${this.sessionId}`);
       }
 
-      logger.log(`Starting conversation for session ${this.sessionId} (mode: ${config.useAgentSDK ? 'SDK' : 'manual'})`);
+      const useAgentSDK = this.configManager.getUseAgentSDK();
+      logger.log(`Starting conversation for session ${this.sessionId} (mode: ${useAgentSDK ? 'SDK' : 'manual'})`);
       logger.log(`Built-in tools: ${this.builtInToolProvider.getToolNames().join(', ')}`);
       logger.log(`Client tools: ${this.dynamicToolProvider.getToolNames().join(', ')}`);
 
-      // Branch based on configuration
-      if (config.useAgentSDK) {
-        await this.startConversationWithSDK(userMessage);
+      // Branch based on agent configuration
+      if (useAgentSDK) {
+        await this.startConversationWithSDK(userMessage, previousAgentContext);
       } else {
+        if (previousAgentContext?.length > 0) {
+          logger.debug(`[Agent switch → manual] Replaying ${previousAgentContext.length} messages from prior agent:`, JSON.stringify(previousAgentContext, null, 2));
+        }
         await this.startConversationManual(userMessage);
       }
 
@@ -123,9 +127,16 @@ export class AgentOrchestrator {
   /**
    * Start conversation using Claude Agent SDK
    */
-  async startConversationWithSDK(userMessage) {
+  async startConversationWithSDK(userMessage, previousAgentContext = null) {
     const session = this.sessionManager.getSession(this.sessionId);
     const modelType = session.modelType;
+
+    // Track user message for cross-mode replay (SDK → manual on future switch)
+    this.sessionManager.addToConversationHistory(this.sessionId, {
+      role: 'user',
+      content: userMessage
+    });
+
     let systemPrompt = this.configManager.buildSystemPrompt(modelType);
 
     // Check model token count and handle large models (for SDK mode)
@@ -138,7 +149,7 @@ export class AgentOrchestrator {
       this.sessionManager.updateModelTokenCount(this.sessionId, tokenCount);
       modelExceedsLimit = this.sessionManager.modelExceedsTokenLimit(this.sessionId);
 
-      logger.log(`SFD Model token count: ${tokenCount} (limit: ${config.maxTokensForEngines}, exceeds: ${modelExceedsLimit})`);
+      logger.log(`SFD Model token count: ${tokenCount} (limit: ${config.agentMaxTokensForEngines}, exceeds: ${modelExceedsLimit})`);
 
       // If model exceeds limit, write to disk
       if (modelExceedsLimit && tokenCount > 0) {
@@ -150,7 +161,7 @@ export class AgentOrchestrator {
           logger.log(`Model exceeds token limit. Written to: ${modelPath}`);
 
           // Add system message to inform Claude about filesystem tools
-          const systemMessage = `\n\n**IMPORTANT: Model Size Notice**\n\nThe current model has exceeded ${config.maxTokensForEngines} tokens (${tokenCount} tokens). The \`generate_quantitative_model\` tool has been disabled.\n\nThe model has been saved to: \`${modelPath}\`\n\nYou can now work with the model using these tools:\n- \`read_model_section\`: Read specific sections of the model (metadata, specs, variables, relationships, modules) with optional filtering\n- \`edit_model_section\`: Edit specific sections by adding, updating, or removing items\n- **Read, Edit, Write**: Use the built-in filesystem tools to directly read and edit the model file at the path above\n\nThese tools allow you to work with large models efficiently without loading the entire model into memory.`;
+          const systemMessage = `\n\n**IMPORTANT: Model Size Notice**\n\nThe current model has exceeded ${config.agentMaxTokensForEngines} tokens (${tokenCount} tokens). The \`generate_quantitative_model\` tool has been disabled.\n\nThe model has been saved to: \`${modelPath}\`\n\nYou can now work with the model using these tools:\n- \`read_model_section\`: Read specific sections of the model (metadata, specs, variables, relationships, modules) with optional filtering\n- \`edit_model_section\`: Edit specific sections by adding, updating, or removing items\n- **Read, Edit, Write**: Use the built-in filesystem tools to directly read and edit the model file at the path above\n\nThese tools allow you to work with large models efficiently without loading the entire model into memory.`;
 
           systemPrompt += systemMessage;
         } catch (err) {
@@ -159,14 +170,13 @@ export class AgentOrchestrator {
       }
     }
 
-    // Start SDK conversation loop
-    await this.runAgentConversationWithSDK(userMessage, systemPrompt, modelExceedsLimit);
+    await this.runAgentConversationWithSDK(userMessage, systemPrompt, modelExceedsLimit, previousAgentContext);
   }
 
   /**
    * Run agent conversation using Claude Agent SDK
    */
-  async runAgentConversationWithSDK(userMessage, systemPrompt, modelExceedsLimit) {
+  async runAgentConversationWithSDK(userMessage, systemPrompt, modelExceedsLimit, previousAgentContext = null) {
     // Create abort controller for stop iteration
     this.abortController = new AbortController();
 
@@ -210,7 +220,7 @@ export class AgentOrchestrator {
       const queryOptions = {
         abortController: this.abortController,
         systemPrompt: systemPrompt,
-        model: 'claude-sonnet-4-6',
+        model: config.agentModel,
         maxTokens: 8192,
         maxTurns: maxIterations,
         mcpServers: mcpServers,
@@ -227,9 +237,17 @@ export class AgentOrchestrator {
         logger.log(`Starting new SDK conversation`);
       }
 
+      // Build prompt - inject prior agent's history as plain string prefix on agent switch
+      let prompt = userMessage;
+      if (previousAgentContext?.length > 0 && !this.sdkSessionId) {
+        logger.debug(`[Agent switch → SDK] Replaying ${previousAgentContext.length} messages from prior agent:`, JSON.stringify(previousAgentContext, null, 2));
+        const contextText = await this.buildPriorContextText(previousAgentContext);
+        prompt = `[Prior conversation context]\n${contextText}\n[End of prior context]\n\n${userMessage}`;
+      }
+
       // Create query iterator with Agent SDK
       const queryIterator = query({
-        prompt: userMessage,
+        prompt,
         options: queryOptions
       });
 
@@ -327,10 +345,12 @@ export class AgentOrchestrator {
    */
   async handleAssistantMessage(message) {
     const content = message.message?.content;
+    const rawTextParts = [];
 
     if (content && Array.isArray(content)) {
       for (const block of content) {
         if (block.type === 'text' && block.text) {
+          rawTextParts.push(block.text);
           const html = await marked.parse(block.text);
           await this.sendToClient(createAgentTextMessage(this.sessionId, html, false));
         }
@@ -381,6 +401,14 @@ export class AgentOrchestrator {
           this.pendingToolCalls.delete(block.tool_use_id);
         }
       }
+    }
+
+    // Track client-facing text for cross-mode replay (SDK → manual)
+    if (rawTextParts.length > 0) {
+      this.sessionManager.addToConversationHistory(this.sessionId, {
+        role: 'assistant',
+        content: rawTextParts.join('\n')
+      });
     }
   }
 
@@ -507,7 +535,7 @@ export class AgentOrchestrator {
       this.sessionManager.updateModelTokenCount(this.sessionId, tokenCount);
       modelExceedsLimit = this.sessionManager.modelExceedsTokenLimit(this.sessionId);
 
-      logger.log(`SFD Model token count: ${tokenCount} (limit: ${config.maxTokensForEngines}, exceeds: ${modelExceedsLimit})`);
+      logger.log(`SFD Model token count: ${tokenCount} (limit: ${config.agentMaxTokensForEngines}, exceeds: ${modelExceedsLimit})`);
 
       // If this is the first time exceeding the limit, write model to disk
       if (modelExceedsLimit && tokenCount > 0) {
@@ -519,7 +547,7 @@ export class AgentOrchestrator {
           logger.log(`Model exceeds token limit. Written to: ${modelPath}`);
 
           // Add system message to inform Claude about the switch
-          const systemMessage = `\n\n**IMPORTANT: Model Size Notice**\n\nThe current model has exceeded ${config.maxTokensForEngines} tokens (${tokenCount} tokens). The \`generate_quantitative_model\` tool has been disabled.\n\nThe model has been saved to: \`${modelPath}\`\n\nYou can now work with the model using these tools:\n- \`read_model_section\`: Read specific sections of the model (metadata, specs, variables, relationships, modules) with optional filtering\n- \`edit_model_section\`: Edit specific sections by adding, updating, or removing items\n\nThese tools allow you to work with large models efficiently without loading the entire model into memory. Use read_model_section first to inspect the parts you need, then use edit_model_section to make targeted changes.`;
+          const systemMessage = `\n\n**IMPORTANT: Model Size Notice**\n\nThe current model has exceeded ${config.agentMaxTokensForEngines} tokens (${tokenCount} tokens). The \`generate_quantitative_model\` tool has been disabled.\n\nThe model has been saved to: \`${modelPath}\`\n\nYou can now work with the model using these tools:\n- \`read_model_section\`: Read specific sections of the model (metadata, specs, variables, relationships, modules) with optional filtering\n- \`edit_model_section\`: Edit specific sections by adding, updating, or removing items\n\nThese tools allow you to work with large models efficiently without loading the entire model into memory. Use read_model_section first to inspect the parts you need, then use edit_model_section to make targeted changes.`;
 
           systemPrompt += systemMessage;
         } catch (err) {
@@ -539,7 +567,7 @@ export class AgentOrchestrator {
       iteration++;
 
       // Limit message history to prevent context overflow using LLM summarization
-      const MAX_CONTEXT_TOKENS = config.maxContextTokens;
+      const MAX_CONTEXT_TOKENS = config.agentMaxContextTokens;
 
       // Calculate current message history token count
       const messagesJson = JSON.stringify(messages);
@@ -590,7 +618,7 @@ export class AgentOrchestrator {
       try {
         // Call Claude API
         const response = await this.anthropic.messages.create({
-          model: 'claude-sonnet-4-6',
+          model: config.agentModel,
           max_tokens: 8192,
           system: systemPrompt,
           messages: messages,
@@ -671,10 +699,10 @@ export class AgentOrchestrator {
           false
         ));
 
-        // Add to conversation history
+        // Add to conversation history (raw markdown, not HTML, for cross-mode replay)
         this.sessionManager.addToConversationHistory(this.sessionId, {
           role: 'assistant',
-          content: text
+          content: block.text
         });
       } else if (block.type === 'tool_use') {
         hasToolCalls = true;
@@ -818,6 +846,27 @@ export class AgentOrchestrator {
   }
 
   /**
+   * Build prior-history context text, summarizing if it exceeds the token budget.
+   * Used when injecting prior agent context into an SDK session.
+   */
+  async buildPriorContextText(history) {
+    const PRIOR_CONTEXT_TOKEN_LIMIT = 4000;
+    const tokenCount = countTokens(JSON.stringify(history));
+
+    if (tokenCount > PRIOR_CONTEXT_TOKEN_LIMIT) {
+      logger.log(`Prior agent context too large (${tokenCount} tokens), summarizing before SDK injection`);
+      const summary = await this.summarizeMessageHistory(history);
+      return summary.content;
+    }
+
+    return history.map(msg => {
+      const role = msg.role === 'user' ? 'User' : 'Assistant';
+      const text = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
+      return `${role}: ${text}`;
+    }).join('\n\n');
+  }
+
+  /**
    * Summarize message history using LLM when it exceeds token limits
    * @param {Array} messages - The messages array to summarize
    * @returns {Promise<Object>} The summary message object
@@ -863,7 +912,7 @@ ${conversationText}`;
 
       // Use Anthropic API directly with a fast model
       const response = await this.anthropic.messages.create({
-        model: 'claude-haiku-4-5', // Fast, cheap model for summarization
+        model: config.agentSummaryModel,
         max_tokens: 1024,
         messages: summaryMessages
       });
@@ -932,7 +981,7 @@ ${conversationText}`;
     }
 
     // Now enforce token limits using LLM summarization
-    const MAX_CONTEXT_TOKENS = config.maxContextTokens;
+    const MAX_CONTEXT_TOKENS = config.agentMaxContextTokens;
     const messagesJson = JSON.stringify(messages);
     const currentTokens = countTokens(messagesJson);
 

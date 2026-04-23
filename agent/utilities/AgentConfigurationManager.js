@@ -295,4 +295,14 @@ When feedback analysis tools fail due to missing feedback information:
   getMaxIterations() {
     return this.baseConfig?.max_iterations || 20;
   }
+
+  /**
+   * Whether this agent should use the Claude Agent SDK (vs manual loop)
+   * Defaults to true if not specified in agent config
+   */
+  getUseAgentSDK() {
+    const val = this.metadata.use_agent_sdk;
+    if (val === undefined) return true;
+    return val !== false && val !== 'false';
+  }
 }
