@@ -514,16 +514,11 @@ export class AgentOrchestrator {
    * Uses Anthropic SDK directly with agentic loop
    */
   async runAgentConversation(_userMessage, systemPrompt, builtInTools, dynamicTools) {
-    const conversationHistory = this.sessionManager.getConversationContext(this.sessionId);
+    // Clean up context (remove stale models, summarize if over limit) before first API call
+    await this.sessionManager.cleanupContext(this.sessionId, config.agentMaxContextTokens);
 
-    // Prepare messages for Claude (conversation history already includes the user message)
-    const messages = conversationHistory.map(msg => ({
-      role: msg.role,
-      content: msg.content
-    }));
-
-    // Clean up message history at session start: remove old models and enforce token limits
-    this.cleanupMessageHistory(messages);
+    // Use the live session context as the messages array — no local copy
+    const messages = this.sessionManager.getConversationContext(this.sessionId);
 
     // Check model token count and update session state (only for SFD models)
     const session = this.sessionManager.getSession(this.sessionId);
@@ -540,7 +535,7 @@ export class AgentOrchestrator {
       logger.log(`SFD Model token count: ${tokenCount} (limit: ${config.agentMaxTokensForEngines}, exceeds: ${modelExceedsLimit})`);
 
       // If this is the first time exceeding the limit, write model to disk
-      if (modelExceedsLimit && tokenCount > 0) {
+      if (modelExceedsLimit) {
         const sessionTempDir = this.sessionManager.getSessionTempDir(this.sessionId);
         const modelPath = join(sessionTempDir, 'model.sdjson');
 
@@ -569,54 +564,8 @@ export class AgentOrchestrator {
     while (continueLoop && iteration < maxIterations && !this.stopRequested) {
       iteration++;
 
-      // Limit message history to prevent context overflow using LLM summarization
-      const MAX_CONTEXT_TOKENS = config.agentMaxContextTokens;
-
-      // Calculate current message history token count
-      const messagesJson = JSON.stringify(messages);
-      const currentTokens = countTokens(messagesJson);
-
-      if (currentTokens > MAX_CONTEXT_TOKENS) {
-        logger.log(`Message history exceeds token limit: ${currentTokens} tokens (limit: ${MAX_CONTEXT_TOKENS})`);
-
-        // Keep the first message (user's initial request) for context
-        const firstMessage = messages[0];
-        const firstMessageTokens = countTokens(JSON.stringify(firstMessage));
-
-        // Reserve space for first message and summary (estimate ~1000 tokens for summary)
-        const SUMMARY_TOKEN_ESTIMATE = 1000;
-        let remainingTokenBudget = MAX_CONTEXT_TOKENS - firstMessageTokens - SUMMARY_TOKEN_ESTIMATE;
-        const keptRecentMessages = [];
-
-        // Collect recent messages that fit in the remaining budget
-        for (let i = messages.length - 1; i >= 1; i--) {
-          const messageTokens = countTokens(JSON.stringify(messages[i]));
-
-          if (remainingTokenBudget - messageTokens >= 0) {
-            keptRecentMessages.unshift(messages[i]);
-            remainingTokenBudget -= messageTokens;
-          } else {
-            break;
-          }
-        }
-
-        // If we kept all messages except first, no need to summarize
-        if (keptRecentMessages.length < messages.length - 1) {
-          // Get messages to summarize (everything between first and recent)
-          const messagesToSummarize = messages.slice(1, messages.length - keptRecentMessages.length);
-
-          if (messagesToSummarize.length > 0) {
-            // Create summary of old messages
-            const summaryMessage = await this.summarizeMessageHistory(messagesToSummarize);
-
-            // Replace messages: [first, summary, ...recent]
-            messages.splice(0, messages.length, firstMessage, summaryMessage, ...keptRecentMessages);
-
-            const newTokenCount = countTokens(JSON.stringify(messages));
-            logger.log(`Summarized message history: ${messages.length} messages (including summary), ${newTokenCount} tokens (saved ${currentTokens - newTokenCount} tokens)`);
-          }
-        }
-      }
+      // Summarize context in-place if it has grown over the token limit
+      await this.sessionManager.summarizeContextIfNeeded(this.sessionId, config.agentMaxContextTokens);
 
       try {
         // Call Claude API
@@ -722,7 +671,7 @@ export class AgentOrchestrator {
 
       if (block.type === 'text') {
         // Send text content to client
-        const text =  await marked.parse(block.text);
+        const text = await marked.parse(block.text);
 
         await this.sendToClient(createAgentTextMessage(
           this.sessionId,
@@ -730,11 +679,11 @@ export class AgentOrchestrator {
           false
         ));
 
-        // Add to conversation history (raw markdown, not HTML, for cross-mode replay)
-        this.sessionManager.addToConversationHistory(this.sessionId, {
-          role: 'assistant',
-          content: block.text
-        });
+        // Append to the live session context (messages IS the session context)
+        if (!messages[messages.length - 1] || messages[messages.length - 1].role !== 'assistant') {
+          messages.push({ role: 'assistant', content: [] });
+        }
+        messages[messages.length - 1].content.push({ type: 'text', text: block.text });
       } else if (block.type === 'tool_use') {
         hasToolCalls = true;
 
@@ -886,8 +835,33 @@ export class AgentOrchestrator {
 
     if (tokenCount > PRIOR_CONTEXT_TOKEN_LIMIT) {
       logger.log(`Prior agent context too large (${tokenCount} tokens), summarizing before SDK injection`);
-      const summary = await this.summarizeMessageHistory(history);
-      return summary.content;
+      try {
+        const conversationText = history.map((msg) => {
+          if (msg.role === 'user') {
+            return `User: ${typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)}`;
+          } else if (msg.role === 'assistant') {
+            if (Array.isArray(msg.content)) {
+              const textContent = msg.content.filter(b => b.type === 'text').map(b => b.text).join('\n');
+              return textContent ? `Assistant: ${textContent}` : '';
+            }
+            return `Assistant: ${msg.content}`;
+          }
+          return '';
+        }).filter(line => line).join('\n\n');
+
+        const response = await this.anthropic.messages.create({
+          model: config.agentSummaryModel,
+          max_tokens: 1024,
+          messages: [{
+            role: 'user',
+            content: `Summarize this conversation history concisely (2-4 paragraphs):\n\n${conversationText}`
+          }]
+        });
+        return response.content[0].text;
+      } catch (error) {
+        logger.error('Error summarizing prior context:', error);
+        return '[Prior conversation condensed due to size]';
+      }
     }
 
     return history.map(msg => {
@@ -895,170 +869,6 @@ export class AgentOrchestrator {
       const text = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
       return `${role}: ${text}`;
     }).join('\n\n');
-  }
-
-  /**
-   * Summarize message history using LLM when it exceeds token limits
-   * @param {Array} messages - The messages array to summarize
-   * @returns {Promise<Object>} The summary message object
-   */
-  async summarizeMessageHistory(messages) {
-    try {
-      // Create a concise representation of the conversation history for summarization
-      const conversationText = messages.map((msg) => {
-        if (msg.role === 'user') {
-          return `User: ${typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)}`;
-        } else if (msg.role === 'assistant') {
-          // For assistant messages, extract text content and skip tool_use blocks
-          if (Array.isArray(msg.content)) {
-            const textContent = msg.content
-              .filter(block => block.type === 'text')
-              .map(block => block.text || block)
-              .join('\n');
-            return textContent ? `Assistant: ${textContent}` : '';
-          }
-          return `Assistant: ${msg.content}`;
-        }
-        return '';
-      }).filter(line => line).join('\n\n');
-
-      // Use a fast, cheap model to create the summary
-      const summaryPrompt = `Please create a concise summary of the following conversation history. Focus on:
-- The main task or goal the user requested
-- Key decisions, findings, or results achieved
-- Important context needed for continuing the conversation
-- Current state of the work
-
-Keep the summary brief but informative (2-4 paragraphs maximum).
-
-Conversation history:
-${conversationText}`;
-
-      const summaryMessages = [
-        {
-          role: 'user',
-          content: summaryPrompt
-        }
-      ];
-
-      // Use Anthropic API directly with a fast model
-      const response = await this.anthropic.messages.create({
-        model: config.agentSummaryModel,
-        max_tokens: 1024,
-        messages: summaryMessages
-      });
-
-      const summaryText = response.content[0].text;
-
-      logger.log(`Created message history summary: ${summaryText.substring(0, 100)}...`);
-
-      return {
-        role: 'user',
-        content: `[Previous conversation summary]\n${summaryText}\n[End of summary - continuing conversation]`
-      };
-
-    } catch (error) {
-      logger.error('Error summarizing message history:', error);
-      // If summarization fails, return a basic summary
-      return {
-        role: 'user',
-        content: '[Previous conversation summary: Earlier messages were condensed to save context. The conversation is continuing from this point.]'
-      };
-    }
-  }
-
-  /**
-   * Clean up message history at session initialization
-   * Removes all but the most recent model and enforces token limits
-   * @param {Array} messages - The messages array to clean
-   */
-  async cleanupMessageHistory(messages) {
-    if (messages.length === 0) {
-      return;
-    }
-
-    logger.log(`Cleaning up message history (${messages.length} messages)`);
-
-    // Find all model results in the messages
-    const modelIndices = [];
-    for (let i = 0; i < messages.length; i++) {
-      const message = messages[i];
-      if (message.role === 'user' && message.content && Array.isArray(message.content)) {
-        for (const content of message.content) {
-          if (content.type === 'tool_result' && content.content) {
-            try {
-              const parsed = JSON.parse(content.content);
-              if (parsed.model || parsed.variables) {
-                modelIndices.push(i);
-                break; // Only count this message once
-              }
-            } catch (e) {
-              // Not parseable or not a model result, skip
-            }
-          }
-        }
-      }
-    }
-
-    // Remove all but the most recent model
-    if (modelIndices.length > 1) {
-      // Keep only the last model index, remove all others
-      const indicesToRemove = modelIndices.slice(0, -1).sort((a, b) => b - a);
-      for (const index of indicesToRemove) {
-        messages.splice(index, 1);
-        logger.log(`Removed old model result from message history at index ${index}`);
-      }
-      logger.log(`Kept most recent model, removed ${indicesToRemove.length} older model(s)`);
-    }
-
-    // Now enforce token limits using LLM summarization
-    const MAX_CONTEXT_TOKENS = config.agentMaxContextTokens;
-    const messagesJson = JSON.stringify(messages);
-    const currentTokens = countTokens(messagesJson);
-
-    if (currentTokens > MAX_CONTEXT_TOKENS) {
-      logger.log(`Message history after cleanup exceeds token limit: ${currentTokens} tokens (limit: ${MAX_CONTEXT_TOKENS})`);
-
-      // Keep the first message (user's initial request) for context
-      const firstMessage = messages[0];
-      const firstMessageTokens = countTokens(JSON.stringify(firstMessage));
-
-      // Reserve space for first message and summary (estimate ~1000 tokens for summary)
-      const SUMMARY_TOKEN_ESTIMATE = 1000;
-      let remainingTokenBudget = MAX_CONTEXT_TOKENS - firstMessageTokens - SUMMARY_TOKEN_ESTIMATE;
-      const keptRecentMessages = [];
-
-      // Collect recent messages that fit in the remaining budget
-      for (let i = messages.length - 1; i >= 1; i--) {
-        const messageTokens = countTokens(JSON.stringify(messages[i]));
-
-        if (remainingTokenBudget - messageTokens >= 0) {
-          keptRecentMessages.unshift(messages[i]);
-          remainingTokenBudget -= messageTokens;
-        } else {
-          break;
-        }
-      }
-
-      // If we kept all messages except first, no need to summarize
-      if (keptRecentMessages.length >= messages.length - 1) {
-        return;
-      }
-
-      // Get messages to summarize (everything between first and recent)
-      const messagesToSummarize = messages.slice(1, messages.length - keptRecentMessages.length);
-
-      if (messagesToSummarize.length > 0) {
-        // Create summary of old messages
-        const summaryMessage = await this.summarizeMessageHistory(messagesToSummarize);
-
-        // Replace messages: [first, summary, ...recent]
-        messages.splice(0, messages.length, firstMessage, summaryMessage, ...keptRecentMessages);
-
-        const newTokenCount = countTokens(JSON.stringify(messages));
-        logger.log(`Summarized message history: ${messages.length} messages (including summary), ${newTokenCount} tokens (saved ${currentTokens - newTokenCount} tokens)`);
-      }
-    }
   }
 
   /**

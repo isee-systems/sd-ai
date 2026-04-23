@@ -2,6 +2,8 @@ import { randomBytes } from 'crypto';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { existsSync, mkdirSync, readdirSync, rmSync } from 'fs';
+import Anthropic from '@anthropic-ai/sdk';
+import { countTokens } from '@anthropic-ai/tokenizer';
 import logger from '../../utilities/logger.js';
 import config from '../../config.js';
 
@@ -218,6 +220,151 @@ export class SessionManager {
   getConversationContext(sessionId) {
     const session = this.getSession(sessionId);
     return session?.conversationContext || [];
+  }
+
+  /**
+   * Summarize an array of messages using the LLM and return a single summary message object.
+   * Private — only called by summarizeContextIfNeeded and cleanupContext.
+   */
+  async #summarizeMessages(messages) {
+    try {
+      const conversationText = messages.map((msg) => {
+        if (msg.role === 'user') {
+          return `User: ${typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)}`;
+        } else if (msg.role === 'assistant') {
+          if (Array.isArray(msg.content)) {
+            const textContent = msg.content
+              .filter(block => block.type === 'text')
+              .map(block => block.text || block)
+              .join('\n');
+            return textContent ? `Assistant: ${textContent}` : '';
+          }
+          return `Assistant: ${msg.content}`;
+        }
+        return '';
+      }).filter(line => line).join('\n\n');
+
+      if (!this.anthropic) {
+        this.anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+      }
+
+      const response = await this.anthropic.messages.create({
+        model: config.agentSummaryModel,
+        max_tokens: 1024,
+        messages: [{
+          role: 'user',
+          content: `Please create a concise summary of the following conversation history. Focus on:
+- The main task or goal the user requested
+- Key decisions, findings, or results achieved
+- Important context needed for continuing the conversation
+- Current state of the work
+
+Keep the summary brief but informative (2-4 paragraphs maximum).
+
+Conversation history:
+${conversationText}`
+        }]
+      });
+
+      const summaryText = response.content[0].text;
+      logger.log(`Created message history summary: ${summaryText.substring(0, 100)}...`);
+
+      return {
+        role: 'user',
+        content: `[Previous conversation summary]\n${summaryText}\n[End of summary - continuing conversation]`
+      };
+
+    } catch (error) {
+      logger.error('Error summarizing message history:', error);
+      return {
+        role: 'user',
+        content: '[Previous conversation summary: Earlier messages were condensed to save context. The conversation is continuing from this point.]'
+      };
+    }
+  }
+
+  /**
+   * If the session's conversation context exceeds maxContextTokens, summarize the oldest messages
+   * in-place so the context stays within budget. Updates session state directly.
+   */
+  async summarizeContextIfNeeded(sessionId, maxContextTokens) {
+    const session = this.getSession(sessionId);
+    if (!session) return;
+
+    const messages = session.conversationContext;
+    const currentTokens = countTokens(JSON.stringify(messages));
+    if (currentTokens <= maxContextTokens) return;
+
+    logger.log(`Message history exceeds token limit: ${currentTokens} tokens (limit: ${maxContextTokens})`);
+
+    const firstMessage = messages[0];
+    const firstMessageTokens = countTokens(JSON.stringify(firstMessage));
+    const SUMMARY_TOKEN_ESTIMATE = 1000;
+    let remainingTokenBudget = maxContextTokens - firstMessageTokens - SUMMARY_TOKEN_ESTIMATE;
+    const keptRecentMessages = [];
+
+    for (let i = messages.length - 1; i >= 1; i--) {
+      const messageTokens = countTokens(JSON.stringify(messages[i]));
+      if (remainingTokenBudget - messageTokens >= 0) {
+        keptRecentMessages.unshift(messages[i]);
+        remainingTokenBudget -= messageTokens;
+      } else {
+        break;
+      }
+    }
+
+    if (keptRecentMessages.length < messages.length - 1) {
+      const messagesToSummarize = messages.slice(1, messages.length - keptRecentMessages.length);
+      if (messagesToSummarize.length > 0) {
+        const summaryMessage = await this.#summarizeMessages(messagesToSummarize);
+        messages.splice(0, messages.length, firstMessage, summaryMessage, ...keptRecentMessages);
+        const newTokenCount = countTokens(JSON.stringify(messages));
+        logger.log(`Summarized context: ${messages.length} messages, ${newTokenCount} tokens (saved ${currentTokens - newTokenCount})`);
+      }
+    }
+  }
+
+  /**
+   * Clean up the session's conversation context: remove stale model results, then summarize if over limit.
+   */
+  async cleanupContext(sessionId, maxContextTokens) {
+    const session = this.getSession(sessionId);
+    if (!session) return;
+
+    const messages = session.conversationContext;
+    if (messages.length === 0) return;
+
+    logger.log(`Cleaning up conversation context (${messages.length} messages)`);
+
+    const modelIndices = [];
+    for (let i = 0; i < messages.length; i++) {
+      const message = messages[i];
+      if (message.role === 'user' && message.content && Array.isArray(message.content)) {
+        for (const content of message.content) {
+          if (content.type === 'tool_result' && content.content) {
+            try {
+              const parsed = JSON.parse(content.content);
+              if (parsed.model || parsed.variables) {
+                modelIndices.push(i);
+                break;
+              }
+            } catch (e) {
+              // not a model result
+            }
+          }
+        }
+      }
+    }
+
+    if (modelIndices.length > 1) {
+      const indicesToRemove = modelIndices.slice(0, -1).sort((a, b) => b - a);
+      for (const index of indicesToRemove) {
+        messages.splice(index, 1);
+      }
+      logger.log(`Removed ${indicesToRemove.length} stale model result(s) from context`);
+    }
+
+    await this.summarizeContextIfNeeded(sessionId, maxContextTokens);
   }
 
   /**
