@@ -186,7 +186,6 @@ describe('MessageProtocol', () => {
       expect(message.type).toBe('error');
       expect(message.error).toBe('Something went wrong');
       expect(message.errorCode).toBe('GENERIC');
-      expect(message.recoverable).toBe(true);
     });
 
     it('should create session ready message', () => {

@@ -94,8 +94,7 @@ export class AgentOrchestrator {
       await this.sendToClient(createErrorMessage(
         this.sessionId,
         error.message,
-        'CONVERSATION_ERROR',
-        true
+        'CONVERSATION_ERROR'
       ));
     }
   }
@@ -277,8 +276,7 @@ export class AgentOrchestrator {
         await this.sendToClient(createErrorMessage(
           this.sessionId,
           `Agent error: ${error.message}`,
-          'AGENT_ERROR',
-          true
+          'AGENT_ERROR'
         ));
         await this.sendToClient(createAgentCompleteMessage(
           this.sessionId,
@@ -328,8 +326,7 @@ export class AgentOrchestrator {
           await this.sendToClient(createErrorMessage(
             this.sessionId,
             message.error?.message || 'SDK system error',
-            'SDK_SYSTEM_ERROR',
-            true
+            'SDK_SYSTEM_ERROR'
           ));
         } else {
           logger.log(`Unhandled system message subtype: ${message.subtype}`, message);
@@ -661,8 +658,7 @@ export class AgentOrchestrator {
           await this.sendToClient(createErrorMessage(
             this.sessionId,
             'The AI service is overloaded. Please try again later.',
-            'AGENT_ERROR',
-            true
+            'AGENT_ERROR'
           ));
           await this.sendToClient(createAgentCompleteMessage(
             this.sessionId,
@@ -675,8 +671,7 @@ export class AgentOrchestrator {
           await this.sendToClient(createErrorMessage(
             this.sessionId,
             `Agent error: ${error.message}`,
-            'AGENT_ERROR',
-            true
+            'AGENT_ERROR'
           ));
           await this.sendToClient(createAgentCompleteMessage(
             this.sessionId,

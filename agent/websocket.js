@@ -135,8 +135,7 @@ export function handleWebSocketConnection(ws, sessionManager) {
         await sendToClient(createErrorMessage(
           sessionId,
           `Invalid message: ${validation.error}`,
-          'INVALID_MESSAGE',
-          true
+          'INVALID_MESSAGE'
         ));
         return;
       }
@@ -185,8 +184,7 @@ export function handleWebSocketConnection(ws, sessionManager) {
           await sendToClient(createErrorMessage(
             sessionId,
             `Unknown message type: ${message.type}`,
-            'UNKNOWN_MESSAGE_TYPE',
-            true
+            'UNKNOWN_MESSAGE_TYPE'
           ));
       }
     } catch (error) {
@@ -194,8 +192,7 @@ export function handleWebSocketConnection(ws, sessionManager) {
       await sendToClient(createErrorMessage(
         sessionId,
         error.message,
-        'MESSAGE_PROCESSING_ERROR',
-        true
+        'MESSAGE_PROCESSING_ERROR'
       ));
     }
   });
@@ -289,8 +286,7 @@ export function handleWebSocketConnection(ws, sessionManager) {
       await sendToClient(createErrorMessage(
         sessionId,
         `Initialization failed: ${error.message}`,
-        'INITIALIZATION_ERROR',
-        false
+        'INITIALIZATION_ERROR'
       ));
     }
   }
@@ -345,8 +341,7 @@ export function handleWebSocketConnection(ws, sessionManager) {
       await sendToClient(createErrorMessage(
         sessionId,
         `Agent selection failed: ${error.message}`,
-        'AGENT_SELECTION_ERROR',
-        false
+        'AGENT_SELECTION_ERROR'
       ));
     }
   }
@@ -369,8 +364,7 @@ export function handleWebSocketConnection(ws, sessionManager) {
       await sendToClient(createErrorMessage(
         sessionId,
         error.message,
-        'CHAT_ERROR',
-        true
+        'CHAT_ERROR'
       ));
     }
   }
@@ -423,8 +417,7 @@ export function handleWebSocketConnection(ws, sessionManager) {
       await sendToClient(createErrorMessage(
         sessionId,
         error.message,
-        'TOOL_RESPONSE_ERROR',
-        true
+        'TOOL_RESPONSE_ERROR'
       ));
     }
   }
@@ -456,8 +449,7 @@ export function handleWebSocketConnection(ws, sessionManager) {
       await sendToClient(createErrorMessage(
         sessionId,
         error.message,
-        'STOP_ITERATION_ERROR',
-        true
+        'STOP_ITERATION_ERROR'
       ));
     }
   }

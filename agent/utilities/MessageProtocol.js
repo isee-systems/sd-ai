@@ -246,13 +246,12 @@ export function createAgentCompleteMessage(sessionId, status, finalMessage) {
   };
 }
 
-export function createErrorMessage(sessionId, error, errorCode, recoverable = true) {
+export function createErrorMessage(sessionId, error, errorCode) {
   return {
     type: 'error',
     sessionId,
     error: typeof error === 'string' ? error : error.message,
     errorCode,
-    recoverable,
     timestamp: new Date().toISOString()
   };
 }

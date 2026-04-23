@@ -585,12 +585,11 @@ Reports errors during processing.
   "sessionId": "sess_abc123",
   "error": "Tool 'run_model' timed out after 60 seconds",
   "errorCode": "TOOL_TIMEOUT",
-  "recoverable": true,
   "timestamp": "2025-01-15T10:30:09.000Z"
 }
 ```
 
-`recoverable: true` means the session can continue; `false` means reconnection may be needed. Note that receiving an `error` message does not mean the agent has stopped — the agent may still continue iterating. Wait for `agent_complete` before treating the agent as idle.
+Note that receiving an `error` message does not mean the agent has stopped — the agent may still continue iterating. Wait for `agent_complete` before treating the agent as idle.
 
 ---
 
