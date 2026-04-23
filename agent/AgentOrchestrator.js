@@ -265,7 +265,7 @@ export class AgentOrchestrator {
       ));
 
     } catch (error) {
-      if (error.name === 'AbortError') {
+      if (error.name === 'AbortError' || this.stopRequested) {
         logger.log(`Agent iteration stopped by user request for session ${this.sessionId}`);
         await this.sendToClient(createAgentCompleteMessage(
           this.sessionId,
@@ -1149,6 +1149,7 @@ ${conversationText}`;
   stopIteration() {
     logger.log(`Stop iteration requested for session ${this.sessionId}`);
     this.stopRequested = true;
+    this.abortController?.abort();
   }
 
   destroy() {
