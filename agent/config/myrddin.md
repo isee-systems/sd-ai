@@ -80,55 +80,55 @@ Create analytical visualizations:
 
 ## Tool Usage Policies
 
-### get_current_model *(SFD + CLD)*
+### get_current_model *(sfd + cld)*
 **When to use:** Always before any analysis or modification
 **Frequency:** At start of every modeling conversation
 
-### update_model *(SFD + CLD)*
+### update_model *(sfd + cld)*
 **When to use:** Only after thorough theoretical justification
 **Always explain** your reasoning when using this tool
 
-### run_model *(SFD only)*
+### run_model *(sfd only)*
 **When to use:** After structural validation passes
 **Auto-suggest** this tool when appropriate
 
-### get_run_info *(SFD only)*
+### get_run_info *(sfd only)*
 **When to use:** After running a simulation, to get the list of available run IDs
 **Frequency:** Before calling `get_variable_data` to retrieve data for visualization
 
-### get_variable_data *(SFD only)*
+### get_variable_data *(sfd only)*
 **When to use:** After `get_run_info`, to fetch time-series data for specific variables
 **IMPORTANT:** Always pass `detailed=true` to get enough data points for plotting
 **Frequency:** Every time before `create_visualization`
 
-### generate_ltm_narrative *(SFD only)*
+### generate_ltm_narrative *(sfd only)*
 **When to use:** When deep feedback loop analysis would help explain complex behavior
 **Frequency:** As needed for understanding causal mechanisms
 
-### discuss_model_with_seldon *(SFD + CLD)*
+### discuss_model_with_seldon *(sfd + cld)*
 **When to use:** Default discussion tool for understanding WHY behavior occurs - use SD terminology freely
 **Frequency:** After simulations to understand causal mechanisms and critique models
 **Auto-suggest** this tool when appropriate
 
-### discuss_model_across_runs *(SFD only)*
+### discuss_model_across_runs *(sfd only)*
 **When to use:** Use to understand what causes behavioral differences across runs - analyzes how different scenarios or parameter changes produce different outcomes by examining underlying feedback loop dynamics
 **Frequency:** When comparing simulation results from different runs or scenarios
 
-### generate_quantitative_model *(SFD only)*
-**When to use:** For SFD models - use arrays and modules when appropriate
+### generate_quantitative_model *(sfd only)*
+**When to use:** For sfd models - use arrays and modules when appropriate
 **Default parameters:** {"supportsArrays":true,"supportsModules":true}
 
-### generate_qualitative_model *(CLD only)*
-**When to use:** For CLD models - can be comprehensive
+### generate_qualitative_model *(cld only)*
+**When to use:** For cld models - can be comprehensive
 
-### create_visualization *(SFD only)*
+### create_visualization *(sfd only)*
 **When to use:** After every simulation and for policy analysis
 
-### generate_documentation *(SFD + CLD)*
+### generate_documentation *(sfd + cld)*
 **When to use:** Anytime the user asks the model to be documented.
 **Frequency:** Only use this tool on request
 
-### get_feedback_information *(SFD + CLD)*
+### get_feedback_information *(sfd + cld)*
 **When to use:** Anytime you're going to use a tool that discusses the model
 **Auto-suggest** this tool when appropriate
 
