@@ -1,4 +1,11 @@
 import logger from '../../utilities/logger.js';
+import QuantitativeEngine from '../../engines/quantitative/engine.js';
+import QualitativeEngine from '../../engines/qualitative/engine.js';
+import SeldonEngine from '../../engines/seldon/engine.js';
+import SeldonILEEngine from '../../engines/seldon-ile-user/engine.js';
+import DocumentationEngine from '../../engines/generate-documentation/engine.js';
+import SeldonMentorEngine from '../../engines/seldon-mentor/engine.js';
+import LTMEngine from '../../engines/ltm-narrative/engine.js';
 
 /**
  * EngineWrapper
@@ -18,8 +25,6 @@ import logger from '../../utilities/logger.js';
  */
 export async function callQuantitativeEngine(prompt, currentModel, parameters = {}) {
   try {
-    // Dynamically import the engine
-    const { default: QuantitativeEngine } = await import('../../engines/quantitative/engine.js');
 
     // Create engine instance with parameters
     const engine = new QuantitativeEngine(parameters);
@@ -47,7 +52,6 @@ export async function callQuantitativeEngine(prompt, currentModel, parameters = 
  */
 export async function callQualitativeEngine(prompt, currentModel, parameters = {}) {
   try {
-    const { default: QualitativeEngine } = await import('../../engines/qualitative/engine.js');
 
     const engine = new QualitativeEngine(parameters);
     const result = await engine.generate(prompt, currentModel, parameters);
@@ -72,7 +76,6 @@ export async function callQualitativeEngine(prompt, currentModel, parameters = {
  */
 export async function callSeldonEngine(prompt, model, feedbackContent, parameters = {}) {
   try {
-    const { default: SeldonEngine } = await import('../../engines/seldon/engine.js');
 
     const engine = new SeldonEngine(parameters);
 
@@ -102,7 +105,6 @@ export async function callSeldonEngine(prompt, model, feedbackContent, parameter
  */
 export async function callSeldonILEEngine(prompt, model, runName, parameters = {}) {
   try {
-    const { default: SeldonILEEngine } = await import('../../engines/seldon-ile-user/engine.js');
 
     const engine = new SeldonILEEngine(parameters);
 
@@ -133,7 +135,6 @@ export async function callSeldonILEEngine(prompt, model, runName, parameters = {
  */
 export async function callDocumentationEngine(model, parameters = {}) {
   try {
-    const { default: DocumentationEngine } = await import('../../engines/generate-documentation/engine.js');
 
     const engine = new DocumentationEngine(parameters);
 
@@ -160,7 +161,6 @@ export async function callDocumentationEngine(model, parameters = {}) {
  */
 export async function callLTMEngine(model, feedbackContent, parameters = {}) {
   try {
-    const { default: LTMEngine } = await import('../../engines/ltm-narrative/engine.js');
 
     const engine = new LTMEngine(parameters);
 
@@ -191,7 +191,6 @@ export async function callLTMEngine(model, feedbackContent, parameters = {}) {
  */
 export async function callSeldonMentorEngine(prompt, model, feedbackContent, parameters = {}) {
   try {
-    const { default: SeldonMentorEngine } = await import('../../engines/seldon-mentor/engine.js');
 
     const engine = new SeldonMentorEngine(parameters);
 
@@ -214,70 +213,4 @@ export async function callSeldonMentorEngine(prompt, model, feedbackContent, par
       error: error.message
     };
   }
-}
-
-/**
- * Get list of available engines with their metadata
- */
-export async function getAvailableEngines() {
-  // Dynamically import all engines to get their metadata
-  const { default: QuantitativeEngine } = await import('../../engines/quantitative/engine.js');
-  const { default: QualitativeEngine } = await import('../../engines/qualitative/engine.js');
-  const { default: SeldonEngine } = await import('../../engines/seldon/engine.js');
-  const { default: SeldonILEEngine } = await import('../../engines/seldon-ile-user/engine.js');
-  const { default: DocumentationEngine } = await import('../../engines/generate-documentation/engine.js');
-  const { default: LTMEngine } = await import('../../engines/ltm-narrative/engine.js');
-  const { default: SeldonMentorEngine } = await import('../../engines/seldon-mentor/engine.js');
-
-  return [
-    {
-      name: 'generate_quantitative_model',
-      displayName: 'Quantitative Model Generator',
-      description: QuantitativeEngine.description(),
-      modes: QuantitativeEngine.supportedModes(),
-      wrapper: callQuantitativeEngine
-    },
-    {
-      name: 'generate_qualitative_model',
-      displayName: 'Qualitative Model Generator',
-      description: QualitativeEngine.description(),
-      modes: QualitativeEngine.supportedModes(),
-      wrapper: callQualitativeEngine
-    },
-    {
-      name: 'discuss_model_with_seldon',
-      displayName: 'Seldon Expert Discussion',
-      description: SeldonEngine.description(),
-      modes: SeldonEngine.supportedModes(),
-      wrapper: callSeldonEngine
-    },
-    {
-      name: 'discuss_model_across_runs',
-      displayName: 'Cross-Run Model Discussion',
-      description: SeldonILEEngine.description(),
-      modes: SeldonILEEngine.supportedModes(),
-      wrapper: callSeldonILEEngine
-    },
-    {
-      name: 'generate_documentation',
-      displayName: 'Documentation Generator',
-      description: DocumentationEngine.description(),
-      modes: DocumentationEngine.supportedModes(),
-      wrapper: callDocumentationEngine
-    },
-    {
-      name: 'generate_ltm_narrative',
-      displayName: 'LTM Narrative Generator',
-      description: LTMEngine.description(),
-      modes: LTMEngine.supportedModes(),
-      wrapper: callLTMEngine
-    },
-    {
-      name: 'discuss_with_mentor',
-      displayName: 'Seldon Mentor Discussion',
-      description: SeldonMentorEngine.description(),
-      modes: SeldonMentorEngine.supportedModes(),
-      wrapper: callSeldonMentorEngine
-    }
-  ];
 }
