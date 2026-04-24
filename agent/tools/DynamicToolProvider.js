@@ -18,28 +18,12 @@ export class DynamicToolProvider {
     this.sessionManager = sessionManager;
     this.sessionId = sessionId;
     this.sendToClient = sendToClient;
-    this.toolCollection = null;
-
-    // Initialize schema converter
     this.schemaConverter = new StructuredOutputToZodConverter();
-  }
 
-  /**
-   * Update tools based on client registration
-   */
-  updateTools(clientTools) {
-    const session = this.sessionManager.getSession(this.sessionId);
-    if (!session) {
-      throw new Error(`Session not found: ${this.sessionId}`);
-    }
-
-    // Store registered tools
-    session.registeredTools = clientTools;
-
-    // Create tool collection from client tools
+    const session = sessionManager.getSession(sessionId);
+    const clientTools = session?.clientTools || [];
     this.toolCollection = this.createToolCollectionFromClientTools(clientTools);
-
-    logger.log(`Updated dynamic tools for session ${this.sessionId}: ${clientTools.map(t => `client_${t.name}`).join(', ')}`);
+    logger.log(`DynamicToolProvider initialized for session ${sessionId} with ${clientTools.length} client tools`);
   }
 
   /**
@@ -193,15 +177,14 @@ export class DynamicToolProvider {
    * Get list of registered client tool names (with client_ prefix)
    */
   getToolNames() {
-    const session = this.sessionManager.getSession(this.sessionId);
-    return session?.registeredTools.map(t => `client_${t.name}`) || [];
+    return Object.keys(this.toolCollection?.tools || {});
   }
 
   /**
    * Check if a tool is a client tool (expects prefixed name)
    */
   isClientTool(toolName) {
-    return this.getClientToolNames().includes(toolName);
+    return this.getToolNames().includes(toolName);
   }
 
   /**

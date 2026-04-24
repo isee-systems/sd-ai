@@ -15,6 +15,7 @@ Visualization types:
 - comparison: Multi-run comparison charts
 
 Use useAICustom=true to have AI generate custom matplotlib code for complex visualizations.`,
+    supportedModes: ['sfd'],
     inputSchema: z.object({
       type: z.enum(['time_series', 'phase_portrait', 'feedback_dominance', 'comparison']).optional(),
       data: z.object({}).passthrough().describe('The data to visualize (time series format or feedback loop data)'),

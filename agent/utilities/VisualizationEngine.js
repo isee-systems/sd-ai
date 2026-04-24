@@ -64,6 +64,37 @@ export class VisualizationEngine {
   }
 
   /**
+   * Truncate all arrays in data to the shortest length among time and the requested variables.
+   * Prevents matplotlib errors when detailed run data and time arrays have different lengths.
+   */
+  #normalizeRunData(runData, variables, label) {
+    if (!runData?.time || !Array.isArray(runData.time)) return runData;
+    const keys = ['time', ...variables].filter(k => Array.isArray(runData[k]));
+    const minLen = Math.min(...keys.map(k => runData[k].length));
+    if (keys.every(k => runData[k].length === minLen)) return runData;
+    const trimmed = keys.filter(k => runData[k].length > minLen);
+    logger.log(`normalizeArrayLengths${label ? ` ${label}` : ''}: trimming to ${minLen} points. Affected keys: ${trimmed.map(k => `${k}(${runData[k].length})`).join(', ')}`);
+    const normalized = { ...runData };
+    for (const k of trimmed) normalized[k] = normalized[k].slice(0, minLen);
+    return normalized;
+  }
+
+  normalizeArrayLengths(data, variables) {
+    // Comparison format: { runs: [{ data: { time, varName } }] }
+    // Each run is normalized independently — runs may have different lengths.
+    if (data?.runs && Array.isArray(data.runs)) {
+      const normalizedRuns = data.runs.map((run, idx) => {
+        const normalizedRunData = this.#normalizeRunData(run.data, variables, `run[${idx}]`);
+        return normalizedRunData === run.data ? run : { ...run, data: normalizedRunData };
+      });
+      return { ...data, runs: normalizedRuns };
+    }
+
+    // Flat format: { time, var1, var2, ... } (time_series, phase_portrait, feedback_dominance)
+    return this.#normalizeRunData(data, variables, null);
+  }
+
+  /**
    * Create visualization - always returns SVG string
    */
   async createVisualization(type, data, variables, options = {}) {
@@ -90,7 +121,8 @@ export class VisualizationEngine {
 
     try {
       // 1. Write data to temp file
-      writeFileSync(dataPath, JSON.stringify(data));
+      const normalizedData = this.normalizeArrayLengths(data, variables);
+      writeFileSync(dataPath, JSON.stringify(normalizedData));
 
       // 2. Generate Python script using AI
       const pythonScript = await this.generateAIVisualizationScript(
@@ -253,7 +285,8 @@ Generate ONLY working Python code, no explanations.`;
 
     try {
       // 1. Write data to temp file
-      writeFileSync(dataPath, JSON.stringify(data));
+      const normalizedData = this.normalizeArrayLengths(data, variables);
+      writeFileSync(dataPath, JSON.stringify(normalizedData));
 
       // 2. Generate Python script
       const pythonScript = this.generatePythonVisualizationScript(

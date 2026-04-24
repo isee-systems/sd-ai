@@ -14,6 +14,7 @@ import { generateRequestId, createSuccessResponse, createErrorResponse } from '.
 export function createGetCurrentModelTool(sessionManager, sessionId, sendToClient) {
   return {
     description: 'Get the current model from the client. Returns the model data that is currently loaded in the client.',
+    supportedModes: ['sfd', 'cld'],
     inputSchema: z.object({}),
     handler: async () => {
       try {
@@ -55,6 +56,7 @@ export function createGetCurrentModelTool(sessionManager, sessionId, sendToClien
 export function createUpdateModelTool(sessionManager, sessionId, sendToClient) {
   return {
     description: 'Update the model in the client with new model data. This replaces the current model.',
+    supportedModes: ['sfd', 'cld'],
     inputSchema: z.object({
       modelData: z.any().describe('The model data to update in the client')
     }),
@@ -98,6 +100,7 @@ export function createUpdateModelTool(sessionManager, sessionId, sendToClient) {
 export function createRunModelTool(sessionManager, sessionId, sendToClient) {
   return {
     description: 'Run the model simulation in the client. Returns a runId for the completed run.',
+    supportedModes: ['sfd', 'cld'],
     inputSchema: z.object({}),
     handler: async () => {
       try {
@@ -143,6 +146,7 @@ export function createRunModelTool(sessionManager, sessionId, sendToClient) {
 export function createGetRunInfoTool(sessionManager, sessionId, sendToClient) {
   return {
     description: 'Get information about all simulation runs. Returns a list of run objects, where each run object contains an id, name, and optional metadata.',
+    supportedModes: ['sfd'],
     inputSchema: z.object({}),
     handler: async () => {
       try {
@@ -187,6 +191,7 @@ export function createGetRunInfoTool(sessionManager, sessionId, sendToClient) {
 export function createGetVariableDataTool(sessionManager, sessionId, sendToClient) {
   return {
     description: 'Get data for specific variables from specific runs. Returns the time-series data for the requested variables from the requested runs. NOTE: This operation can be slow for large datasets - consider requesting only essential variables and runs. For visualization or analysis, consider requesting a small subset of key variables first.',
+    supportedModes: ['sfd'],
     inputSchema: z.object({
       variableNames: z.array(z.string()).describe('List of variable names to get data for'),
       runIds: z.array(z.string()).describe('List of run IDs to get variable data from'),

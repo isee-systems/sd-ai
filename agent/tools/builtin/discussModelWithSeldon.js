@@ -9,6 +9,7 @@ import { generateRequestId, createSuccessResponse, createErrorResponse } from '.
 export function createDiscussModelWithSeldonTool(sessionManager, sessionId, sendToClient) {
   return {
     description: 'Have an expert-level discussion about the model using System Dynamics terminology. Use this for technical analysis and SD theory discussions.',
+    supportedModes: ['sfd', 'cld'],
     inputSchema: z.object({
       prompt: z.string().describe('Question or topic for discussion'),
       model: SDModelSchema.describe('The model to discuss'),

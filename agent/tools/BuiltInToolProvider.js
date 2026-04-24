@@ -92,21 +92,14 @@ export class BuiltInToolProvider {
 
   /**
    * Create MCP server from tool instances (for SDK mode)
-   * Wraps the existing tool collection into SDK MCP server format
-   * @param {boolean} modelExceedsLimit - Whether to exclude generate_quantitative_model
+   * Exposes all built-in tools — allowedTools in the SDK query handles mode/token filtering
    * @returns {Object} MCP server instance
    */
-  getMcpServer(modelExceedsLimit = false) {
+  getMcpServer() {
     const toolCollection = this.createToolCollection();
     const toolsArr = [];
 
-    // Wrap each tool for SDK mode
     for (const [toolName, toolDef] of Object.entries(toolCollection.tools)) {
-      // Skip generate_quantitative_model if model exceeds limit
-      if (modelExceedsLimit && toolName === 'generate_quantitative_model') {
-        continue;
-      }
-
       // Tools in SDK mode need to throw errors instead of returning error responses
       const sdkHandler = async (args) => {
         const result = await toolDef.handler(args);
@@ -116,7 +109,6 @@ export class BuiltInToolProvider {
         return result;
       };
 
-      // Use the tool() helper to create SDK tool instances
       toolsArr.push(tool({
         name: toolName,
         description: toolDef.description,
@@ -125,7 +117,7 @@ export class BuiltInToolProvider {
       }));
     }
 
-    logger.log(`Creating builtin MCP server with ${toolsArr.length} tools (modelExceedsLimit: ${modelExceedsLimit})`);
+    logger.log(`Creating builtin MCP server with ${toolsArr.length} tools`);
     return createSdkMcpServer({
       name: 'builtin',
       version: '1.0.0',

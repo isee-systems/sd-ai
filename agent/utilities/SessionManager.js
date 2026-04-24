@@ -79,25 +79,19 @@ export class SessionManager {
       lastActivity: Date.now(),
 
       // Client-provided data
-      modelType: null,  // 'cld' or 'sfd' - set once at initialization, never changes
+      mode: null,  // 'cld' or 'sfd' - set once at initialization, never changes
       clientModel: null,
-      registeredTools: [],
-      sessionConfig: null,
+      clientTools: [],
       context: {},
 
       // Model token tracking
       modelTokenCount: 0,
-      modelExceedsTokenLimit: false,
 
       // Active tool calls awaiting client response
       pendingToolCalls: new Map(),
 
       // Agent conversation context (for Claude Agent SDK)
-      conversationContext: [],
-
-      // Usage metrics (anonymous)
-      messageCount: 0,
-      toolCallCount: 0
+      conversationContext: []
     };
 
     this.sessions.set(sessionId, session);
@@ -121,28 +115,28 @@ export class SessionManager {
   /**
    * Initialize a session with model and tools
    */
-  initializeSession(sessionId, modelType, model, tools, context) {
+  initializeSession(sessionId, mode, model, tools, context) {
     const session = this.getSession(sessionId);
     if (!session) {
       throw new Error(`Session not found: ${sessionId}`);
     }
 
     // Validate model type
-    if (modelType !== 'cld' && modelType !== 'sfd') {
-      throw new Error(`Invalid modelType: ${modelType}. Must be 'cld' or 'sfd'`);
+    if (mode !== 'cld' && mode !== 'sfd') {
+      throw new Error(`Invalid mode: ${mode}. Must be 'cld' or 'sfd'`);
     }
 
     // Set model type (can only be set once)
-    if (session.modelType && session.modelType !== modelType) {
-      throw new Error(`Cannot change model type from ${session.modelType} to ${modelType} during session`);
+    if (session.mode && session.mode !== mode) {
+      throw new Error(`Cannot change model type from ${session.mode} to ${mode} during session`);
     }
-    session.modelType = modelType;
+    session.mode = mode;
 
     session.clientModel = model;
-    session.registeredTools = tools;
+    session.clientTools = tools || [];
     session.context = context || {};
 
-    logger.log(`Session initialized: ${sessionId} with modelType=${modelType} and ${tools.length} client tools`);
+    logger.log(`Session initialized: ${sessionId} with mode=${mode} and ${tools.length} client tools`);
   }
 
   /**
@@ -170,16 +164,7 @@ export class SessionManager {
     const session = this.getSession(sessionId);
     if (session) {
       session.modelTokenCount = tokenCount;
-      session.modelExceedsTokenLimit = tokenCount > config.agentMaxTokensForEngines;
     }
-  }
-
-  /**
-   * Check if model exceeds token limit
-   */
-  modelExceedsTokenLimit(sessionId) {
-    const session = this.getSession(sessionId);
-    return session?.modelExceedsTokenLimit || false;
   }
 
   /**
@@ -205,7 +190,6 @@ export class SessionManager {
     const session = this.getSession(sessionId);
     if (session) {
       session.conversationContext.push(message);
-      session.messageCount++;
 
       // Limit conversation history size to prevent memory bloat
       if (session.conversationContext.length > this.maxConversationHistory) {
@@ -388,8 +372,6 @@ ${conversationText}`
         reject: rejecter
       });
 
-      session.toolCallCount++;
-
       return promise;
     }
     return Promise.reject(new Error('Session not found'));
@@ -404,7 +386,7 @@ ${conversationText}`
       const pendingCall = session.pendingToolCalls.get(callId);
       if (pendingCall) {
         if (isError) {
-          pendingCall.reject(new Error(result.error || 'Tool call failed'));
+          pendingCall.reject(new Error(typeof result === 'string' ? result : (result?.error || 'Tool call failed')));
         } else {
           pendingCall.resolve(result);
         }
@@ -442,7 +424,6 @@ ${conversationText}`
       session.ws = null;
       session.clientModel = null;
       session.conversationContext = [];
-      session.registeredTools = [];
 
       this.sessions.delete(sessionId);
 

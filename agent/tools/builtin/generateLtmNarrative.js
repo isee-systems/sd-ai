@@ -9,6 +9,7 @@ import { createSuccessResponse, createErrorResponse } from './toolHelpers.js';
 export function createGenerateLtmNarrativeTool(sessionManager, sessionId) {
   return {
     description: 'Generate a narrative explanation of feedback loops and their influence on model behavior (Loops That Matter analysis).',
+    supportedModes: ['sfd'],
     inputSchema: z.object({
       model: SDModelSchema.describe('The model to analyze'),
       feedbackContent: FeedbackContentSchema,

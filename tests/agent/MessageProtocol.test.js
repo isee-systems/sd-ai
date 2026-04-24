@@ -55,7 +55,7 @@ describe('MessageProtocol', () => {
         authenticationKey: 'test-key',
         clientProduct: 'sd-web',
         clientVersion: '1.0.0',
-        modelType: 'cld',
+        mode: 'cld',
         model: { variables: [] },
         tools: []
       };
@@ -64,13 +64,13 @@ describe('MessageProtocol', () => {
       expect(result.success).toBe(true);
     });
 
-    it('should require modelType to be cld or sfd', () => {
+    it('should require mode to be cld or sfd', () => {
       const message = {
         type: 'initialize_session',
         authenticationKey: 'test-key',
         clientProduct: 'sd-web',
         clientVersion: '1.0.0',
-        modelType: 'invalid',
+        mode: 'invalid',
         model: {},
         tools: []
       };
@@ -85,7 +85,7 @@ describe('MessageProtocol', () => {
         authenticationKey: 'test-key',
         clientProduct: 'sd-web',
         clientVersion: '1.0.0',
-        modelType: 'sfd',
+        mode: 'sfd',
         model: {},
         tools: [],
         context: { description: 'This is test context' }

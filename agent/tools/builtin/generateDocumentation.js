@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { SDModelSchema, createUpdateModelMessage } from '../../utilities/MessageProtocol.js';
 import { callDocumentationEngine } from '../../utilities/EngineWrapper.js';
 import { generateRequestId, createSuccessResponse, createErrorResponse } from './toolHelpers.js';
+import config from '../../../config.js';
 
 /**
  * Auto-generate documentation for model variables
@@ -9,6 +10,8 @@ import { generateRequestId, createSuccessResponse, createErrorResponse } from '.
 export function createGenerateDocumentationTool(sessionManager, sessionId, sendToClient) {
   return {
     description: 'Auto-generate documentation for model variables including descriptions and polarity.',
+    supportedModes: ['sfd', 'cld'],
+    maxModelTokens: config.agentMaxTokensForEngines,
     inputSchema: z.object({
       model: SDModelSchema.describe('The model to document'),
       parameters: z.object({

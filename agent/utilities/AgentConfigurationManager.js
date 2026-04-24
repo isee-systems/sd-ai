@@ -25,14 +25,14 @@ NEVER switch between CLD and SFD during a session.
 ## CRITICAL: CLD vs SFD - Behavior and Visualization
 **CLDs (Causal Loop Diagrams) are QUALITATIVE ONLY:**
 - CLDs show causal structure and feedback loops but have NO quantitative behavior
-- NEVER run simulations on CLDs (no run_model, no get_run_data)
+- NEVER run simulations on CLDs (no run_model, no get_variable_data)
 - NEVER create visualizations for CLDs (no create_visualization)
 - CLDs are for conceptual exploration and understanding causal relationships only
 - CLDs help identify feedback loop structure before building quantitative models
 
 **SFDs (Stock Flow Diagrams) are QUANTITATIVE:**
 - SFDs have equations and can be simulated to produce time series behavior
-- Use run_model, get_run_data, and create_visualization for SFDs only
+- Use run_model, get_variable_data, and create_visualization for SFDs only
 - ALWAYS check that stocks and variables that represent physical quantities (population, inventory, resources, etc.) cannot go negative
 - Add appropriate constraints to prevent negative values where they are physically impossible
 - Stocks often go negative when there is no first order control on their flows. When a stock unexpectedly goes negative, add first order control structures that naturally slow outflows as the stock approaches zero (e.g., fractional outflow rates proportional to the stock level)
@@ -43,7 +43,7 @@ NEVER switch between CLD and SFD during a session.
 When a user requests a visualization:
 - ALWAYS use the current model as-is without any modifications
 - NEVER modify, update, or change the existing model structure or parameters to create visualizations
-- Follow this sequence: get_current_model -> run_model (if needed) -> get_run_data -> create_visualization
+- Follow this sequence: get_current_model -> run_model (if needed) -> get_variable_data -> create_visualization
 - If the current model cannot produce the requested visualization, inform the user rather than modifying the model
 - Visualizations should reflect the current state of the model, not an idealized or modified version
 
@@ -56,7 +56,7 @@ When calling create_visualization, the data parameter MUST be structured exactly
   ...
 }
 
-**Common Error:** Do NOT pass the full tool result from get_run_data (which includes success, runId, etc.).
+**Common Error:** Do NOT pass the full tool result from get_variable_data (which includes success, runId, etc.).
 Instead, extract ONLY the time series data fields:
 - Correct: { time: result.time, Population: result.Population, Births: result.Births }
 - Wrong: result (includes success, runId, and other metadata)
@@ -137,7 +137,8 @@ When feedback analysis tools fail due to missing feedback information:
         description: metadata.description,
         version: metadata.version,
         max_iterations: metadata.max_iterations || 20,
-        supports: metadata.supports || ['sfd', 'cld']
+        use_agent_sdk: true,
+        supported_modes: metadata.supported_modes || []
       }
     };
     this.baseConfig = this.config.agent;
@@ -173,7 +174,8 @@ When feedback analysis tools fail due to missing feedback information:
             description: '',
             version: '1.0',
             max_iterations: 20,
-            supports: ['sfd', 'cld']
+            use_agent_sdk: true,
+            supported_modes: []
           },
           content: fileContent
         };
@@ -233,14 +235,14 @@ When feedback analysis tools fail due to missing feedback information:
    * Build system prompt with optional model type
    * Combines universal instructions with agent-specific content
    */
-  buildSystemPrompt(modelType = null) {
+  buildSystemPrompt(mode = null) {
     // Start with universal instructions
     let prompt = AgentConfigurationManager.UNIVERSAL_AGENT_INSTRUCTIONS;
 
     // Add model type section if specified
-    if (modelType) {
-      prompt += `\n\n## SESSION MODEL TYPE: ${modelType.toUpperCase()}`;
-      prompt += `\nThis session is working with ${modelType === 'cld' ? 'Causal Loop Diagrams (CLD)' : 'Stock Flow Diagrams (SFD)'}.`;
+    if (mode) {
+      prompt += `\n\n## SESSION MODEL TYPE: ${mode.toUpperCase()}`;
+      prompt += `\nThis session is working with ${mode === 'cld' ? 'Causal Loop Diagrams (CLD)' : 'Stock Flow Diagrams (SFD)'}.`;
       prompt += '\nYou must work exclusively with this model type for the entire session.';
     }
 

@@ -292,8 +292,8 @@
         <div class="panel">
           <h2><span class="step-number">2</span>Session Initialization</h2>
           <div class="form-group">
-            <label for="modelType">Model Type</label>
-            <select id="modelType">
+            <label for="mode">Model Type</label>
+            <select id="mode">
               <option value="sfd">SFD (Stock Flow Diagram)</option>
               <option value="cld">CLD (Causal Loop Diagram)</option>
             </select>
@@ -390,7 +390,7 @@
       wsUrl: document.getElementById('wsUrl'),
       agentType: document.getElementById('agentType'),
       agentDescription: document.getElementById('agentDescription'),
-      modelType: document.getElementById('modelType'),
+      mode: document.getElementById('mode'),
       userMessage: document.getElementById('userMessage'),
       modelData: document.getElementById('modelData'),
       log: document.getElementById('log'),
@@ -1046,7 +1046,7 @@
         authenticationKey: 'test-key-12345',
         clientProduct: 'sd-test-client',
         clientVersion: '1.0.0',
-        modelType: elements.modelType.value,
+        mode: elements.mode.value,
         model: {},
         tools: [
           {
@@ -1122,7 +1122,7 @@
 
     // Function to populate agent dropdown based on model type
     function populateAgentDropdown() {
-      const modelType = elements.modelType.value;
+      const mode = elements.mode.value;
       const agentSelect = elements.agentType;
 
       // Clear existing options
@@ -1130,7 +1130,7 @@
 
       // Filter agents that support the current model type
       const supportedAgents = availableAgents.filter(agent =>
-        agent.supports && agent.supports.includes(modelType)
+        agent.supportedModes && agent.supportedModes.includes(mode)
       );
 
       if (supportedAgents.length === 0) {
@@ -1149,7 +1149,7 @@
       });
 
       // Select the default agent for this model type
-      const defaultAgentId = agentDefaults[modelType];
+      const defaultAgentId = agentDefaults[mode];
       if (defaultAgentId && supportedAgents.find(a => a.id === defaultAgentId)) {
         agentSelect.value = defaultAgentId;
       }
@@ -1173,7 +1173,7 @@
     }
 
     // Handle model type change
-    elements.modelType.addEventListener('change', () => {
+    elements.mode.addEventListener('change', () => {
       if (availableAgents.length > 0) {
         populateAgentDropdown();
       }

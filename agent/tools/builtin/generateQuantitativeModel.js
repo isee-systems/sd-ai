@@ -10,6 +10,8 @@ import config from '../../../config.js';
 export function createGenerateQuantitativeModelTool(sessionManager, sessionId, sendToClient) {
   return {
     description: 'Generate a Stock Flow Diagram (SFD) model with equations and quantitative structure. Use this for building computational models that can be simulated. Automatically pushes the generated model to the client.',
+    supportedModes: ['sfd'],
+    maxModelTokens: config.agentMaxTokensForEngines,
     inputSchema: z.object({
       prompt: z.string().describe('Description of the model to generate'),
       currentModel: SDModelSchema.optional().describe('Existing model to build upon'),
@@ -23,13 +25,6 @@ export function createGenerateQuantitativeModelTool(sessionManager, sessionId, s
     }),
     handler: async ({ prompt, currentModel, parameters }) => {
       try {
-        // Check if model exceeds token limit - if so, refuse to call this tool
-        if (sessionManager.modelExceedsTokenLimit(sessionId)) {
-          return createErrorResponse(
-            `Cannot use generate_quantitative_model when the model exceeds the token limit (${config.agentMaxTokensForEngines} tokens). The model is currently ${sessionManager.getModelTokenCount(sessionId)} tokens. Please use read_model_section and edit_model_section tools instead to work with large models.`
-          );
-        }
-
         const result = await callQuantitativeEngine(prompt, currentModel, parameters);
 
         if (!result.success) {

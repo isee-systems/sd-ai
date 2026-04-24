@@ -9,6 +9,7 @@ import { generateRequestId, createSuccessResponse, createErrorResponse } from '.
 export function createDiscussModelAcrossRunsTool(sessionManager, sessionId, sendToClient) {
   return {
     description: 'Have a user-friendly discussion about the model without jargon, with the ability to compare and explain differences between simulation runs. Use this to understand what causes behavioral differences across runs - analyzing how different scenarios or parameter changes produce different outcomes by examining the underlying feedback loop dynamics.',
+    supportedModes: ['sfd'],
     inputSchema: z.object({
       prompt: z.string().describe('Question or topic for discussion'),
       model: SDModelSchema.describe('The model to discuss'),

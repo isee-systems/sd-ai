@@ -71,7 +71,7 @@ function getAvailableAgents() {
           agents.push({
             id: file.replace('.md', ''),
             name: metadata.name || file.replace('.md', ''),
-            supports: metadata.supports || [],
+            supportedModes: metadata.supported_modes || [],
             description: metadata.description || ''
           });
         }
@@ -217,14 +217,14 @@ export function handleWebSocketConnection(ws, sessionManager) {
       }
 
       // Validate model type
-      if (!message.modelType || !['cld', 'sfd'].includes(message.modelType)) {
-        throw new Error('Invalid or missing modelType. Must be "cld" or "sfd".');
+      if (!message.mode || !['cld', 'sfd'].includes(message.mode)) {
+        throw new Error('Invalid or missing mode. Must be "cld" or "sfd".');
       }
 
       // Initialize session with model type, model, tools, and context
       sessionManager.initializeSession(
         sessionId,
-        message.modelType,
+        message.mode,
         message.model,
         message.tools,
         message.context
@@ -320,9 +320,6 @@ export function handleWebSocketConnection(ws, sessionManager) {
         sendToClient,
         configPath
       );
-
-      // Get session to access tools
-      const session = sessionManager.getSession(sessionId);
 
       // Send agent selected message
       await sendToClient(createAgentSelectedMessage(sessionId, selectedAgent.id, selectedAgent.name));

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { SDModelSchema, createUpdateModelMessage } from '../../utilities/MessageProtocol.js';
 import { callQualitativeEngine } from '../../utilities/EngineWrapper.js';
 import { generateRequestId, createSuccessResponse, createErrorResponse } from './toolHelpers.js';
+import config from '../../../config.js';
 
 /**
  * Generate a Causal Loop Diagram (CLD) showing feedback loops and causal relationships
@@ -9,6 +10,8 @@ import { generateRequestId, createSuccessResponse, createErrorResponse } from '.
 export function createGenerateQualitativeModelTool(sessionManager, sessionId, sendToClient) {
   return {
     description: 'Generate a Causal Loop Diagram (CLD) showing feedback loops and causal relationships. Use this for conceptual models focusing on system structure. Automatically pushes the generated model to the client.',
+    supportedModes: ['cld'],
+    maxModelTokens: config.agentMaxTokensForEngines,
     inputSchema: z.object({
       prompt: z.string().describe('Description of the model to generate'),
       currentModel: SDModelSchema.optional().describe('Existing model to build upon'),

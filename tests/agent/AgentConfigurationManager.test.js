@@ -29,9 +29,9 @@ describe('AgentConfigurationManager', () => {
 
   describe('buildSystemPrompt', () => {
     it('should build system prompt with model type context', () => {
-      const modelType = 'cld';
+      const mode = 'cld';
 
-      const prompt = configManager.buildSystemPrompt(modelType);
+      const prompt = configManager.buildSystemPrompt(mode);
 
       expect(prompt).toContain('CLD');
       expect(prompt).toContain('Causal Loop Diagram');

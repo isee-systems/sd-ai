@@ -16,31 +16,31 @@ describe('SessionManager', () => {
 
   describe('initializeSession', () => {
     it('should create a new session with CLD model type', () => {
-      const modelType = 'cld';
+      const mode = 'cld';
       const model = { variables: [], relationships: [] };
       const tools = [];
       const context = { description: 'Test context' };
 
       const sessionId = sessionManager.createSession(null); // null WebSocket for testing
-      sessionManager.initializeSession(sessionId, modelType, model, tools, context);
+      sessionManager.initializeSession(sessionId, mode, model, tools, context);
 
       const session = sessionManager.getSession(sessionId);
       expect(session).toBeDefined();
-      expect(session.modelType).toBe('cld');
+      expect(session.mode).toBe('cld');
       expect(session.clientModel).toEqual(model);
       expect(session.context).toEqual(context);
       expect(session.conversationContext).toEqual([]);
     });
 
     it('should create a new session with SFD model type', () => {
-      const modelType = 'sfd';
+      const mode = 'sfd';
       const model = { variables: [] };
 
       const sessionId = sessionManager.createSession(null);
-      sessionManager.initializeSession(sessionId, modelType, model, [], {}, '');
+      sessionManager.initializeSession(sessionId, mode, model, [], {}, '');
 
       const session = sessionManager.getSession(sessionId);
-      expect(session.modelType).toBe('sfd');
+      expect(session.mode).toBe('sfd');
     });
 
     it('should create temp folder for session', () => {
@@ -67,7 +67,7 @@ describe('SessionManager', () => {
 
       const session = sessionManager.getSession(sessionId);
       expect(session).toBeDefined();
-      expect(session.modelType).toBe('cld');
+      expect(session.mode).toBe('cld');
     });
 
     it('should return undefined for non-existent session', () => {

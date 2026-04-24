@@ -4,6 +4,7 @@ import { join } from 'path';
 import { createUpdateModelMessage } from '../../utilities/MessageProtocol.js';
 import { generateRequestId, createSuccessResponse, createErrorResponse } from './toolHelpers.js';
 import logger from '../../../utilities/logger.js';
+import config from '../../../config.js';
 
 /**
  * Read a specific section of the large model file
@@ -37,6 +38,8 @@ Filtering:
 - variableNames filter matches base names (e.g., "cost" matches "Module_1.cost", "Module_2.cost", and "cost")
 - moduleName filter gets all variables from a specific module (by name prefix)
 - usedInEquation filter finds all variables whose equations reference a given variable (case-insensitive, matches XMILE format with underscores)`,
+    supportedModes: ['sfd', 'cld'],
+    minModelTokens: config.agentMaxTokensForEngines,
     inputSchema: z.object({
       section: z.enum(['specs', 'variables', 'relationships', 'modules']).describe('Which section to read'),
       filter: z.object({
@@ -237,6 +240,8 @@ CRITICAL ARRAY RULES:
   * CRITICAL: Every SUM equation MUST contain at least one asterisk (*)
 
 After editing, the model is validated and processed through the quantitative engine pipeline before updating the client.`,
+    supportedModes: ['sfd', 'cld'],
+    minModelTokens: config.agentMaxTokensForEngines,
     inputSchema: z.object({
       section: z.enum(['specs', 'variables', 'relationships', 'modules']).describe('Which section to edit'),
       operation: z.enum(['update', 'add', 'remove']).describe('Operation to perform'),
@@ -510,9 +515,9 @@ After editing, the model is validated and processed through the quantitative eng
             break;
         }
 
-        const modelType = session.modelType;
+        const mode = session.mode;
 
-        if (modelType !== 'sfd') {
+        if (mode !== 'sfd') {
           return handleError('Error: Model editing is only supported for quantitative (SFD) models');
         }
 

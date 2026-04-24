@@ -90,7 +90,7 @@ export const InitializeSessionMessageSchema = z.object({
   authenticationKey: z.string().describe('Authentication key for server access'),
   clientProduct: z.string().describe('Client product name (e.g., "sd-web", "sd-desktop")'),
   clientVersion: z.string().describe('Client version (e.g., "1.0.0")'),
-  modelType: z.enum(['cld', 'sfd']).describe('Model type: CLD (Causal Loop Diagram) or SFD (Stock Flow Diagram). This cannot be changed during the session.'),
+  mode: z.enum(['cld', 'sfd']).describe('Model type: CLD (Causal Loop Diagram) or SFD (Stock Flow Diagram). This cannot be changed during the session.'),
   model: SDModelSchema,
   tools: z.array(ToolDefinitionSchema).describe('Array of client-side tools available for the agent to call'),
   historicalMessages: z.array(HistoricalMessageSchema).optional().describe('Optional array of historical messages from a previous session to provide context'),

@@ -84,7 +84,7 @@ Establishes a session with authentication, model type, initial model, and option
   "authenticationKey": "your-auth-key",
   "clientProduct": "sd-web",
   "clientVersion": "1.0.0",
-  "modelType": "sfd",
+  "mode": "sfd",
   "model": {
     "variables": [],
     "relationships": [],
@@ -124,7 +124,7 @@ Establishes a session with authentication, model type, initial model, and option
 - `authenticationKey` — Server authentication (required only if `AUTHENTICATION_KEY` env var is set)
 - `clientProduct` — Client identifier (e.g., `"sd-web"`, `"sd-desktop"`)
 - `clientVersion` — Client version for compatibility checking
-- `modelType` — Either `"cld"` or `"sfd"` — **cannot be changed during session**
+- `mode` — Either `"cld"` or `"sfd"` — **cannot be changed during session**
 - `model` — Initial model state (can be empty)
 - `tools` — Optional array of custom client tool definitions (see Client Tool Registration below). Core model operations are all built-in and do not need to be registered here.
 - `historicalMessages` — Optional array of previous messages to seed conversation context
@@ -290,13 +290,13 @@ Sent after successful initialization. Lists available agents.
     {
       "id": "ganos-lal",
       "name": "Ganos Lal",
-      "supports": ["sfd", "cld"],
+      "supportedModes": ["sfd", "cld"],
       "description": "System Dynamics mentor who uses Socratic questioning..."
     },
     {
       "id": "myrddin",
       "name": "Myrddin",
-      "supports": ["sfd", "cld"],
+      "supportedModes": ["sfd", "cld"],
       "description": "..."
     }
   ],
@@ -617,6 +617,30 @@ When the agent calls a custom tool, the server sends a `tool_call_request` and t
 
 ---
 
+## Built-In Tool Interface
+
+Each built-in tool is a plain object returned by a factory function. The fields are:
+
+### Required
+
+| Field | Type | Description |
+|---|---|---|
+| `description` | `string` | Natural-language description shown to the AI when deciding whether to call the tool |
+| `inputSchema` | `ZodSchema` | Zod schema defining the tool's input parameters |
+| `handler` | `async (args) => { content, isError }` | Executes the tool and returns a standardized response |
+| `supportedModes` | `string[]` | Modes this tool is available in. Values: `'sfd'`, `'cld'`. Include both to support all modes. |
+
+### Optional
+
+| Field | Type | Description |
+|---|---|---|
+| `maxModelTokens` | `number` | If the current model's token count exceeds this value, the tool is excluded from the agent's tool list. Used for tools that receive the full model (e.g., `generate_quantitative_model`). |
+| `minModelTokens` | `number` | If the current model's token count is below this value, the tool is excluded. Used for tools that only make sense for large models (e.g., `read_model_section`, `edit_model_section`). |
+
+Token counting runs on every conversation turn for all sessions. The token thresholds use `agentMaxTokensForEngines` from `config.js` (default: 100,000).
+
+---
+
 ## Built-In Tools
 
 All core tools are registered server-side. Clients do not need to register them.
@@ -671,7 +695,7 @@ name: "Ganos Lal"
 description: "System Dynamics mentor who uses Socratic questioning..."
 version: "1.0"
 max_iterations: 20
-supports:
+supported_modes:
   - sfd
   - cld
 ---
@@ -718,7 +742,7 @@ ws.on('message', (data) => {
         authenticationKey: 'your-key',
         clientProduct: 'my-client',
         clientVersion: '1.0.0',
-        modelType: 'sfd',
+        mode: 'sfd',
         model: {}
         // Optionally include custom tools here
       }));

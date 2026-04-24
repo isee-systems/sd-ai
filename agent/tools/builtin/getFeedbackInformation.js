@@ -8,6 +8,7 @@ import { generateRequestId, createSuccessResponse, createErrorResponse } from '.
 export function createGetFeedbackInformationTool(sessionManager, sessionId, sendToClient) {
   return {
     description: 'Request feedback loop analysis data from the client. MUST be called before using discuss_model_with_seldon or generate_ltm_narrative to ensure feedback information is available. Provide a list of run IDs to get feedback for.',
+    supportedModes: ['sfd', 'cld'],
     inputSchema: z.object({
       runIds: z.array(z.string()).describe('List of simulation run IDs to get feedback for')
     }),

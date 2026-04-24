@@ -57,13 +57,6 @@ export class AgentOrchestrator {
   }
 
   /**
-   * Initialize with client tools
-   */
-  initializeTools(clientTools) {
-    this.dynamicToolProvider.updateTools(clientTools);
-  }
-
-  /**
    * Start a conversation with the agent
    */
   async startConversation(userMessage, previousAgentContext = null) {
@@ -112,8 +105,8 @@ export class AgentOrchestrator {
     });
 
     // Build system prompt from config
-    const modelType = session.modelType;
-    const systemPrompt = this.configManager.buildSystemPrompt(modelType);
+    const mode = session.mode;
+    const systemPrompt = this.configManager.buildSystemPrompt(mode);
 
     // Get tool collections
     const builtInTools = this.builtInToolProvider.getTools();
@@ -123,12 +116,16 @@ export class AgentOrchestrator {
     await this.runAgentConversation(userMessage, systemPrompt, builtInTools, dynamicTools);
   }
 
+  #buildModelSizeSystemMessage(modelTokenCount, modelPath) {
+    return `\n\n**IMPORTANT: Model Size Notice**\n\nThe current model has exceeded ${config.agentMaxTokensForEngines} tokens (${modelTokenCount} tokens). The \`generate_quantitative_model\` tool has been disabled.\n\nThe model has been saved to: \`${modelPath}\`\n\nYou can now work with the model using these tools:\n- \`read_model_section\`: Read specific sections of the model (metadata, specs, variables, relationships, modules) with optional filtering\n- \`edit_model_section\`: Edit specific sections by adding, updating, or removing items\n- **Read, Edit, Write**: Use the built-in filesystem tools to directly read and edit the model file at the path above\n\nThese tools allow you to work with large models efficiently without loading the entire model into memory. Use read_model_section first to inspect the parts you need, then use edit_model_section to make targeted changes.`;
+  }
+
   /**
    * Start conversation using Claude Agent SDK
    */
   async startConversationWithSDK(userMessage, previousAgentContext = null) {
     const session = this.sessionManager.getSession(this.sessionId);
-    const modelType = session.modelType;
+    const mode = session.mode;
 
     // Track user message for cross-mode replay (SDK → manual on future switch)
     this.sessionManager.addToConversationHistory(this.sessionId, {
@@ -136,22 +133,22 @@ export class AgentOrchestrator {
       content: userMessage
     });
 
-    let systemPrompt = this.configManager.buildSystemPrompt(modelType);
+    let systemPrompt = this.configManager.buildSystemPrompt(mode);
 
     // Check model token count and handle large models (for SDK mode)
     const currentModel = session?.clientModel;
-    let modelExceedsLimit = false;
+    let modelTokenCount = 0;
 
-    if (currentModel && modelType === 'sfd') {
+    if (currentModel) {
       const modelJson = JSON.stringify(currentModel, null, 2);
-      const tokenCount = countTokens(modelJson);
-      this.sessionManager.updateModelTokenCount(this.sessionId, tokenCount);
-      modelExceedsLimit = this.sessionManager.modelExceedsTokenLimit(this.sessionId);
+      modelTokenCount = countTokens(modelJson);
+      this.sessionManager.updateModelTokenCount(this.sessionId, modelTokenCount);
+      const modelExceedsLimit = modelTokenCount > config.agentMaxTokensForEngines;
 
-      logger.log(`SFD Model token count: ${tokenCount} (limit: ${config.agentMaxTokensForEngines}, exceeds: ${modelExceedsLimit})`);
+      logger.log(`Model token count: ${modelTokenCount} (limit: ${config.agentMaxTokensForEngines}, exceeds: ${modelExceedsLimit})`);
 
-      // If model exceeds limit, write to disk
-      if (modelExceedsLimit && tokenCount > 0) {
+      // If model exceeds limit, write to disk (SFD only — large model tools are SFD-specific)
+      if (modelExceedsLimit) {
         const sessionTempDir = this.sessionManager.getSessionTempDir(this.sessionId);
         const modelPath = join(sessionTempDir, 'model.sdjson');
 
@@ -159,25 +156,24 @@ export class AgentOrchestrator {
           writeFileSync(modelPath, modelJson);
           logger.log(`Model exceeds token limit. Written to: ${modelPath}`);
 
-          // Add system message to inform Claude about filesystem tools
-          const systemMessage = `\n\n**IMPORTANT: Model Size Notice**\n\nThe current model has exceeded ${config.agentMaxTokensForEngines} tokens (${tokenCount} tokens). The \`generate_quantitative_model\` tool has been disabled.\n\nThe model has been saved to: \`${modelPath}\`\n\nYou can now work with the model using these tools:\n- \`read_model_section\`: Read specific sections of the model (metadata, specs, variables, relationships, modules) with optional filtering\n- \`edit_model_section\`: Edit specific sections by adding, updating, or removing items\n- **Read, Edit, Write**: Use the built-in filesystem tools to directly read and edit the model file at the path above\n\nThese tools allow you to work with large models efficiently without loading the entire model into memory.`;
-
-          systemPrompt += systemMessage;
+          systemPrompt += this.#buildModelSizeSystemMessage(modelTokenCount, modelPath);
         } catch (err) {
           logger.error(`Failed to write model to disk: ${err.message}`);
         }
       }
     }
 
-    await this.runAgentConversationWithSDK(userMessage, systemPrompt, modelExceedsLimit, previousAgentContext);
+    await this.runAgentConversationWithSDK(userMessage, systemPrompt, modelTokenCount, previousAgentContext);
   }
 
   /**
    * Run agent conversation using Claude Agent SDK
    */
-  async runAgentConversationWithSDK(userMessage, systemPrompt, modelExceedsLimit, previousAgentContext = null) {
+  async runAgentConversationWithSDK(userMessage, systemPrompt, modelTokenCount, previousAgentContext = null) {
     // Create abort controller for stop iteration
     this.abortController = new AbortController();
+
+    const mode = this.sessionManager.getSession(this.sessionId)?.mode;
 
     const maxIterations = this.configManager.getMaxIterations();
 
@@ -186,7 +182,7 @@ export class AgentOrchestrator {
       const builtInSdkTools = ['Read', 'Edit', 'Write', 'Glob', 'Grep'];
 
       let mcpServers = {
-        builtin: this.builtInToolProvider.getMcpServer(modelExceedsLimit)
+        builtin: this.builtInToolProvider.getMcpServer()
       };
 
       // Get client MCP server
@@ -195,13 +191,24 @@ export class AgentOrchestrator {
         mcpServers.client = clientMcpServer;
       }
 
-      // Build allowed tools list with MCP prefixes
-      const builtInToolNames = this.builtInToolProvider.getToolNames().map(name => `mcp__builtin__${name}`);
+      // Build allowed tools list with MCP prefixes, filtered by mode and model token count
+      const allBuiltInTools = this.builtInToolProvider.getTools();
+      const builtInToolNames = this.builtInToolProvider.getToolNames()
+        .filter(name => {
+          const toolDef = allBuiltInTools.tools[name];
+          if (toolDef?.supportedModes && !toolDef.supportedModes.includes(mode)) return false;
+          if (toolDef?.maxModelTokens && modelTokenCount > toolDef.maxModelTokens) return false;
+          if (toolDef?.minModelTokens && modelTokenCount < toolDef.minModelTokens) return false;
+          return true;
+        })
+        .map(name => `mcp__builtin__${name}`);
       let allowedTools = [
         ...builtInSdkTools,      // SDK filesystem tools (no prefix)
         ...builtInToolNames      // Built-in tools with mcp__builtin__ prefix
       ];
 
+      logger.debug("Allowed tools are: " + allowedTools.join(', '));
+      
       // Add client tools if any
       const clientToolNames = this.dynamicToolProvider.getToolNames();
       if (clientToolNames.length > 0) {
@@ -430,7 +437,11 @@ export class AgentOrchestrator {
           if (block.is_error) {
             logger.error(`Tool error for ${toolName} (${block.tool_use_id}):`, block.content);
           } else {
-            logger.log(`Tool result received for ${toolName} (${block.tool_use_id})`);
+            if (toolName === 'ToolSearch') {
+              logger.log(`Tool result received for ${toolName} (${block.tool_use_id}):`, JSON.stringify(block.content));
+            } else {
+              logger.log(`Tool result received for ${toolName} (${block.tool_use_id})`);
+            }
           }
 
           await this.sendToClient(createToolCallCompletedMessage(
@@ -520,21 +531,21 @@ export class AgentOrchestrator {
     // Use the live session context as the messages array — no local copy
     const messages = this.sessionManager.getConversationContext(this.sessionId);
 
-    // Check model token count and update session state (only for SFD models)
+    // Check model token count and update session state
     const session = this.sessionManager.getSession(this.sessionId);
     const currentModel = session?.clientModel;
-    const modelType = session?.modelType;
-    let modelExceedsLimit = false;
+    const mode = session?.mode;
+    let modelTokenCount = 0;
 
-    if (currentModel && modelType === 'sfd') {
+    if (currentModel) {
       const modelJson = JSON.stringify(currentModel, null, 2);
-      const tokenCount = countTokens(modelJson);
-      this.sessionManager.updateModelTokenCount(this.sessionId, tokenCount);
-      modelExceedsLimit = this.sessionManager.modelExceedsTokenLimit(this.sessionId);
+      modelTokenCount = countTokens(modelJson);
+      this.sessionManager.updateModelTokenCount(this.sessionId, modelTokenCount);
+      const modelExceedsLimit = modelTokenCount > config.agentMaxTokensForEngines;
 
-      logger.log(`SFD Model token count: ${tokenCount} (limit: ${config.agentMaxTokensForEngines}, exceeds: ${modelExceedsLimit})`);
+      logger.log(`Model token count: ${modelTokenCount} (limit: ${config.agentMaxTokensForEngines}, exceeds: ${modelExceedsLimit})`);
 
-      // If this is the first time exceeding the limit, write model to disk
+      // If model exceeds limit, write to disk so large model tools can access it
       if (modelExceedsLimit) {
         const sessionTempDir = this.sessionManager.getSessionTempDir(this.sessionId);
         const modelPath = join(sessionTempDir, 'model.sdjson');
@@ -543,10 +554,7 @@ export class AgentOrchestrator {
           writeFileSync(modelPath, modelJson);
           logger.log(`Model exceeds token limit. Written to: ${modelPath}`);
 
-          // Add system message to inform Claude about the switch
-          const systemMessage = `\n\n**IMPORTANT: Model Size Notice**\n\nThe current model has exceeded ${config.agentMaxTokensForEngines} tokens (${tokenCount} tokens). The \`generate_quantitative_model\` tool has been disabled.\n\nThe model has been saved to: \`${modelPath}\`\n\nYou can now work with the model using these tools:\n- \`read_model_section\`: Read specific sections of the model (metadata, specs, variables, relationships, modules) with optional filtering\n- \`edit_model_section\`: Edit specific sections by adding, updating, or removing items\n\nThese tools allow you to work with large models efficiently without loading the entire model into memory. Use read_model_section first to inspect the parts you need, then use edit_model_section to make targeted changes.`;
-
-          systemPrompt += systemMessage;
+          systemPrompt += this.#buildModelSizeSystemMessage(modelTokenCount, modelPath);
         } catch (err) {
           logger.error(`Failed to write model to disk: ${err.message}`);
         }
@@ -554,7 +562,7 @@ export class AgentOrchestrator {
     }
 
     // Convert tool servers to Anthropic tool format (with conditional filtering)
-    const tools = this.convertToolsToAnthropicFormat(builtInTools, dynamicTools, modelExceedsLimit);
+    const tools = this.convertToolsToAnthropicFormat(builtInTools, dynamicTools, modelTokenCount, mode);
 
     let continueLoop = true;
     const maxIterations = this.configManager.getMaxIterations();
@@ -886,8 +894,9 @@ export class AgentOrchestrator {
 
       // Check if it's a client tool
       if (this.dynamicToolProvider.isClientTool(toolUse.name)) {
+        const unprefixedName = toolUse.name.replace(/^client_/, '');
         const result = await this.dynamicToolProvider.requestClientExecution(
-          toolUse.name,
+          unprefixedName,
           toolUse.input
         );
         return {
@@ -914,14 +923,9 @@ export class AgentOrchestrator {
   /**
    * Convert tool servers to Anthropic tool format
    */
-  convertToolsToAnthropicFormat(builtInTools, dynamicTools, modelExceedsLimit = false) {
+  convertToolsToAnthropicFormat(builtInTools, dynamicTools, modelTokenCount = 0, mode = null) {
     const tools = [];
     const toolNames = new Set();
-
-    // Tools to exclude when model exceeds token limit (only quantitative model generation)
-    const excludedToolsWhenOverLimit = new Set([
-      'generate_quantitative_model'
-    ]);
 
     // Convert built-in tools
     for (const [toolName, toolDef] of Object.entries(builtInTools.tools)) {
@@ -930,9 +934,19 @@ export class AgentOrchestrator {
         continue;
       }
 
-      // Skip model generation tools if model exceeds token limit
-      if (modelExceedsLimit && excludedToolsWhenOverLimit.has(toolName)) {
-        logger.log(`Excluding tool ${toolName} - model exceeds token limit`);
+      // Skip tools that don't support the current mode
+      if (mode && toolDef.supportedModes && !toolDef.supportedModes.includes(mode)) {
+        logger.log(`Excluding tool ${toolName} - not supported in mode: ${mode}`);
+        continue;
+      }
+
+      // Skip tools whose model token constraints aren't met
+      if (toolDef.maxModelTokens && modelTokenCount > toolDef.maxModelTokens) {
+        logger.log(`Excluding tool ${toolName} - model token count ${modelTokenCount} exceeds max ${toolDef.maxModelTokens}`);
+        continue;
+      }
+      if (toolDef.minModelTokens && modelTokenCount < toolDef.minModelTokens) {
+        logger.log(`Excluding tool ${toolName} - model token count ${modelTokenCount} below min ${toolDef.minModelTokens}`);
         continue;
       }
 

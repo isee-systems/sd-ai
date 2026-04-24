@@ -9,6 +9,7 @@ import { createSuccessResponse, createErrorResponse } from './toolHelpers.js';
 export function createDiscussWithMentorTool(sessionManager, sessionId) {
   return {
     description: 'Ask thoughtful questions to the user to guide their learning and help them think through System Dynamics concepts. Use this to engage users in Socratic dialogue about their model.',
+    supportedModes: ['sfd', 'cld'],
     inputSchema: z.object({
       prompt: z.string().describe('The question or guidance to provide to the user'),
       model: SDModelSchema.describe('The model being discussed'),
