@@ -15,7 +15,6 @@ export function createDiscussModelWithSeldonTool(sessionManager, sessionId, send
       model: SDModelSchema.describe('The model to discuss'),
       feedbackContent: FeedbackContentSchema.optional(),
       parameters: z.object({
-        model: z.string().optional(),
         problemStatement: z.string().optional().describe('Description of dynamic issue to address'),
         backgroundKnowledge: z.string().optional().describe('Background information for LLM'),
         behaviorContent: z.string().optional().describe('Time series behavior data')

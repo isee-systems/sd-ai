@@ -76,7 +76,10 @@ export class AgentOrchestrator {
         await this.startConversationWithSDK(userMessage, previousAgentContext);
       } else {
         if (previousAgentContext?.length > 0) {
-          logger.debug(`[Agent switch → manual] Replaying ${previousAgentContext.length} messages from prior agent:`, JSON.stringify(previousAgentContext, null, 2));
+          // previousAgentContext is a reference to the live context — pop the last message
+          // (always the prior agent's unanswered user message) before adding the new one
+          previousAgentContext.pop();
+          logger.debug(`[Agent switch → manual] Prior context now has ${previousAgentContext.length} messages after pop`);
         }
         await this.startConversationManual(userMessage);
       }
@@ -246,9 +249,12 @@ export class AgentOrchestrator {
       // Build prompt - inject prior agent's history as plain string prefix on agent switch
       let prompt = userMessage;
       if (previousAgentContext?.length > 0 && !this.sdkSessionId) {
-        logger.debug(`[Agent switch → SDK] Replaying ${previousAgentContext.length} messages from prior agent:`, JSON.stringify(previousAgentContext, null, 2));
-        const contextText = await this.buildPriorContextText(previousAgentContext);
-        prompt = `[Prior conversation context]\n${contextText}\n[End of prior context]\n\n${userMessage}`;
+        const contextToReplay = previousAgentContext.slice(0, -1);
+        if (contextToReplay.length > 0) {
+          logger.debug(`[Agent switch → SDK] Replaying ${contextToReplay.length} messages from prior agent:`, JSON.stringify(contextToReplay, null, 2));
+          const contextText = await this.buildPriorContextText(contextToReplay);
+          prompt = `[Prior conversation context]\n${contextText}\n[End of prior context]\n\n${userMessage}`;
+        }
       }
 
       // Create query iterator with Agent SDK

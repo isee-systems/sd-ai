@@ -16,7 +16,6 @@ export function createGenerateQualitativeModelTool(sessionManager, sessionId, se
       prompt: z.string().describe('Description of the model to generate'),
       currentModel: SDModelSchema.optional().describe('Existing model to build upon'),
       parameters: z.object({
-        model: z.string().optional(),
         problemStatement: z.string().optional().describe('Description of dynamic issue to address'),
         backgroundKnowledge: z.string().optional().describe('Background information for LLM')
       }).optional()
