@@ -19,6 +19,8 @@ import config from '../../config.js';
  * - Orphaned temp directory cleanup
  */
 export class SessionManager {
+  static MAX_COMPRESSION_TOKENS_PER_PASS = 200_000;
+
   constructor(options = {}) {
     this.sessions = new Map();
 
@@ -254,14 +256,14 @@ ${conversationText}`
       logger.log(`Created message history summary: ${summaryText.substring(0, 100)}...`);
 
       return {
-        role: 'user',
+        role: 'assistant',
         content: `[Previous conversation summary]\n${summaryText}\n[End of summary - continuing conversation]`
       };
 
     } catch (error) {
       logger.error('Error summarizing message history:', error);
       return {
-        role: 'user',
+        role: 'assistant',
         content: '[Previous conversation summary: Earlier messages were condensed to save context. The conversation is continuing from this point.]'
       };
     }
@@ -276,35 +278,55 @@ ${conversationText}`
     if (!session) return;
 
     const messages = session.conversationContext;
-    const currentTokens = countTokens(JSON.stringify(messages));
-    if (currentTokens <= maxContextTokens) return;
+    const MAX_PASSES = 10;
 
-    logger.log(`Message history exceeds token limit: ${currentTokens} tokens (limit: ${maxContextTokens})`);
+    for (let pass = 0; pass < MAX_PASSES; pass++) {
+      const currentTokens = countTokens(JSON.stringify(messages));
+      if (currentTokens <= maxContextTokens) break;
 
-    const firstMessage = messages[0];
-    const firstMessageTokens = countTokens(JSON.stringify(firstMessage));
-    const SUMMARY_TOKEN_ESTIMATE = 1000;
-    let remainingTokenBudget = maxContextTokens - firstMessageTokens - SUMMARY_TOKEN_ESTIMATE;
-    const keptRecentMessages = [];
+      logger.log(`Message history exceeds token limit: ${currentTokens} tokens (limit: ${maxContextTokens})`);
 
-    for (let i = messages.length - 1; i >= 1; i--) {
-      const messageTokens = countTokens(JSON.stringify(messages[i]));
-      if (remainingTokenBudget - messageTokens >= 0) {
-        keptRecentMessages.unshift(messages[i]);
-        remainingTokenBudget -= messageTokens;
-      } else {
-        break;
+      const firstMessage = messages[0];
+      const firstMessageTokens = countTokens(JSON.stringify(firstMessage));
+      const SUMMARY_TOKEN_ESTIMATE = 1000;
+      let remainingTokenBudget = maxContextTokens - firstMessageTokens - SUMMARY_TOKEN_ESTIMATE;
+      const keptRecentMessages = [];
+
+      for (let i = messages.length - 1; i >= 1; i--) {
+        const messageTokens = countTokens(JSON.stringify(messages[i]));
+        if (remainingTokenBudget - messageTokens >= 0) {
+          keptRecentMessages.unshift(messages[i]);
+          remainingTokenBudget -= messageTokens;
+        } else {
+          break;
+        }
       }
-    }
 
-    if (keptRecentMessages.length < messages.length - 1) {
+      if (keptRecentMessages.length >= messages.length - 1) break;
+
       const messagesToSummarize = messages.slice(1, messages.length - keptRecentMessages.length);
-      if (messagesToSummarize.length > 0) {
-        const summaryMessage = await this.#summarizeMessages(messagesToSummarize);
-        messages.splice(0, messages.length, firstMessage, summaryMessage, ...keptRecentMessages);
-        const newTokenCount = countTokens(JSON.stringify(messages));
-        logger.log(`Summarized context: ${messages.length} messages, ${newTokenCount} tokens (saved ${currentTokens - newTokenCount})`);
+      if (messagesToSummarize.length === 0) break;
+
+      // Cap how many tokens go to the LLM in one compression call
+      let batchToSummarize = messagesToSummarize;
+      if (countTokens(JSON.stringify(batchToSummarize)) > SessionManager.MAX_COMPRESSION_TOKENS_PER_PASS) {
+        batchToSummarize = [];
+        let tokenBudget = SessionManager.MAX_COMPRESSION_TOKENS_PER_PASS;
+        for (const msg of messagesToSummarize) {
+          const msgTokens = countTokens(JSON.stringify(msg));
+          if (tokenBudget - msgTokens < 0) break;
+          batchToSummarize.push(msg);
+          tokenBudget -= msgTokens;
+        }
       }
+
+      if (batchToSummarize.length === 0) break;
+
+      const summaryMessage = await this.#summarizeMessages(batchToSummarize);
+      // Replace only the batch — remaining messages stay for subsequent passes
+      messages.splice(1, batchToSummarize.length, summaryMessage);
+      const newTokenCount = countTokens(JSON.stringify(messages));
+      logger.log(`Summarized context: ${messages.length} messages, ${newTokenCount} tokens (saved ${currentTokens - newTokenCount})`);
     }
   }
 

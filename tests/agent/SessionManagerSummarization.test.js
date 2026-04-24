@@ -68,7 +68,7 @@ describe('SessionManager.summarizeContextIfNeeded', () => {
 
     const context = sessionManager.getConversationContext(sessionId);
     expect(context[0]).toEqual(firstMessage);
-    expect(context[1].role).toBe('user');
+    expect(context[1].role).toBe('assistant');
     expect(context[1].content).toMatch(/\[Previous conversation summary\]/);
     expect(sessionManager.anthropic.messages.create).toHaveBeenCalled();
   });

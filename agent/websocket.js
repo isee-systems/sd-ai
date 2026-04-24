@@ -13,6 +13,7 @@ import { dirname } from 'path';
 import { readdirSync, readFileSync } from 'fs';
 import logger from '../utilities/logger.js';
 import utils from '../utilities/utils.js';
+import config from '../config.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -270,6 +271,9 @@ export function handleWebSocketConnection(ws, sessionManager) {
             });
           }
         }
+
+        // Compress historical messages to within the token limit
+        await sessionManager.summarizeContextIfNeeded(sessionId, config.agentMaxContextTokens);
 
         logger.log(`Loaded ${message.historicalMessages.length} historical messages for session ${sessionId}`);
       }
