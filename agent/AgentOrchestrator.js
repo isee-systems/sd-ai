@@ -838,7 +838,7 @@ export class AgentOrchestrator {
    * Used when injecting prior agent context into an SDK session.
    */
   async buildPriorContextText(history) {
-    const PRIOR_CONTEXT_TOKEN_LIMIT = 4000;
+    const PRIOR_CONTEXT_TOKEN_LIMIT = 10_000;
     const tokenCount = countTokens(JSON.stringify(history));
 
     if (tokenCount > PRIOR_CONTEXT_TOKEN_LIMIT) {
@@ -859,7 +859,7 @@ export class AgentOrchestrator {
 
         const response = await this.anthropic.messages.create({
           model: config.agentSummaryModel,
-          max_tokens: 1024,
+          max_tokens: 2048,
           messages: [{
             role: 'user',
             content: `Summarize this conversation history concisely (2-4 paragraphs):\n\n${conversationText}`
