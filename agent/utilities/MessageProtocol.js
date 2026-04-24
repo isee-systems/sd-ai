@@ -80,9 +80,9 @@ const HistoricalMessageSchema = z.object({
   visualizationId: z.string().optional().describe('Unique ID for the visualization (for visualization messages)'),
   visualizationTitle: z.string().optional().describe('Title of the visualization (for visualization messages)'),
   visualizationDescription: z.string().optional().describe('Description of the visualization (for visualization messages)'),
-  imageData: z.string().optional().describe('Base64-encoded image data (for visualization messages)'),
+  svgData: z.string().optional().describe('Image data (for visualization messages)'),
   status: z.string().optional().describe('Status for agent_complete messages')
-}).describe('Historical message from a previous session');
+}).catchall(z.any()).describe('Historical message from a previous session');
 
 export const InitializeSessionMessageSchema = z.object({
   type: z.literal('initialize_session').describe('Message type identifier'),
