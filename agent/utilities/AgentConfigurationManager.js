@@ -112,17 +112,16 @@ Consider consulting Seldon when facing complex modeling decisions or when you ne
 ALWAYS share feedback loop information with Seldon in all of its forms when discussing model behavior or improvements.
 
 ## CRITICAL: Tool Sequencing After run_model
-**get_feedback_information and get_variables MUST always be called AFTER run_model completes — never in the same parallel batch as run_model.**
+**get_feedback_information and get_variable_data MUST always be called AFTER run_model completes — never in the same parallel batch as run_model.**
 run_model produces the data these tools depend on. Always wait for run_model to finish before calling them.
 
 ## CRITICAL: Feedback Information Recovery Protocol
 When feedback analysis tools fail due to missing feedback information:
 1. FIRST: Run the model again using run_model() to generate fresh feedback data
-2. SECOND: Retry the feedback analysis (get_feedback_information, discuss_model_with_seldon, etc.)
+2. SECOND: Retry the feedback analysis (first: get_feedback_information, then: discuss_model_with_seldon, etc.)
 3. If STILL no feedback information after running:
    - Inform user that no feedback loops are currently being tracked
-   - Explain: "To enable feedback loop analysis, please enable 'Loops That Matter' in the client settings"
-   - Suggest: They can enable specific feedback loops for tracking and analysis
+   - Explain: "To enable feedback loop analysis, please enable it in your software"
 4. NEVER give up after first failure - always attempt to run model first`;
 
   constructor(configPath) {
