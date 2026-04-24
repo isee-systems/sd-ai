@@ -313,9 +313,7 @@ export function handleWebSocketConnection(ws, sessionManager) {
       const isSwitching = orchestrator !== null;
 
       // Snapshot context before replacing orchestrator so first chat can bridge modes
-      previousAgentContext = isSwitching
-        ? sessionManager.getConversationContext(sessionId)
-        : null;
+      previousAgentContext = sessionManager.getConversationContext(sessionId);
 
       // Create new agent orchestrator (replaces existing if switching)
       orchestrator = new AgentOrchestrator(
