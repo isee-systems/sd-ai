@@ -15,7 +15,8 @@ export function createGenerateDocumentationTool(sessionManager, sessionId, sendT
     inputSchema: z.object({
       model: SDModelSchema.describe('The model to document'),
       parameters: z.object({
-        model: z.string().optional()
+        problemStatement: z.string().optional().describe('Description of dynamic issue to address'),
+        backgroundKnowledge: z.string().optional().describe('Background information for LLM')
       }).optional()
     }),
     handler: async ({ model, parameters }) => {

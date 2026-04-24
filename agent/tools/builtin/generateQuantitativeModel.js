@@ -16,7 +16,6 @@ export function createGenerateQuantitativeModelTool(sessionManager, sessionId, s
       prompt: z.string().describe('Description of the model to generate'),
       currentModel: SDModelSchema.optional().describe('Existing model to build upon'),
       parameters: z.object({
-        model: z.string().optional(),
         problemStatement: z.string().optional().describe('Description of dynamic issue to address'),
         backgroundKnowledge: z.string().optional().describe('Background information for LLM'),
         supportsArrays: z.boolean().optional().describe('Whether client supports arrayed models'),

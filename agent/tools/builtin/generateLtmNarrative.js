@@ -14,7 +14,9 @@ export function createGenerateLtmNarrativeTool(sessionManager, sessionId) {
       model: SDModelSchema.describe('The model to analyze'),
       feedbackContent: FeedbackContentSchema,
       parameters: z.object({
-        model: z.string().optional()
+        problemStatement: z.string().optional().describe('Description of dynamic issue to address'),
+        backgroundKnowledge: z.string().optional().describe('Background information for LLM'),
+        behaviorContent: z.string().optional().describe('Time series behavior data')
       }).optional()
     }),
     handler: async ({ model, feedbackContent, parameters }) => {

@@ -15,9 +15,9 @@ export function createDiscussWithMentorTool(sessionManager, sessionId) {
       model: SDModelSchema.describe('The model being discussed'),
       feedbackContent: FeedbackContentSchema.optional(),
       parameters: z.object({
-        model: z.string().optional(),
         problemStatement: z.string().optional().describe('Description of dynamic issue to address'),
-        backgroundKnowledge: z.string().optional().describe('Background information for LLM')
+        backgroundKnowledge: z.string().optional().describe('Background information for LLM'),
+        behaviorContent: z.string().optional().describe('Time series behavior data')
       }).optional()
     }),
     handler: async ({ prompt, model, feedbackContent, parameters }) => {
