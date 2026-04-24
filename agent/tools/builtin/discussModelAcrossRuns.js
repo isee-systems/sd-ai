@@ -16,7 +16,6 @@ export function createDiscussModelAcrossRunsTool(sessionManager, sessionId, send
       runName: z.string().optional().describe('Simulation run ID for context'),
       feedbackContent: z.union([FeedbackContentSchema, z.record(z.string(), FeedbackContentSchema)]).optional().describe('Feedback content: either a single FeedbackContentSchema or a map of runId to FeedbackContentSchema'),
       parameters: z.object({
-        model: z.string().optional(),
         problemStatement: z.string().optional().describe('Description of dynamic issue to address'),
         backgroundKnowledge: z.string().optional().describe('Background information for LLM'),
         behaviorContent: z.string().optional().describe('Time series behavior data')
