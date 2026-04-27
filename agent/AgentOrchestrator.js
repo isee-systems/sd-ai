@@ -188,8 +188,10 @@ export class AgentOrchestrator {
         builtin: this.builtInToolProvider.getMcpServer()
       };
 
-      // Get client MCP server
+      // Get client MCP server and derive allowed tool names from the same source
       const clientMcpServer = this.dynamicToolProvider.getMcpServer();
+      const clientToolNames = this.dynamicToolProvider.getToolNames(); // client_* prefixed, used for system prompt
+      const prefixedClientToolNames = clientToolNames.map(name => `mcp__client__${name.replace(/^client_/, '')}`);
       if (clientMcpServer) {
         mcpServers.client = clientMcpServer;
       }
@@ -207,20 +209,11 @@ export class AgentOrchestrator {
         .map(name => `mcp__builtin__${name}`);
       let allowedTools = [
         ...builtInSdkTools,      // SDK filesystem tools (no prefix)
-        ...builtInToolNames      // Built-in tools with mcp__builtin__ prefix
+        ...builtInToolNames,     // Built-in tools with mcp__builtin__ prefix
+        ...prefixedClientToolNames // Client tools with mcp__client__ prefix
       ];
 
       logger.debug("Allowed tools are: " + allowedTools.join(', '));
-      
-      // Add client tools if any
-      const clientToolNames = this.dynamicToolProvider.getToolNames();
-      if (clientToolNames.length > 0) {
-        // Remove 'client_' prefix and add 'mcp__client__' prefix
-        const prefixedClientTools = clientToolNames.map(name =>
-          `mcp__client__${name.replace(/^client_/, '')}`
-        );
-        allowedTools.push(...prefixedClientTools);
-      }
 
       // Prefix tool names in system prompt
       systemPrompt = this.prefixToolNamesInSystemPrompt(systemPrompt, builtInToolNames, clientToolNames);

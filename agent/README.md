@@ -609,7 +609,19 @@ Core model operations (`get_current_model`, `update_model`, `run_model`, `get_ru
       // Parameter definitions
     },
     required?: string[]
-  }
+  },
+  timeout?: number           // Milliseconds to wait for client response (default: 30000)
+}
+```
+
+The `timeout` field controls how long the server waits for the client's `tool_call_response` before failing with a timeout error. Use a longer value for tools that trigger slow operations (e.g., a long-running export or analysis):
+
+```json
+{
+  "name": "run_heavy_export",
+  "description": "Exports the full model to an external system",
+  "inputSchema": { "type": "object", "properties": {} },
+  "timeout": 120000
 }
 ```
 

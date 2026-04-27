@@ -56,15 +56,9 @@ export class DynamicToolProvider {
       try {
         // Use unprefixed name when communicating with client
         const clientToolName = toolDef.name;
+        const timeout = toolDef.timeout;
+        return await this.requestClientExecution(clientToolName, args, timeout);
 
-        // Special handling for specific tools
-        if (clientToolName === 'get_current_model') {
-          return await this.handleGetCurrentModel(args);
-        } else if (clientToolName === 'update_model') {
-          return await this.handleUpdateModel(args);
-        } else {
-          return await this.requestClientExecution(clientToolName, args);
-        }
       } catch (error) {
         logger.error(`Error executing client tool ${toolDef.name}:`, error);
         return {
@@ -76,48 +70,10 @@ export class DynamicToolProvider {
   }
 
   /**
-   * Handle get_current_model (returns and caches model)
-   */
-  async handleGetCurrentModel(args) {
-    const result = await this.requestClientExecution('get_current_model', args);
-
-    // Update session with latest model
-    if (result.model) {
-      this.sessionManager.updateClientModel(this.sessionId, result.model);
-    }
-
-    return {
-      content: [{
-        type: 'text',
-        text: JSON.stringify(result, null, 2)
-      }]
-    };
-  }
-
-  /**
-   * Handle update_model (sets/updates the model and caches it)
-   * Note: No distinction between creating and updating - always returns the full model
-   */
-  async handleUpdateModel(args) {
-    const result = await this.requestClientExecution('update_model', args);
-
-    // Update session with the new model state
-    if (result.model) {
-      this.sessionManager.updateClientModel(this.sessionId, result.model);
-    }
-
-    return {
-      content: [{
-        type: 'text',
-        text: JSON.stringify(result, null, 2)
-      }]
-    };
-  }
-
-  /**
    * Request client to execute a tool
    */
-  async requestClientExecution(toolName, args, timeout = 30000) {
+  async requestClientExecution(toolName, args, timeout) {
+    timeout = timeout ?? 30000;
     const callId = this.generateCallId();
 
     // Create pending call that will be resolved when client responds
