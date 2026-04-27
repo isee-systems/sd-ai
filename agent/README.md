@@ -428,29 +428,46 @@ Requests the client to execute a model interaction and return results via `tool_
 ```json
 {
   "runs": [
-    { "id": "run_abc123", "name": "Baseline" },
+    {
+      "id": "run_abc123",
+      "name": "Baseline",
+      "isExternal": false,
+      "variables": ["Population", "Births", "Deaths"]
+    },
     { "id": "run_def456", "name": "Policy" }
   ]
 }
 ```
 
+Each run object:
+- `id` — required, unique run identifier
+- `name` — required, display name
+- `isExternal` — optional boolean, whether the run originated outside the current model
+- `variables` — optional array of variable names available in this run
+
 **`get_variable_data`** — return time-series data for requested variables and runs
 ```json
 {
-  "variableData": {
-    "run_abc123": {
-      "Population": [
-        { "time": 0, "value": 1000 },
-        { "time": 1, "value": 1020 }
-      ],
-      "Births": [
-        { "time": 0, "value": 20 },
-        { "time": 1, "value": 20.4 }
-      ]
+  "run_abc123": {
+    "Population": {
+      "time": [0, 1, 2],
+      "values": [1000, 1020, 1040]
+    },
+    "Births": {
+      "time": [0, 1, 2],
+      "values": [20, 20.4, 20.8]
+    }
+  },
+  "run_def456": {
+    "Population": {
+      "time": [0, 1, 2],
+      "values": [1000, 980, 961]
     }
   }
 }
 ```
+
+The response is keyed by run ID, then by variable name. Each variable entry has parallel `time` and `values` arrays.
 
 For **custom registered tools**, the `toolName` will match a name from the `tools` array provided in `initialize_session`, and `result` can be any JSON value meaningful to the agent.
 
@@ -557,7 +574,7 @@ Requests time-series data for specific variables from specific runs.
 
 - `detailed: true` returns more data points suitable for plotting; `false` returns a sampled summary
 
-**Client response** — send `tool_call_response` with `callId` set to the `requestId` and the `variableData` shape shown in §6 above.
+**Client response** — send `tool_call_response` with `callId` set to the `requestId` and the `result` in the `get_variable_data` shape shown in §6 above (keyed by run ID → variable name → `{ time, values }`).
 
 #### 11. Agent Complete
 
@@ -814,10 +831,12 @@ function handleToolCallRequest(message) {
       result = { runId: runSimulation() };
       break;
     case 'get_run_info':
+      // runs: [{ id, name, isExternal?, variables? }, ...]
       result = { runs: getAllRuns() };
       break;
     case 'get_variable_data':
-      result = { variableData: getVariableData(message.arguments) };
+      // { [runId]: { [varName]: { times: number[], values: number[] } } }
+      result = getVariableData(message.arguments);
       break;
     default:
       // Custom registered tool

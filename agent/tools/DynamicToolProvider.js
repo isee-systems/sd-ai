@@ -37,7 +37,8 @@ export class DynamicToolProvider {
       tools[toolName] = {
         description: toolDef.description,
         inputSchema: this.schemaConverter.convert(toolDef.inputSchema),
-        handler: this.createToolHandler(toolDef)
+        handler: this.createToolHandler(toolDef),
+        timeout: toolDef.timeout ?? 30000
       };
     }
 
@@ -104,7 +105,11 @@ export class DynamicToolProvider {
 
     try {
       const result = await Promise.race([resultPromise, timeoutPromise]);
-      return result;
+      const text = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+      return {
+        content: [{ type: 'text', text}],
+        isError: false
+      };
     } catch (error) {
       // Clean up pending call
       const pendingCall = this.sessionManager.getPendingToolCall(this.sessionId, callId);

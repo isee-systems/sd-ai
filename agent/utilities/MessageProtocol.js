@@ -1,3 +1,4 @@
+import { timeout } from 'async';
 import { z } from 'zod';
 
 /**
@@ -49,6 +50,17 @@ export const FeedbackContentSchema = z.object({
   })).optional()
 }).describe('Feedback loop analysis data');
 
+const RunSchema = z.object({
+  id: z.any().describe('Unique identifier for the run'),
+  name: z.string().describe('Display name for the run'),
+  isExternal: z.boolean().optional().describe('Whether the run is from an external source'),
+  variables: z.array(z.string()).optional().describe('Names of variables available in this run')
+}).catchall(z.any());
+
+export const GetRunInfoResponseSchema = z.object({
+  runs: z.array(RunSchema).describe('List of simulation runs')
+}).catchall(z.any());
+
 export const SDModelSchema = z.object({
   variables: z.array(SDVariableSchema).optional(),
   relationships: z.array(SDRelationshipSchema).optional(),
@@ -59,6 +71,15 @@ export const SDModelSchema = z.object({
   title: z.string().optional()
 }).catchall(z.any()).describe('SD-JSON model structure (CLD or SFD)');
 
+export const GetCurrentModelResponseSchema = SDModelSchema;
+
+export const UpdateModelResponseSchema = z.object({}).catchall(z.any())
+  .describe('Response from the client after updating the model');
+
+export const RunModelResponseSchema = z.object({
+  runId: z.any().describe('ID of the completed simulation run')
+}).catchall(z.any()).describe('Response from the client after running the model');
+
 // ============================================================================
 // CLIENT → SERVER MESSAGES
 // ============================================================================
@@ -66,6 +87,7 @@ export const SDModelSchema = z.object({
 const ToolDefinitionSchema = z.object({
   name: z.string().describe('Unique name identifier for the tool'),
   description: z.string().describe('Human-readable description of what the tool does'),
+  timeout: z.number().optional().describe('The number of miliseconds to wait for this tool to execute'),
   inputSchema: z.object({
     type: z.literal('object').describe('Schema type, must be "object"'),
     properties: z.record(z.string(), z.any()).describe('Map of parameter names to their schema definitions'),

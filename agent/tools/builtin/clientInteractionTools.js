@@ -4,7 +4,11 @@ import {
   createUpdateModelMessage,
   createRunModelMessage,
   createGetRunInfoMessage,
-  createGetVariableDataMessage
+  createGetVariableDataMessage,
+  GetCurrentModelResponseSchema,
+  UpdateModelResponseSchema,
+  RunModelResponseSchema,
+  GetRunInfoResponseSchema
 } from '../../utilities/MessageProtocol.js';
 import { generateRequestId, createSuccessResponse, createErrorResponse } from './toolHelpers.js';
 
@@ -41,8 +45,9 @@ export function createGetCurrentModelTool(sessionManager, sessionId, sendToClien
         });
 
         const modelData = await resultPromise;
+        const parsed = GetCurrentModelResponseSchema.parse(modelData);
 
-        return createSuccessResponse(modelData);
+        return createSuccessResponse(parsed);
       } catch (error) {
         return createErrorResponse(`Failed to get current model: ${error.message}`, error);
       }
@@ -85,8 +90,9 @@ export function createUpdateModelTool(sessionManager, sessionId, sendToClient) {
         });
 
         const result = await resultPromise;
+        const parsed = UpdateModelResponseSchema.parse(result);
 
-        return createSuccessResponse({ success: true, ...result });
+        return createSuccessResponse({ success: true, ...parsed });
       } catch (error) {
         return createErrorResponse(`Failed to update model: ${error.message}`, error);
       }
@@ -127,12 +133,9 @@ export function createRunModelTool(sessionManager, sessionId, sendToClient) {
         });
 
         const result = await resultPromise;
+        const parsed = RunModelResponseSchema.parse(result);
 
-        return createSuccessResponse({
-          runId: result.runId,
-          success: true,
-          ...result
-        });
+        return createSuccessResponse({ success: true, ...parsed });
       } catch (error) {
         return createErrorResponse(`Failed to run model: ${error.message}`, error);
       }
@@ -173,10 +176,11 @@ export function createGetRunInfoTool(sessionManager, sessionId, sendToClient) {
         });
 
         const runInfo = await resultPromise;
+        const parsed = GetRunInfoResponseSchema.parse({ runs: runInfo.runs || [] });
 
         return createSuccessResponse({
-          runs: runInfo.runs || [],
-          count: runInfo.runs?.length || 0
+          runs: parsed.runs,
+          count: parsed.runs.length
         });
       } catch (error) {
         return createErrorResponse(`Failed to get run info: ${error.message}`, error);

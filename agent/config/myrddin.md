@@ -195,3 +195,155 @@ Create analytical visualizations:
 - All variables must have documentation
 - All variables must have units
 - All equations must be validated
+
+
+## Client-Specific Tools *(sfd only)*
+
+These tools are available when connected to a Stella client. They expose the optimization, calibration, and sensitivity analysis subsystems directly.
+
+### Tool Reference
+
+#### Calibration & Payoff Tools
+
+**`load_calibration_data`**
+Prompts the user to select an external data file and loads it as a calibration run.
+- `requestedVariables` (array of strings, optional) — variables to suggest in the load dialog
+- Returns: `{ runId, runName, variables }` where `variables` lists every variable in the loaded file
+- **CRITICAL:** Always call before creating a new calibration payoff. The returned `runId` is required as `calibrationRunId`, and the `variables` array defines which model variables have data — use exactly those as payoff elements.
+
+**`create_payoff`**
+Defines what the optimization targets.
+- `name` (string, required)
+- `isCalibration` (boolean) — true for calibration; weights computed automatically
+- `calibrationRunId` (integer) — `runId` from `load_calibration_data`; required when `isCalibration` is true
+- `elements` (array of `{ variableName, weight? }`) — for calibration payoffs use the `variables` from `load_calibration_data`
+- Returns: `{ status: "created", payoffIndex }`
+
+**`edit_payoff`**
+Modifies an existing payoff. Requires `payoffIndex` (integer); all other fields from `create_payoff` are optional.
+Returns: `{ status: "updated", payoffIndex }`
+
+**`list_payoffs`**
+Lists all defined payoffs with elements and calibration references. No parameters.
+
+#### Optimization Tools
+
+**`create_optimization`**
+Creates a Powell optimization.
+- `name` (string, required)
+- `parameters` (array of `{ variableName, min?, max?, stepMult? }`) — `stepMult` scales the global `initialStep` for this parameter
+- `payoff` (`{ payoffName, action }`) — `action`: `"maximize"` | `"minimize"` | `"lt"` | `"lte"`; calibration payoffs use `"minimize"`
+- `initialStep` (number, default 1.0) — expected parameter magnitude to reach optimum
+- `numSims` (integer, default 5000) — max optimizer evaluations; -1 for unlimited
+- `sensitivityAnalysis` (string, optional) — name of a sensitivity analysis to optimize over (each evaluation runs the full analysis)
+- `worstCase` (boolean, optional) — when using a sensitivity analysis, optimize for worst case
+- Returns: `{ status: "created", optimizationIndex }`
+
+**`edit_optimization`**
+Modifies an existing optimization. Requires `optimizationIndex` (integer); all other fields optional.
+Returns: `{ status: "updated", optimizationIndex }`
+
+**`list_optimization_analyses`**
+Lists all defined optimizations. No parameters. Returns `{ optimizations: [...], activeIndex }`.
+
+**`run_optimization`**
+Runs an optimization. Long-running (minutes to hours).
+- `optimizationIndex` (integer, optional) — use -1 or omit for the active one
+- Returns: `{ status: "completed" }`
+
+#### Sensitivity Analysis Tools
+
+**`create_sensitivity_analysis`**
+Creates a sensitivity analysis.
+- `name` (string, required)
+- `method` (enum: `"sobolSequence"` [default], `"latinHypercube"`, `"grid"`)
+- `numRuns` (integer) — number of simulation runs
+- `variables` (array) — each object requires `variableName` and `distribution`, plus distribution parameters:
+  - `uniform`: `min`, `max`
+  - `incremental`: `min` (start), `max` (end) — linear steps
+  - `normal` / `logNormal`: `mean`, `stdDev`, optional `min`/`max` truncation
+  - `beta`: `alpha`, `beta`, optional `min`/`max`
+  - `exponential`: `lambda`, optional `min`/`max`
+  - `gamma` / `pareto` / `weibull`: `shape`, `scale`, optional `min`/`max`
+  - `logistic`: `mean`, `scale`, optional `min`/`max`
+  - `triangular`: `lower`, `mode`, `upper`
+  - `adHoc`: `values` (comma-separated numbers)
+- Returns: `{ status: "created", sensitivityIndex }`
+
+**`edit_sensitivity_analysis`**
+Modifies an existing sensitivity analysis. Requires `sensitivityIndex` (integer); all other fields optional.
+Returns: `{ status: "updated", sensitivityIndex }`
+
+**`list_sensitivity_analyses`**
+Lists all defined sensitivity analyses. No parameters. Returns `{ sensitivityAnalyses: [...], activeIndex }`.
+
+**`run_sensitivity`**
+Runs a sensitivity analysis. Long-running (minutes to hours).
+- `sensitivityIndex` (integer, optional) — use -1 or omit for the active one
+- `variablesToPlot` (array of strings, optional) — output variables to auto-plot
+- Returns: `{ status: "completed" }`
+
+---
+
+### Tool Usage Policies
+
+#### `load_calibration_data` *(sfd only)*
+**When to use:** Always before `create_payoff` with `isCalibration: true`. Also useful before sensitivity analysis to identify relevant output variables.
+**Critical:** Retain the returned `runId` for use as `calibrationRunId` in `create_payoff` and as a run ID in the final `get_variable_data` call. Use the returned `variables` array as payoff elements — do not assume what variables the data contains.
+
+#### `create_payoff` *(sfd only)*
+**When to use:** After `load_calibration_data`. `calibrationRunId` is required for calibration payoffs.
+
+#### `edit_payoff` *(sfd only)*
+**When to use:** When modifying an existing payoff in place.
+
+#### `list_payoffs` *(sfd only)*
+**When to use:** Before creating an optimization to confirm payoff names.
+
+#### `create_optimization` *(sfd only)*
+**When to use:** After verifying a payoff exists. Set `action: "minimize"` for calibration payoffs.
+
+#### `edit_optimization` *(sfd only)*
+**When to use:** When adjusting an existing optimization without recreating it.
+
+#### `list_optimization_analyses` *(sfd only)*
+**When to use:** Before running or editing an optimization to confirm indices.
+
+#### `run_optimization` *(sfd only)*
+**When to use:** After creating an optimization. Long-running — advise the user accordingly.
+**After completion:** `run_model` → `get_run_info` → `get_variable_data` (calibration run ID + simulation run ID, `detailed: true`) → `create_visualization`.
+
+#### `create_sensitivity_analysis` *(sfd only)*
+**When to use:** For parameter uncertainty analysis or to identify high-leverage parameters before optimization.
+
+#### `edit_sensitivity_analysis` *(sfd only)*
+**When to use:** When adjusting an existing sensitivity analysis in place.
+
+#### `list_sensitivity_analyses` *(sfd only)*
+**When to use:** Before running or editing a sensitivity analysis to confirm indices.
+
+#### `run_sensitivity` *(sfd only)*
+**When to use:** After creating a sensitivity analysis. Always pass `variablesToPlot` with the key output variables.
+
+---
+
+### Action Sequences
+
+#### On Calibration / Optimization Request
+1. Call `load_calibration_data` with the model variables the data is expected to contain
+2. Note the returned `runId` (needed for payoff and for the final fit plot) and `variables` (use these as payoff elements)
+3. Create a calibration payoff: `create_payoff(isCalibration: true, calibrationRunId: <runId>, elements: [<variables from response>])`
+4. Create the optimization with parameter bounds and `action: "minimize"`:
+   `create_optimization(parameters: [...], payoff: { payoffName: "...", action: "minimize" })`
+5. Run: `run_optimization(optimizationIndex: <index>)`
+6. After completion, visualize the fit:
+   - `run_model()` — execute with optimized parameters
+   - `get_run_info()` — identify the new simulation run ID
+   - `get_variable_data(variableNames: [...], runIds: [<calibrationRunId>, <simulationRunId>], detailed: true)`
+   - `create_visualization()` — overlay calibration data and simulation output
+
+#### On Sensitivity Analysis Request
+1. Create the analysis with appropriate distributions and sample size:
+   `create_sensitivity_analysis(method: "sobolSequence", numRuns: ..., variables: [...])`
+2. Run with key outputs: `run_sensitivity(sensitivityIndex: <index>, variablesToPlot: [...])`
+3. Analyze which parameters drive variance in the outputs

@@ -66,6 +66,31 @@ export class StructuredOutputToZodConverter {
    * @returns {import('zod').ZodTypeAny} Zod type
    */
   convertTypeToZod(propDef) {
+    // Handle anyOf / oneOf as union
+    if (propDef.anyOf || propDef.oneOf) {
+      const items = propDef.anyOf || propDef.oneOf;
+      const nullItems = items.filter(v => v.type === 'null');
+      const nonNullItems = items.filter(v => v.type !== 'null');
+      if (nonNullItems.length === 0) return z.null();
+      const variants = nonNullItems.map(v => this.convertTypeToZod(v));
+      let base = variants.length === 1 ? variants[0] : z.union(variants);
+      return nullItems.length > 0 ? base.nullable() : base;
+    }
+
+    // No type field — infer from shape
+    if (propDef.type === undefined) {
+      if (propDef.properties || propDef.additionalProperties) {
+        return this.convertNestedObject(propDef);
+      }
+      if (propDef.items) {
+        return this.convertArrayType(propDef);
+      }
+      if (propDef.enum) {
+        return this.convertStringType(propDef);
+      }
+      return z.any();
+    }
+
     switch (propDef.type) {
       case 'string':
         return this.convertStringType(propDef);
@@ -75,6 +100,8 @@ export class StructuredOutputToZodConverter {
         return z.number().int();
       case 'boolean':
         return z.boolean();
+      case 'null':
+        return z.null();
       case 'array':
         return this.convertArrayType(propDef);
       case 'object':
