@@ -534,6 +534,7 @@ export class AgentOrchestrator {
     const currentModel = session?.clientModel;
     const mode = session?.mode;
     let modelTokenCount = 0;
+    let modelSizeNotice = null;
 
     if (currentModel) {
       const modelJson = JSON.stringify(currentModel, null, 2);
@@ -545,9 +546,16 @@ export class AgentOrchestrator {
 
       if (modelExceedsLimit) {
         const generateTool = mode === 'sfd' ? 'generate_quantitative_model' : 'generate_qualitative_model';
-        systemPrompt += `\n\n**IMPORTANT: Model Size Notice**\n\nThe current model has exceeded ${config.agentMaxTokensForEngines} tokens (${modelTokenCount} tokens). The \`${generateTool}\` tool has been disabled. Call \`get_current_model\` to load the model to disk, then use \`read_model_section\` and \`edit_model_section\` to inspect and modify it.`;
+        modelSizeNotice = `\n\n**IMPORTANT: Model Size Notice**\n\nThe current model has exceeded ${config.agentMaxTokensForEngines} tokens (${modelTokenCount} tokens). The \`${generateTool}\` tool has been disabled. Call \`get_current_model\` to load the model to disk, then use \`read_model_section\` and \`edit_model_section\` to inspect and modify it.`;
       }
     }
+
+    // Build system prompt array — stable part is cached, variable model-size notice is not
+    // (keeping them separate prevents the model-size notice from busting the cache on the stable prefix)
+    const systemBlocks = [
+      { type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } },
+      ...(modelSizeNotice ? [{ type: 'text', text: modelSizeNotice }] : [])
+    ];
 
     // Convert tool servers to Anthropic tool format (with conditional filtering)
     const tools = this.convertToolsToAnthropicFormat(builtInTools, dynamicTools, modelTokenCount, mode);
@@ -568,7 +576,7 @@ export class AgentOrchestrator {
         const response = await this.anthropic.messages.create({
           model: config.agentModel,
           max_tokens: 8192,
-          system: systemPrompt,
+          system: systemBlocks,
           messages: messages,
           tools: tools.length > 0 ? tools : undefined
         });
@@ -959,6 +967,11 @@ export class AgentOrchestrator {
           input_schema: toolDef.inputSchema.toJSONSchema()
         });
       }
+    }
+
+    // Cache all tool definitions up to the last one — stable within a session
+    if (tools.length > 0) {
+      tools[tools.length - 1] = { ...tools[tools.length - 1], cache_control: { type: 'ephemeral' } };
     }
 
     return tools;
