@@ -84,10 +84,10 @@ function getAvailableAgents() {
     logger.error('Failed to scan agent config directory:', err);
   }
 
-  // Hardcoded defaults - myrddin is the default agent for all model types
+  // Hardcoded defaults - ganos-lal is the default agent for all model types
   const defaults = {
-    sfd: 'myrddin',
-    cld: 'myrddin'
+    sfd: 'ganos-lal',
+    cld: 'ganos-lal'
   };
 
   return { agents, defaults };
