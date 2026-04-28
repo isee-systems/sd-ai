@@ -2,6 +2,9 @@
 
 # Master installation script for all third-party components
 # This script iterates through all subdirectories and runs their install.sh scripts
+#
+# Set SKIP_THIRD_PARTY_COMPONENTS to a comma-separated list of component names to skip.
+# Example: SKIP_THIRD_PARTY_COMPONENTS=causal-decoder,PySD-simulator,time-series-behavior-analysis npm install
 
 set -e
 
@@ -13,6 +16,17 @@ echo ""
 # Track overall success
 FAILED_COMPONENTS=()
 
+should_skip() {
+    local name="$1"
+    IFS=',' read -ra SKIP_LIST <<< "${SKIP_THIRD_PARTY_COMPONENTS:-}"
+    for skip in "${SKIP_LIST[@]}"; do
+        if [ "$skip" = "$name" ]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
 # Iterate through all subdirectories that have an install.sh script
 for component_dir in "$SCRIPT_DIR"/*/; do
     # Remove trailing slash and get component name
@@ -20,6 +34,14 @@ for component_dir in "$SCRIPT_DIR"/*/; do
     install_script="$component_dir/install.sh"
 
     if [ -f "$install_script" ] && [ -x "$install_script" ]; then
+        if should_skip "$component_name"; then
+            echo "================================================"
+            echo "Skipping: $component_name"
+            echo "================================================"
+            echo ""
+            continue
+        fi
+
         echo "================================================"
         echo "Installing: $component_name"
         echo "================================================"
