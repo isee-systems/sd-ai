@@ -224,6 +224,28 @@ Some engines require additional dependencies to be installed on your system:
 
 These dependencies are automatically built/installed when you run `npm install` via postinstall hooks, but only if the respective toolchains are available on your PATH.
 
+To skip specific components during installation, set the `SKIP_THIRD_PARTY_COMPONENTS` environment variable to a comma-separated list of component names before running `npm install`:
+
+**Mac/Linux:**
+```bash
+SKIP_THIRD_PARTY_COMPONENTS=causal-decoder,PySD-simulator,time-series-behavior-analysis npm install
+```
+
+**Windows:**
+```bat
+set SKIP_THIRD_PARTY_COMPONENTS=causal-decoder,PySD-simulator,time-series-behavior-analysis && npm install
+```
+
+Available component names and what they affect:
+
+| Component | Effect of skipping |
+|---|---|
+| `causal-chains` | Disables the causal-chains engine |
+| `causal-decoder` | Disables the causal-decoder engine |
+| `PySD-simulator` | Breaks evals |
+| `time-series-behavior-analysis` | Breaks evals |
+| `visualization-engine` | Breaks agentic tools |
+
 ## Metrics Reporting
 SD-AI includes optional metrics reporting via the `GenerateMetricsReporter` class. When enabled, it automatically tracks and reports usage data for every engine generation request.
 
