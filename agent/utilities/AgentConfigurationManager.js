@@ -38,6 +38,7 @@ NEVER switch between CLD and SFD during a session.
 - Stocks often go negative when there is no first order control on their flows. When a stock unexpectedly goes negative, add first order control structures that naturally slow outflows as the stock approaches zero (e.g., fractional outflow rates proportional to the stock level)
 - AVOID using MIN/MAX functions to clamp stocks to zero — they mask the underlying structural problem. Fix the model structure instead.
 - Unit warnings are NOT cosmetic, they are important and MUST to be fixed
+- Use // for safe division (e.g., a // b) — this divides a by b but returns 0 when b is zero, preventing model crashes when a denominator can reach zero
 
 ## CRITICAL: Visualization Requests
 When a user requests a visualization:
