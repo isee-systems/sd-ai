@@ -3,6 +3,7 @@ import { join, resolve, normalize, dirname } from 'path';
 import { writeFileSync, readFileSync, existsSync, unlinkSync } from 'fs';
 import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
+import { userInfo } from 'os';
 import { LLMWrapper } from '../../utilities/LLMWrapper.js';
 import logger from '../../utilities/logger.js';
 
@@ -129,6 +130,7 @@ export class VisualizationEngine {
         dataPath, outputPath, data, variables, options
       );
       writeFileSync(scriptPath, pythonScript);
+      logger.log(`[VizEngine] AI script created: ${scriptPath} at ${new Date().toISOString()}`);
 
       // 3. Execute Python script
       await this.executePythonScript(scriptPath);
@@ -146,8 +148,8 @@ export class VisualizationEngine {
       error = err;
       // Suppress error logging - errors are thrown and handled by caller
     } finally {
-      // ALWAYS cleanup temp files
-      this.cleanupVisualizationFiles(vizId);
+      // CLEANUP DISABLED for debugging - re-enable when matplotlib issue is resolved
+      // this.cleanupVisualizationFiles(vizId);
 
       if (error) {
         throw error;
@@ -293,6 +295,7 @@ Generate ONLY working Python code, no explanations.`;
         type, dataPath, outputPath, variables, options
       );
       writeFileSync(scriptPath, pythonScript);
+      logger.log(`[VizEngine] Template script created: ${scriptPath} at ${new Date().toISOString()}`);
 
       // 3. Execute Python script
       await this.executePythonScript(scriptPath);
@@ -310,8 +313,8 @@ Generate ONLY working Python code, no explanations.`;
       error = err;
       // Suppress error logging - errors are thrown and handled by caller
     } finally {
-      // ALWAYS cleanup temp files
-      this.cleanupVisualizationFiles(vizId);
+      // CLEANUP DISABLED for debugging - re-enable when matplotlib issue is resolved
+      // this.cleanupVisualizationFiles(vizId);
 
       if (error) {
         throw error;
@@ -611,6 +614,10 @@ print('Visualization saved')
     const sandboxScript = isWindows
       ? join(__dirname, 'python_sandbox_windows.bat')
       : join(__dirname, 'python_sandbox.sh');
+
+    const currentUser = (() => { try { return userInfo().username; } catch { return process.env.USER || 'unknown'; } })();
+    logger.log(`[VizEngine] Invoking sandbox: ${sandboxScript} ${this.resolvedTempDir} ${validatedPath}`);
+    logger.log(`[VizEngine] Running as user: ${currentUser}, PATH: ${process.env.PATH}`);
 
     return new Promise((resolve, reject) => {
       // Arguments: sandbox_dir, script_path
