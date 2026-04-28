@@ -1,7 +1,7 @@
 import { randomBytes } from 'crypto';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { existsSync, mkdirSync, readdirSync, rmSync } from 'fs';
+import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'fs';
 import Anthropic from '@anthropic-ai/sdk';
 import { countTokens } from '@anthropic-ai/tokenizer';
 import logger from '../../utilities/logger.js';
@@ -183,6 +183,34 @@ export class SessionManager {
   getSessionTempDir(sessionId) {
     const session = this.getSession(sessionId);
     return session?.tempDir;
+  }
+
+  /**
+   * Write a model to disk and return the LLM message describing where to find it.
+   * Returns { modelPath, message }.
+   */
+  writeModelToDisk(sessionId, model) {
+    const sessionTempDir = this.getSessionTempDir(sessionId);
+    const modelPath = join(sessionTempDir, 'model.sdjson');
+    mkdirSync(sessionTempDir, { recursive: true });
+    writeFileSync(modelPath, JSON.stringify(model, null, 2));
+    logger.log(`Model written to: ${modelPath}`);
+    const message = `The model has been written to disk at: ${modelPath}. Use the read_model_section tool to inspect specific sections.`;
+    return { modelPath, message };
+  }
+
+  /**
+   * Write arbitrary data to a named file in the session temp directory.
+   * Returns { filePath, message }.
+   */
+  writeDataToDisk(sessionId, filename, data) {
+    const sessionTempDir = this.getSessionTempDir(sessionId);
+    const filePath = join(sessionTempDir, filename);
+    mkdirSync(sessionTempDir, { recursive: true });
+    writeFileSync(filePath, JSON.stringify(data, null, 2));
+    logger.log(`Data written to: ${filePath}`);
+    const message = `The data has been written to disk at: ${filePath}. Use the Read filesystem tool to load it into context.`;
+    return { filePath, message };
   }
 
   /**

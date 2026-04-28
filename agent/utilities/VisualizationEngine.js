@@ -616,8 +616,6 @@ print('Visualization saved')
       : join(__dirname, 'python_sandbox.sh');
 
     const currentUser = (() => { try { return userInfo().username; } catch { return process.env.USER || 'unknown'; } })();
-    logger.log(`[VizEngine] Invoking sandbox: ${sandboxScript} ${this.resolvedTempDir} ${validatedPath}`);
-    logger.log(`[VizEngine] Running as user: ${currentUser}, PATH: ${process.env.PATH}`);
 
     return new Promise((resolve, reject) => {
       // Arguments: sandbox_dir, script_path

@@ -51,9 +51,11 @@ export function createGenerateQualitativeModelTool(sessionManager, sessionId, se
 
         await updatePromise;
 
-        // Build response
+        const { modelPath, message } = sessionManager.writeModelToDisk(sessionId, result.model);
+
         return createSuccessResponse({
-          model: result.model,
+          message: `Model generated and pushed to client. ${message}`,
+          modelPath,
           supportingInfo: result.supportingInfo,
           pushedToClient: true
         });

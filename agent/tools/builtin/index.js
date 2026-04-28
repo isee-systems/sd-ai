@@ -24,6 +24,7 @@ export {
   createReadModelSectionTool,
   createEditModelSectionTool
 } from './largeModelTools.js';
+export { createReadFileTool, createWriteFileTool, createEditFileTool } from './fileTools.js';
 
 // Helper utilities
 export { generateRequestId, createErrorResponse } from './toolHelpers.js';

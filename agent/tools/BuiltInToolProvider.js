@@ -18,7 +18,10 @@ import {
   createGetVariableDataTool,
   createVisualizationTool,
   createReadModelSectionTool,
-  createEditModelSectionTool
+  createEditModelSectionTool,
+  createReadFileTool,
+  createWriteFileTool,
+  createEditFileTool
 } from './builtin/index.js';
 
 /**
@@ -78,7 +81,10 @@ export class BuiltInToolProvider {
         get_variable_data: createGetVariableDataTool(this.sessionManager, this.sessionId, this.sendToClient),
         create_visualization: createVisualizationTool(this.sessionManager, this.sessionId, this.sendToClient, this.vizEngine),
         read_model_section: createReadModelSectionTool(this.sessionManager, this.sessionId),
-        edit_model_section: createEditModelSectionTool(this.sessionManager, this.sessionId, this.sendToClient)
+        edit_model_section: createEditModelSectionTool(this.sessionManager, this.sessionId, this.sendToClient),
+        read_file: createReadFileTool(),
+        write_file: createWriteFileTool(),
+        edit_file: createEditFileTool()
       }
     };
   }
@@ -100,6 +106,8 @@ export class BuiltInToolProvider {
     const toolsArr = [];
 
     for (const [toolName, toolDef] of Object.entries(toolCollection.tools)) {
+      if (toolDef.nonSdkOnly) continue;
+
       // Tools in SDK mode need to throw errors instead of returning error responses
       const sdkHandler = async (args) => {
         const result = await toolDef.handler(args);

@@ -11,6 +11,7 @@ import {
   GetRunInfoResponseSchema
 } from '../../utilities/MessageProtocol.js';
 import { generateRequestId, createSuccessResponse, createErrorResponse } from './toolHelpers.js';
+import logger from '../../../utilities/logger.js';
 
 /**
  * Get the current model from the client
@@ -47,7 +48,16 @@ export function createGetCurrentModelTool(sessionManager, sessionId, sendToClien
         const modelData = await resultPromise;
         const parsed = GetCurrentModelResponseSchema.parse(modelData);
 
-        return createSuccessResponse(parsed);
+        // If the session has no model yet (empty variables), return it directly into context
+        if (!session.clientModel?.variables?.length) {
+          return createSuccessResponse(parsed);
+        }
+
+        const { modelPath, message } = sessionManager.writeModelToDisk(sessionId, parsed);
+
+        return createSuccessResponse({ message, modelPath });
+
+        // return createSuccessResponse(parsed);
       } catch (error) {
         return createErrorResponse(`Failed to get current model: ${error.message}`, error);
       }
@@ -194,7 +204,7 @@ export function createGetRunInfoTool(sessionManager, sessionId, sendToClient) {
  */
 export function createGetVariableDataTool(sessionManager, sessionId, sendToClient) {
   return {
-    description: 'Get data for specific variables from specific runs. Returns the time-series data for the requested variables from the requested runs. NOTE: This operation can be slow for large datasets - consider requesting only essential variables and runs. For visualization or analysis, consider requesting a small subset of key variables first.',
+    description: 'Get data for specific variables from specific runs. Writes the time-series data to a file on disk and returns the file path. Use the Read filesystem tool to load the data into context. NOTE: This operation can be slow for large datasets - consider requesting only essential variables and runs.',
     supportedModes: ['sfd'],
     inputSchema: z.object({
       variableNames: z.array(z.string()).describe('List of variable names to get data for'),
@@ -227,7 +237,10 @@ export function createGetVariableDataTool(sessionManager, sessionId, sendToClien
 
         const variableData = await resultPromise;
 
-        return createSuccessResponse(variableData);
+        const filename = `variable_data_${Date.now()}.json`;
+        const { filePath, message } = sessionManager.writeDataToDisk(sessionId, filename, variableData);
+
+        return createSuccessResponse({ message, filePath });
       } catch (error) {
         return createErrorResponse(`Failed to get variable data: ${error.message}`, error);
       }

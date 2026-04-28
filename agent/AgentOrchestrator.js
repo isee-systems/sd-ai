@@ -2,8 +2,6 @@ import Anthropic from '@anthropic-ai/sdk';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import { marked } from 'marked';
 import { countTokens } from '@anthropic-ai/tokenizer';
-import { writeFileSync } from 'fs';
-import { join } from 'path';
 import { AgentConfigurationManager } from './utilities/AgentConfigurationManager.js';
 import { BuiltInToolProvider } from './tools/BuiltInToolProvider.js';
 import { DynamicToolProvider } from './tools/DynamicToolProvider.js';
@@ -119,10 +117,6 @@ export class AgentOrchestrator {
     await this.runAgentConversation(userMessage, systemPrompt, builtInTools, dynamicTools);
   }
 
-  #buildModelSizeSystemMessage(modelTokenCount, modelPath) {
-    return `\n\n**IMPORTANT: Model Size Notice**\n\nThe current model has exceeded ${config.agentMaxTokensForEngines} tokens (${modelTokenCount} tokens). The \`generate_quantitative_model\` tool has been disabled.\n\nThe model has been saved to: \`${modelPath}\`\n\nYou can now work with the model using these tools:\n- \`read_model_section\`: Read specific sections of the model (metadata, specs, variables, relationships, modules) with optional filtering\n- \`edit_model_section\`: Edit specific sections by adding, updating, or removing items\n- **Read, Edit, Write**: Use the built-in filesystem tools to directly read and edit the model file at the path above\n\nThese tools allow you to work with large models efficiently without loading the entire model into memory. Use read_model_section first to inspect the parts you need, then use edit_model_section to make targeted changes.`;
-  }
-
   /**
    * Start conversation using Claude Agent SDK
    */
@@ -150,19 +144,9 @@ export class AgentOrchestrator {
 
       logger.log(`Model token count: ${modelTokenCount} (limit: ${config.agentMaxTokensForEngines}, exceeds: ${modelExceedsLimit})`);
 
-      // If model exceeds limit, write to disk (SFD only — large model tools are SFD-specific)
       if (modelExceedsLimit) {
-        const sessionTempDir = this.sessionManager.getSessionTempDir(this.sessionId);
-        const modelPath = join(sessionTempDir, 'model.sdjson');
-
-        try {
-          writeFileSync(modelPath, modelJson);
-          logger.log(`Model exceeds token limit. Written to: ${modelPath}`);
-
-          systemPrompt += this.#buildModelSizeSystemMessage(modelTokenCount, modelPath);
-        } catch (err) {
-          logger.error(`Failed to write model to disk: ${err.message}`);
-        }
+        const generateTool = mode === 'sfd' ? 'generate_quantitative_model' : 'generate_qualitative_model';
+        systemPrompt += `\n\n**IMPORTANT: Model Size Notice**\n\nThe current model has exceeded ${config.agentMaxTokensForEngines} tokens (${modelTokenCount} tokens). The \`${generateTool}\` tool has been disabled. Call \`get_current_model\` to load the model to disk, then use \`read_model_section\` and \`edit_model_section\` to inspect and modify it.`;
       }
     }
 
@@ -201,6 +185,7 @@ export class AgentOrchestrator {
       const builtInToolNames = this.builtInToolProvider.getToolNames()
         .filter(name => {
           const toolDef = allBuiltInTools.tools[name];
+          if (toolDef?.nonSdkOnly) return false;
           if (toolDef?.supportedModes && !toolDef.supportedModes.includes(mode)) return false;
           if (toolDef?.maxModelTokens && modelTokenCount > toolDef.maxModelTokens) return false;
           if (toolDef?.minModelTokens && modelTokenCount < toolDef.minModelTokens) return false;
@@ -544,19 +529,9 @@ export class AgentOrchestrator {
 
       logger.log(`Model token count: ${modelTokenCount} (limit: ${config.agentMaxTokensForEngines}, exceeds: ${modelExceedsLimit})`);
 
-      // If model exceeds limit, write to disk so large model tools can access it
       if (modelExceedsLimit) {
-        const sessionTempDir = this.sessionManager.getSessionTempDir(this.sessionId);
-        const modelPath = join(sessionTempDir, 'model.sdjson');
-
-        try {
-          writeFileSync(modelPath, modelJson);
-          logger.log(`Model exceeds token limit. Written to: ${modelPath}`);
-
-          systemPrompt += this.#buildModelSizeSystemMessage(modelTokenCount, modelPath);
-        } catch (err) {
-          logger.error(`Failed to write model to disk: ${err.message}`);
-        }
+        const generateTool = mode === 'sfd' ? 'generate_quantitative_model' : 'generate_qualitative_model';
+        systemPrompt += `\n\n**IMPORTANT: Model Size Notice**\n\nThe current model has exceeded ${config.agentMaxTokensForEngines} tokens (${modelTokenCount} tokens). The \`${generateTool}\` tool has been disabled. Call \`get_current_model\` to load the model to disk, then use \`read_model_section\` and \`edit_model_section\` to inspect and modify it.`;
       }
     }
 
@@ -693,6 +668,8 @@ export class AgentOrchestrator {
         messages[messages.length - 1].content.push({ type: 'text', text: block.text });
       } else if (block.type === 'tool_use') {
         hasToolCalls = true;
+
+        logger.debug(`Tool call: ${block.name} (${block.id}) input: ${JSON.stringify(block.input)}`);
 
         // Notify client that tool call is happening (for UI display)
         const isBuiltIn = this.isBuiltInTool(block.name, builtInTools);

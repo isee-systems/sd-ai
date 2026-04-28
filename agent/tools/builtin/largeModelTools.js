@@ -39,7 +39,6 @@ Filtering:
 - moduleName filter gets all variables from a specific module (by name prefix)
 - usedInEquation filter finds all variables whose equations reference a given variable (case-insensitive, matches XMILE format with underscores)`,
     supportedModes: ['sfd', 'cld'],
-    minModelTokens: config.agentMaxTokensForEngines,
     inputSchema: z.object({
       section: z.enum(['specs', 'variables', 'relationships', 'modules']).describe('Which section to read'),
       filter: z.object({
