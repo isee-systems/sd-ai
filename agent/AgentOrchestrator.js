@@ -281,6 +281,16 @@ export class AgentOrchestrator {
   }
 
   /**
+   * Determine the response type for a completed tool call (using stripped tool name)
+   */
+  #getResponseType(displayName) {
+    if (['generate_ltm_narrative'].includes(displayName)) return 'ltm-discuss';
+    if (['discuss_model_with_seldon', 'discuss_model_across_runs', 'discuss_with_mentor'].includes(displayName)) return 'discuss';
+    if (['generate_quantitative_model', 'generate_qualitative_model', 'generate_documentation'].includes(displayName)) return 'model';
+    return 'other';
+  }
+
+  /**
    * Remove MCP prefix from tool names for client display
    */
   stripMcpPrefix(toolName) {
@@ -382,13 +392,15 @@ export class AgentOrchestrator {
             logger.log(`Tool result received in assistant message for ${toolName} (${block.tool_use_id})`);
           }
 
+          const responseType = this.#getResponseType(displayName);
+
           await this.sendToClient(createToolCallCompletedMessage(
             this.sessionId,
             block.tool_use_id,
             displayName,
             block.content,
             block.is_error || false,
-            'other'
+            responseType
           ));
 
           this.pendingToolCalls.delete(block.tool_use_id);
@@ -428,13 +440,15 @@ export class AgentOrchestrator {
             }
           }
 
+          const responseType = this.#getResponseType(displayName);
+
           await this.sendToClient(createToolCallCompletedMessage(
             this.sessionId,
             block.tool_use_id,
             displayName,
             block.content,
             block.is_error || false,
-            'other'
+            responseType
           ));
 
           this.pendingToolCalls.delete(block.tool_use_id);
@@ -741,15 +755,7 @@ export class AgentOrchestrator {
           return false; // Stop processing immediately
         }
 
-        // Determine response type based on tool name
-        let responseType = 'other';
-        if (['generate_ltm_narrative'].includes(block.name)) {
-          responseType = 'ltm-discuss';
-        } else if (['discuss_model_with_seldon', 'discuss_model_across_runs', 'discuss_with_mentor'].includes(block.name)) {
-          responseType = 'discuss';
-        } else if (['generate_quantitative_model', 'generate_qualitative_model', 'generate_documentation'].includes(block.name)) {
-          responseType = 'model';
-        }
+        const responseType = this.#getResponseType(block.name);
 
         // Notify client of completion
         await this.sendToClient(createToolCallCompletedMessage(
