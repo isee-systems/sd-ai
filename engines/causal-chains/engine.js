@@ -13,6 +13,7 @@ import logger from "../../utilities/logger.js";
 const __filename = fileURLToPath(import.meta.url); // get the resolved path to the file
 const __dirname = path.dirname(__filename); // get the name of the directory
 const THIRD_PARTY_DIR = path.resolve(__dirname, '../../third-party/causal-chains');
+const BINARY_PATH = path.join(THIRD_PARTY_DIR, process.platform === 'win32' ? 'causal-chains.exe' : 'causal-chains');
 
 class Engine {
     constructor() {
@@ -28,8 +29,9 @@ focus on chains of relationships, rather then individual links.`
     static supportedModes() {
         // check that the third-party/causal-chains Go binary exists
         try {
-            const stats =  statSync(`${THIRD_PARTY_DIR}/causal-chains`);
-            const isExecutable = !!(stats.mode & (fs.constants.S_IXUSR | fs.constants.S_IXGRP | fs.constants.S_IXOTH));
+            statSync(BINARY_PATH);
+            // on Windows all files are executable; on Unix check the execute bit
+            const isExecutable = process.platform === 'win32' || !!(statSync(BINARY_PATH).mode & 0o111);
 
             if (isExecutable) {
                 return ["cld"];
@@ -127,7 +129,7 @@ focus on chains of relationships, rather then individual links.`
             const inputPath = path.resolve(path.join(tempDir, 'data.json'));
             // logger.log(`input path is ${inputPath}`);
             await fs.writeFile(inputPath, JSON.stringify(input));
-            const { stdout, stderr } = await promiseExec(`${THIRD_PARTY_DIR}/causal-chains ${inputPath}`, {cwd: tempDir});
+            const { stdout, stderr } = await promiseExec(`"${BINARY_PATH}" "${inputPath}"`, {cwd: tempDir});
             return JSON.parse(stdout.toString());
         } catch (err) {
             logger.log(`causal-chains returned non-zero exit code: ${err.status}`);
