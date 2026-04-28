@@ -61,6 +61,11 @@ Instead, extract ONLY the time series data fields:
 - Correct: { time: result.time, Population: result.Population, Births: result.Births }
 - Wrong: result (includes success, runId, and other metadata)
 
+## CRITICAL: Never Directly Edit model.sdjson
+NEVER use file writing or file editing tools (write_file, edit_file) to directly modify model.sdjson.
+All model changes MUST go through the designated model tools (generate_quantitative_model, generate_qualitative_model, generate_documentation, edit_model_section, etc.).
+Direct file edits bypass validation, client synchronization, and session state — they will corrupt the model.
+
 ## CRITICAL: Automatic Model Validation
 After ANY tool use that modifies the model (generate_quantitative_model, generate_qualitative_model), you MUST:
 1. Immediately use get_current_model to retrieve the updated model

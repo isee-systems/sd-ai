@@ -1,5 +1,7 @@
 import { z } from 'zod';
-import { SDModelSchema, FeedbackContentSchema, createFeedbackRequestMessage } from '../../utilities/MessageProtocol.js';
+import { readFileSync, existsSync } from 'fs';
+import { join } from 'path';
+import { createFeedbackRequestMessage } from '../../utilities/MessageProtocol.js';
 import { callSeldonEngine } from '../../utilities/EngineWrapper.js';
 import { generateRequestId, createSuccessResponse, createErrorResponse } from './toolHelpers.js';
 
@@ -12,16 +14,25 @@ export function createDiscussModelWithSeldonTool(sessionManager, sessionId, send
     supportedModes: ['sfd', 'cld'],
     inputSchema: z.object({
       prompt: z.string().describe('Question or topic for discussion'),
-      model: SDModelSchema.describe('The model to discuss'),
-      feedbackContent: FeedbackContentSchema.optional(),
       parameters: z.object({
         problemStatement: z.string().optional().describe('Description of dynamic issue to address'),
         backgroundKnowledge: z.string().optional().describe('Background information for LLM'),
         behaviorContent: z.string().optional().describe('Time series behavior data')
       }).optional()
     }),
-    handler: async ({ prompt, model, feedbackContent, parameters }) => {
+    handler: async ({ prompt, parameters }) => {
       try {
+        const model = sessionManager.getClientModel(sessionId);
+        if (!model) {
+          return createErrorResponse('No model available in session');
+        }
+
+        const sessionTempDir = sessionManager.getSessionTempDir(sessionId);
+        const feedbackPath = join(sessionTempDir, 'feedback.json');
+        const feedbackContent = existsSync(feedbackPath)
+          ? JSON.parse(readFileSync(feedbackPath, 'utf-8')).feedbackContent
+          : undefined;
+
         const result = await callSeldonEngine(prompt, model, feedbackContent, parameters);
 
         if (!result.success) {

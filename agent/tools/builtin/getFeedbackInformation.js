@@ -7,7 +7,7 @@ import { generateRequestId, createSuccessResponse, createErrorResponse } from '.
  */
 export function createGetFeedbackInformationTool(sessionManager, sessionId, sendToClient) {
   return {
-    description: 'Request feedback loop analysis data from the client. MUST be called before using discuss_model_with_seldon or generate_ltm_narrative to ensure feedback information is available. Provide a list of run IDs to get feedback for.',
+    description: 'Request feedback loop analysis data from the client and cache it for use by other tools. MUST be called before using discuss_model_with_seldon or generate_ltm_narrative. Provide a list of run IDs to get feedback for.',
     supportedModes: ['sfd', 'cld'],
     inputSchema: z.object({
       runIds: z.array(z.string()).describe('List of simulation run IDs to get feedback for')
@@ -40,8 +40,14 @@ export function createGetFeedbackInformationTool(sessionManager, sessionId, send
 
         const feedbackData = await resultPromise;
 
-        return createSuccessResponse({
+        const { filePath } = sessionManager.writeDataToDisk(sessionId, 'feedback.json', {
           feedbackContent: feedbackData.feedbackContent,
+          runIds: feedbackData.runIds
+        });
+
+        return createSuccessResponse({
+          message: 'Feedback information cached. Other tools will load it automatically — you do not need to read this file.',
+          filePath,
           runIds: feedbackData.runIds
         });
       } catch (error) {

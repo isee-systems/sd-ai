@@ -1,9 +1,8 @@
 import { z } from 'zod';
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { createUpdateModelMessage } from '../../utilities/MessageProtocol.js';
 import { generateRequestId, createSuccessResponse, createErrorResponse } from './toolHelpers.js';
-import logger from '../../../utilities/logger.js';
 import config from '../../../config.js';
 
 /**
@@ -530,9 +529,6 @@ After editing, the model is validated and processed through the quantitative eng
         if (!model.relationships || !Array.isArray(model.relationships)) {
           return handleError('Model validation failed: model.relationships must be an array.');
         }
-
-        writeFileSync(modelPath, JSON.stringify(model, null, 2));
-        logger.log(`Model written to: ${modelPath}`);
 
         const updateRequestId = generateRequestId('model');
         await sendToClient(createUpdateModelMessage(sessionId, updateRequestId, model));

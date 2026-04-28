@@ -1,5 +1,7 @@
 import { z } from 'zod';
-import { SDModelSchema, FeedbackContentSchema, createFeedbackRequestMessage } from '../../utilities/MessageProtocol.js';
+import { readFileSync, existsSync } from 'fs';
+import { join } from 'path';
+import { createFeedbackRequestMessage } from '../../utilities/MessageProtocol.js';
 import { callSeldonILEEngine } from '../../utilities/EngineWrapper.js';
 import { generateRequestId, createSuccessResponse, createErrorResponse } from './toolHelpers.js';
 
@@ -12,18 +14,27 @@ export function createDiscussModelAcrossRunsTool(sessionManager, sessionId, send
     supportedModes: ['sfd'],
     inputSchema: z.object({
       prompt: z.string().describe('Question or topic for discussion'),
-      model: SDModelSchema.describe('The model to discuss'),
-      runName: z.string().optional().describe('Simulation run ID for context'),
-      feedbackContent: z.union([FeedbackContentSchema, z.record(z.string(), FeedbackContentSchema)]).optional().describe('Feedback content: either a single FeedbackContentSchema or a map of runId to FeedbackContentSchema'),
+      runName: z.string().optional().describe('Simulation run identifier of the most recent run matching the way the behavioral content is being passed to this too.'),
       parameters: z.object({
         problemStatement: z.string().optional().describe('Description of dynamic issue to address'),
         backgroundKnowledge: z.string().optional().describe('Background information for LLM'),
         behaviorContent: z.string().optional().describe('Time series behavior data')
       }).optional()
     }),
-    handler: async ({ prompt, model, runName, feedbackContent, parameters }) => {
+    handler: async ({ prompt, runName, parameters }) => {
       try {
-        // Add feedbackContent to parameters if provided
+        const model = sessionManager.getClientModel(sessionId);
+        if (!model) {
+          return createErrorResponse('No model available in session');
+        }
+
+        const sessionTempDir = sessionManager.getSessionTempDir(sessionId);
+        const feedbackPath = join(sessionTempDir, 'feedback.json');
+        const feedbackContent = existsSync(feedbackPath)
+          ? JSON.parse(readFileSync(feedbackPath, 'utf-8')).feedbackContent
+          : undefined;
+
+        // Add feedbackContent to parameters if available
         const engineParams = {
           ...parameters,
           ...(feedbackContent && { feedbackContent })

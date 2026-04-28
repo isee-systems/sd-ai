@@ -53,7 +53,7 @@ export function createGetCurrentModelTool(sessionManager, sessionId, sendToClien
           return createSuccessResponse(parsed);
         }
 
-        const { modelPath, message } = sessionManager.writeModelToDisk(sessionId, parsed);
+        const { modelPath, message } = sessionManager.updateClientModel(sessionId, parsed);
 
         return createSuccessResponse({ message, modelPath });
 

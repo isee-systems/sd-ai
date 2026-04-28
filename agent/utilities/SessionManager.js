@@ -134,20 +134,24 @@ export class SessionManager {
     }
     session.mode = mode;
 
-    session.clientModel = model;
     session.clientTools = tools || [];
     session.context = context || {};
+    this.updateClientModel(sessionId, model);
 
     logger.log(`Session initialized: ${sessionId} with mode=${mode} and ${tools.length} client tools`);
   }
 
   /**
-   * Update the client model reference
+   * Update the client model reference and persist to disk.
+   * Returns { modelPath, message } when the model is written.
    */
   updateClientModel(sessionId, model) {
     const session = this.getSession(sessionId);
     if (session) {
       session.clientModel = model;
+      if (model) {
+        return this.#writeModelToDisk(sessionId, model);
+      }
     }
   }
 
@@ -189,13 +193,13 @@ export class SessionManager {
    * Write a model to disk and return the LLM message describing where to find it.
    * Returns { modelPath, message }.
    */
-  writeModelToDisk(sessionId, model) {
+  #writeModelToDisk(sessionId, model) {
     const sessionTempDir = this.getSessionTempDir(sessionId);
     const modelPath = join(sessionTempDir, 'model.sdjson');
     mkdirSync(sessionTempDir, { recursive: true });
     writeFileSync(modelPath, JSON.stringify(model, null, 2));
     logger.log(`Model written to: ${modelPath}`);
-    const message = `The model has been written to disk at: ${modelPath}. Use the read_model_section tool to inspect specific sections.`;
+    const message = `The model has been written to disk at: ${modelPath}. Other tools will load it automatically — you do not need to read this file. Use the read_model_section tool if you need to inspect specific sections.`;
     return { modelPath, message };
   }
 

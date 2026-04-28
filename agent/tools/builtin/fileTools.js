@@ -65,7 +65,7 @@ Filtering options to avoid reading more than needed:
 
 export function createWriteFileTool() {
   return {
-    description: 'Write content to a file on disk, creating the file (and any parent directories) if it does not exist. Overwrites any existing content.',
+    description: 'Write content to a file on disk, creating the file (and any parent directories) if it does not exist. Overwrites any existing content. NEVER use this to write to model.sdjson — all model updates must go through the designated model tools.',
     supportedModes: ['sfd', 'cld'],
     nonSdkOnly: true,
     inputSchema: z.object({
@@ -89,7 +89,8 @@ export function createEditFileTool() {
     description: `Replace a string in a file with new content.
 
 By default, old_string must appear exactly once. Set replaceAll: true to replace every occurrence.
-The match is exact (whitespace-sensitive). Provide enough surrounding context to make the match unique.`,
+The match is exact (whitespace-sensitive). Provide enough surrounding context to make the match unique.
+NEVER use this to edit model.sdjson — all model updates must go through the designated model tools.`,
     supportedModes: ['sfd', 'cld'],
     nonSdkOnly: true,
     inputSchema: z.object({

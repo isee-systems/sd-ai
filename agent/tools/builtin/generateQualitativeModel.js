@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { SDModelSchema, createUpdateModelMessage } from '../../utilities/MessageProtocol.js';
+import { createUpdateModelMessage } from '../../utilities/MessageProtocol.js';
 import { callQualitativeEngine } from '../../utilities/EngineWrapper.js';
 import { generateRequestId, createSuccessResponse, createErrorResponse } from './toolHelpers.js';
 import config from '../../../config.js';
@@ -14,14 +14,14 @@ export function createGenerateQualitativeModelTool(sessionManager, sessionId, se
     maxModelTokens: config.agentMaxTokensForEngines,
     inputSchema: z.object({
       prompt: z.string().describe('Description of the model to generate'),
-      currentModel: SDModelSchema.optional().describe('Existing model to build upon'),
       parameters: z.object({
         problemStatement: z.string().optional().describe('Description of dynamic issue to address'),
         backgroundKnowledge: z.string().optional().describe('Background information for LLM')
       }).optional()
     }),
-    handler: async ({ prompt, currentModel, parameters }) => {
+    handler: async ({ prompt, parameters }) => {
       try {
+        const currentModel = sessionManager.getClientModel(sessionId);
         const result = await callQualitativeEngine(prompt, currentModel, parameters);
 
         if (!result.success) {
@@ -51,7 +51,7 @@ export function createGenerateQualitativeModelTool(sessionManager, sessionId, se
 
         await updatePromise;
 
-        const { modelPath, message } = sessionManager.writeModelToDisk(sessionId, result.model);
+        const { modelPath, message } = sessionManager.updateClientModel(sessionId, result.model);
 
         return createSuccessResponse({
           message: `Model generated and pushed to client. ${message}`,

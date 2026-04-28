@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { SDModelSchema, createUpdateModelMessage } from '../../utilities/MessageProtocol.js';
+import { createUpdateModelMessage } from '../../utilities/MessageProtocol.js';
 import { callDocumentationEngine } from '../../utilities/EngineWrapper.js';
 import { generateRequestId, createSuccessResponse, createErrorResponse } from './toolHelpers.js';
 import config from '../../../config.js';
@@ -13,14 +13,18 @@ export function createGenerateDocumentationTool(sessionManager, sessionId, sendT
     supportedModes: ['sfd', 'cld'],
     maxModelTokens: config.agentMaxTokensForEngines,
     inputSchema: z.object({
-      model: SDModelSchema.describe('The model to document'),
       parameters: z.object({
         problemStatement: z.string().optional().describe('Description of dynamic issue to address'),
         backgroundKnowledge: z.string().optional().describe('Background information for LLM')
       }).optional()
     }),
-    handler: async ({ model, parameters }) => {
+    handler: async ({ parameters }) => {
       try {
+        const model = sessionManager.getClientModel(sessionId);
+        if (!model) {
+          return createErrorResponse('No model available in session');
+        }
+
         const result = await callDocumentationEngine(model, parameters);
 
         if (!result.success) {
@@ -50,9 +54,13 @@ export function createGenerateDocumentationTool(sessionManager, sessionId, sendT
 
         await updatePromise;
 
+        const { modelPath, message } = sessionManager.updateClientModel(sessionId, result.model);
+
         return createSuccessResponse({
-          model: result.model,
-          supportingInfo: result.supportingInfo
+          message: `Documentation generated and pushed to client. ${message}`,
+          modelPath,
+          supportingInfo: result.supportingInfo,
+          pushedToClient: true
         });
       } catch (error) {
         return createErrorResponse(error.message);
