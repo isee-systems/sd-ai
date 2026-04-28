@@ -31,9 +31,9 @@ function modelResultMessage(id) {
   };
 }
 
-// ─── SessionManager.summarizeContextIfNeeded ─────────────────────────────────
+// ─── SessionManager.cleanupContext ─────────────────────────────────
 
-describe('SessionManager.summarizeContextIfNeeded', () => {
+describe('SessionManager.cleanupContext', () => {
   let sessionManager;
   let sessionId;
 
@@ -51,7 +51,7 @@ describe('SessionManager.summarizeContextIfNeeded', () => {
     sessionManager.addToConversationHistory(sessionId, { role: 'assistant', content: 'Hi there' });
 
     const contextBefore = [...sessionManager.getConversationContext(sessionId)];
-    await sessionManager.summarizeContextIfNeeded(sessionId, 100_000);
+    await sessionManager.cleanupContext(sessionId, 100_000);
 
     expect(sessionManager.getConversationContext(sessionId)).toEqual(contextBefore);
     expect(sessionManager.anthropic.messages.create).not.toHaveBeenCalled();
@@ -63,13 +63,11 @@ describe('SessionManager.summarizeContextIfNeeded', () => {
       sessionManager.addToConversationHistory(sessionId, { role: 'assistant', content: `Response ${i}` });
     }
 
-    const firstMessage = sessionManager.getConversationContext(sessionId)[0];
-    await sessionManager.summarizeContextIfNeeded(sessionId, 1);
+    await sessionManager.cleanupContext(sessionId, 1);
 
     const context = sessionManager.getConversationContext(sessionId);
-    expect(context[0]).toEqual(firstMessage);
-    expect(context[1].role).toBe('assistant');
-    expect(context[1].content).toMatch(/\[Previous conversation summary\]/);
+    expect(context[0].role).toBe('user');
+    expect(context[0].content).toMatch(/\[Previous conversation summary\]/);
     expect(sessionManager.anthropic.messages.create).toHaveBeenCalled();
   });
 
@@ -82,12 +80,12 @@ describe('SessionManager.summarizeContextIfNeeded', () => {
     const liveRef = sessionManager.getConversationContext(sessionId);
     const originalLength = liveRef.length;
 
-    await sessionManager.summarizeContextIfNeeded(sessionId, 1);
+    await sessionManager.cleanupContext(sessionId, 1);
 
     // splice is in-place: the same array object must be updated, not replaced
     expect(liveRef).toBe(sessionManager.getConversationContext(sessionId));
     expect(liveRef.length).toBeLessThan(originalLength);
-    expect(liveRef[1].content).toMatch(/\[Previous conversation summary\]/);
+    expect(liveRef[0].content).toMatch(/\[Previous conversation summary\]/);
   });
 
   it('uses a fallback summary message when the LLM call fails', async () => {
@@ -98,15 +96,15 @@ describe('SessionManager.summarizeContextIfNeeded', () => {
       sessionManager.addToConversationHistory(sessionId, { role: 'assistant', content: `Response ${i}` });
     }
 
-    await sessionManager.summarizeContextIfNeeded(sessionId, 1);
+    await sessionManager.cleanupContext(sessionId, 1);
 
     const context = sessionManager.getConversationContext(sessionId);
-    expect(context[1].content).toMatch(/condensed/);
+    expect(context[0].content).toMatch(/condensed/);
   });
 
   it('does nothing for a non-existent session ID', async () => {
     await expect(
-      sessionManager.summarizeContextIfNeeded('non-existent-id', 1)
+      sessionManager.cleanupContext('non-existent-id', 1)
     ).resolves.toBeUndefined();
   });
 });
@@ -125,39 +123,6 @@ describe('SessionManager.cleanupContext', () => {
   });
 
   afterEach(() => { sessionManager.shutdown(); });
-
-  it('removes all but the most recent model result', async () => {
-    sessionManager.addToConversationHistory(sessionId, { role: 'user', content: 'request 1' });
-    sessionManager.addToConversationHistory(sessionId, modelResultMessage('r1'));
-    sessionManager.addToConversationHistory(sessionId, { role: 'user', content: 'request 2' });
-    sessionManager.addToConversationHistory(sessionId, modelResultMessage('r2'));
-    sessionManager.addToConversationHistory(sessionId, { role: 'user', content: 'request 3' });
-    sessionManager.addToConversationHistory(sessionId, modelResultMessage('r3'));
-
-    await sessionManager.cleanupContext(sessionId, 100_000);
-
-    const context = sessionManager.getConversationContext(sessionId);
-    const modelResults = context.filter(msg =>
-      msg.role === 'user' &&
-      Array.isArray(msg.content) &&
-      msg.content.some(c => {
-        try { return JSON.parse(c.content)?.model !== undefined; } catch { return false; }
-      })
-    );
-
-    expect(modelResults).toHaveLength(1);
-    expect(JSON.parse(modelResults[0].content[0].content).resultId).toBe('r3');
-  });
-
-  it('leaves the context untouched when there is only one model result', async () => {
-    sessionManager.addToConversationHistory(sessionId, { role: 'user', content: 'request' });
-    sessionManager.addToConversationHistory(sessionId, modelResultMessage('only'));
-
-    const lengthBefore = sessionManager.getConversationContext(sessionId).length;
-    await sessionManager.cleanupContext(sessionId, 100_000);
-
-    expect(sessionManager.getConversationContext(sessionId)).toHaveLength(lengthBefore);
-  });
 
   it('does nothing when context is empty', async () => {
     await expect(
@@ -241,7 +206,7 @@ describe('Agent switch - context continuity between orchestrators', () => {
     const fullLength = sessionManager.getConversationContext(sessionId).length;
 
     // Summarization fires during agent A's last turn
-    await sessionManager.summarizeContextIfNeeded(sessionId, 1);
+    await sessionManager.cleanupContext(sessionId, 1);
 
     // websocket.js captures context and creates agent B
     const capturedOnSwitch = sessionManager.getConversationContext(sessionId);
