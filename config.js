@@ -8,8 +8,8 @@ const config = {
     "reporterURL": process.env.REPORTER_URL || null, // Optional URL to POST engine usage metrics
     "websocketPort": 3000,
     "sessionTempDir": process.env.SESSION_TEMP_DIR || null, // Optional custom temp directory for session files (defaults to OS tmpdir/sd-agent)
-    "agentMaxTokensForEngines": parseInt(process.env.MAX_TOKENS_FOR_ENGINES) || 100000, // Maximum tokens before switching to file-based editing
-    "agentMaxContextTokens": parseInt(process.env.MAX_CONTEXT_TOKENS) || 100000, // Maximum tokens for conversation history sent to Claude API
+    "agentMaxTokensForEngines": parseInt(process.env.MAX_TOKENS_FOR_ENGINES) || 10_000, // Maximum tokens before switching to file-based editing
+    "agentMaxContextTokens": parseInt(process.env.MAX_CONTEXT_TOKENS) || 50_000, // Maximum tokens for conversation history sent to Claude API
     "agentModel": process.env.AGENT_MODEL || 'claude-sonnet-4-6', // Model used for agent conversations MUST BE Anthropic models
     "agentSummaryModel": process.env.SUMMARY_MODEL || 'claude-haiku-4-5', // Model used for conversation history summarization MUST BE Anthropic models
 };

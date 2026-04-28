@@ -242,7 +242,7 @@ export class SessionManager {
 
   /**
    * Summarize an array of messages using the LLM and return a single summary message object.
-   * Private — only called by summarizeContextIfNeeded and cleanupContext.
+   * Private — only called by #summarizeContextIfNeeded and cleanupContext.
    */
   async #summarizeMessages(messages) {
     try {
@@ -288,121 +288,81 @@ ${conversationText}`
       logger.log(`Created message history summary: ${summaryText.substring(0, 100)}...`);
 
       return {
-        role: 'assistant',
+        role: 'user',
         content: `[Previous conversation summary]\n${summaryText}\n[End of summary - continuing conversation]`
       };
 
     } catch (error) {
       logger.error('Error summarizing message history:', error);
       return {
-        role: 'assistant',
+        role: 'user',
         content: '[Previous conversation summary: Earlier messages were condensed to save context. The conversation is continuing from this point.]'
       };
     }
   }
 
   /**
-   * If the session's conversation context exceeds maxContextTokens, summarize the oldest messages
-   * in-place so the context stays within budget. Updates session state directly.
+   * If the session's conversation context exceeds maxContextTokens, summarize all messages
+   * and replace the context with [original_user_message, ...summaries]. Messages are split
+   * into chunks of MAX_COMPRESSION_TOKENS_PER_PASS before summarizing to handle large
+   * histories (e.g. on session initialization) that would exceed the LLM's input limit.
    */
-  async summarizeContextIfNeeded(sessionId, maxContextTokens) {
+  async #summarizeContextIfNeeded(sessionId, maxContextTokens) {
     const session = this.getSession(sessionId);
     if (!session) return;
 
     const messages = session.conversationContext;
-    const MAX_PASSES = 10;
+    if (messages.length <= 1) return;
 
-    for (let pass = 0; pass < MAX_PASSES; pass++) {
-      const currentTokens = countTokens(JSON.stringify(messages));
-      if (currentTokens <= maxContextTokens) break;
+    const currentTokens = countTokens(JSON.stringify(messages));
+    if (currentTokens <= maxContextTokens) return;
 
-      logger.log(`Message history exceeds token limit: ${currentTokens} tokens (limit: ${maxContextTokens})`);
+    logger.log(`Message history exceeds token limit: ${currentTokens} tokens (limit: ${maxContextTokens}), summarizing context`);
 
-      const firstMessage = messages[0];
-      const firstMessageTokens = countTokens(JSON.stringify(firstMessage));
-      const SUMMARY_TOKEN_ESTIMATE = 1000;
-      let remainingTokenBudget = maxContextTokens - firstMessageTokens - SUMMARY_TOKEN_ESTIMATE;
-      const keptRecentMessages = [];
+    const lastUserIdx = messages.findLastIndex(m => m.role === 'user');
+    const lastMessage = lastUserIdx !== -1 ? messages[lastUserIdx] : null;
 
-      for (let i = messages.length - 1; i >= 1; i--) {
-        const messageTokens = countTokens(JSON.stringify(messages[i]));
-        if (remainingTokenBudget - messageTokens >= 0) {
-          keptRecentMessages.unshift(messages[i]);
-          remainingTokenBudget -= messageTokens;
-        } else {
-          break;
-        }
-      }
-
-      if (keptRecentMessages.length >= messages.length - 1) break;
-
-      const messagesToSummarize = messages.slice(1, messages.length - keptRecentMessages.length);
-      if (messagesToSummarize.length === 0) break;
-
-      // Cap how many tokens go to the LLM in one compression call
-      let batchToSummarize = messagesToSummarize;
-      if (countTokens(JSON.stringify(batchToSummarize)) > SessionManager.MAX_COMPRESSION_TOKENS_PER_PASS) {
-        batchToSummarize = [];
-        let tokenBudget = SessionManager.MAX_COMPRESSION_TOKENS_PER_PASS;
-        for (const msg of messagesToSummarize) {
-          const msgTokens = countTokens(JSON.stringify(msg));
-          if (tokenBudget - msgTokens < 0) break;
-          batchToSummarize.push(msg);
-          tokenBudget -= msgTokens;
-        }
-      }
-
-      if (batchToSummarize.length === 0) break;
-
-      const summaryMessage = await this.#summarizeMessages(batchToSummarize);
-      // Replace only the batch — remaining messages stay for subsequent passes
-      messages.splice(1, batchToSummarize.length, summaryMessage);
-      const newTokenCount = countTokens(JSON.stringify(messages));
-      logger.log(`Summarized context: ${messages.length} messages, ${newTokenCount} tokens (saved ${currentTokens - newTokenCount})`);
+    // If the last user message contains tool_results, also keep the preceding assistant
+    // message (which holds the matching tool_use blocks) to avoid orphaned tool pairs.
+    let tailStart = lastUserIdx !== -1 ? lastUserIdx : messages.length;
+    if (lastMessage && Array.isArray(lastMessage.content) &&
+        lastMessage.content.some(b => b.type === 'tool_result') &&
+        lastUserIdx > 0 && messages[lastUserIdx - 1]?.role === 'assistant') {
+      tailStart = lastUserIdx - 1;
     }
+
+    const tail = messages.slice(tailStart);
+    const remaining = messages.slice(0, tailStart);
+
+    // Split remaining messages into chunks that fit within the per-pass token budget
+    const chunks = [];
+    let chunk = [];
+    let chunkTokens = 0;
+    for (const msg of remaining) {
+      const msgTokens = countTokens(JSON.stringify(msg));
+      if (chunkTokens + msgTokens > SessionManager.MAX_COMPRESSION_TOKENS_PER_PASS && chunk.length > 0) {
+        chunks.push(chunk);
+        chunk = [];
+        chunkTokens = 0;
+      }
+      chunk.push(msg);
+      chunkTokens += msgTokens;
+    }
+    if (chunk.length > 0) chunks.push(chunk);
+
+    const summaries = await Promise.all(chunks.map(c => this.#summarizeMessages(c)));
+    const replacement = [...summaries, ...tail];
+    messages.splice(0, messages.length, ...replacement);
+
+    const newTokenCount = countTokens(JSON.stringify(messages));
+    logger.log(`Summarized context in ${chunks.length} chunk(s): ${messages.length} messages, ${newTokenCount} tokens (saved ${currentTokens - newTokenCount})`);
   }
 
   /**
-   * Clean up the session's conversation context: remove stale model results, then summarize if over limit.
+   * Clean up the session's conversation context by summarizing if over the token limit.
    */
   async cleanupContext(sessionId, maxContextTokens) {
-    const session = this.getSession(sessionId);
-    if (!session) return;
-
-    const messages = session.conversationContext;
-    if (messages.length === 0) return;
-
-    logger.log(`Cleaning up conversation context (${messages.length} messages)`);
-
-    const modelIndices = [];
-    for (let i = 0; i < messages.length; i++) {
-      const message = messages[i];
-      if (message.role === 'user' && message.content && Array.isArray(message.content)) {
-        for (const content of message.content) {
-          if (content.type === 'tool_result' && content.content) {
-            try {
-              const parsed = JSON.parse(content.content);
-              if (parsed.model || parsed.variables) {
-                modelIndices.push(i);
-                break;
-              }
-            } catch (e) {
-              // not a model result
-            }
-          }
-        }
-      }
-    }
-
-    if (modelIndices.length > 1) {
-      const indicesToRemove = modelIndices.slice(0, -1).sort((a, b) => b - a);
-      for (const index of indicesToRemove) {
-        messages.splice(index, 1);
-      }
-      logger.log(`Removed ${indicesToRemove.length} stale model result(s) from context`);
-    }
-
-    await this.summarizeContextIfNeeded(sessionId, maxContextTokens);
+    await this.#summarizeContextIfNeeded(sessionId, maxContextTokens);
   }
 
   /**

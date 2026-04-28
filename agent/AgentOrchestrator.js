@@ -547,7 +547,7 @@ export class AgentOrchestrator {
       iteration++;
 
       // Summarize context in-place if it has grown over the token limit
-      await this.sessionManager.summarizeContextIfNeeded(this.sessionId, config.agentMaxContextTokens);
+      await this.sessionManager.cleanupContext(this.sessionId, config.agentMaxContextTokens);
 
       try {
         // Call Claude API
@@ -778,12 +778,15 @@ export class AgentOrchestrator {
         });
 
         // Add tool_result following Claude's API requirements
+        const resultText = Array.isArray(toolResult.content)
+          ? toolResult.content.filter(b => b.type === 'text').map(b => b.text).join('\n')
+          : toolResult.content;
         messages.push({
           role: 'user',
           content: [{
             type: 'tool_result',
             tool_use_id: block.id,
-            content: typeof toolResult.content === 'string' ? toolResult.content : JSON.stringify(toolResult.content),
+            content: resultText,
             is_error: toolResult.isError || false
           }]
         });

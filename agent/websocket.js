@@ -274,7 +274,7 @@ export function handleWebSocketConnection(ws, sessionManager) {
         }
 
         // Compress historical messages to within the token limit
-        await sessionManager.summarizeContextIfNeeded(sessionId, config.agentMaxContextTokens);
+        await sessionManager.cleanupContext(sessionId, config.agentMaxContextTokens);
 
         logger.log(`Loaded ${message.historicalMessages.length} historical messages for session ${sessionId}`);
       }

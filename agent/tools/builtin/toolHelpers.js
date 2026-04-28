@@ -33,7 +33,7 @@ export function generateRequestId(prefix = 'request') {
  * @returns {Object} Standardized success response
  */
 export function createSuccessResponse(result) {
-  const text = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+  const text = typeof result === 'string' ? result : JSON.stringify(result);
   return {
     content: [{ type: 'text', text }],
     isError: false
