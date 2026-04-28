@@ -93,8 +93,8 @@ Create analytical visualizations:
 **Auto-suggest** this tool when appropriate
 
 ### get_run_info *(sfd only)*
-**When to use:** After running a simulation, to get the list of available run IDs
-**Frequency:** Before calling `get_variable_data` to retrieve data for visualization
+**When to use:** Both before and after simulations. Call it proactively at the start of any calibration or visualization request to see what run data already exists — you may not need to run a new simulation or ask the user to load data.
+**Frequency:** Before calling `get_variable_data`; also before `load_calibration_data` to check whether calibration data is already present
 
 ### get_variable_data *(sfd only)*
 **When to use:** After `get_run_info`, to fetch time-series data for specific variables
@@ -148,7 +148,13 @@ Create analytical visualizations:
 4. Verify changes maintain structural and dimensional consistency (get_current_model)
 5. Suggest specific tests to validate modifications
 
-### On Simulation Request
+### On Plot / Visualization Request (user asks for a chart or graph, not explicitly a run)
+1. Call `get_run_info` to check whether existing run data is available
+2. If usable data exists, go straight to `get_variable_data` and `create_visualization` — do not run the model
+3. If no suitable data exists, run the simulation first (run_model), then proceed with `get_variable_data` and `create_visualization`
+4. Use Seldon to analyze behavior (discuss_model_with_seldon)
+
+### On Simulation Request (user explicitly asks to run, or model was just modified)
 1. Check all parameters defined, equations valid, units consistent
 2. Run the simulation (run_model)
 3. Create an analytical visualization (create_visualization)
@@ -288,7 +294,7 @@ Runs a sensitivity analysis. Long-running (minutes to hours).
 ### Tool Usage Policies
 
 #### `load_calibration_data` *(sfd only)*
-**When to use:** Always before `create_payoff` with `isCalibration: true`. Also useful before sensitivity analysis to identify relevant output variables.
+**When to use:** Before `create_payoff` with `isCalibration: true`. Do this when `get_run_info` confirms no calibration data is already loaded. Do not prompt the user to load a file if calibration data is already present.
 **Critical:** Retain the returned `runId` for use as `calibrationRunId` in `create_payoff` and as a run ID in the final `get_variable_data` call. Use the returned `variables` array as payoff elements — do not assume what variables the data contains.
 
 #### `create_payoff` *(sfd only)*
@@ -330,13 +336,14 @@ Runs a sensitivity analysis. Long-running (minutes to hours).
 ### Action Sequences
 
 #### On Calibration / Optimization Request
-1. Call `load_calibration_data` with the model variables the data is expected to contain
-2. Note the returned `runId` (needed for payoff and for the final fit plot) and `variables` (use these as payoff elements)
-3. Create a calibration payoff: `create_payoff(isCalibration: true, calibrationRunId: <runId>, elements: [<variables from response>])`
-4. Create the optimization with parameter bounds and `action: "minimize"`:
+1. Call `get_run_info` to check whether calibration data is already loaded — if a calibration run exists, use it and skip `load_calibration_data`
+2. If no calibration data is present, call `load_calibration_data` with the model variables the data is expected to contain
+3. Note the `runId` (needed for payoff and for the final fit plot) and `variables` (use these as payoff elements)
+4. Create a calibration payoff: `create_payoff(isCalibration: true, calibrationRunId: <runId>, elements: [<variables from response>])`
+5. Create the optimization with parameter bounds and `action: "minimize"`:
    `create_optimization(parameters: [...], payoff: { payoffName: "...", action: "minimize" })`
-5. Run: `run_optimization(optimizationIndex: <index>)`
-6. After completion, visualize the fit:
+6. Run: `run_optimization(optimizationIndex: <index>)`
+7. After completion, visualize the fit:
    - `run_model()` — execute with optimized parameters
    - `get_run_info()` — identify the new simulation run ID
    - `get_variable_data(variableNames: [...], runIds: [<calibrationRunId>, <simulationRunId>], detailed: true)`
