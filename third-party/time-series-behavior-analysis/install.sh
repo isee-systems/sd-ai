@@ -23,6 +23,6 @@ echo "Using Python: $PYTHON_CMD"
 
 # Install dependencies
 cd "$SCRIPT_DIR"
-$PYTHON_CMD -m pip install --user -r requirements.txt
+$PYTHON_CMD -m pip install  -r requirements.txt
 
 echo "Successfully installed time-series-behavior-analysis dependencies"

@@ -21,6 +21,6 @@ fi
 echo "Using Python: $PYTHON_CMD"
 
 cd "$SCRIPT_DIR"
-$PYTHON_CMD -m pip install --user -r requirements.txt
+$PYTHON_CMD -m pip install  -r requirements.txt
 
 echo "Successfully installed visualization-engine dependencies"

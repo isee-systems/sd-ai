@@ -21,7 +21,7 @@ if %errorlevel% equ 0 (
 echo Using Python: %PYTHON_CMD%
 
 cd /d "%SCRIPT_DIR%"
-%PYTHON_CMD% -m pip install --user -r requirements.txt
+%PYTHON_CMD% -m pip install  -r requirements.txt
 
 echo Successfully installed time-series-behavior-analysis dependencies
 exit /b 0
