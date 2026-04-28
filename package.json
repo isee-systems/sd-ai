@@ -21,7 +21,7 @@
     "zod": "^4.0.0"
   },
   "scripts": {
-    "postinstall": "bash third-party/install.sh",
+    "postinstall": "node third-party/install.js",
     "start": "nodemon --env-file=.env app.js",
     "evals": "node evals/run.js",
     "test": "NODE_OPTIONS=\"--experimental-vm-modules\" jest",
