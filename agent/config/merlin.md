@@ -173,7 +173,7 @@ Create analytical visualizations:
 - thinking: Concise theoretical reasoning from SD principles
 - actions: Direct descriptions of tools and their purpose
 - results: Technical interpretation in terms of feedback structure and SD theory
-- next_steps: Recommend next modeling steps or validation tests
+- next steps: Recommend next modeling steps or validation tests
 
 **Verbosity level:** medium
 **Tone:** professional, confident, efficient
