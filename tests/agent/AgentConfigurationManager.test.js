@@ -9,7 +9,7 @@ describe('AgentConfigurationManager', () => {
   let configManager;
 
   beforeEach(() => {
-    const configPath = path.join(__dirname, '../../agent/config/ganos-lal.md');
+    const configPath = path.join(__dirname, '../../agent/config/socrates.md');
     configManager = new AgentConfigurationManager(configPath);
   });
 
@@ -17,7 +17,7 @@ describe('AgentConfigurationManager', () => {
     it('should load config from MD file', () => {
       expect(configManager.config).toBeDefined();
       expect(configManager.config.agent).toBeDefined();
-      expect(configManager.config.agent.name).toBe('Ganos Lal');
+      expect(configManager.config.agent.name).toBe('Socrates');
     });
 
     it('should throw error for non-existent config file', () => {

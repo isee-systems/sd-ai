@@ -190,15 +190,15 @@ describe('MessageProtocol', () => {
 
     it('should create session ready message', () => {
       const availableAgents = [
-        { id: 'ganos-lal', name: 'Ganos Lal', description: 'Helpful mentor' },
-        { id: 'myrddin', name: 'Myrddin', description: 'Expert modeler' }
+        { id: 'socrates', name: 'Socrates', description: 'Helpful mentor' },
+        { id: 'merlin', name: 'Merlin', description: 'Expert modeler' }
       ];
       const message = createSessionReadyMessage('session-1', availableAgents);
 
       expect(message.type).toBe('session_ready');
       expect(message.sessionId).toBe('session-1');
       expect(message.availableAgents).toHaveLength(2);
-      expect(message.availableAgents[0].id).toBe('ganos-lal');
+      expect(message.availableAgents[0].id).toBe('socrates');
     });
   });
 });

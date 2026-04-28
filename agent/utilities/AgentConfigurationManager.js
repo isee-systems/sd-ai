@@ -6,7 +6,7 @@ import logger from '../../utilities/logger.js';
  * Loads and manages agent configuration from Markdown files
  *
  * Key Features:
- * - Loads agent configuration from MD files (e.g., ganos-lal.md, myrddin.md)
+ * - Loads agent configuration from MD files (e.g., socrates.md, merlin.md)
  * - Provides system prompts for Claude Agent SDK
  * - NO filesystem writes - all modifications in memory only
  */

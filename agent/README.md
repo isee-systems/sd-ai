@@ -12,7 +12,7 @@ This WebSocket server provides an AI agent (powered by Claude) that helps users 
 - Optional custom client tool registration for application-specific behavior
 - Configurable agent behavior via Markdown files in `agent/config/`
 - AI-powered custom visualizations (SVG)
-- Multiple agent personalities (Ganos Lal, Myrddin, etc.)
+- Multiple agent personalities (Socrates, Merlin, etc.)
 - Per-session temp directory for visualization scratch space
 
 ## Architecture
@@ -66,7 +66,7 @@ ws://localhost:3000/api/v1/agent
 2. **Server sends** `session_created` with session ID
 3. **Client sends** `initialize_session` with auth, model type, initial model, and optional custom tools
 4. **Server validates** and sends `session_ready` with available agents
-5. **Client sends** `select_agent` to choose an agent (e.g., `"ganos-lal"`, `"myrddin"`)
+5. **Client sends** `select_agent` to choose an agent (e.g., `"socrates"`, `"merlin"`)
 6. **Server sends** `agent_selected` confirmation
 7. **Normal conversation** begins with `chat` messages
 
@@ -177,7 +177,7 @@ Chooses which agent personality to use.
 {
   "type": "select_agent",
   "sessionId": "sess_abc123",
-  "agentId": "ganos-lal"
+  "agentId": "socrates"
 }
 ```
 
@@ -288,21 +288,21 @@ Sent after successful initialization. Lists available agents.
   "sessionId": "sess_abc123",
   "availableAgents": [
     {
-      "id": "ganos-lal",
-      "name": "Ganos Lal",
+      "id": "socrates",
+      "name": "Socrates",
       "supportedModes": ["sfd", "cld"],
       "description": "System Dynamics mentor who uses Socratic questioning..."
     },
     {
-      "id": "myrddin",
-      "name": "Myrddin",
+      "id": "merlin",
+      "name": "Merlin",
       "supportedModes": ["sfd", "cld"],
       "description": "..."
     }
   ],
   "defaults": {
-    "sfd": "myrddin",
-    "cld": "myrddin"
+    "sfd": "merlin",
+    "cld": "merlin"
   },
   "timestamp": "2025-01-15T10:30:00.100Z"
 }
@@ -316,8 +316,8 @@ Confirms the selected agent is ready.
 {
   "type": "agent_selected",
   "sessionId": "sess_abc123",
-  "agentId": "ganos-lal",
-  "agentName": "Ganos Lal",
+  "agentId": "socrates",
+  "agentName": "Socrates",
   "timestamp": "2025-01-15T10:30:00.200Z"
 }
 ```
@@ -712,15 +712,15 @@ Agents are configured via Markdown files in `agent/config/`. The server automati
 
 ```
 agent/config/
-  ganos-lal.md
-  myrddin.md
+  socrates.md
+  merlin.md
 ```
 
 **Frontmatter fields:**
 
 ```yaml
 ---
-name: "Ganos Lal"
+name: "Socrates"
 description: "System Dynamics mentor who uses Socratic questioning..."
 version: "1.0"
 max_iterations: 20

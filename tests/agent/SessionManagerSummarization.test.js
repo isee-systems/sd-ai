@@ -7,8 +7,8 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const AGENT_A_CONFIG = path.join(__dirname, '../../agent/config/ganos-lal.md');
-const AGENT_B_CONFIG = path.join(__dirname, '../../agent/config/myrddin.md');
+const AGENT_A_CONFIG = path.join(__dirname, '../../agent/config/socrates.md');
+const AGENT_B_CONFIG = path.join(__dirname, '../../agent/config/merlin.md');
 
 function makeMockAnthropic(summaryText = 'Mocked summary.') {
   return {

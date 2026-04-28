@@ -123,7 +123,7 @@ export const InitializeSessionMessageSchema = z.object({
 const SelectAgentMessageSchema = z.object({
   type: z.literal('select_agent').describe('Message type identifier'),
   sessionId: z.string().describe('Unique session identifier'),
-  agentId: z.string().describe('Agent ID to use (e.g., "myrddin", "ganos-lal")'),
+  agentId: z.string().describe('Agent ID to use (e.g., "merlin", "socrates")'),
   timestamp: z.string().optional().describe('ISO 8601 timestamp of when the message was created')
 });
 

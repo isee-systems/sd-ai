@@ -72,6 +72,7 @@ function getAvailableAgents() {
           agents.push({
             id: file.replace('.md', ''),
             name: metadata.name || file.replace('.md', ''),
+            role: metadata.role || 'Agent',
             supportedModes: metadata.supported_modes || [],
             description: metadata.description || ''
           });
@@ -84,10 +85,10 @@ function getAvailableAgents() {
     logger.error('Failed to scan agent config directory:', err);
   }
 
-  // Hardcoded defaults - ganos-lal is the default agent for all model types
+  // Hardcoded defaults - socrates is the default agent for all model types
   const defaults = {
-    sfd: 'ganos-lal',
-    cld: 'ganos-lal'
+    sfd: 'socrates',
+    cld: 'socrates'
   };
 
   return { agents, defaults };
