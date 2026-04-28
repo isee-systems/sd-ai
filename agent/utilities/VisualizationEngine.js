@@ -148,8 +148,8 @@ export class VisualizationEngine {
       error = err;
       // Suppress error logging - errors are thrown and handled by caller
     } finally {
-      // CLEANUP DISABLED for debugging - re-enable when matplotlib issue is resolved
-      // this.cleanupVisualizationFiles(vizId);
+      // ALWAYS cleanup temp files
+      this.cleanupVisualizationFiles(vizId);
 
       if (error) {
         throw error;
@@ -313,8 +313,8 @@ Generate ONLY working Python code, no explanations.`;
       error = err;
       // Suppress error logging - errors are thrown and handled by caller
     } finally {
-      // CLEANUP DISABLED for debugging - re-enable when matplotlib issue is resolved
-      // this.cleanupVisualizationFiles(vizId);
+      // ALWAYS cleanup temp files
+      this.cleanupVisualizationFiles(vizId);
 
       if (error) {
         throw error;
