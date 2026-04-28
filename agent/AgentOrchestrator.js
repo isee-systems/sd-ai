@@ -244,7 +244,7 @@ export class AgentOrchestrator {
       if (previousAgentContext?.length > 0 && !this.sdkSessionId) {
         const contextToReplay = previousAgentContext.slice(0, -1);
         if (contextToReplay.length > 0) {
-          logger.debug(`[Agent switch → SDK] Replaying ${contextToReplay.length} messages from prior agent:`, JSON.stringify(contextToReplay, null, 2));
+          logger.debug(`[Agent switch → SDK] Replaying ${contextToReplay.length} messages from prior agent.`);
           const contextText = await this.buildPriorContextText(contextToReplay);
           prompt = `[Prior conversation context]\n${contextText}\n[End of prior context]\n\n${userMessage}`;
         }
