@@ -150,7 +150,7 @@ Focus on educational validation:
 **Frequency:** At start of every modeling conversation
 
 ### update_model *(sfd + cld)*
-**When to use:** Only after discussing changes with the user
+**When to use:** After editing the model file on disk — this tool reads the session model file and pushes it to the client. Edit the file first, then call this with no arguments.
 **Always explain** your reasoning when using this tool
 
 ### run_model *(sfd only)*

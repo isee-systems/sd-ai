@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { readFileSync, existsSync } from 'fs';
+import { join } from 'path';
 import {
   createGetCurrentModelMessage,
   createUpdateModelMessage,
@@ -70,17 +72,24 @@ export function createGetCurrentModelTool(sessionManager, sessionId, sendToClien
  */
 export function createUpdateModelTool(sessionManager, sessionId, sendToClient) {
   return {
-    description: 'Update the model in the client with new model data. This replaces the current model.',
+    description: 'Send the current model file to the client. Reads the model from the session file on disk — edit that file first, then call this tool to push the changes to the client.',
     supportedModes: ['sfd', 'cld'],
-    inputSchema: z.object({
-      modelData: z.any().describe('The model data to update in the client')
-    }),
-    handler: async ({ modelData }) => {
+    inputSchema: z.object({}),
+    handler: async () => {
       try {
         const session = sessionManager.getSession(sessionId);
         if (!session) {
           throw new Error(`Session not found: ${sessionId}`);
         }
+
+        const sessionTempDir = sessionManager.getSessionTempDir(sessionId);
+        const modelPath = join(sessionTempDir, 'model.sdjson');
+
+        if (!existsSync(modelPath)) {
+          throw new Error('No model file found for this session. Call get_current_model first.');
+        }
+
+        const modelData = JSON.parse(readFileSync(modelPath, 'utf-8'));
 
         const requestId = generateRequestId('model');
 
