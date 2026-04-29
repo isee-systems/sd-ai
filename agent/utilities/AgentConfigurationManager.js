@@ -39,6 +39,7 @@ NEVER switch between CLD and SFD during a session.
 - AVOID using MIN/MAX functions to clamp stocks to zero - they mask the underlying structural problem. Fix the model structure instead.
 - Unit warnings are NOT cosmetic, they are important and MUST to be fixed
 - Use // for safe division (e.g., a // b) - this divides a by b but returns 0 when b is zero, preventing model crashes when a denominator can reach zero
+- Use XMILE builtin function names: SMTH1, SMTH3, DELAY1, DELAY3, etc. — NOT SMOOTH1, SMOOTH3, or other non-XMILE variants
 
 ## CRITICAL: Visualization Requests
 When a user requests a visualization:
