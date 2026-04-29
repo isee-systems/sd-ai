@@ -104,9 +104,10 @@ export class WorkerSpawner {
   static #logBwrapDiagnostics(bwrapBin) {
     const lines = ['bwrap sandbox diagnostics:'];
 
+    let isSetuid = false;
     try {
       const st = statSync(bwrapBin);
-      const isSetuid = (st.mode & 0o4000) !== 0;
+      isSetuid = (st.mode & 0o4000) !== 0;
       lines.push(`  bwrap binary : ${bwrapBin} (mode=${st.mode.toString(8)}, setuid=${isSetuid})`);
     } catch (e) {
       lines.push(`  bwrap binary : stat failed — ${e.message}`);
@@ -115,11 +116,12 @@ export class WorkerSpawner {
     for (const sysctl of [
       '/proc/sys/kernel/unprivileged_userns_clone',
       '/proc/sys/user/max_user_namespaces',
+      '/proc/sys/kernel/apparmor_restrict_unprivileged_userns',
     ]) {
       try {
         lines.push(`  ${sysctl} = ${readFileSync(sysctl, 'utf8').trim()}`);
       } catch {
-        lines.push(`  ${sysctl} = (not readable)`);
+        lines.push(`  ${sysctl} = (not present)`);
       }
     }
 
@@ -129,9 +131,16 @@ export class WorkerSpawner {
       lines.push(`  process CapEff: ${capEff ?? 'unknown'}`);
     } catch { /* ignore */ }
 
-    try {
-      lines.push(`  running in container: ${existsSync('/.dockerenv') ? 'yes (docker)' : 'no'}`);
-    } catch { /* ignore */ }
+    for (const f of ['/.dockerenv', '/run/.containerenv']) {
+      if (existsSync(f)) { lines.push(`  container marker: ${f}`); break; }
+    }
+
+    lines.push('');
+    if (!isSetuid) {
+      lines.push('  Most reliable fix: sudo chmod u+s ' + bwrapBin);
+      lines.push('  Ubuntu 24.04 alternative: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0');
+      lines.push('  LXC/Proxmox: enable nested user namespaces in the container config');
+    }
 
     logger.error(lines.join('\n'));
   }
@@ -145,6 +154,8 @@ export class WorkerSpawner {
    *  - APP_ROOT → /app: application code including node_modules (read-only)
    *  - Node binary dir (if outside /usr, e.g. nvm): additional read-only bind
    *  - Claude binary dir (if outside /usr): additional read-only bind
+   *  - Any non-/usr directories in PATH (e.g. python venv): read-only bind of
+   *    the venv root (detected via pyvenv.cfg) or the directory itself
    *  - sessionTempDir → /session: the ONLY writable location; also hosts ipc.sock
    *  - /dev, /proc: required pseudo-filesystems for Node.js
    *  - /tmp: tmpfs (ephemeral scratch)
@@ -186,6 +197,23 @@ export class WorkerSpawner {
         args.push('--dir', '/' + parts.slice(0, i).join('/'));
       }
       args.push('--ro-bind', claudeDir, claudeDir);
+    }
+
+    // Mount any non-/usr directories from PATH (e.g. python venv).
+    // If a directory's parent contains pyvenv.cfg we mount the whole venv root
+    // so that the Python interpreter can find its site-packages and stdlib.
+    const alreadyMounted = new Set();
+    for (const dir of (process.env.PATH || '').split(':')) {
+      if (!dir || dir.startsWith('/usr') || !existsSync(dir)) continue;
+      const parent = dirname(dir);
+      const mountTarget = existsSync(join(parent, 'pyvenv.cfg')) ? parent : dir;
+      if (alreadyMounted.has(mountTarget)) continue;
+      alreadyMounted.add(mountTarget);
+      const parts = mountTarget.split('/').filter(Boolean);
+      for (let i = 1; i < parts.length; i++) {
+        args.push('--dir', '/' + parts.slice(0, i).join('/'));
+      }
+      args.push('--ro-bind', mountTarget, mountTarget);
     }
 
     args.push(
@@ -233,6 +261,9 @@ export class WorkerSpawner {
           SESSION_ID: sessionId,
           SESSION_TEMP_DIR: WorkerSpawner.CONTAINER_SESSION_PATH,
           WORKER_IPC_SOCKET: WorkerSpawner.CONTAINER_SESSION_PATH + '/ipc.sock',
+          // claude CLI requires HOME to locate ~/.claude/ for config and session state.
+          // Point it at /session so each sandbox gets a fresh, writable home dir.
+          HOME: WorkerSpawner.CONTAINER_SESSION_PATH,
           PATH: process.env.PATH,
         };
         const bwrapArgs = WorkerSpawner.#buildBwrapArgs(sessionTempDir);
