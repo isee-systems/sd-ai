@@ -1,5 +1,6 @@
 import { spawn, fork } from 'child_process';
 import { existsSync, readFileSync, statSync, unlink, unlinkSync, mkdirSync } from 'fs';
+import { randomBytes } from 'crypto';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { execSync } from 'child_process';
@@ -255,14 +256,17 @@ export class WorkerSpawner {
         logger.log(`[worker:${sessionId}] Spawning sandboxed worker via bwrap`);
 
         mkdirSync(sessionTempDir, { recursive: true });
-        const socketPath = join(sessionTempDir, 'ipc.sock');
+        // Unique name per spawn so the old IpcWorker's async unlink-on-exit
+        // never races with the new IpcWorker's socket (agent-switch scenario).
+        const socketName = `ipc-${randomBytes(4).toString('hex')}.sock`;
+        const socketPath = join(sessionTempDir, socketName);
         const workerEnv = {
           OPENAI_API_KEY: process.env.OPENAI_API_KEY,
           GOOGLE_API_KEY: process.env.GOOGLE_API_KEY,
           ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
           SESSION_ID: sessionId,
           SESSION_TEMP_DIR: WorkerSpawner.CONTAINER_SESSION_PATH,
-          WORKER_IPC_SOCKET: WorkerSpawner.CONTAINER_SESSION_PATH + '/ipc.sock',
+          WORKER_IPC_SOCKET: `${WorkerSpawner.CONTAINER_SESSION_PATH}/${socketName}`,
           // claude CLI requires HOME to locate ~/.claude/ for config and session state.
           // Point it at /session so each sandbox gets a fresh, writable home dir.
           HOME: WorkerSpawner.CONTAINER_SESSION_PATH,
