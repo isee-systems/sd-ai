@@ -1,5 +1,5 @@
 import { spawn, fork } from 'child_process';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync, statSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { execSync } from 'child_process';
@@ -11,10 +11,46 @@ const APP_ROOT = dirname(__dirname);  // sd-ai root (parent of agent/)
 export class WorkerSpawner {
   static CONTAINER_SESSION_PATH = '/session';
   static #WORKER_PATH = join(__dirname, 'AgentWorker.js');
+  static #bwrapBroken = false; // set true on first bwrap sandbox failure
 
   static #findBinary(name) {
     try { return execSync(`which ${name}`, { encoding: 'utf8' }).trim(); }
     catch { return null; }
+  }
+
+  static #logBwrapDiagnostics(bwrapBin) {
+    const lines = ['bwrap sandbox diagnostics:'];
+
+    try {
+      const st = statSync(bwrapBin);
+      const isSetuid = (st.mode & 0o4000) !== 0;
+      lines.push(`  bwrap binary : ${bwrapBin} (mode=${st.mode.toString(8)}, setuid=${isSetuid})`);
+    } catch (e) {
+      lines.push(`  bwrap binary : stat failed — ${e.message}`);
+    }
+
+    for (const sysctl of [
+      '/proc/sys/kernel/unprivileged_userns_clone',
+      '/proc/sys/user/max_user_namespaces',
+    ]) {
+      try {
+        lines.push(`  ${sysctl} = ${readFileSync(sysctl, 'utf8').trim()}`);
+      } catch {
+        lines.push(`  ${sysctl} = (not readable)`);
+      }
+    }
+
+    try {
+      const caps = readFileSync('/proc/self/status', 'utf8');
+      const capEff = caps.match(/^CapEff:\s+(\S+)/m)?.[1];
+      lines.push(`  process CapEff: ${capEff ?? 'unknown'}`);
+    } catch { /* ignore */ }
+
+    try {
+      lines.push(`  running in container: ${existsSync('/.dockerenv') ? 'yes (docker)' : 'no'}`);
+    } catch { /* ignore */ }
+
+    logger.error(lines.join('\n'));
   }
 
   /**
@@ -100,7 +136,7 @@ export class WorkerSpawner {
   static spawn(sessionId, sessionTempDir) {
     if (process.platform === 'linux') {
       const bwrapBin = WorkerSpawner.#findBinary('bwrap');
-      if (bwrapBin) {
+      if (bwrapBin && !WorkerSpawner.#bwrapBroken) {
         logger.log(`[worker:${sessionId}] Spawning sandboxed worker via bwrap`);
         const workerEnv = {
           OPENAI_API_KEY: process.env.OPENAI_API_KEY,
@@ -111,19 +147,45 @@ export class WorkerSpawner {
           PATH: process.env.PATH,
           // NODE_CHANNEL_FD is injected automatically by Node.js for the ipc stdio slot
         };
-        return spawn(bwrapBin, WorkerSpawner.#buildBwrapArgs(sessionTempDir), {
+        const bwrapArgs = WorkerSpawner.#buildBwrapArgs(sessionTempDir);
+        logger.log(`[worker:${sessionId}] bwrap args: ${bwrapArgs.join(' ')}`);
+
+        const worker = spawn(bwrapBin, bwrapArgs, {
           env: workerEnv,
           stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
         });
+
+        // Capture bwrap's own stderr before the relay in WebSocket sets up its listener
+        const stderrChunks = [];
+        worker.stderr?.on('data', (d) => stderrChunks.push(d));
+
+        worker.once('exit', (code, signal) => {
+          if (!worker.connected && code !== 0 && code !== null) {
+            WorkerSpawner.#bwrapBroken = true;
+            const stderrText = Buffer.concat(stderrChunks).toString().trim();
+            logger.error(
+              `[worker:${sessionId}] bwrap exited early (code=${code} signal=${signal}) — sandbox unavailable.\n` +
+              (stderrText ? `  bwrap stderr: ${stderrText}\n` : '') +
+              'Future workers will fall back to unsandboxed fork. Fix: ensure bwrap has SUID bit set\n' +
+              'or that unprivileged user namespaces are enabled (sysctl kernel.unprivileged_userns_clone=1).'
+            );
+            WorkerSpawner.#logBwrapDiagnostics(bwrapBin);
+          }
+        });
+        return worker;
       }
-      logger.error(
-        '================================================================================\n' +
-        'SECURITY WARNING: bwrap (bubblewrap) not found on Linux!\n' +
-        'Agent workers will run WITHOUT filesystem sandbox isolation.\n' +
-        'Install bubblewrap to enable sandboxing: apt install bubblewrap\n' +
-        'DO NOT run this configuration for any publicly hosted service.\n' +
-        '================================================================================'
-      );
+      if (WorkerSpawner.#bwrapBroken) {
+        logger.warn(`[worker:${sessionId}] bwrap sandbox unavailable — spawning unsandboxed worker`);
+      } else {
+        logger.error(
+          '================================================================================\n' +
+          'SECURITY WARNING: bwrap (bubblewrap) not found on Linux!\n' +
+          'Agent workers will run WITHOUT filesystem sandbox isolation.\n' +
+          'Install bubblewrap to enable sandboxing: apt install bubblewrap\n' +
+          'DO NOT run this configuration for any publicly hosted service.\n' +
+          '================================================================================'
+        );
+      }
     } else {
       logger.warn(
         '================================================================================\n' +

@@ -259,6 +259,9 @@ export class WebSocketHandler {
       this.#setupWorkerRelay(this.#worker);
 
       const session = this.#sessionManager.getSession(this.#sessionId);
+      if (!this.#worker.connected) {
+        throw new Error('Worker process failed to start (sandbox may not be available)');
+      }
       this.#worker.send({
         type: 'initialize',
         mode: session.mode,
@@ -363,7 +366,9 @@ export class WebSocketHandler {
 
   #killWorker() {
     if (this.#worker) {
-      this.#worker.send({ type: 'shutdown' });
+      if (this.#worker.connected) {
+        try { this.#worker.send({ type: 'shutdown' }); } catch { /* already dead */ }
+      }
       // Give it a moment to exit cleanly; force-kill if it doesn't
       const w = this.#worker;
       const t = setTimeout(() => w.kill('SIGKILL'), 2000);
@@ -388,8 +393,10 @@ export class WebSocketHandler {
       // context_response is handled inside #getWorkerContext via its own listener
     });
 
+    w.on('error', (err) => logger.error(`[worker:${this.#sessionId}] process error: ${err.message}`));
+
     w.stdout?.on('data', (d) => logger.log(`[worker:${this.#sessionId}] ${d.toString().trim()}`));
-    w.stderr?.on('data', (d) => logger.error(`[worker:${this.#sessionId}] ${d.toString().trim()}`));
+    w.stderr?.on('data', (d) => logger.error(`[worker:${this.#sessionId}] stderr: ${d.toString().trim()}`));
 
     w.on('exit', (code, signal) => {
       logger.log(`[worker:${this.#sessionId}] exited (code=${code} signal=${signal})`);
