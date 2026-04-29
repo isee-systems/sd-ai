@@ -187,7 +187,10 @@ class AgentWorker {
 
         case 'shutdown': {
           const session = this.#sessionManager.getSession(SESSION_ID);
-          if (session) this.#sessionManager.deleteSession(SESSION_ID);
+          if (session) {
+            try { this.#sessionManager.deleteSession(SESSION_ID); }
+            catch { /* bind-mount root can't be rmdir'd from inside the sandbox */ }
+          }
           process.exit(0);
           break;
         }

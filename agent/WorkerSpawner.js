@@ -1,5 +1,5 @@
 import { spawn, fork } from 'child_process';
-import { existsSync, readFileSync, statSync, unlink, mkdirSync } from 'fs';
+import { existsSync, readFileSync, statSync, unlink, unlinkSync, mkdirSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { execSync } from 'child_process';
@@ -60,6 +60,7 @@ class IpcWorker extends EventEmitter {
     });
 
     this.#server.on('error', (err) => this.emit('error', err));
+    try { unlinkSync(socketPath); } catch { /* no stale socket to remove */ }
     this.#server.listen(socketPath);
 
     proc.on('error', (err) => this.emit('error', err));
