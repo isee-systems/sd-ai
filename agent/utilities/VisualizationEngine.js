@@ -176,7 +176,21 @@ Requirements:
 - Load JSON data and create the visualization
 - Save as SVG using plt.savefig with format='svg'
 - Include labels, titles, legends
-- Make it clear and professional`;
+- Make it clear and professional
+
+Data handling:
+- Hardcode all data values as Python literals inside the code — do NOT read values from the data file at runtime unless explicitly needed; hardcoded literals are more reliable
+
+Matplotlib rules — these are known sources of errors, follow them exactly:
+- Never pass fontweight to ax.plot() or ax.scatter() — it is not a valid kwarg for Line2D or PathCollection
+- ax.annotate ha= only accepts 'left', 'right', 'center' — never 'top' or 'bottom'
+- ax.annotate va= accepts 'top', 'bottom', 'center', 'baseline' — never 'left' or 'right'
+- Use fig.subplots_adjust() instead of plt.tight_layout()
+
+Composing multiple chart types (background bands + line overlay, stacked area + secondary axis, etc.):
+- Draw background period bands with ax.axvspan(zorder=0, linewidth=0)
+- Draw overlaid lines at zorder=3 or higher
+- Build legends manually using matplotlib.patches.Patch and matplotlib.lines.Line2D rather than relying on automatic label collection`;
 
     const userPrompt = `Generate Python code for this visualization:
 

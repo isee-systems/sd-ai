@@ -36,9 +36,9 @@ NEVER switch between CLD and SFD during a session.
 - ALWAYS check that stocks and variables that represent physical quantities (population, inventory, resources, etc.) cannot go negative
 - Add appropriate constraints to prevent negative values where they are physically impossible
 - Stocks often go negative when there is no first order control on their flows. When a stock unexpectedly goes negative, add first order control structures that naturally slow outflows as the stock approaches zero (e.g., fractional outflow rates proportional to the stock level)
-- AVOID using MIN/MAX functions to clamp stocks to zero — they mask the underlying structural problem. Fix the model structure instead.
+- AVOID using MIN/MAX functions to clamp stocks to zero - they mask the underlying structural problem. Fix the model structure instead.
 - Unit warnings are NOT cosmetic, they are important and MUST to be fixed
-- Use // for safe division (e.g., a // b) — this divides a by b but returns 0 when b is zero, preventing model crashes when a denominator can reach zero
+- Use // for safe division (e.g., a // b) - this divides a by b but returns 0 when b is zero, preventing model crashes when a denominator can reach zero
 
 ## CRITICAL: Visualization Requests
 When a user requests a visualization:
@@ -65,7 +65,7 @@ Instead, extract ONLY the time series data fields:
 ## CRITICAL: Never Directly Edit model.sdjson
 NEVER use file writing or file editing tools (write_file, edit_file) to directly modify model.sdjson.
 All model changes MUST go through the designated model tools (generate_quantitative_model, generate_qualitative_model, generate_documentation, edit_model_section, etc.).
-Direct file edits bypass validation, client synchronization, and session state — they will corrupt the model.
+Direct file edits bypass validation, client synchronization, and session state - they will corrupt the model.
 
 ## CRITICAL: Automatic Model Validation
 After ANY tool use that modifies the model (generate_quantitative_model, generate_qualitative_model), you MUST:
@@ -118,7 +118,7 @@ Consider consulting Seldon when facing complex modeling decisions or when you ne
 ALWAYS share feedback loop information with Seldon in all of its forms when discussing model behavior or improvements.
 
 ## CRITICAL: Tool Sequencing After run_model
-**get_feedback_information and get_variable_data MUST always be called AFTER run_model completes — never in the same parallel batch as run_model.**
+**get_feedback_information and get_variable_data MUST always be called AFTER run_model completes - never in the same parallel batch as run_model.**
 run_model produces the data these tools depend on. Always wait for run_model to finish before calling them.
 
 ## CRITICAL: Feedback Information Recovery Protocol
@@ -128,7 +128,17 @@ When feedback analysis tools fail due to missing feedback information:
 3. If STILL no feedback information after running:
    - Inform user that no feedback loops are currently being tracked
    - Explain: "To enable feedback loop analysis, please enable it in your software"
-4. NEVER give up after first failure - always attempt to run model first`;
+4. NEVER give up after first failure - always attempt to run model first
+
+## Feedback Loop Dominance Visualization Style
+When asked to visualize feedback loop dominance alongside a variable's behavior, use colored background bands (ax.axvspan) keyed to the dominant loop in each period - **NOT** a stacked area chart of loop percentages.
+
+- Source band periods from the dominantLoopsByPeriod field returned by get_feedback_information, not from the per-timestep percentage series
+- dominantLoopsByPeriod gives discrete start/end time windows with the set of dominant loops for that window - draw one axvspan per period, colored by the primary (first listed) dominant loop
+- Draw bands at zorder=0; draw the variable of interest (e.g. a stock) as a line at zorder=3+ so it is always readable against the background
+
+Reserve the feedback_dominance visualization type (stacked area) for when the user explicitly wants the quantitative percentage breakdown of loop contributions over time. For all other requests involving dominant loops and a behavior variable together, use the colored band approach.
+`;
 
   constructor(configPath) {
     this.configPath = configPath;
