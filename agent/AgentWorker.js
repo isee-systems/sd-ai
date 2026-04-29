@@ -5,6 +5,12 @@
  * Receives IPC messages from the main process, runs AgentOrchestrator, and
  * relays all outbound client messages back over IPC.
  *
+ * IPC transport:
+ *   - Sandboxed (bwrap): Unix domain socket at WORKER_IPC_SOCKET, newline-
+ *     delimited JSON.  The socket lives in /session so it crosses the sandbox
+ *     boundary without needing --forward-fd.
+ *   - Unsandboxed (fork fallback): standard Node.js process IPC channel.
+ *
  * IPC messages IN  (main → worker):
  *   initialize    – session data; must arrive before select_agent
  *   select_agent  – agentId; creates/replaces AgentOrchestrator
@@ -27,6 +33,8 @@ import logger from '../utilities/logger.js';
 import { join } from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import net from 'net';
+import { createInterface } from 'readline';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -53,8 +61,16 @@ class AgentWorker {
   // from the previous agent into the new session.
   #pendingIsAgentSwitch = false;
 
+  // IPC send function — overridden by #setupSocketIpc when using bwrap sandbox
+  #sendToMain = (msg) => process.send(msg);
+
   constructor() {
-    process.on('message', (msg) => this.#handleMessage(msg));
+    const ipcSocketPath = process.env.WORKER_IPC_SOCKET;
+    if (ipcSocketPath) {
+      this.#setupSocketIpc(ipcSocketPath);
+    } else {
+      process.on('message', (msg) => this.#handleMessage(msg));
+    }
 
     process.on('uncaughtException', (err) => {
       logger.error(`[worker:${SESSION_ID}] Uncaught exception:`, err);
@@ -67,7 +83,29 @@ class AgentWorker {
     });
   }
 
-  #toMain(msg) { process.send(msg); }
+  #setupSocketIpc(socketPath) {
+    const sock = net.createConnection(socketPath);
+
+    sock.on('error', (err) => {
+      logger.error(`[worker:${SESSION_ID}] IPC socket error: ${err.message}`);
+      process.exit(1);
+    });
+
+    this.#sendToMain = (msg) => {
+      if (!sock.destroyed) sock.write(JSON.stringify(msg) + '\n');
+    };
+
+    const rl = createInterface({ input: sock, crlfDelay: Infinity });
+    rl.on('line', (line) => {
+      if (!line.trim()) return;
+      try { this.#handleMessage(JSON.parse(line)); }
+      catch (e) { logger.error(`[worker:${SESSION_ID}] IPC parse error: ${e.message}`); }
+    });
+
+    rl.on('close', () => process.exit(0));
+  }
+
+  #toMain(msg) { this.#sendToMain(msg); }
   #toClient(msg) { this.#toMain({ type: 'to_client', message: msg }); }
 
   async #handleMessage(msg) {

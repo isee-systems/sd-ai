@@ -1,12 +1,95 @@
 import { spawn, fork } from 'child_process';
-import { existsSync, readFileSync, statSync } from 'fs';
+import { existsSync, readFileSync, statSync, unlink } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { execSync } from 'child_process';
+import net from 'net';
+import { EventEmitter } from 'events';
 import logger from '../utilities/logger.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = dirname(__dirname);  // sd-ai root (parent of agent/)
+
+/**
+ * Wraps a bwrap ChildProcess with a Unix-socket-based IPC channel.
+ *
+ * bwrap cannot pass the Node.js IPC fd (fd 3) into the sandbox. 
+ * Instead we create a Unix domain socket inside the session temp dir 
+ * (which maps to /session in the container) and use newline-delimited 
+ * JSON over that socket as a drop-in replacement.
+ *
+ * The public API intentionally mirrors the subset of ChildProcess that
+ * WebSocket.js uses (.send, on('message'), .connected, .stdout, .stderr,
+ * .kill, on('exit'), on('error')).
+ */
+class IpcWorker extends EventEmitter {
+  #proc;
+  #server;
+  #socket = null;
+  #sendQueue = [];
+  #connected = true;   // true while the process is still alive
+  #socketConnected = false;
+
+  constructor(proc, socketPath) {
+    super();
+    this.#proc = proc;
+
+    this.#server = net.createServer((socket) => {
+      this.#socket = socket;
+      this.#socketConnected = true;
+
+      for (const chunk of this.#sendQueue) socket.write(chunk);
+      this.#sendQueue = [];
+
+      let buf = '';
+      socket.on('data', (d) => {
+        buf += d.toString();
+        let nl;
+        while ((nl = buf.indexOf('\n')) !== -1) {
+          const line = buf.slice(0, nl).trim();
+          buf = buf.slice(nl + 1);
+          if (line) {
+            try { this.emit('message', JSON.parse(line)); }
+            catch { /* ignore malformed line */ }
+          }
+        }
+      });
+
+      socket.once('close', () => { this.#connected = false; });
+      socket.on('error', (err) => this.emit('error', err));
+    });
+
+    this.#server.on('error', (err) => this.emit('error', err));
+    this.#server.listen(socketPath);
+
+    proc.on('error', (err) => this.emit('error', err));
+    proc.on('exit', (code, signal) => {
+      this.#connected = false;
+      this.#socket?.destroy();
+      this.#server.close();
+      unlink(socketPath, () => {});
+      this.emit('exit', code, signal);
+    });
+  }
+
+  get stdout() { return this.#proc.stdout; }
+  get stderr() { return this.#proc.stderr; }
+  get stdin() { return this.#proc.stdin; }
+  get connected() { return this.#connected; }
+  get socketConnected() { return this.#socketConnected; }
+
+  kill(signal) { this.#proc.kill(signal); }
+
+  send(msg) {
+    const chunk = JSON.stringify(msg) + '\n';
+    if (this.#socket && !this.#socket.destroyed) {
+      this.#socket.write(chunk);
+    } else if (this.#connected) {
+      this.#sendQueue.push(chunk); // worker hasn't connected yet; drain on connect
+    }
+    // silently drop if the process has already exited
+  }
+}
 
 export class WorkerSpawner {
   static CONTAINER_SESSION_PATH = '/session';
@@ -62,10 +145,12 @@ export class WorkerSpawner {
    *  - APP_ROOT → /app: application code including node_modules (read-only)
    *  - Node binary dir (if outside /usr, e.g. nvm): additional read-only bind
    *  - Claude binary dir (if outside /usr): additional read-only bind
-   *  - sessionTempDir → /session: the ONLY writable location
+   *  - sessionTempDir → /session: the ONLY writable location; also hosts ipc.sock
    *  - /dev, /proc: required pseudo-filesystems for Node.js
-   *  - /tmp: tmpfs (ephemeral scratch, not writable by agent since all writes go to /session)
-   *  - --forward-fd 3: preserve the Node.js IPC socket fd across the exec boundary
+   *  - /tmp: tmpfs (ephemeral scratch)
+   *
+   * IPC is handled via a Unix domain socket at /session/ipc.sock rather than
+   * Node.js IPC fd forwarding, so no --forward-fd flag is needed.
    */
   static #buildBwrapArgs(sessionTempDir) {
     const nodeBin = process.execPath;
@@ -110,8 +195,6 @@ export class WorkerSpawner {
       '--tmpfs', '/tmp',
       '--unshare-pid',
       '--unshare-uts', '--hostname', 'agent',
-      // Forward the Node.js IPC socket fd (always fd 3 with stdio: [..., 'ipc'])
-      '--forward-fd', '3',
       '--',
       nodeBin,
       '/app/agent/AgentWorker.js'
@@ -125,53 +208,55 @@ export class WorkerSpawner {
    *
    * On Linux with bwrap installed: runs inside a bubblewrap container where
    * only the session temp dir is writable and most of the filesystem is
-   * either read-only or not mounted at all.
+   * either read-only or not mounted at all.  IPC uses a Unix domain socket
+   * at <sessionTempDir>/ipc.sock (mapped to /session/ipc.sock in the sandbox)
+   * rather than Node.js IPC fd forwarding, so no --forward-fd support is needed.
    *
    * On Linux without bwrap, macOS, or Windows: falls back to a plain fork
    * with a prominent warning. Use Linux + bwrap for any publicly hosted
    * deployment.
    *
-   * Returns a ChildProcess with an active IPC channel (.send() / on('message')).
+   * Returns an IpcWorker (bwrap) or ChildProcess (fork) — both expose the
+   * same .send() / on('message') / .connected interface used by WebSocket.js.
    */
   static spawn(sessionId, sessionTempDir) {
     if (process.platform === 'linux') {
       const bwrapBin = WorkerSpawner.#findBinary('bwrap');
       if (bwrapBin && !WorkerSpawner.#bwrapBroken) {
         logger.log(`[worker:${sessionId}] Spawning sandboxed worker via bwrap`);
+
+        const socketPath = join(sessionTempDir, 'ipc.sock');
         const workerEnv = {
           OPENAI_API_KEY: process.env.OPENAI_API_KEY,
           GOOGLE_API_KEY: process.env.GOOGLE_API_KEY,
           ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
           SESSION_ID: sessionId,
           SESSION_TEMP_DIR: WorkerSpawner.CONTAINER_SESSION_PATH,
+          WORKER_IPC_SOCKET: WorkerSpawner.CONTAINER_SESSION_PATH + '/ipc.sock',
           PATH: process.env.PATH,
-          // NODE_CHANNEL_FD is injected automatically by Node.js for the ipc stdio slot
         };
         const bwrapArgs = WorkerSpawner.#buildBwrapArgs(sessionTempDir);
         logger.log(`[worker:${sessionId}] bwrap args: ${bwrapArgs.join(' ')}`);
 
-        const worker = spawn(bwrapBin, bwrapArgs, {
+        const proc = spawn(bwrapBin, bwrapArgs, {
           env: workerEnv,
-          stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+          stdio: ['pipe', 'pipe', 'pipe'],
         });
 
-        // Capture bwrap's own stderr before the relay in WebSocket sets up its listener
-        const stderrChunks = [];
-        worker.stderr?.on('data', (d) => stderrChunks.push(d));
+        const worker = new IpcWorker(proc, socketPath);
 
         worker.once('exit', (code, signal) => {
-          if (!worker.connected && code !== 0 && code !== null) {
+          if (!worker.socketConnected && code !== 0 && code !== null) {
             WorkerSpawner.#bwrapBroken = true;
-            const stderrText = Buffer.concat(stderrChunks).toString().trim();
             logger.error(
-              `[worker:${sessionId}] bwrap exited early (code=${code} signal=${signal}) — sandbox unavailable.\n` +
-              (stderrText ? `  bwrap stderr: ${stderrText}\n` : '') +
-              'Future workers will fall back to unsandboxed fork. Fix: ensure bwrap has SUID bit set\n' +
-              'or that unprivileged user namespaces are enabled (sysctl kernel.unprivileged_userns_clone=1).'
+              `[worker:${sessionId}] bwrap exited early (code=${code} signal=${signal}) — sandbox unavailable. See stderr above.\n` +
+              'Future workers will fall back to unsandboxed fork.\n' +
+              'Fix: update bubblewrap (apt-get upgrade bubblewrap) or ensure user namespaces are enabled.'
             );
             WorkerSpawner.#logBwrapDiagnostics(bwrapBin);
           }
         });
+
         return worker;
       }
       if (WorkerSpawner.#bwrapBroken) {
