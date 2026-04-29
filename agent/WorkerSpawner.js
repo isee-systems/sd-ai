@@ -1,5 +1,5 @@
 import { spawn, fork } from 'child_process';
-import { existsSync, readFileSync, statSync, unlink } from 'fs';
+import { existsSync, readFileSync, statSync, unlink, mkdirSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { execSync } from 'child_process';
@@ -253,6 +253,7 @@ export class WorkerSpawner {
       if (bwrapBin && !WorkerSpawner.#bwrapBroken) {
         logger.log(`[worker:${sessionId}] Spawning sandboxed worker via bwrap`);
 
+        mkdirSync(sessionTempDir, { recursive: true });
         const socketPath = join(sessionTempDir, 'ipc.sock');
         const workerEnv = {
           OPENAI_API_KEY: process.env.OPENAI_API_KEY,
