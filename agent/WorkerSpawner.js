@@ -97,6 +97,10 @@ export class WorkerSpawner {
   static CONTAINER_SESSION_PATH = '/session';
   static #WORKER_PATH = join(__dirname, 'AgentWorker.js');
   static #bwrapBroken = false; // set true on first bwrap sandbox failure
+  // Set ALLOW_UNSANDBOXED_FALLBACK=true to allow unsandboxed fork workers when
+  // bwrap fails at runtime.  Defaults to false so a sandbox failure is a hard
+  // error rather than a silent security regression.
+  static #allowUnsandboxedFallback = process.env.ALLOW_UNSANDBOXED_FALLBACK === 'true';
 
   static #findBinary(name) {
     try { return execSync(`which ${name}`, { encoding: 'utf8' }).trim(); }
@@ -285,9 +289,12 @@ export class WorkerSpawner {
         worker.once('exit', (code, signal) => {
           if (!worker.socketConnected && code !== 0 && code !== null) {
             WorkerSpawner.#bwrapBroken = true;
+            const fallbackNote = WorkerSpawner.#allowUnsandboxedFallback
+              ? 'Future workers will fall back to unsandboxed fork (ALLOW_UNSANDBOXED_FALLBACK=true).'
+              : 'Worker spawning will now FAIL until bwrap is fixed (set ALLOW_UNSANDBOXED_FALLBACK=true to override).';
             logger.error(
               `[worker:${sessionId}] bwrap exited early (code=${code} signal=${signal}) — sandbox unavailable. See stderr above.\n` +
-              'Future workers will fall back to unsandboxed fork.\n' +
+              fallbackNote + '\n' +
               'Fix: update bubblewrap (apt-get upgrade bubblewrap) or ensure user namespaces are enabled.'
             );
             WorkerSpawner.#logBwrapDiagnostics(bwrapBin);
@@ -297,6 +304,9 @@ export class WorkerSpawner {
         return worker;
       }
       if (WorkerSpawner.#bwrapBroken) {
+        if (!WorkerSpawner.#allowUnsandboxedFallback) {
+          throw new Error('bwrap sandbox is unavailable and ALLOW_UNSANDBOXED_FALLBACK is not set — refusing to spawn unsandboxed worker');
+        }
         logger.warn(`[worker:${sessionId}] bwrap sandbox unavailable — spawning unsandboxed worker`);
       } else {
         logger.error(
