@@ -40,8 +40,10 @@ export class SessionManager {
       mkdirSync(this.tempBasePath, { recursive: true });
     }
 
-    // Start cleanup timer
-    this.startCleanupTimer();
+    // Start cleanup timer (disabled in worker processes — lifetime managed by main)
+    if (!options.disableCleanup) {
+      this.startCleanupTimer();
+    }
 
     logger.log(`SessionManager initialized. Temp base: ${this.tempBasePath}`);
   }
@@ -100,6 +102,44 @@ export class SessionManager {
 
     logger.log(`Session created: ${sessionId} (total: ${this.sessions.size})`);
 
+    return sessionId;
+  }
+
+  /**
+   * Register a session with a known ID and an explicit temp directory path.
+   * Used by worker processes where the session ID and temp dir are assigned
+   * by the main process and passed in via environment variables.
+   */
+  createSessionWithId(sessionId, ws, tempDir) {
+    if (this.sessions.has(sessionId)) return sessionId;
+    if (this.sessions.size >= this.maxSessions) {
+      throw new Error('Server at capacity. Please try again later.');
+    }
+
+    try {
+      mkdirSync(tempDir, { recursive: true });
+    } catch (err) {
+      logger.error(`Failed to ensure temp directory for session ${sessionId}:`, err);
+      throw new Error('Failed to initialize session temp directory');
+    }
+
+    const session = {
+      sessionId,
+      ws,
+      tempDir,
+      createdAt: Date.now(),
+      lastActivity: Date.now(),
+      mode: null,
+      clientModel: null,
+      clientTools: [],
+      context: {},
+      modelTokenCount: 0,
+      pendingToolCalls: new Map(),
+      conversationContext: [],
+    };
+
+    this.sessions.set(sessionId, session);
+    logger.log(`Session registered: ${sessionId}`);
     return sessionId;
   }
 
@@ -466,7 +506,6 @@ ${conversationText}`
   startCleanupTimer() {
     this.cleanupTimer = setInterval(() => {
       this.cleanupStaleSessions();
-      this.cleanupOrphanedTempDirs();
     }, this.cleanupInterval);
   }
 

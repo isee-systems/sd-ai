@@ -14,7 +14,7 @@ import v1EvalsTestDetails from './routes/v1/evalsTestDetails.js'
 import v1Leaderboard from './routes/v1/leaderboard.js'
 
 import { SessionManager } from './agent/utilities/SessionManager.js'
-import { handleWebSocketConnection } from './agent/websocket.js'
+import { WebSocketHandler } from './agent/WebSocket.js'
 
 const app = express()
 
@@ -63,7 +63,7 @@ if (useSamePort) {
 }
 
 wss.on('connection', (ws) => {
-  handleWebSocketConnection(ws, sessionManager);
+  new WebSocketHandler(ws, sessionManager);
 });
 
 // Graceful shutdown

@@ -3,7 +3,6 @@ import { join, resolve, normalize, dirname } from 'path';
 import { writeFileSync, readFileSync, existsSync, unlinkSync } from 'fs';
 import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
-import { userInfo } from 'os';
 import { LLMWrapper } from '../../utilities/LLMWrapper.js';
 import logger from '../../utilities/logger.js';
 
@@ -603,66 +602,34 @@ print('Visualization saved')
   }
 
   /**
-   * Execute Python script with OS-level sandboxing
+   * Execute a Python script.
+   *
+   * On Linux in production this process runs inside a bwrap container, so the
+   * OS-level mount namespace provides isolation — no additional Python-level
+   * sandbox wrapper is needed. On macOS/Windows (dev) the worker spawner has
+   * already emitted a prominent warning about the lack of sandboxing.
    */
   async executePythonScript(scriptPath) {
-    // Validate that the script path is within the session temp directory
     const validatedPath = this.validatePath(scriptPath);
 
-    // Detect OS and use appropriate sandbox script
-    const isWindows = process.platform === 'win32';
-    const isMacOS = process.platform === 'darwin';
-
-    if (isWindows) {
-      logger.warn('WARNING: Running on Windows with minimal sandbox security.');
-      logger.warn('This is for LOCAL DEVELOPMENT ONLY.');
-      logger.warn('DO NOT use for publicly hosted services.');
-      logger.warn('For production, deploy on Linux.');
-    } else if (isMacOS) {
-      logger.warn('WARNING: Running on MacOS sandbox security.');
-      logger.warn('This is for LOCAL DEVELOPMENT ONLY.');
-      logger.warn('DO NOT use for publicly hosted services.');
-      logger.warn('For production, deploy on Linux.');
-    }
-
-    const sandboxScript = isWindows
-      ? join(__dirname, 'python_sandbox_windows.bat')
-      : join(__dirname, 'python_sandbox.sh');
-
-    const currentUser = (() => { try { return userInfo().username; } catch { return process.env.USER || 'unknown'; } })();
-
     return new Promise((resolve, reject) => {
-      // Arguments: sandbox_dir, script_path
-      const sandboxProcess = spawn(sandboxScript, [
-        this.resolvedTempDir,  // Sandbox directory (session temp dir)
-        validatedPath           // Script to execute
-      ], {
-        // Additional security: set working directory to sandbox
+      const pythonProcess = spawn('python3', [validatedPath], {
         cwd: this.resolvedTempDir,
-        // Limit environment variables
         env: {
           PATH: process.env.PATH,
           HOME: this.resolvedTempDir,
           TMPDIR: this.resolvedTempDir,
         },
-        // Set timeout at process level as well
-        timeout: 70000, // 70 seconds (sandbox has 65s timeout + 5s buffer)
-        // Windows needs shell
-        shell: isWindows
+        timeout: 70000,
       });
 
       let stdout = '';
       let stderr = '';
 
-      sandboxProcess.stdout.on('data', (data) => {
-        stdout += data.toString();
-      });
+      pythonProcess.stdout.on('data', (data) => { stdout += data.toString(); });
+      pythonProcess.stderr.on('data', (data) => { stderr += data.toString(); });
 
-      sandboxProcess.stderr.on('data', (data) => {
-        stderr += data.toString();
-      });
-
-      sandboxProcess.on('close', (code) => {
+      pythonProcess.on('close', (code) => {
         if (code !== 0) {
           reject(new Error(`Python script failed (code ${code}): ${stderr}`));
         } else {
@@ -670,8 +637,8 @@ print('Visualization saved')
         }
       });
 
-      sandboxProcess.on('error', (err) => {
-        reject(new Error(`Failed to spawn sandboxed Python: ${err.message}`));
+      pythonProcess.on('error', (err) => {
+        reject(new Error(`Failed to spawn Python: ${err.message}`));
       });
     });
   }

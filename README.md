@@ -246,6 +246,34 @@ Available component names and what they affect:
 | `time-series-behavior-analysis` | Breaks evals |
 | `visualization-engine` | Breaks agentic tools |
 
+## Agent Sandbox (Production Linux Only)
+
+The agentic assistant runs each session's agent in an isolated worker process. On **Linux**, worker processes are sandboxed using [bubblewrap](https://github.com/containers/bubblewrap) (`bwrap`), which uses Linux kernel namespaces to confine the agent to its session-specific temp directory. The agent cannot read or write anywhere else on the server filesystem — including other sessions, application source code, or environment variables on disk.
+
+### Installing bubblewrap
+
+Install `bubblewrap` via your system package manager (`bubblewrap` on most distros). See the [bubblewrap releases page](https://github.com/containers/bubblewrap/releases) for more options.
+
+### What bwrap provides
+
+| Isolation | Guarantee |
+|---|---|
+| Filesystem writes | Agent can only write to its session temp dir |
+| Filesystem reads | Only app code, system libs, and TLS certs are visible |
+| Cross-session access | Other sessions' temp dirs are not mounted |
+| Process isolation | Separate PID namespace; agent cannot signal other processes |
+| Hostname isolation | Separate UTS namespace |
+
+The Python subprocess spawned for visualizations inherits the same bwrap namespace automatically — no separate Python-level sandbox is needed.
+
+### Development (macOS / Windows)
+
+`bwrap` is a Linux kernel feature and is not available on macOS or Windows. On those platforms the agent worker runs **unsandboxed** with full filesystem access. A prominent warning is logged at startup. This is acceptable for local development but **must not be used for any publicly hosted deployment**.
+
+### What bwrap does NOT restrict
+
+- **Network access** — the agent worker must reach the Anthropic API. The agent can make arbitrary outbound HTTP requests if prompted to do so. Restrict this at the network/firewall level if needed.
+
 ## Metrics Reporting
 SD-AI includes optional metrics reporting via the `GenerateMetricsReporter` class. When enabled, it automatically tracks and reports usage data for every engine generation request.
 
