@@ -598,12 +598,16 @@ export class AgentOrchestrator {
 
       } catch (error) {
         const isOverloaded = error?.status === 529 || error?.error?.type === 'overloaded_error';
-        if (isOverloaded && overloadedRetries < 3) {
+        const isNetworkError = error?.cause?.code === 'UND_ERR_SOCKET' || error?.code === 'UND_ERR_SOCKET' ||
+          error?.code === 'ECONNRESET' || error?.cause?.code === 'ECONNRESET' ||
+          (error instanceof TypeError && error.message === 'terminated');
+        if ((isOverloaded || isNetworkError) && overloadedRetries < 3) {
           overloadedRetries++;
-          logger.warn(`Anthropic API overloaded (529), retry ${overloadedRetries}/3`);
+          const reason = isOverloaded ? 'overloaded (529)' : 'network error';
+          logger.warn(`Anthropic API ${reason}, retry ${overloadedRetries}/3`);
           await this.sendToClient(createAgentTextMessage(
             this.sessionId,
-            'The AI service is temporarily overloaded. Retrying...'
+            isOverloaded ? 'The AI service is temporarily overloaded. Retrying...' : 'Network connection interrupted. Retrying...'
           ));
           await new Promise(resolve => setTimeout(resolve, 5000));
         } else if (isOverloaded) {
