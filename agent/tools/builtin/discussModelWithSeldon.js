@@ -66,6 +66,12 @@ export function createDiscussModelWithSeldonTool(sessionManager, sessionId, send
 
           const feedbackData = await resultPromise;
 
+          // Write feedback to disk instead of passing directly into context
+          sessionManager.writeDataToDisk(sessionId, 'feedback.json', {
+            feedbackContent: feedbackData.feedbackContent,
+            runIds: feedbackData.runIds
+          });
+
           // Retry the call with feedback information
           const retryResult = await callSeldonEngine(prompt, model, feedbackData.feedbackContent, parameters);
 

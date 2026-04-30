@@ -1,13 +1,14 @@
 import { z } from 'zod';
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
+import { createFeedbackRequestMessage } from '../../utilities/MessageProtocol.js';
 import { callLTMEngine } from '../../utilities/EngineWrapper.js';
-import { createSuccessResponse, createErrorResponse } from './toolHelpers.js';
+import { generateRequestId, createSuccessResponse, createErrorResponse } from './toolHelpers.js';
 
 /**
  * Generate a narrative explanation of feedback loops and their influence on model behavior
  */
-export function createGenerateLtmNarrativeTool(sessionManager, sessionId) {
+export function createGenerateLtmNarrativeTool(sessionManager, sessionId, sendToClient) {
   return {
     description: 'Generate a narrative explanation of feedback loops and their influence on model behavior (Loops That Matter analysis).',
     supportedModes: ['sfd'],
@@ -27,10 +28,41 @@ export function createGenerateLtmNarrativeTool(sessionManager, sessionId) {
 
         const sessionTempDir = sessionManager.getSessionTempDir(sessionId);
         const feedbackPath = join(sessionTempDir, 'feedback.json');
-        if (!existsSync(feedbackPath)) {
-          return createErrorResponse('Feedback information not available. Call get_feedback_information first.');
+        let feedbackContent = existsSync(feedbackPath)
+          ? JSON.parse(readFileSync(feedbackPath, 'utf-8')).feedbackContent
+          : undefined;
+
+        if (!feedbackContent) {
+          const session = sessionManager.getSession(sessionId);
+          if (!session) {
+            throw new Error(`Session not found: ${sessionId}`);
+          }
+
+          const requestId = generateRequestId('feedback');
+
+          await sendToClient(createFeedbackRequestMessage(sessionId, requestId, []));
+
+          const resultPromise = new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+              reject(new Error('Feedback request timeout: Client did not respond within 30 seconds'));
+            }, 30000);
+
+            if (!session.pendingFeedbackRequests) {
+              session.pendingFeedbackRequests = new Map();
+            }
+            session.pendingFeedbackRequests.set(requestId, { resolve, reject, timeout });
+          });
+
+          const feedbackData = await resultPromise;
+
+          // Write feedback to disk instead of passing directly into context
+          sessionManager.writeDataToDisk(sessionId, 'feedback.json', {
+            feedbackContent: feedbackData.feedbackContent,
+            runIds: feedbackData.runIds
+          });
+
+          feedbackContent = feedbackData.feedbackContent;
         }
-        const feedbackContent = JSON.parse(readFileSync(feedbackPath, 'utf-8')).feedbackContent;
 
         const result = await callLTMEngine(model, feedbackContent, parameters);
 
