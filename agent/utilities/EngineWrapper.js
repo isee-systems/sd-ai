@@ -6,6 +6,8 @@ import SeldonILEEngine from '../../engines/seldon-ile-user/engine.js';
 import DocumentationEngine from '../../engines/generate-documentation/engine.js';
 import SeldonMentorEngine from '../../engines/seldon-mentor/engine.js';
 import LTMEngine from '../../engines/ltm-narrative/engine.js';
+import SeldonEngineBrain from '../../engines/seldon/SeldonBrain.js';
+import SeldonILEUserBrain from '../../engines/seldon-ile-user/SeldonILEUserBrain.js';
 
 /**
  * EngineWrapper
@@ -84,6 +86,9 @@ export async function callSeldonEngine(prompt, model, feedbackContent, parameter
       ...(feedbackContent && { feedbackContent })
     };
 
+    const beBrief = "\n\n**CRITICAL**\nBe brief in your response.";
+    seldonParams.systemPrompt = SeldonEngineBrain.DEFAULT_SYSTEM_PROMPT + beBrief 
+
     const result = await engine.generate(prompt, model, seldonParams);
 
     return {
@@ -113,6 +118,10 @@ export async function callSeldonILEEngine(prompt, model, runName, parameters = {
       ...parameters,
       currentRunName: runName
     };
+
+    const beBrief = "\n\n**CRITICAL**\nBe brief in your response.";
+    seldonParams.systemPrompt = SeldonILEUserBrain.DEFAULT_SYSTEM_PROMPT + beBrief 
+
 
     const result = await engine.generate(prompt, model, seldonParams);
 
@@ -198,6 +207,9 @@ export async function callSeldonMentorEngine(prompt, model, feedbackContent, par
       ...parameters,
       ...(feedbackContent && { feedbackContent })
     };
+
+    const beBrief = "\n\n**CRITICAL**\nBe brief in your response.";
+    seldonParams.systemPrompt = SeldonEngineBrain.MENTOR_SYSTEM_PROMPT + beBrief 
 
     const result = await engine.generate(prompt, model, mentorParams);
 
