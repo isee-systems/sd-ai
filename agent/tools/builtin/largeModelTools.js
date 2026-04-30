@@ -184,8 +184,8 @@ You can edit:
   * Variable Schema: {name, type (stock|flow|variable), equation?, documentation?, units?, uniflow?, inflows?, outflows?, dimensions?, arrayEquations?, crossLevelGhostOf?, graphicalFunction?}
   * For ADD operation: Array of variable objects
     Example: [{name: "Population", type: "stock", equation: "1000"}, {name: "births", type: "flow", equation: "Population*0.1"}]
-  * For UPDATE operation: Single variable object with name field (required) and fields to update
-    Example: {name: "Population", equation: "2000", documentation: "Total population"}
+  * For UPDATE operation: Array of variable objects, each with name field (required) and fields to update
+    Example: [{name: "Population", equation: "2000"}, {name: "births", type: "flow", equation: "Population*0.1"}]
   * For REMOVE operation: Array of variable name strings
     Example: ["Population", "births", "deaths"]
 - relationships: Add, update, or remove relationships.
@@ -272,8 +272,8 @@ After editing, the model is validated and processed through the quantitative eng
           crossLevelGhostOf: z.string().optional(),
           graphicalFunction: z.any().optional()
         })),
-        // For variables update - single variable object with name (required)
-        z.object({
+        // For variables update - array of variable objects with name (required), type optional
+        z.array(z.object({
           name: z.string(),
           newName: z.string().optional(),
           type: z.enum(['stock', 'flow', 'variable']).optional(),
@@ -287,7 +287,7 @@ After editing, the model is validated and processed through the quantitative eng
           arrayEquations: z.array(z.any()).optional(),
           crossLevelGhostOf: z.string().optional(),
           graphicalFunction: z.any().optional()
-        }),
+        })),
         // For variables remove - array of strings
         z.array(z.string()),
         // For relationships add - array of relationships
@@ -398,45 +398,50 @@ After editing, the model is validated and processed through the quantitative eng
 
               model.variables.push(...varsToAdd);
             } else if (operation === 'update') {
-              const varName = data.name;
-              if (!varName) {
-                return handleError('Error: Must specify "name" field to update a variable');
+              if (!Array.isArray(data)) {
+                return handleError('Error: For variables update operation, data must be an array of variable objects. Example: [{name: "Population", equation: "2000"}]');
               }
-              const index = model.variables.findIndex(v => v.name === varName);
-              if (index >= 0) {
-                const oldVariable = model.variables[index];
-                const oldName = oldVariable.name;
+              for (const update of data) {
+                const varName = update.name;
+                if (!varName) {
+                  return handleError('Error: Must specify "name" field to update a variable');
+                }
+                const index = model.variables.findIndex(v => v.name === varName);
+                if (index >= 0) {
+                  const oldVariable = model.variables[index];
+                  const oldName = oldVariable.name;
 
-                const isRenamed = data.newName && data.newName !== oldName;
+                  const isRenamed = update.newName && update.newName !== oldName;
 
-                if (isRenamed) {
-                  const newName = data.newName;
-                  const oldNameXMILE = oldName.replace(/ /g, '_');
-                  const newNameXMILE = newName.replace(/ /g, '_');
+                  if (isRenamed) {
+                    const newName = update.newName;
+                    const oldNameXMILE = oldName.replace(/ /g, '_');
+                    const newNameXMILE = newName.replace(/ /g, '_');
 
-                  const varRegex = new RegExp(`\\b${oldNameXMILE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
+                    const varRegex = new RegExp(`\\b${oldNameXMILE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
 
-                  for (const variable of model.variables) {
-                    if (variable.equation && varRegex.test(variable.equation)) {
-                      variable.equation = variable.equation.replace(varRegex, newNameXMILE);
-                    }
+                    for (const variable of model.variables) {
+                      if (variable.equation && varRegex.test(variable.equation)) {
+                        variable.equation = variable.equation.replace(varRegex, newNameXMILE);
+                      }
 
-                    if (variable.arrayEquations && Array.isArray(variable.arrayEquations)) {
-                      for (const ae of variable.arrayEquations) {
-                        if (ae.equation && varRegex.test(ae.equation)) {
-                          ae.equation = ae.equation.replace(varRegex, newNameXMILE);
+                      if (variable.arrayEquations && Array.isArray(variable.arrayEquations)) {
+                        for (const ae of variable.arrayEquations) {
+                          if (ae.equation && varRegex.test(ae.equation)) {
+                            ae.equation = ae.equation.replace(varRegex, newNameXMILE);
+                          }
                         }
                       }
                     }
+
+                    update.name = newName;
+                    delete update.newName;
                   }
 
-                  data.name = newName;
-                  delete data.newName;
+                  model.variables[index] = { ...model.variables[index], ...update };
+                } else {
+                  return handleError(`Error: Variable "${varName}" not found`);
                 }
-
-                model.variables[index] = { ...model.variables[index], ...data };
-              } else {
-                return handleError(`Error: Variable "${varName}" not found`);
               }
             } else if (operation === 'remove') {
               if (!Array.isArray(data)) {
