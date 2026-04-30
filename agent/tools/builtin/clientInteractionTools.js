@@ -50,16 +50,9 @@ export function createGetCurrentModelTool(sessionManager, sessionId, sendToClien
         const modelData = await resultPromise;
         const parsed = GetCurrentModelResponseSchema.parse(modelData);
 
-        // If the session has no model yet (empty variables), return it directly into context
-        if (!session.clientModel?.variables?.length) {
-          return createSuccessResponse(parsed);
-        }
-
         const { modelPath, message } = sessionManager.updateClientModel(sessionId, parsed);
 
         return createSuccessResponse({ message, modelPath });
-
-        // return createSuccessResponse(parsed);
       } catch (error) {
         return createErrorResponse(`Failed to get current model: ${error.message}`, error);
       }
