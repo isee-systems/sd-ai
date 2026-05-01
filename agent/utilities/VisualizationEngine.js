@@ -162,10 +162,12 @@ export class VisualizationEngine {
    * Use AI to generate custom Python visualization script
    */
   async generateAIVisualizationScript(dataPath, outputPath, data, variables, options) {
-    // Prepare data description
-    const dataDescription = options.dataDescription || this.describeData(data, variables);
+    const actualDataPath = options.feedbackFilePath ?? dataPath;
+    const schemaData = options.feedbackFilePath
+      ? JSON.parse(readFileSync(options.feedbackFilePath, 'utf8'))
+      : data;
 
-    // Prepare visualization requirements
+    const dataDescription = options.dataDescription || this.buildSchemaDescription(actualDataPath, schemaData);
     const visualizationGoal = options.visualizationGoal || options.title || 'Visualize the data in an insightful way';
 
     const systemPrompt = `You are a Python matplotlib code generator. Generate working Python visualization code.
@@ -178,7 +180,8 @@ Requirements:
 - Make it clear and professional
 
 Data handling:
-- Hardcode all data values as Python literals inside the code — do NOT read values from the data file at runtime unless explicitly needed; hardcoded literals are more reliable
+- Always read data from the provided file path at runtime — never invent, assume, or hardcode data values
+- Use the exact field paths from the schema provided — do not guess field names
 
 Matplotlib rules — these are known sources of errors, follow them exactly:
 - Never pass fontweight to ax.plot() or ax.scatter() — it is not a valid kwarg for Line2D or PathCollection
@@ -193,13 +196,11 @@ Composing multiple chart types (background bands + line overlay, stacked area + 
 
     const userPrompt = `Generate Python code for this visualization:
 
-Data: ${dataPath}
-Variables: ${variables.join(', ')}
 Goal: ${visualizationGoal}
 Output: ${outputPath}
 Size: ${(options.width || 800)/100}x${(options.height || 600)/100} inches
 
-Data structure: JSON with 'time' array and variable arrays: ${variables.map(v => `'${v}'`).join(', ')}
+${dataDescription}
 
 ${options.customRequirements ? `Requirements: ${options.customRequirements}\n` : ''}
 Required:
@@ -247,6 +248,46 @@ Generate ONLY working Python code, no explanations.`;
   /**
    * Describe data for AI to understand
    */
+  buildSchemaDescription(filePath, data) {
+    const describe = (val, depth = 0) => {
+      if (val === null || val === undefined) return 'null';
+
+      if (Array.isArray(val)) {
+        if (val.length === 0) return '[]';
+        const first = val[0];
+        if (typeof first === 'number') {
+          const sample = val.slice(0, Math.min(val.length, 100));
+          const min = Math.min(...sample).toFixed(2);
+          const max = Math.max(...sample).toFixed(2);
+          return `[number, ...]  // ${val.length} values, range ${min}–${max}`;
+        }
+        if (typeof first === 'string') {
+          const preview = val.slice(0, 3).map(s => JSON.stringify(s)).join(', ');
+          return `[${preview}${val.length > 3 ? ', ...' : ''}]  // ${val.length} strings`;
+        }
+        if (typeof first === 'object' && first !== null) {
+          const pad = '  '.repeat(depth + 1);
+          return `[  // ${val.length} items\n${pad}${describe(first, depth + 1)}\n${'  '.repeat(depth)}]`;
+        }
+        return JSON.stringify(val.slice(0, 3)) + (val.length > 3 ? '...' : '');
+      }
+
+      if (typeof val === 'object') {
+        if (depth > 4) return '{...}';
+        const pad = '  '.repeat(depth + 1);
+        const entries = Object.entries(val)
+          .map(([k, v]) => `${pad}"${k}": ${describe(v, depth + 1)}`)
+          .join(',\n');
+        return `{\n${entries}\n${'  '.repeat(depth)}}`;
+      }
+
+      if (typeof val === 'string') return JSON.stringify(val);
+      return String(val);
+    };
+
+    return `File: ${filePath}\nSchema:\n${describe(data)}`;
+  }
+
   describeData(data, variables) {
     const lines = [];
 

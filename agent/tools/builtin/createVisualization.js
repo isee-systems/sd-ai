@@ -78,9 +78,7 @@ Use useAICustom=true to have AI generate custom matplotlib code for complex visu
           }
 
           resolvedVariables = variables ?? loopsWithData.map(l => l.identifier);
-          extraOptions = {
-            dataDescription: dataDescription ?? `Feedback loop dominance data. Each variable is a loop identifier whose values represent "Percent of Model Behavior Explained By Loop" at each timestep (0–100%). Values across all loops sum to approximately 100% at each point in time. A stacked area chart is the standard representation.`
-          };
+          extraOptions = {};
         } else {
           data = rawData;
           resolvedVariables = variables ?? Object.keys(data).filter(k => k !== 'time');
@@ -108,7 +106,7 @@ Use useAICustom=true to have AI generate custom matplotlib code for complex visu
           description,
           usePython,
           useAICustom,
-          dataDescription: dataDescription ?? extraOptions.dataDescription,
+          dataDescription: dataDescription,
           visualizationGoal
         };
 
