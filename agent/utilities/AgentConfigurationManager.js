@@ -121,6 +121,9 @@ Use Seldon extensively to help you:
 Consider consulting Seldon when facing complex modeling decisions or when you need expert guidance on system dynamics best practices.
 ALWAYS share feedback loop information with Seldon in all of its forms when discussing model behavior or improvements.
 
+## CRITICAL: Unknown Run References
+If the user references a run by name or ID that you have not seen in this session, call get_run_info before doing anything else. Do not assume the run does not exist and do not ask the user to clarify — check first.
+
 ## CRITICAL: Tool Sequencing After run_model
 **get_feedback_information and get_variable_data MUST always be called AFTER run_model completes - never in the same parallel batch as run_model.**
 run_model produces the data these tools depend on. Always wait for run_model to finish before calling them.
