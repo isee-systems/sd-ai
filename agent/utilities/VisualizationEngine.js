@@ -80,14 +80,17 @@ export class VisualizationEngine {
   }
 
   normalizeArrayLengths(data, variables) {
-    // Comparison format: { runs: [{ data: { time, varName } }] }
-    // Each run is normalized independently — runs may have different lengths.
-    if (data?.runs && Array.isArray(data.runs)) {
-      const normalizedRuns = data.runs.map((run, idx) => {
-        const normalizedRunData = this.#normalizeRunData(run.data, variables, `run[${idx}]`);
-        return normalizedRunData === run.data ? run : { ...run, data: normalizedRunData };
-      });
-      return { ...data, runs: normalizedRuns };
+    // Run-keyed comparison format: { runId: { time: [...], var1: [...], ... } }
+    // Each run is flat and normalized independently.
+    if (data && typeof data === 'object' && !Array.isArray(data) && !('time' in data)) {
+      const firstVal = data[Object.keys(data)[0]];
+      if (firstVal && typeof firstVal === 'object' && !Array.isArray(firstVal) && Array.isArray(firstVal.time)) {
+        const normalized = {};
+        for (const [runId, runData] of Object.entries(data)) {
+          normalized[runId] = this.#normalizeRunData(runData, variables, runId);
+        }
+        return normalized;
+      }
     }
 
     // Flat format: { time, var1, var2, ... } (time_series, phase_portrait, feedback_dominance)
@@ -423,9 +426,23 @@ Generate ONLY working Python code, no explanations.`;
    * Generate time series plot script
    */
   generateTimeSeriesScript(dataPath, outputPath, variables, options) {
-    const highlightPeriodsCode = (options.highlightPeriods || []).map(period => `
-ax.axvspan(${period.start}, ${period.end}, alpha=0.2, color='${period.color || 'yellow'}', label='${period.label}')
-`).join('');
+    const bandPalette = ['#4e79a7','#f28e2b','#59a14f','#e15759','#76b7b2','#edc948','#b07aa1','#ff9da7','#9c755f','#bab0ac'];
+    let paletteIdx = 0;
+    const periods = (options.highlightPeriods || []).map(period => ({
+      ...period,
+      color: period.color || bandPalette[paletteIdx++ % bandPalette.length]
+    }));
+
+    const highlightPeriodsCode = periods.map(p =>
+      `\nax.axvspan(${p.start}, ${p.end}, alpha=0.2, color='${p.color}', zorder=0, linewidth=0)`
+    ).join('');
+
+    const legendCode = periods.length > 0
+      ? `import matplotlib.patches as mpatches
+band_handles = [${periods.map(p => `mpatches.Patch(facecolor='${p.color}', alpha=0.6, label='${p.label}')`).join(', ')}]
+line_handles = [l for l in ax.lines if not l.get_label().startswith('_')]
+ax.legend(handles=band_handles + line_handles, loc='best')`
+      : `ax.legend(loc='best')`;
 
     return `
 import matplotlib
@@ -441,20 +458,20 @@ with open('${dataPath}', 'r') as f:
 
 fig, ax = plt.subplots(figsize=(${(options.width || 800)/100}, ${(options.height || 600)/100}))
 
+# Background highlight periods (drawn first so lines render on top)
+${highlightPeriodsCode}
+
 # Plot each variable
 ${variables.map((v, idx) => `
-ax.plot(data['time'], data['${v}'], label='${v}', linewidth=2)
+ax.plot(data['time'], data['${v}'], label='${v}', linewidth=2, zorder=3)
 `).join('')}
 
 # Styling
 ax.set_xlabel('Time (${options.timeUnits || 'units'})', fontsize=12)
 ax.set_ylabel('Value', fontsize=12)
 ax.set_title('${options.title || 'Time Series'}', fontsize=14, fontweight='bold')
-ax.legend(loc='best')
+${legendCode}
 ax.grid(True, alpha=0.3)
-
-# Highlight periods
-${highlightPeriodsCode}
 
 plt.tight_layout()
 plt.savefig('${outputPath}', format='svg', bbox_inches='tight')
@@ -616,18 +633,18 @@ with open('${dataPath}', 'r') as f:
 
 fig, ax = plt.subplots(figsize=(${(options.width || 800)/100}, ${(options.height || 600)/100}))
 
-runs = data.get('runs', [])
 colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
 line_styles = ['-', '--', '-.', ':']
 
-for idx, run in enumerate(runs):
-    run_data = run.get('data', {})
-    label = run.get('label', run.get('runId', f'Run {idx+1}'))
+# Run-keyed format: { runId: { time: [...], varName: [...], ... } }
+run_items = []
+for run_id, run_data in data.items():
+    run_items.append((run_id, run_data.get('time', []), run_data.get('${variable}', [])))
+
+for idx, (label, time_data, values) in enumerate(run_items):
     color = colors[idx % len(colors)]
     line_style = line_styles[0] if idx == 0 else line_styles[(idx % (len(line_styles)-1)) + 1]
-
-    ax.plot(run_data.get('time', []), run_data.get('${variable}', []),
-            label=label, color=color, linestyle=line_style, linewidth=2)
+    ax.plot(time_data, values, label=label, color=color, linestyle=line_style, linewidth=2)
 
 ax.set_xlabel('Time', fontsize=12)
 ax.set_ylabel('${variable}', fontsize=12)

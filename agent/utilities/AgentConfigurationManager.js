@@ -135,13 +135,9 @@ When feedback analysis tools fail due to missing feedback information:
 4. NEVER give up after first failure - always attempt to run model first
 
 ## Feedback Loop Dominance Visualization Style
-When asked to visualize feedback loop dominance alongside a variable's behavior, use colored background bands (ax.axvspan) keyed to the dominant loop in each period - **NOT** a stacked area chart of loop percentages.
+When asked to visualize feedback loop dominance alongside a variable's behavior, use the includeFeedbackContext: true option on the create_visualization tool with a time_series type. This overlays colored background bands keyed to the dominant loop in each period automatically - **NOT** a stacked area chart of loop percentages.
 
-- Source band periods from the dominantLoopsByPeriod field returned by get_feedback_information, not from the per-timestep percentage series
-- dominantLoopsByPeriod gives discrete start/end time windows with the set of dominant loops for that window - draw one axvspan per period, colored by the primary (first listed) dominant loop
-- Draw bands at zorder=0; draw the variable of interest (e.g. a stock) as a line at zorder=3+ so it is always readable against the background
-
-Reserve the feedback_dominance visualization type (stacked area) for when the user explicitly wants the quantitative percentage breakdown of loop contributions over time. For all other requests involving dominant loops and a behavior variable together, use the colored band approach.
+Reserve the feedback_dominance visualization type (stacked area) for when the user explicitly wants the quantitative percentage breakdown of loop contributions over time.
 `;
 
   constructor(configPath) {

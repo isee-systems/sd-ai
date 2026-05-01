@@ -3,6 +3,27 @@ import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { createSuccessResponse, createErrorResponse } from './toolHelpers.js';
 
+// Detect run-keyed format: { runId: { time: [...], varName: [...], ... } }
+export function isRunKeyedFormat(data) {
+  const keys = Object.keys(data);
+  if (keys.length === 0 || keys.includes('time') || keys.includes('feedbackContent')) return false;
+  return keys.every(key => {
+    const val = data[key];
+    return typeof val === 'object' && !Array.isArray(val) && val !== null && Array.isArray(val.time);
+  });
+}
+
+// Extract run-specific data from feedbackContent.
+// feedbackContent is either flat { feedbackLoops, ... } or run-keyed { runId: { feedbackLoops, ... } }.
+export function extractRunFeedback(feedbackContent, preferredRunId = null) {
+  if (!feedbackContent || typeof feedbackContent !== 'object') return feedbackContent;
+  if ('feedbackLoops' in feedbackContent) return feedbackContent;
+  if (preferredRunId && preferredRunId in feedbackContent) return feedbackContent[preferredRunId];
+  const keys = Object.keys(feedbackContent);
+  const lastKey = keys[keys.length - 1];
+  return lastKey ? feedbackContent[lastKey] : feedbackContent;
+}
+
 /**
  * Create a data visualization and send it to the client
  */
@@ -49,12 +70,16 @@ Use useAICustom=true to have AI generate custom matplotlib code for complex visu
         const rawData = JSON.parse(fileContent);
 
         let data, resolvedVariables, extraOptions;
+        let resolvedType = type;
+        let selectedRunId = null;
 
         if ((type || 'time_series') === 'feedback_dominance') {
           if (!rawData.feedbackContent || Object.keys(rawData.feedbackContent).length === 0) {
             return createErrorResponse('No feedback information is present. Call get_feedback_information first.');
           }
-          const { feedbackLoops = [], dominantLoopsByPeriod } = rawData.feedbackContent;
+          // feedbackContent may be flat or run-keyed: { runId: { feedbackLoops, ... } }
+          const feedbackSource = extractRunFeedback(rawData.feedbackContent);
+          const { feedbackLoops = [], dominantLoopsByPeriod } = feedbackSource;
 
           const getLoopScores = l => l['Percent of Model Behavior Explained By Loop'] ?? l.loopScore;
           const loopsWithData = feedbackLoops.filter(l => getLoopScores(l)?.length > 0);
@@ -81,14 +106,32 @@ Use useAICustom=true to have AI generate custom matplotlib code for complex visu
           extraOptions = {};
         } else {
           data = rawData;
-          resolvedVariables = variables ?? Object.keys(data).filter(k => k !== 'time');
+
+          if (isRunKeyedFormat(data)) {
+            const runKeys = Object.keys(data);
+            if (runKeys.length === 1) {
+              selectedRunId = runKeys[0];
+              data = data[runKeys[0]];
+            } else {
+              resolvedType = 'comparison';
+              const firstRun = data[runKeys[0]] || {};
+              resolvedVariables = variables ?? Object.keys(firstRun).filter(k => k !== 'time');
+            }
+          }
+
+          if (!resolvedVariables) {
+            resolvedVariables = variables ?? Object.keys(data).filter(k => k !== 'time');
+          }
           extraOptions = {};
         }
 
-        if (options?.includeFeedbackContext && (type || 'time_series') !== 'feedback_dominance') {
+        if (options?.includeFeedbackContext && (resolvedType || 'time_series') !== 'feedback_dominance') {
           const feedbackPath = join(sessionManager.getSessionTempDir(sessionId), 'feedback.json');
           if (existsSync(feedbackPath)) {
-            const feedback = JSON.parse(readFileSync(feedbackPath, 'utf8'));
+            const feedbackFile = JSON.parse(readFileSync(feedbackPath, 'utf8'));
+            const feedback = feedbackFile.feedbackContent
+              ? extractRunFeedback(feedbackFile.feedbackContent, selectedRunId)
+              : feedbackFile;
             if (feedback.dominantLoopsByPeriod?.length > 0) {
               extraOptions.highlightPeriods = feedback.dominantLoopsByPeriod.map(p => ({
                 start: p.startTime,
@@ -111,7 +154,7 @@ Use useAICustom=true to have AI generate custom matplotlib code for complex visu
         };
 
         // VisualizationEngine returns raw SVG string
-        const svgContent = await vizEngine.createVisualization(type || 'time_series', data, resolvedVariables, vizOptions);
+        const svgContent = await vizEngine.createVisualization(resolvedType || 'time_series', data, resolvedVariables, vizOptions);
 
         // Generate visualization ID
         const visualizationId = `viz_${Date.now()}_${Math.random().toString(36).substring(7)}`;
@@ -134,7 +177,7 @@ Use useAICustom=true to have AI generate custom matplotlib code for complex visu
         // Send visualization to client
         await sendToClient(vizMessage);
 
-        return createSuccessResponse(`Created ${useAICustom ? 'AI-custom' : type || 'time_series'} SVG visualization: "${title}" and sent to client`);
+        return createSuccessResponse(`Created ${useAICustom ? 'AI-custom' : resolvedType || 'time_series'} SVG visualization: "${title}" and sent to client`);
       } catch (error) {
         return createErrorResponse(`Failed to create visualization: ${error.message}`, error);
       }
