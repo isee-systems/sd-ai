@@ -51,7 +51,10 @@ Use useAICustom=true to have AI generate custom matplotlib code for complex visu
         let data, resolvedVariables, extraOptions;
 
         if ((type || 'time_series') === 'feedback_dominance') {
-          const { feedbackLoops = [], dominantLoopsByPeriod } = rawData;
+          if (!rawData.feedbackContent || Object.keys(rawData.feedbackContent).length === 0) {
+            return createErrorResponse('No feedback information is present. Call get_feedback_information first.');
+          }
+          const { feedbackLoops = [], dominantLoopsByPeriod } = rawData.feedbackContent;
 
           const getLoopScores = l => l['Percent of Model Behavior Explained By Loop'] ?? l.loopScore;
           const loopsWithData = feedbackLoops.filter(l => getLoopScores(l)?.length > 0);
