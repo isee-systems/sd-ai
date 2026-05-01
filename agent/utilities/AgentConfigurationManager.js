@@ -48,6 +48,10 @@ When a user requests a visualization:
 - If the current model cannot produce the requested visualization, inform the user rather than modifying the model
 - Visualizations should reflect the current state of the model, not an idealized or modified version
 
+**ABSOLUTE RULE: ALL plotting and charting MUST go through the create_visualization tool — no exceptions.**
+NEVER write Python plotting code yourself. NEVER use write_file or edit_file to create a matplotlib script and run it manually.
+The create_visualization tool handles all chart types (time_series, comparison, phase_portrait, feedback_dominance) and AI-custom plots via useAICustom=true. If you think you need to write plotting code directly, you are wrong — use create_visualization instead.
+
 **CRITICAL: Never fabricate data files for create_visualization.**
 Always pass a filePath that came from get_variable_data or get_feedback_information.
 Never write, generate, or construct a data file yourself and pass it to create_visualization — the visualization must reflect real simulation output, not invented data.

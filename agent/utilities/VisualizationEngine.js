@@ -170,21 +170,32 @@ export class VisualizationEngine {
       ? JSON.parse(readFileSync(options.feedbackFilePath, 'utf8'))
       : data;
 
-    const dataDescription = options.dataDescription || this.buildSchemaDescription(actualDataPath, schemaData);
+    // Always build schema from the actual file on disk — agent's dataDescription is supplemental context only
+    const autoSchema = this.buildSchemaDescription(actualDataPath, schemaData);
+    const dataDescription = options.dataDescription
+      ? `${autoSchema}\n\nAdditional context from caller: ${options.dataDescription}`
+      : autoSchema;
     const visualizationGoal = options.visualizationGoal || options.title || 'Visualize the data in an insightful way';
 
     const systemPrompt = `You are a Python matplotlib code generator. Generate working Python visualization code.
 
+ABSOLUTE RULE — DATA LOADING:
+You MUST open and parse the data file yourself at runtime using Python file I/O (e.g. open(), json.load()).
+NEVER hardcode, inline, or assume any data values in the script.
+NEVER treat data passed in the prompt as the actual data — the prompt only describes the file schema so you know how to read it.
+ALL data used in the visualization must come exclusively from reading the file at the path provided.
+Write explicit parsing code: open the file, navigate the JSON structure, extract the fields you need.
+
 Requirements:
 - Use matplotlib with Agg backend (set BEFORE importing pyplot)
-- Load JSON data and create the visualization
+- Load JSON data from disk and create the visualization
 - Save as SVG using plt.savefig with format='svg'
 - Include labels, titles, legends
 - Make it clear and professional
 
 Data handling:
-- Always read data from the provided file path at runtime — never invent, assume, or hardcode data values
-- Use the exact field paths from the schema provided — do not guess field names
+- Use the exact field paths from the schema provided to navigate the JSON — do not guess field names
+- Write all data-loading and parsing logic explicitly in the script
 
 Matplotlib rules — these are known sources of errors, follow them exactly:
 - Never pass fontweight to ax.plot() or ax.scatter() — it is not a valid kwarg for Line2D or PathCollection
@@ -197,29 +208,46 @@ Composing multiple chart types (background bands + line overlay, stacked area + 
 - Draw overlaid lines at zorder=3 or higher
 - Build legends manually using matplotlib.patches.Patch and matplotlib.lines.Line2D rather than relying on automatic label collection`;
 
+    const periodsSchemaNote = (options.highlightPeriods?.length > 0)
+      ? `\n\nPRE-DEFINED VARIABLE — HIGHLIGHT_PERIODS:
+A Python list named HIGHLIGHT_PERIODS is already defined in the required boilerplate. Each entry has keys: start (number), end (number), label (string), and optionally color (string).
+Use axvspan(p['start'], p['end'], ...) to draw background bands and mpatches.Patch for legend entries. Do NOT read any file to get this data — it is already in the variable.`
+      : '';
+
+    const schemaPrompt = `DATA FILE SCHEMA for this request:
+The following describes the structure of the JSON file on disk. Use the exact field paths to write your parsing code. Do NOT treat these values as data — read everything from disk at runtime.
+
+${dataDescription}${periodsSchemaNote}`;
+
+    const periodsConstant = (options.highlightPeriods?.length > 0)
+      ? `5. HIGHLIGHT_PERIODS = ${JSON.stringify(options.highlightPeriods)}  # server-computed dominant loop periods — use these directly, do not re-read from any file\n`
+      : '';
+
     const userPrompt = `Generate Python code for this visualization:
 
 Goal: ${visualizationGoal}
-Output: ${outputPath}
 Size: ${(options.width || 800)/100}x${(options.height || 600)/100} inches
 
-${dataDescription}
-
 ${options.customRequirements ? `Requirements: ${options.customRequirements}\n` : ''}
-Required:
-1. Import order: matplotlib.use('Agg') BEFORE import matplotlib.pyplot
-2. Suppress warnings: warnings.filterwarnings('ignore')
-3. Save with: plt.savefig(path, format='svg', bbox_inches='tight')
-
+Required — copy these lines exactly, do not alter the paths:
+1. matplotlib.use('Agg') BEFORE import matplotlib.pyplot
+2. import warnings; warnings.filterwarnings('ignore')
+3. with open('${actualDataPath}', 'r') as f: data = json.load(f)
+4. plt.savefig('${outputPath}', format='svg', bbox_inches='tight')
+${periodsConstant}
 Generate ONLY working Python code, no explanations.`;
 
     try {
       // Get LLM parameters with lower temperature for faster, more deterministic responses
       const { underlyingModel, temperature } = this.llm.getLLMParameters(0.1);
 
-      // Create messages array
+      // Create messages array.
+      // systemPrompt is stable across requests and will be cached.
+      // schemaPrompt is request-specific and sent as a separate turn after the system message.
       const messages = [
         { role: 'system', content: systemPrompt },
+        { role: 'system', content: schemaPrompt },
+        { role: 'assistant', content: 'I have reviewed the data file schema and am ready to generate the visualization code.' },
         { role: 'user', content: userPrompt }
       ];
 
