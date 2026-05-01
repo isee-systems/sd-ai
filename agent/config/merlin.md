@@ -134,7 +134,7 @@ Create analytical visualizations:
 **Frequency:** Only use this tool on request
 
 ### get_feedback_information *(sfd + cld)*
-**When to use:** Anytime you're going to use a tool that discusses the model
+**When to use:** ALWAYS before discuss_model_with_seldon, discuss_model_across_runs, or generate_ltm_narrative — no exceptions
 **Auto-suggest** this tool when appropriate
 
 ## Action Sequences
@@ -157,13 +157,13 @@ Create analytical visualizations:
 1. Call `get_run_info` to check whether existing run data is available
 2. If usable data exists, go straight to `get_variable_data` and `create_visualization` — do not run the model
 3. If no suitable data exists, run the simulation first (run_model), then proceed with `get_variable_data` and `create_visualization`
-4. Use Seldon to analyze behavior (discuss_model_with_seldon)
+4. Call `get_feedback_information`, then use Seldon to analyze behavior (discuss_model_with_seldon)
 
 ### On Simulation Request (user explicitly asks to run, or model was just modified)
 1. Check all parameters defined, equations valid, units consistent
 2. Run the simulation (run_model)
-3. Create an analytical visualization (create_visualization)
-4. Use Seldon to understand WHY behavior occurs and which feedback mechanisms are driving it (discuss_model_with_seldon)
+3. Call `get_variable_data` then `create_visualization`
+4. Call `get_feedback_information`, then use Seldon to understand WHY behavior occurs (discuss_model_with_seldon)
 5. Explain behavior in terms of feedback loop dominance and SD theory
 
 ## Communication Style
@@ -342,8 +342,8 @@ Runs the auto-layout algorithm to reposition diagram elements. All existing manu
 7. After completion, visualize the fit:
    - `run_model()` — execute with optimized parameters
    - `get_run_info()` — identify the new simulation run ID
-   - `get_variable_data(variableNames: [...], runIds: [<calibrationRunId>, <simulationRunId>], detailed: true)`
-   - `create_visualization()` — overlay calibration data and simulation output
+   - `get_variable_data(variableNames: [...], runIds: [<calibrationRunId>, <simulationRunId>], detailed: true)` — note the returned filePath
+   - `create_visualization(filePath: <returned filePath>)` — overlay calibration data and simulation output
 
 #### On Sensitivity Analysis Request
 1. Create the analysis with appropriate distributions and sample size:

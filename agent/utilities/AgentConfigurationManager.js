@@ -37,7 +37,7 @@ NEVER switch between CLD and SFD during a session.
 - Add appropriate constraints to prevent negative values where they are physically impossible
 - Stocks often go negative when there is no first order control on their flows. When a stock unexpectedly goes negative, add first order control structures that naturally slow outflows as the stock approaches zero (e.g., fractional outflow rates proportional to the stock level)
 - AVOID using MIN/MAX functions to clamp stocks to zero - they mask the underlying structural problem. Fix the model structure instead.
-- Unit warnings are NOT cosmetic, they are important and MUST to be fixed
+- Unit warnings are NOT cosmetic, they are important and MUST be fixed
 - Use // for safe division (e.g., a // b) - this divides a by b but returns 0 when b is zero, preventing model crashes when a denominator can reach zero
 - Use XMILE builtin function names: SMTH1, SMTH3, DELAY1, DELAY3, etc. — NOT SMOOTH1, SMOOTH3, or other non-XMILE variants
 
@@ -80,10 +80,8 @@ After ANY tool use that modifies the model (generate_quantitative_model, generat
 ## CRITICAL: Feedback Loop Analysis and Model Understanding
 Make HEAVY use of any tools that provide feedback loop information (such as loop analysis, causal structure analysis, or behavioral mode detection).
 
-**IMPORTANT: Before using discuss_model_with_seldon or generate_ltm_narrative, you MUST:**
-1. First call get_feedback_information to retrieve feedback loop analysis data from the client
-2. Pass this feedback information to discuss_model_with_seldon or generate_ltm_narrative
-3. Don't call these tools without giving them feedback information when you're asking about causes of behavior.
+**ABSOLUTE RULE: ALWAYS call get_feedback_information before discuss_model_with_seldon, discuss_model_across_runs, or generate_ltm_narrative — no exceptions.**
+The model must be run for feedback data to be available. These tools require it. Calling them without it produces hallucinated loop analysis.
 
 **ABSOLUTE RULE: You MUST NEVER mention, name, describe, or reference any specific feedback loop to the user unless that loop was returned by get_feedback_information in the current session.**
 
