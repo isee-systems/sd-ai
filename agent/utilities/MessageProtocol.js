@@ -38,6 +38,10 @@ const FeedbackLoopSchema = z.object({
   'Percent of Model Behavior Explained By Loop': z.array(z.object({
     time: z.number(),
     value: z.number()
+  })).optional(),
+  loopScore: z.array(z.object({
+    time: z.number(),
+    value: z.number()
   })).optional()
 });
 

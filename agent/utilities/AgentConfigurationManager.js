@@ -45,23 +45,20 @@ NEVER switch between CLD and SFD during a session.
 When a user requests a visualization:
 - ALWAYS use the current model as-is without any modifications
 - NEVER modify, update, or change the existing model structure or parameters to create visualizations
-- Follow this sequence: get_current_model -> run_model (if needed) -> get_variable_data -> create_visualization
 - If the current model cannot produce the requested visualization, inform the user rather than modifying the model
 - Visualizations should reflect the current state of the model, not an idealized or modified version
 
-**CRITICAL: Data Structure for create_visualization**
-When calling create_visualization, the data parameter MUST be structured exactly as follows:
-{
-  time: [0, 1, 2, 3, ...],
-  Variable1: [value1, value2, value3, ...],
-  Variable2: [value1, value2, value3, ...],
-  ...
-}
+**How to plot time series, phase portraits, or comparisons:**
+1. Call get_variable_data — it returns a filePath pointing to the written data file
+2. Pass that filePath directly to create_visualization
 
-**Common Error:** Do NOT pass the full tool result from get_variable_data (which includes success, runId, etc.).
-Instead, extract ONLY the time series data fields:
-- Correct: { time: result.time, Population: result.Population, Births: result.Births }
-- Wrong: result (includes success, runId, and other metadata)
+**How to plot feedback loop dominance (stacked area of loop percentages):**
+1. Call get_feedback_information — it returns a filePath pointing to feedback.json
+2. Pass that filePath to create_visualization with type: "feedback_dominance"
+
+**How to overlay dominant-loop periods on a time-series plot:**
+1. Ensure get_feedback_information has already been called (feedback.json exists)
+2. Pass the variable data filePath to create_visualization with options.includeFeedbackContext: true
 
 ## CRITICAL: Never Directly Edit model.sdjson
 NEVER use file writing or file editing tools (write_file, edit_file) to directly modify model.sdjson.
