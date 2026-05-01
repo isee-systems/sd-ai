@@ -239,7 +239,7 @@ CRITICAL ARRAY RULES:
 
 After editing, the model is validated and processed through the quantitative engine pipeline before updating the client.`,
     supportedModes: ['sfd', 'cld'],
-    minModelTokens: config.agentMaxTokensForEngines,
+    minModelTokens: config.agentTargetedEditingMinimum,
     inputSchema: z.object({
       section: z.enum(['specs', 'variables', 'relationships', 'modules']).describe('Which section to edit'),
       operation: z.enum(['update', 'add', 'remove']).describe('Operation to perform'),
