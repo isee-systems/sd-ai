@@ -3,7 +3,7 @@ import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { createFeedbackRequestMessage } from '../../utilities/MessageProtocol.js';
 import { callSeldonMentorEngine } from '../../utilities/EngineWrapper.js';
-import { generateRequestId, createSuccessResponse, createErrorResponse } from './toolHelpers.js';
+import { generateRequestId, createSuccessResponse, createErrorResponse, loadBehaviorContent } from './toolHelpers.js';
 
 /**
  * Ask thoughtful questions to the user to guide their learning
@@ -17,7 +17,7 @@ export function createDiscussWithMentorTool(sessionManager, sessionId, sendToCli
       parameters: z.object({
         problemStatement: z.string().optional().describe('Description of dynamic issue to address'),
         backgroundKnowledge: z.string().optional().describe('Background information for LLM'),
-        behaviorContent: z.string().optional().describe('Time series behavior data')
+        runIds: z.array(z.string()).optional().describe('Run IDs to include as behavior data; defaults to the last run')
       }).optional()
     }),
     handler: async ({ prompt, parameters }) => {
@@ -33,7 +33,10 @@ export function createDiscussWithMentorTool(sessionManager, sessionId, sendToCli
           ? JSON.parse(readFileSync(feedbackPath, 'utf-8')).feedbackContent
           : undefined;
 
-        const result = await callSeldonMentorEngine(prompt, model, feedbackContent, parameters);
+        const behaviorContent = loadBehaviorContent(sessionTempDir, parameters?.runIds);
+        const enrichedParameters = behaviorContent ? { ...parameters, behaviorContent } : parameters;
+
+        const result = await callSeldonMentorEngine(prompt, model, feedbackContent, enrichedParameters);
 
         if (!result.success) {
           return createErrorResponse(result.error);
@@ -69,7 +72,7 @@ export function createDiscussWithMentorTool(sessionManager, sessionId, sendToCli
             runIds: feedbackData.runIds
           });
 
-          const retryResult = await callSeldonMentorEngine(prompt, model, feedbackData.feedbackContent, parameters);
+          const retryResult = await callSeldonMentorEngine(prompt, model, feedbackData.feedbackContent, enrichedParameters);
 
           if (!retryResult.success) {
             return createErrorResponse(retryResult.error);

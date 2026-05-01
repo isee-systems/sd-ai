@@ -2,6 +2,8 @@
  * Helper utilities shared across built-in tools
  */
 import { tool as sdkTool } from '@anthropic-ai/claude-agent-sdk';
+import { readdirSync, readFileSync, existsSync } from 'fs';
+import { join } from 'path';
 import logger from '../../../utilities/logger.js';
 
 /**
@@ -38,6 +40,37 @@ export function createSuccessResponse(result) {
     content: [{ type: 'text', text }],
     isError: false
   };
+}
+
+/**
+ * Load behavior content from the most recent variable_data JSON file in the session temp dir,
+ * filtered to the given run IDs (or the last run ID in the file if none specified).
+ * Returns undefined if no variable_data file exists.
+ * @param {string} sessionTempDir - Path to the session temp directory
+ * @param {string[]} [runIds] - Optional run IDs to include; defaults to the last run in the file
+ * @returns {string|undefined} JSON string of filtered run data, or undefined
+ */
+export function loadBehaviorContent(sessionTempDir, runIds) {
+  if (!existsSync(sessionTempDir)) return undefined;
+
+  const files = readdirSync(sessionTempDir)
+    .filter(f => f.startsWith('variable_data_') && f.endsWith('.json'))
+    .sort();
+
+  if (files.length === 0) return undefined;
+
+  const latest = JSON.parse(readFileSync(join(sessionTempDir, files[files.length - 1]), 'utf-8'));
+  const allRunIds = Object.keys(latest);
+  if (allRunIds.length === 0) return undefined;
+
+  const selected = (runIds && runIds.length > 0)
+    ? runIds.filter(id => id in latest)
+    : [allRunIds[allRunIds.length - 1]];
+
+  if (selected.length === 1) return JSON.stringify(latest[selected[0]]);
+
+  const filtered = Object.fromEntries(selected.map(id => [id, latest[id]]));
+  return JSON.stringify(filtered);
 }
 
 /**

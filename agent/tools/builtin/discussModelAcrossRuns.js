@@ -3,7 +3,7 @@ import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { createFeedbackRequestMessage } from '../../utilities/MessageProtocol.js';
 import { callSeldonILEEngine } from '../../utilities/EngineWrapper.js';
-import { generateRequestId, createSuccessResponse, createErrorResponse } from './toolHelpers.js';
+import { generateRequestId, createSuccessResponse, createErrorResponse, loadBehaviorContent } from './toolHelpers.js';
 
 /**
  * Have a user-friendly discussion about the model without jargon, with ability to compare runs
@@ -18,7 +18,7 @@ export function createDiscussModelAcrossRunsTool(sessionManager, sessionId, send
       parameters: z.object({
         problemStatement: z.string().optional().describe('Description of dynamic issue to address'),
         backgroundKnowledge: z.string().optional().describe('Background information for LLM'),
-        behaviorContent: z.string().optional().describe('Time series behavior data')
+        runIds: z.array(z.string()).optional().describe('Run IDs to include as behavior data; defaults to the last run')
       }).optional()
     }),
     handler: async ({ prompt, runName, parameters }) => {
@@ -34,10 +34,13 @@ export function createDiscussModelAcrossRunsTool(sessionManager, sessionId, send
           ? JSON.parse(readFileSync(feedbackPath, 'utf-8')).feedbackContent
           : undefined;
 
-        // Add feedbackContent to parameters if available
+        const behaviorContent = loadBehaviorContent(sessionTempDir, parameters?.runIds);
+
+        // Add feedbackContent and behaviorContent to parameters if available
         const engineParams = {
           ...parameters,
-          ...(feedbackContent && { feedbackContent })
+          ...(feedbackContent && { feedbackContent }),
+          ...(behaviorContent && { behaviorContent })
         };
 
         const result = await callSeldonILEEngine(prompt, model, runName, engineParams);
@@ -82,7 +85,8 @@ export function createDiscussModelAcrossRunsTool(sessionManager, sessionId, send
           // Retry the call with comparative feedback information
           const retryParams = {
             ...parameters,
-            feedbackContent: feedbackData.feedbackContent
+            feedbackContent: feedbackData.feedbackContent,
+            ...(behaviorContent && { behaviorContent })
           };
 
           const retryResult = await callSeldonILEEngine(prompt, model, runName, retryParams);

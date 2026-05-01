@@ -3,7 +3,7 @@ import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { createFeedbackRequestMessage } from '../../utilities/MessageProtocol.js';
 import { callLTMEngine } from '../../utilities/EngineWrapper.js';
-import { generateRequestId, createSuccessResponse, createErrorResponse } from './toolHelpers.js';
+import { generateRequestId, createSuccessResponse, createErrorResponse, loadBehaviorContent } from './toolHelpers.js';
 
 /**
  * Generate a narrative explanation of feedback loops and their influence on model behavior
@@ -16,7 +16,7 @@ export function createGenerateLtmNarrativeTool(sessionManager, sessionId, sendTo
       parameters: z.object({
         problemStatement: z.string().optional().describe('Description of dynamic issue to address'),
         backgroundKnowledge: z.string().optional().describe('Background information for LLM'),
-        behaviorContent: z.string().optional().describe('Time series behavior data')
+        runIds: z.array(z.string()).optional().describe('Run IDs to include as behavior data; defaults to the last run')
       }).optional()
     }),
     handler: async ({ parameters }) => {
@@ -31,6 +31,9 @@ export function createGenerateLtmNarrativeTool(sessionManager, sessionId, sendTo
         let feedbackContent = existsSync(feedbackPath)
           ? JSON.parse(readFileSync(feedbackPath, 'utf-8')).feedbackContent
           : undefined;
+
+        const behaviorContent = loadBehaviorContent(sessionTempDir, parameters?.runIds);
+        const enrichedParameters = behaviorContent ? { ...parameters, behaviorContent } : parameters;
 
         if (!feedbackContent) {
           const session = sessionManager.getSession(sessionId);
@@ -64,7 +67,7 @@ export function createGenerateLtmNarrativeTool(sessionManager, sessionId, sendTo
           feedbackContent = feedbackData.feedbackContent;
         }
 
-        const result = await callLTMEngine(model, feedbackContent, parameters);
+        const result = await callLTMEngine(model, feedbackContent, enrichedParameters);
 
         if (!result.success) {
           return createErrorResponse(result.error);
