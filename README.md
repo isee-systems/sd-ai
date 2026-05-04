@@ -111,6 +111,7 @@ Contains the engines used by [Stella](https://www.iseesystems.com/store/products
         stopTime: <number>,
         dt?: <number>,
         timeUnits?: <string>,
+        integrationMethod?: <string>, # "Euler" or "RK4"
         arrayDimensions?: [{ # Array dimension definitions (all four fields required)
             type: <string>, # "numeric" or "labels" - numeric auto-generates element names as strings ('1','2','3'), labels use user-defined meaningful names
             name: <string>, # Singular, alphanumeric dimension name (e.g., "region" not "regions")

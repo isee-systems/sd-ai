@@ -219,7 +219,8 @@ export class LLMWrapper {
     "stopTime": "The time at which this model stops calculating.  It is measured in the units of \"timeUnits\".",
     "dt": "The time step for the model, how often is it calculated.  The most common dt is 0.25. It is measured in the units of \"timeUnits\".",
     "timeUnits": "The unit of time for this model.  This should match with the equations that you generate.",
-
+    "integrationMethod": "The method used to solve this model.  Euler (Default), RK4, is an optional method for systems with oscillations.",
+    
     "loopIdentifier": "The globally unique identifer for this feedback loop.  You will take this value from the feedback loop identifier given to you.",
     "loopName": "A short, but unique name, for the process this feedback loop represents.  This name must be distinct for each loop you give a name to. This name should not refer directly to the polarity of the loop.  Don't use the words: growth, decline, stablizing, dampening, balancing, reinforcing, positive or negative in the name.",
     "loopDescription": "A description of what the process this feedback loop represents.  This description should discusses the purpose of this feedback loop. It should not be longer then 3 paragraphs",
@@ -414,7 +415,8 @@ export class LLMWrapper {
         startTime: z.number().describe(LLMWrapper.SCHEMA_STRINGS.startTime),
         stopTime: z.number().describe(LLMWrapper.SCHEMA_STRINGS.stopTime),
         dt: z.number().describe(LLMWrapper.SCHEMA_STRINGS.dt),
-        timeUnits: z.string().describe(LLMWrapper.SCHEMA_STRINGS.timeUnits)
+        timeUnits: z.string().describe(LLMWrapper.SCHEMA_STRINGS.timeUnits),
+        integrationMethod: z.enum(["Euler", "RK4"]).describe(LLMWrapper.SCHEMA_STRINGS.integrationMethod)
       };
 
       if (supportsArrays) {
