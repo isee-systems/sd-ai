@@ -13,6 +13,8 @@ const config = {
     "agentTargetedEditingMinimum": parseInt(process.env.TARGETED_EDITING_MINIMUM) || 5_000, //Above this size, models can be edited without quantitative/qualitative engine
     "agentModel": process.env.AGENT_MODEL || 'claude-sonnet-4-6', // Model used for agent conversations MUST BE Anthropic models
     "agentSummaryModel": process.env.SUMMARY_MODEL || 'claude-haiku-4-5', // Model used for conversation history summarization MUST BE Anthropic models
+    "agentEffort": undefined,
+    "agentThinking": { type: "disabled" }
 };
 
 export default config

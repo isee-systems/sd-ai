@@ -213,6 +213,8 @@ export class AgentOrchestrator {
         mcpServers: mcpServers,
         allowedTools: allowedTools,
         permissionMode: 'bypassPermissions',
+        thinking: config.agentThinking,
+        effort: config.agentEffort,
         compact: true  // Enable automatic compaction
       };
 
@@ -578,6 +580,8 @@ export class AgentOrchestrator {
           max_tokens: 8192,
           system: systemBlocks,
           messages: messages,
+          thinking: config.agentThinking,
+          effort: config.agentEffort,
           tools: tools.length > 0 ? tools : undefined
         });
 
