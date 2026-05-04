@@ -456,18 +456,22 @@ Generate ONLY working Python code, no explanations.`;
   generateTimeSeriesScript(dataPath, outputPath, variables, options) {
     const bandPalette = ['#4e79a7','#f28e2b','#59a14f','#e15759','#76b7b2','#edc948','#b07aa1','#ff9da7','#9c755f','#bab0ac'];
     let paletteIdx = 0;
-    const periods = (options.highlightPeriods || []).map(period => ({
-      ...period,
-      color: period.color || bandPalette[paletteIdx++ % bandPalette.length]
-    }));
+    const labelColorMap = {};
+    const periods = (options.highlightPeriods || []).map(period => {
+      if (!labelColorMap[period.label]) {
+        labelColorMap[period.label] = period.color || bandPalette[paletteIdx++ % bandPalette.length];
+      }
+      return { ...period, color: labelColorMap[period.label] };
+    });
 
     const highlightPeriodsCode = periods.map(p =>
       `\nax.axvspan(${p.start}, ${p.end}, alpha=0.2, color='${p.color}', zorder=0, linewidth=0)`
     ).join('');
 
-    const legendCode = periods.length > 0
+    const uniqueLabelPeriods = Object.entries(labelColorMap).map(([label, color]) => ({ label, color }));
+    const legendCode = uniqueLabelPeriods.length > 0
       ? `import matplotlib.patches as mpatches
-band_handles = [${periods.map(p => `mpatches.Patch(facecolor='${p.color}', alpha=0.6, label='${p.label}')`).join(', ')}]
+band_handles = [${uniqueLabelPeriods.map(p => `mpatches.Patch(facecolor='${p.color}', alpha=0.6, label='${p.label}')`).join(', ')}]
 line_handles = [l for l in ax.lines if not l.get_label().startswith('_')]
 ax.legend(handles=band_handles + line_handles, loc='best')`
       : `ax.legend(loc='best')`;
@@ -491,7 +495,7 @@ ${highlightPeriodsCode}
 
 # Plot each variable
 ${variables.map((v, idx) => `
-ax.plot(data['time'], data['${v}'], label='${v}', linewidth=2, zorder=3)
+ax.plot(data['time'], data['${v}'], label='${v.replaceAll('_', ' ')}', linewidth=2, zorder=3)
 `).join('')}
 
 # Styling
