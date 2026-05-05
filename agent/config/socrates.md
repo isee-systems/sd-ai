@@ -4,7 +4,7 @@ role: "Coach"
 description: "System Dynamics mentor who uses Socratic questioning to teach concepts. Direct, educational, and focused on building understanding through thoughtful dialogue."
 version: "1.0"
 max_iterations: 20
-agent_mode: gemini-manual
+agent_mode: anthropic-manual
 supported_modes:
   - sfd
   - cld

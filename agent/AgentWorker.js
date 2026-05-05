@@ -186,6 +186,17 @@ class AgentWorker {
         }
 
         case 'shutdown': {
+          // Abort any in-flight conversation so the Agent SDK can clean up
+          // the claude CLI subprocess it may have spawned.
+          this.#orchestrator?.stopIteration();
+          // Kill our entire process group. On the fork fallback (macOS/dev)
+          // this catches grandchild processes (claude CLI) that would otherwise
+          // be orphaned at 100% CPU. Inside a bwrap PID namespace this kills
+          // all container processes. Safe because the fork is spawned with
+          // detached:true (own process group) and bwrap runs in its own namespace.
+          if (process.platform !== 'win32') {
+            try { process.kill(-process.pid, 'SIGKILL'); } catch { /* already exiting */ }
+          }
           // Temp-dir cleanup is the host SessionManager's responsibility.
           // Inside the bwrap sandbox /session is a bind mount and can't be
           // rmdir'd; in the fork fallback the host also calls deleteSession.

@@ -90,6 +90,27 @@ function getAvailableAgents() {
   return { agents, defaults };
 }
 
+// Registry of all live worker processes so signal handlers can kill them all.
+const liveWorkers = new Set();
+
+// Kill a worker and all its descendant processes.
+//
+// IpcWorker (bwrap sandbox): w.pid is undefined. We kill only the bwrap process;
+// the kernel kills everything in the PID namespace when its init (bwrap) exits.
+//
+// ChildProcess (fork fallback): w.pid is a number. The fork is spawned with
+// detached:true so it leads its own process group. Killing the group
+// (process.kill(-pid, signal)) also kills grandchildren like the claude CLI
+// subprocess launched by the Agent SDK — without this they become orphans at
+// 100% CPU after the worker is gone.
+function killWorkerProcess(w, signal) {
+  if (typeof w.pid === 'number') {
+    process.kill(-w.pid, signal);
+  } else {
+    w.kill(signal);
+  }
+}
+
 export class WebSocketHandler {
   #ws;
   #sessionManager;
@@ -97,6 +118,15 @@ export class WebSocketHandler {
   #worker = null;
   // True on the first chat message after a select_agent — tells worker to bridge context
   #pendingAgentSwitch = false;
+
+  // SIGKILL every live worker immediately. Called by process signal handlers so
+  // workers don't outlive the main process as orphans.
+  static killAll() {
+    for (const w of liveWorkers) {
+      try { killWorkerProcess(w, 'SIGKILL'); } catch { /* already dead */ }
+    }
+    liveWorkers.clear();
+  }
 
   constructor(ws, sessionManager) {
     this.#ws = ws;
@@ -254,8 +284,14 @@ export class WebSocketHandler {
         this.#killWorker();
       }
 
+      // Guard: the WS may have closed during the async context fetch above.
+      // #onClose already killed the worker and deleted the session — bail out
+      // before spawning a new worker that would never be cleaned up.
+      if (this.#ws.readyState !== 1) return;
+
       const tempDir = this.#sessionManager.getSessionTempDir(this.#sessionId);
       this.#worker = WorkerSpawner.spawn(this.#sessionId, tempDir);
+      liveWorkers.add(this.#worker);
       this.#setupWorkerRelay(this.#worker);
 
       const session = this.#sessionManager.getSession(this.#sessionId);
@@ -371,7 +407,8 @@ export class WebSocketHandler {
       }
       // Give it a moment to exit cleanly; force-kill if it doesn't
       const w = this.#worker;
-      const t = setTimeout(() => w.kill('SIGKILL'), 2000);
+      liveWorkers.delete(w);
+      const t = setTimeout(() => { try { killWorkerProcess(w, 'SIGKILL'); } catch { /* already dead */ } }, 2000);
       this.#worker.once('exit', () => clearTimeout(t));
       this.#worker = null;
     }
@@ -386,7 +423,11 @@ export class WebSocketHandler {
   #setupWorkerRelay(w) {
     w.on('message', async (msg) => {
       if (msg.type === 'to_client') {
-        if (this.#ws.readyState === 1) this.#ws.send(JSON.stringify(msg.message));
+        // Only forward if this is still the active worker; drop stale messages
+        // from a worker that has been replaced or is in its shutdown grace period.
+        if (this.#worker === w && this.#ws.readyState === 1) {
+          this.#ws.send(JSON.stringify(msg.message));
+        }
       } else if (msg.type === 'worker_error') {
         logger.error(`[worker:${this.#sessionId}] ${msg.error}`);
       }
@@ -400,6 +441,7 @@ export class WebSocketHandler {
 
     w.on('exit', (code, signal) => {
       logger.log(`[worker:${this.#sessionId}] exited (code=${code} signal=${signal})`);
+      liveWorkers.delete(w);
       if (this.#worker === w) this.#worker = null;
     });
   }

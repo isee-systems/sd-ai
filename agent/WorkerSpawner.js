@@ -329,10 +329,14 @@ export class WorkerSpawner {
       );
     }
 
-    // Unsandboxed fallback: plain fork, inherits full environment
+    // Unsandboxed fallback: plain fork.
+    // detached: true puts the worker in its own process group so that killing
+    // the group (process.kill(-pid, signal)) also kills grandchildren like the
+    // claude CLI subprocess spawned by the Agent SDK.
     return fork(WorkerSpawner.#WORKER_PATH, [], {
       env: { ...process.env, SESSION_ID: sessionId, SESSION_TEMP_DIR: sessionTempDir },
       stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+      detached: true,
     });
   }
 }

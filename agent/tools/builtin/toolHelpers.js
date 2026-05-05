@@ -20,6 +20,14 @@ export function tool({ name, description, inputSchema, execute }) {
   return sdkTool(name, description, inputSchema, execute);
 }
 
+// Keys that are valid JSON Schema but not supported by the Gemini function-declaration schema.
+const GEMINI_UNSUPPORTED_KEYS = new Set([
+  '$schema',
+  'additionalProperties',
+  'exclusiveMinimum',  // handled below for numeric form; boolean form is dropped
+  'exclusiveMaximum',
+]);
+
 export function sanitizeSchemaForGemini(schema) {
   if (!schema || typeof schema !== 'object') return schema;
   if (Array.isArray(schema)) return schema.map(sanitizeSchemaForGemini);
@@ -30,8 +38,8 @@ export function sanitizeSchemaForGemini(schema) {
       out.minimum = v;
     } else if (k === 'exclusiveMaximum' && typeof v === 'number') {
       out.maximum = v;
-    } else if (k === 'exclusiveMinimum' || k === 'exclusiveMaximum') {
-      // boolean form (JSON Schema draft 4) — drop it
+    } else if (GEMINI_UNSUPPORTED_KEYS.has(k)) {
+      // drop — Gemini rejects these fields
     } else {
       out[k] = sanitizeSchemaForGemini(v);
     }

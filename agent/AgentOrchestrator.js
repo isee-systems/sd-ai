@@ -20,6 +20,37 @@ import config from '../config.js';
 import { LLMWrapper } from '../utilities/LLMWrapper.js';
 import { sanitizeSchemaForGemini } from './tools/builtin/toolHelpers.js';
 
+// Normalize a single message to Gemini format {role:'user'|'model', parts:[{text}]}.
+// Handles Anthropic-format messages ({role, content}) that arrive when switching
+// from an Anthropic-mode agent or from client-provided historical messages.
+function toGeminiMessage(msg) {
+  if (Array.isArray(msg.parts)) {
+    const role = msg.role === 'assistant' ? 'model' : msg.role;
+    return role === msg.role ? msg : { ...msg, role };
+  }
+  const role = msg.role === 'assistant' ? 'model' : msg.role;
+  let text = '';
+  if (typeof msg.content === 'string') {
+    text = msg.content;
+  } else if (Array.isArray(msg.content)) {
+    text = msg.content.filter(b => b.type === 'text').map(b => b.text || '').join('\n');
+  }
+  return { role, parts: [{ text }] };
+}
+
+// Normalize a single message to Anthropic format {role:'user'|'assistant', content}.
+// Handles Gemini-format messages ({role:'user'|'model', parts}) that arrive when
+// switching from a Gemini-mode agent.
+function toAnthropicMessage(msg) {
+  if (!Array.isArray(msg.parts)) {
+    const role = msg.role === 'model' ? 'assistant' : msg.role;
+    return role === msg.role ? msg : { ...msg, role };
+  }
+  const role = msg.role === 'model' ? 'assistant' : msg.role;
+  const text = msg.parts.filter(p => p.text).map(p => p.text).join('\n');
+  return { role, content: text };
+}
+
 /**
  * AgentOrchestrator
  * Manages the Claude Agent SDK lifecycle and message translation
@@ -251,7 +282,7 @@ export class AgentOrchestrator {
       // Build prompt - inject prior agent's history as plain string prefix on agent switch
       let prompt = userMessage;
       if (previousAgentContext?.length > 0 && !this.sdkSessionId) {
-        const contextToReplay = previousAgentContext.slice(0, -1);
+        const contextToReplay = previousAgentContext.slice(0, -1).map(toAnthropicMessage);
         if (contextToReplay.length > 0) {
           logger.debug(`[Agent switch → SDK] Replaying ${contextToReplay.length} messages from prior agent.`);
           const contextText = await this.buildPriorContextTextAnthropic(contextToReplay);
@@ -553,6 +584,13 @@ export class AgentOrchestrator {
 
     // Use the live session context as the messages array — no local copy
     const messages = this.sessionManager.getConversationContext(this.sessionId);
+
+    // Normalize in-place: Gemini-format messages ({role:'user'|'model', parts}) from
+    // historical session load or a prior Gemini-mode agent switch must become
+    // Anthropic-format ({role:'user'|'assistant', content}) before the API call.
+    for (let i = 0; i < messages.length; i++) {
+      messages[i] = toAnthropicMessage(messages[i]);
+    }
 
     // Check model token count and update session state
     const session = this.sessionManager.getSession(this.sessionId);
@@ -1008,6 +1046,14 @@ export class AgentOrchestrator {
     await this.sessionManager.cleanupContext(this.sessionId, config.agentMaxContextTokens);
 
     const messages = this.sessionManager.getConversationContext(this.sessionId);
+
+    // Normalize in-place: Anthropic-format messages ({role,content}) from historical
+    // session load or a prior Anthropic-mode agent switch must become Gemini-format
+    // ({role:'user'|'model', parts}) before being sent to the Gemini API.
+    for (let i = 0; i < messages.length; i++) {
+      messages[i] = toGeminiMessage(messages[i]);
+    }
+
     const currentModel = session?.clientModel;
 
     let modelTokenCount = 0;
@@ -1229,7 +1275,7 @@ export class AgentOrchestrator {
 
       let prompt = userMessage;
       if (previousAgentContext?.length > 0 && !this.#adkHasPriorContext) {
-        const contextToReplay = previousAgentContext.slice(0, -1);
+        const contextToReplay = previousAgentContext.slice(0, -1).map(toGeminiMessage);
         if (contextToReplay.length > 0) {
           logger.debug(`[Agent switch → ADK] Replaying ${contextToReplay.length} messages from prior agent.`);
           const contextText = await this.buildPriorContextTextGemini(contextToReplay);

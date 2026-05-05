@@ -66,20 +66,18 @@ wss.on('connection', (ws) => {
   new WebSocketHandler(ws, sessionManager);
 });
 
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  logger.log('SIGTERM received, shutting down gracefully...');
+function shutdown(signal) {
+  logger.log(`${signal} received, shutting down gracefully...`);
+  // Kill all worker child processes first — ws.close() is async and process.exit()
+  // fires before #onClose can run #killWorker, so workers would otherwise be orphaned.
+  WebSocketHandler.killAll();
   wss.clients.forEach(ws => ws.close(1000, 'Server shutting down'));
   sessionManager.shutdown();
   process.exit(0);
-});
+}
 
-process.on('SIGINT', () => {
-  logger.log('SIGINT received, shutting down gracefully...');
-  wss.clients.forEach(ws => ws.close(1000, 'Server shutting down'));
-  sessionManager.shutdown();
-  process.exit(0);
-});
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT',  () => shutdown('SIGINT'));
 
 // Start HTTP server
 server.listen(config.port, () => {
