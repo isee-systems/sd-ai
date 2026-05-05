@@ -33,6 +33,9 @@ import { sanitizeSchemaForGemini } from './tools/builtin/toolHelpers.js';
  * - Send messages to client via WebSocket
  */
 export class AgentOrchestrator {
+  #geminiManualCacheName = null;
+  #geminiManualCacheKey = null;
+
   constructor(sessionManager, sessionId, sendToClient, configPath) {
     this.sessionManager = sessionManager;
     this.sessionId = sessionId;
@@ -167,10 +170,6 @@ export class AgentOrchestrator {
 
       logger.log(`Model token count: ${modelTokenCount} (limit: ${config.agentMaxTokensForEngines}, exceeds: ${modelExceedsLimit})`);
 
-      if (modelExceedsLimit) {
-        const generateTool = mode === 'sfd' ? 'generate_quantitative_model' : 'generate_qualitative_model';
-        systemPrompt += `\n\n**IMPORTANT: Model Size Notice**\n\nThe current model has exceeded ${config.agentMaxTokensForEngines} tokens (${modelTokenCount} tokens). The \`${generateTool}\` tool has been disabled. Call \`get_current_model\` to load the model to disk, then use \`read_model_section\` and \`edit_model_section\` to inspect and modify it.`;
-      }
     }
 
     await this.runAgentConversationWithAnthropicSDK(userMessage, systemPrompt, modelTokenCount, previousAgentContext);
@@ -487,6 +486,7 @@ export class AgentOrchestrator {
    */
   async handleAnthropicSDKResultMessage(message) {
     if (message.subtype === 'success') {
+      this.#logApiUsage('anthropic-sdk', message.usage);
       logger.log(`SDK conversation completed successfully for session ${this.sessionId}`);
     } else if (message.subtype === 'error') {
       logger.error(`SDK conversation error for session ${this.sessionId}:`, message.error || message);
@@ -559,27 +559,16 @@ export class AgentOrchestrator {
     const currentModel = session?.clientModel;
     const mode = session?.mode;
     let modelTokenCount = 0;
-    let modelSizeNotice = null;
 
     if (currentModel) {
       const modelJson = JSON.stringify(currentModel, null, 2);
       modelTokenCount = countTokens(modelJson);
       this.sessionManager.updateModelTokenCount(this.sessionId, modelTokenCount);
-      const modelExceedsLimit = modelTokenCount > config.agentMaxTokensForEngines;
-
-      logger.log(`Model token count: ${modelTokenCount} (limit: ${config.agentMaxTokensForEngines}, exceeds: ${modelExceedsLimit})`);
-
-      if (modelExceedsLimit) {
-        const generateTool = mode === 'sfd' ? 'generate_quantitative_model' : 'generate_qualitative_model';
-        modelSizeNotice = `\n\n**IMPORTANT: Model Size Notice**\n\nThe current model has exceeded ${config.agentMaxTokensForEngines} tokens (${modelTokenCount} tokens). The \`${generateTool}\` tool has been disabled. Call \`get_current_model\` to load the model to disk, then use \`read_model_section\` and \`edit_model_section\` to inspect and modify it.`;
-      }
+      logger.log(`Model token count: ${modelTokenCount} (limit: ${config.agentMaxTokensForEngines}, exceeds: ${modelTokenCount > config.agentMaxTokensForEngines})`);
     }
 
-    // Build system prompt array — stable part is cached, variable model-size notice is not
-    // (keeping them separate prevents the model-size notice from busting the cache on the stable prefix)
     const systemBlocks = [
-      { type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } },
-      ...(modelSizeNotice ? [{ type: 'text', text: modelSizeNotice }] : [])
+      { type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }
     ];
 
     // Convert tool servers to Anthropic tool format (with conditional filtering)
@@ -613,6 +602,8 @@ export class AgentOrchestrator {
           logger.log(`Stop requested during API call for session ${this.sessionId}`);
           break;
         }
+
+        this.#logApiUsage('anthropic-manual', response.usage);
 
         // Process response
         continueLoop = await this.processAgentResponseAnthropicManual(response, messages, builtInTools, dynamicTools);
@@ -1031,31 +1022,18 @@ export class AgentOrchestrator {
     const currentModel = session?.clientModel;
 
     let modelTokenCount = 0;
-    let modelSizeNotice = null;
 
     if (currentModel) {
       const modelJson = JSON.stringify(currentModel, null, 2);
       modelTokenCount = encode(modelJson).length;
       this.sessionManager.updateModelTokenCount(this.sessionId, modelTokenCount);
-      const modelExceedsLimit = modelTokenCount > config.agentMaxTokensForEngines;
-      logger.log(`Model token count: ${modelTokenCount} (limit: ${config.agentMaxTokensForEngines}, exceeds: ${modelExceedsLimit})`);
-
-      if (modelExceedsLimit) {
-        const generateTool = mode === 'sfd' ? 'generate_quantitative_model' : 'generate_qualitative_model';
-        modelSizeNotice = `\n\n**IMPORTANT: Model Size Notice**\n\nThe current model has exceeded ${config.agentMaxTokensForEngines} tokens (${modelTokenCount} tokens). The \`${generateTool}\` tool has been disabled. Call \`get_current_model\` to load the model to disk, then use \`read_model_section\` and \`edit_model_section\` to inspect and modify it.`;
-      }
+      logger.log(`Model token count: ${modelTokenCount} (limit: ${config.agentMaxTokensForEngines}, exceeds: ${modelTokenCount > config.agentMaxTokensForEngines})`);
     }
 
-    const fullSystemPrompt = modelSizeNotice ? systemPrompt + modelSizeNotice : systemPrompt;
     const toolDeclarations = this.convertToolsToGeminiFormat(builtInTools, dynamicTools, modelTokenCount, mode);
 
-    const geminiConfig = {
-      systemInstruction: fullSystemPrompt,
-      thinkingConfig: config.agentGeminiThinking
-    };
-    if (toolDeclarations.length > 0) {
-      geminiConfig.tools = [{ functionDeclarations: toolDeclarations }];
-    }
+    // Build or reuse per-session Gemini context cache (system prompt + tools)
+    const geminiConfig = await this.#getGeminiManualConfig(systemPrompt, toolDeclarations);
 
     let continueLoop = true;
     let completedNaturally = false;
@@ -1075,6 +1053,8 @@ export class AgentOrchestrator {
         });
 
         if (this.stopRequested) break;
+
+        this.#logApiUsage('gemini-manual', response.usageMetadata);
 
         continueLoop = await this.processGeminiManualResponse(response, messages, builtInTools, dynamicTools);
         if (!continueLoop) completedNaturally = true;
@@ -1197,13 +1177,7 @@ export class AgentOrchestrator {
       const modelJson = JSON.stringify(currentModel, null, 2);
       modelTokenCount = encode(modelJson).length;
       this.sessionManager.updateModelTokenCount(this.sessionId, modelTokenCount);
-      const modelExceedsLimit = modelTokenCount > config.agentMaxTokensForEngines;
-      logger.log(`Model token count: ${modelTokenCount} (limit: ${config.agentMaxTokensForEngines}, exceeds: ${modelExceedsLimit})`);
-
-      if (modelExceedsLimit) {
-        const generateTool = mode === 'sfd' ? 'generate_quantitative_model' : 'generate_qualitative_model';
-        systemPrompt += `\n\n**IMPORTANT: Model Size Notice**\n\nThe current model has exceeded ${config.agentMaxTokensForEngines} tokens (${modelTokenCount} tokens). The \`${generateTool}\` tool has been disabled. Call \`get_current_model\` to load the model to disk, then use \`read_model_section\` and \`edit_model_section\` to inspect and modify it.`;
-      }
+      logger.log(`Model token count: ${modelTokenCount} (limit: ${config.agentMaxTokensForEngines}, exceeds: ${modelTokenCount > config.agentMaxTokensForEngines})`);
     }
 
     this.abortController = new AbortController();
@@ -1323,6 +1297,10 @@ export class AgentOrchestrator {
   async handleAdkEvent(event) {
     if (event.errorCode) {
       throw new Error(event.errorMessage || `ADK error: ${event.errorCode}`);
+    }
+
+    if (event.usageMetadata) {
+      this.#logApiUsage('gemini-adk', event.usageMetadata);
     }
 
     const content = event.content;
@@ -1479,8 +1457,82 @@ export class AgentOrchestrator {
     this.abortController?.abort();
   }
 
+  async #getGeminiManualConfig(systemPrompt, toolDeclarations) {
+    // Build a cache key from the stable inputs — recreate if they change (e.g. tool set changes on model resize)
+    const cacheKey = systemPrompt + JSON.stringify(toolDeclarations.map(t => t.name));
+
+    if (this.#geminiManualCacheName && this.#geminiManualCacheKey === cacheKey) {
+      logger.log(`[gemini-cache] reusing cache ${this.#geminiManualCacheName}`);
+      return {
+        cachedContent: this.#geminiManualCacheName,
+        thinkingConfig: config.agentGeminiThinking
+      };
+    }
+
+    // Delete the old cache if the key changed
+    if (this.#geminiManualCacheName) {
+      try {
+        await this.gemini.caches.delete({ name: this.#geminiManualCacheName });
+        logger.log(`[gemini-cache] deleted stale cache ${this.#geminiManualCacheName}`);
+      } catch (e) {
+        logger.warn('[gemini-cache] failed to delete stale cache:', e.message);
+      }
+      this.#geminiManualCacheName = null;
+      this.#geminiManualCacheKey = null;
+    }
+
+    try {
+      const cacheConfig = {
+        ttl: '3600s',
+        systemInstruction: systemPrompt
+      };
+      if (toolDeclarations.length > 0) {
+        cacheConfig.tools = [{ functionDeclarations: toolDeclarations }];
+      }
+
+      const cache = await this.gemini.caches.create({
+        model: config.agentGeminiModel,
+        config: cacheConfig
+      });
+
+      this.#geminiManualCacheName = cache.name;
+      this.#geminiManualCacheKey = cacheKey;
+      logger.log(`[gemini-cache] created cache ${cache.name}`);
+
+      return {
+        cachedContent: cache.name,
+        thinkingConfig: config.agentGeminiThinking
+      };
+    } catch (e) {
+      logger.warn('[gemini-cache] failed to create cache, falling back to uncached:', e.message);
+      const cfg = {
+        systemInstruction: systemPrompt,
+        thinkingConfig: config.agentGeminiThinking
+      };
+      if (toolDeclarations.length > 0) {
+        cfg.tools = [{ functionDeclarations: toolDeclarations }];
+      }
+      return cfg;
+    }
+  }
+
+  #logApiUsage(method, usage) {
+    if (!usage) return;
+    if (method === 'anthropic-manual' || method === 'anthropic-sdk') {
+      const { input_tokens = 0, output_tokens = 0, cache_creation_input_tokens = 0, cache_read_input_tokens = 0 } = usage;
+      logger.log(`[usage:${method}] input=${input_tokens} output=${output_tokens} cache_write=${cache_creation_input_tokens} cache_read=${cache_read_input_tokens}`);
+    } else {
+      const { promptTokenCount = 0, candidatesTokenCount = 0, cachedContentTokenCount = 0, thoughtsTokenCount = 0 } = usage;
+      logger.log(`[usage:${method}] prompt=${promptTokenCount} output=${candidatesTokenCount} cached=${cachedContentTokenCount} thoughts=${thoughtsTokenCount}`);
+    }
+  }
+
   destroy() {
     logger.log(`AgentOrchestrator destroyed for session ${this.sessionId}`);
+
+    if (this.#geminiManualCacheName && this.gemini) {
+      this.gemini.caches.delete({ name: this.#geminiManualCacheName }).catch(() => {});
+    }
 
     // Clear any references
     this.sessionManager = null;
