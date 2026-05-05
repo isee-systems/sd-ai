@@ -13,7 +13,7 @@ const config = {
     "agentAnthropicSummaryModel": 'claude-haiku-4-5', // Model used for conversation history summarization MUST BE Anthropic models
     "agentGeminiModel": 'gemini-3-flash-preview', // Model used for agent conversations MUST BE gemini models
     "agentGeminiSummaryModel": 'gemini-3.1-flash-preview', // Model used for conversation history summarization MUST BE gemini models
-    "agentAnthropicEffort": undefined,
+    "agentAnthropicEffort": "low",
     "agentAnthropicThinking": { type: "disabled" },
     "agentGeminiThinking": { thinkingLevel: ThinkingLevel.LOW }
 };
