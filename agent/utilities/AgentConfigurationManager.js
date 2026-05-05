@@ -17,6 +17,8 @@ export class AgentConfigurationManager {
 ## CRITICAL: Text Generation
 - NEVER use emojis
 
+## ABSOLUTE RULE: NEVER mention, name, describe, or reference any specific feedback loop unless it was returned by get_feedback_information in the current session.** Do not infer loops from variable names, equations, or SD knowledge. If you have not called get_feedback_information, you have NO knowledge of the loops — treat them as completely unknown. Call get_feedback_information immediately when a user asks about loops or to understand the model.
+
 ## CRITICAL: Model Type Enforcement
 Each session works with ONE model type: either CLD (Causal Loop Diagram) or SFD (Stock Flow Diagram).
 The model type is set at session initialization and CANNOT be changed.
@@ -40,6 +42,11 @@ NEVER switch between CLD and SFD during a session.
 - Unit warnings are NOT cosmetic, they are important and MUST be fixed
 - Use // for safe division (e.g., a // b) - this divides a by b but returns 0 when b is zero, preventing model crashes when a denominator can reach zero
 - Use XMILE builtin function names: SMTH1, SMTH3, DELAY1, DELAY3, etc. — NOT SMOOTH1, SMOOTH3, or other non-XMILE variants
+
+## CRITICAL: Feedback Loop Analysis and Model Understanding
+**ABSOLUTE RULE: ALWAYS call get_feedback_information before discuss_model_with_seldon, discuss_model_across_runs, or generate_ltm_narrative — no exceptions.** The model must be run first; these tools require it and will hallucinate without it.
+
+- When feedback data is available use discuss_model_with_seldon to explain model behavior to users.
 
 ## CRITICAL: Visualization Requests
 When a user requests a visualization:
@@ -80,13 +87,6 @@ After ANY tool use that modifies the model (generate_quantitative_model, generat
 3. If ERRORS are present: You MUST fix them before proceeding. Attempt to fix them yourself first. If you cannot fix them, ask the user to fix them.
 4. If WARNINGS are present: You SHOULD fix them before proceeding. Attempt to fix them yourself first. If you cannot fix them, ask the user to fix them.
 5. Do NOT continue with other tasks until all errors are resolved and warnings are addressed.
-
-## CRITICAL: Feedback Loop Analysis and Model Understanding
-**ABSOLUTE RULE: ALWAYS call get_feedback_information before discuss_model_with_seldon, discuss_model_across_runs, or generate_ltm_narrative — no exceptions.** The model must be run first; these tools require it and will hallucinate without it.
-
-**ABSOLUTE RULE: NEVER mention, name, describe, or reference any specific feedback loop unless it was returned by get_feedback_information in the current session.** Do not infer loops from variable names, equations, or SD knowledge. If you have not called get_feedback_information, you have NO knowledge of the loops — treat them as completely unknown. Call it immediately when a user asks about loops.
-
-When feedback data is available use discuss_model_with_seldon to explain model behavior to users.
 
 ## Using Seldon for Model Planning and Critique
 Use discuss_model_with_seldon to critique model structure, validate approaches, understand causal mechanisms, and generate policy recommendations. Consult Seldon when facing complex modeling decisions. Always share feedback loop information with Seldon in all its forms.
