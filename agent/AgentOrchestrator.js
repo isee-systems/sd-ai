@@ -267,7 +267,7 @@ export class AgentOrchestrator {
         allowedTools: allowedTools,
         permissionMode: 'bypassPermissions',
         thinking: config.agentAnthropicThinking,
-        effort: config.agentAnthropicEffort,
+        ...(config.agentAnthropicThinking?.type !== 'disabled' && { effort: config.agentAnthropicEffort }),
         compact: true  // Enable automatic compaction
       };
 
@@ -625,13 +625,14 @@ export class AgentOrchestrator {
 
       try {
         // Call Claude API
+        const thinkingEnabled = config.agentAnthropicThinking?.type !== 'disabled';
         const response = await this.anthropic.messages.create({
           model: config.agentAnthropicModel,
           max_tokens: 8192,
           system: systemBlocks,
           messages: messages,
           thinking: config.agentAnthropicThinking,
-          effort: config.agentAnthropicEffort,
+          ...(thinkingEnabled && { effort: config.agentAnthropicEffort }),
           tools: tools.length > 0 ? tools : undefined
         });
 
