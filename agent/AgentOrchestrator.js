@@ -568,7 +568,7 @@ export class AgentOrchestrator {
     }
 
     const systemBlocks = [
-      { type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }
+      { type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral', ttl: '1h' } }
     ];
 
     // Convert tool servers to Anthropic tool format (with conditional filtering)
@@ -853,41 +853,30 @@ export class AgentOrchestrator {
    * Used when injecting prior agent context into an SDK session.
    */
   async buildPriorContextTextAnthropic(history) {
-    const PRIOR_CONTEXT_TOKEN_LIMIT = 10_000;
-    const tokenCount = countTokens(JSON.stringify(history));
-
-    if (tokenCount > PRIOR_CONTEXT_TOKEN_LIMIT) {
-      logger.log(`Prior agent context too large (${tokenCount} tokens), summarizing before SDK injection`);
-      try {
-        const conversationText = history.map((msg) => {
-          if (msg.role === 'user') {
-            return `User: ${typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)}`;
-          } else if (msg.role === 'assistant') {
-            if (Array.isArray(msg.content)) {
-              const textContent = msg.content.filter(b => b.type === 'text').map(b => b.text).join('\n');
-              return textContent ? `Assistant: ${textContent}` : '';
-            }
-            return `Assistant: ${msg.content}`;
+    try {
+      const conversationText = history.map((msg) => {
+        if (msg.role === 'user') {
+          return `User: ${typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)}`;
+        } else if (msg.role === 'assistant') {
+          if (Array.isArray(msg.content)) {
+            const textContent = msg.content.filter(b => b.type === 'text').map(b => b.text).join('\n');
+            return textContent ? `Assistant: ${textContent}` : '';
           }
-          return '';
-        }).filter(line => line).join('\n\n');
+          return `Assistant: ${msg.content}`;
+        }
+        return '';
+      }).filter(line => line).join('\n\n');
 
-        const response = await this.llm.createChatCompletion([{
-          role: 'user',
-          content: `Summarize this conversation history concisely (2-4 paragraphs):\n\n${conversationText}`
-        }], config.agentGeminiSummaryModel);
-        return response.content;
-      } catch (error) {
-        logger.error('Error summarizing prior context:', error);
-        return '[Prior conversation condensed due to size]';
-      }
+      logger.log(`Summarizing prior agent context (${history.length} messages) before injection`);
+      const response = await this.llm.createChatCompletion([{
+        role: 'user',
+        content: `Summarize this conversation history concisely (2-4 paragraphs):\n\n${conversationText}`
+      }], config.agentAnthropicSummaryModel);
+      return response.content;
+    } catch (error) {
+      logger.error('Error summarizing prior context:', error);
+      return '[Prior conversation condensed due to size]';
     }
-
-    return history.map(msg => {
-      const role = msg.role === 'user' ? 'User' : 'Assistant';
-      const text = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
-      return `${role}: ${text}`;
-    }).join('\n\n');
   }
 
   /**
@@ -989,7 +978,7 @@ export class AgentOrchestrator {
 
     // Cache all tool definitions up to the last one — stable within a session
     if (tools.length > 0) {
-      tools[tools.length - 1] = { ...tools[tools.length - 1], cache_control: { type: 'ephemeral' } };
+      tools[tools.length - 1] = { ...tools[tools.length - 1], cache_control: { type: 'ephemeral', ttl: '1h' } };
     }
 
     return tools;
@@ -1400,39 +1389,27 @@ export class AgentOrchestrator {
   }
 
   async buildPriorContextTextGemini(history) {
-    const PRIOR_CONTEXT_TOKEN_LIMIT = 10_000;
-    const tokenCount = encode(JSON.stringify(history)).length;
+    try {
+      const conversationText = history.map((msg) => {
+        const role = msg.role === 'user' ? 'User' : 'Assistant';
+        if (!Array.isArray(msg.parts)) return '';
+        const text = msg.parts.filter(p => p.text).map(p => p.text).join('\n');
+        return text ? `${role}: ${text}` : '';
+      }).filter(line => line).join('\n\n');
 
-    if (tokenCount > PRIOR_CONTEXT_TOKEN_LIMIT) {
-      logger.log(`Prior agent context too large (${tokenCount} tokens), summarizing before ADK injection`);
-      try {
-        const conversationText = history.map((msg) => {
-          const role = msg.role === 'user' ? 'User' : 'Assistant';
-          if (!Array.isArray(msg.parts)) return '';
-          const text = msg.parts.filter(p => p.text).map(p => p.text).join('\n');
-          return text ? `${role}: ${text}` : '';
-        }).filter(line => line).join('\n\n');
-
-        const response = await this.gemini.models.generateContent({
-          model: config.agentGeminiSummaryModel,
-          contents: [{
-            role: 'user',
-            parts: [{ text: `Summarize this conversation history concisely (2-4 paragraphs):\n\n${conversationText}` }]
-          }]
-        });
-        return response.text || response.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      } catch (error) {
-        logger.error('Error summarizing prior context:', error);
-        return '[Prior conversation condensed due to size]';
-      }
+      logger.log(`Summarizing prior agent context (${history.length} messages) before injection`);
+      const response = await this.gemini.models.generateContent({
+        model: config.agentGeminiSummaryModel,
+        contents: [{
+          role: 'user',
+          parts: [{ text: `Summarize this conversation history concisely (2-4 paragraphs):\n\n${conversationText}` }]
+        }]
+      });
+      return response.text || response.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    } catch (error) {
+      logger.error('Error summarizing prior context:', error);
+      return '[Prior conversation condensed due to size]';
     }
-
-    return history.map(msg => {
-      const role = msg.role === 'user' ? 'User' : 'Assistant';
-      if (!Array.isArray(msg.parts)) return '';
-      const text = msg.parts.filter(p => p.text).map(p => p.text).join('\n');
-      return text ? `${role}: ${text}` : '';
-    }).filter(line => line).join('\n\n');
   }
 
   /**

@@ -7,7 +7,7 @@ const config = {
     "websocketPort": 3000,
     "sessionTempDir": process.env.SESSION_TEMP_DIR || null, // Optional custom temp directory for session files (defaults to OS tmpdir/sd-agent)
     "agentMaxTokensForEngines": 50_000, // Maximum tokens before switching to file-based editing
-    "agentMaxContextTokens": 50_000, // Maximum tokens for conversation history sent to Claude API
+    "agentMaxContextTokens": 32_000, // Maximum tokens for conversation history sent to Claude API
     "agentTargetedEditingMinimum": 5_000, //Above this size, models can be edited without quantitative/qualitative engine
     "agentAnthropicModel": 'claude-sonnet-4-6', // Model used for agent conversations MUST BE Anthropic models
     "agentAnthropicSummaryModel": 'claude-haiku-4-5', // Model used for conversation history summarization MUST BE Anthropic models
