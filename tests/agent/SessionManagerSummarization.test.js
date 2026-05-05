@@ -10,23 +10,44 @@ const __dirname = path.dirname(__filename);
 const AGENT_A_CONFIG = path.join(__dirname, '../../agent/config/socrates.md');
 const AGENT_B_CONFIG = path.join(__dirname, '../../agent/config/merlin.md');
 
-function makeMockAnthropic(summaryText = 'Mocked summary.') {
+function makeGeminiMock(summaryText = 'Mocked summary.') {
   return {
-    messages: {
-      create: jest.fn().mockResolvedValue({
-        content: [{ text: summaryText }]
+    models: {
+      generateContent: jest.fn().mockResolvedValue({
+        text: summaryText
       })
     }
   };
 }
 
+function userMsg(text) {
+  return { role: 'user', parts: [{ text }] };
+}
+
+function modelMsg(text) {
+  return { role: 'model', parts: [{ text }] };
+}
+
 function modelResultMessage(id) {
   return {
     role: 'user',
-    content: [{
-      type: 'tool_result',
-      tool_use_id: id,
-      content: JSON.stringify({ model: { variables: [] }, resultId: id })
+    parts: [{
+      functionResponse: {
+        name: 'generate_model',
+        response: { result: JSON.stringify({ model: { variables: [] }, resultId: id }) }
+      }
+    }]
+  };
+}
+
+function modelToolCallMessage(id) {
+  return {
+    role: 'model',
+    parts: [{
+      functionCall: {
+        name: 'generate_model',
+        args: { id }
+      }
     }]
   };
 }
@@ -41,40 +62,40 @@ describe('SessionManager.cleanupContext', () => {
     sessionManager = new SessionManager();
     sessionId = sessionManager.createSession(null);
     sessionManager.initializeSession(sessionId, 'cld', {}, [], {});
-    sessionManager.anthropic = makeMockAnthropic();
+    sessionManager.gemini = makeGeminiMock();
   });
 
   afterEach(() => { sessionManager.shutdown(); });
 
   it('does nothing when context is under the token limit', async () => {
-    sessionManager.addToConversationHistory(sessionId, { role: 'user', content: 'Hello' });
-    sessionManager.addToConversationHistory(sessionId, { role: 'assistant', content: 'Hi there' });
+    sessionManager.addToConversationHistory(sessionId, userMsg('Hello'));
+    sessionManager.addToConversationHistory(sessionId, modelMsg('Hi there'));
 
     const contextBefore = [...sessionManager.getConversationContext(sessionId)];
     await sessionManager.cleanupContext(sessionId, 100_000);
 
     expect(sessionManager.getConversationContext(sessionId)).toEqual(contextBefore);
-    expect(sessionManager.anthropic.messages.create).not.toHaveBeenCalled();
+    expect(sessionManager.gemini.models.generateContent).not.toHaveBeenCalled();
   });
 
   it('replaces old messages with a summary when over the token limit', async () => {
     for (let i = 0; i < 10; i++) {
-      sessionManager.addToConversationHistory(sessionId, { role: 'user', content: `Message ${i}` });
-      sessionManager.addToConversationHistory(sessionId, { role: 'assistant', content: `Response ${i}` });
+      sessionManager.addToConversationHistory(sessionId, userMsg(`Message ${i}`));
+      sessionManager.addToConversationHistory(sessionId, modelMsg(`Response ${i}`));
     }
 
     await sessionManager.cleanupContext(sessionId, 1);
 
     const context = sessionManager.getConversationContext(sessionId);
     expect(context[0].role).toBe('user');
-    expect(context[0].content).toMatch(/\[Previous conversation summary\]/);
-    expect(sessionManager.anthropic.messages.create).toHaveBeenCalled();
+    expect(context[0].parts[0].text).toMatch(/\[Previous conversation summary\]/);
+    expect(sessionManager.gemini.models.generateContent).toHaveBeenCalled();
   });
 
   it('modifies the session context in-place so the live reference reflects the change', async () => {
     for (let i = 0; i < 8; i++) {
-      sessionManager.addToConversationHistory(sessionId, { role: 'user', content: `Message ${i}` });
-      sessionManager.addToConversationHistory(sessionId, { role: 'assistant', content: `Response ${i}` });
+      sessionManager.addToConversationHistory(sessionId, userMsg(`Message ${i}`));
+      sessionManager.addToConversationHistory(sessionId, modelMsg(`Response ${i}`));
     }
 
     const liveRef = sessionManager.getConversationContext(sessionId);
@@ -85,21 +106,21 @@ describe('SessionManager.cleanupContext', () => {
     // splice is in-place: the same array object must be updated, not replaced
     expect(liveRef).toBe(sessionManager.getConversationContext(sessionId));
     expect(liveRef.length).toBeLessThan(originalLength);
-    expect(liveRef[0].content).toMatch(/\[Previous conversation summary\]/);
+    expect(liveRef[0].parts[0].text).toMatch(/\[Previous conversation summary\]/);
   });
 
   it('uses a fallback summary message when the LLM call fails', async () => {
-    sessionManager.anthropic.messages.create.mockRejectedValue(new Error('API error'));
+    sessionManager.gemini.models.generateContent.mockRejectedValue(new Error('API error'));
 
     for (let i = 0; i < 5; i++) {
-      sessionManager.addToConversationHistory(sessionId, { role: 'user', content: `Message ${i}` });
-      sessionManager.addToConversationHistory(sessionId, { role: 'assistant', content: `Response ${i}` });
+      sessionManager.addToConversationHistory(sessionId, userMsg(`Message ${i}`));
+      sessionManager.addToConversationHistory(sessionId, modelMsg(`Response ${i}`));
     }
 
     await sessionManager.cleanupContext(sessionId, 1);
 
     const context = sessionManager.getConversationContext(sessionId);
-    expect(context[0].content).toMatch(/condensed/);
+    expect(context[0].parts[0].text).toMatch(/condensed/);
   });
 
   it('does nothing for a non-existent session ID', async () => {
@@ -119,7 +140,7 @@ describe('SessionManager.cleanupContext', () => {
     sessionManager = new SessionManager();
     sessionId = sessionManager.createSession(null);
     sessionManager.initializeSession(sessionId, 'cld', {}, [], {});
-    sessionManager.anthropic = makeMockAnthropic();
+    sessionManager.gemini = makeGeminiMock();
   });
 
   afterEach(() => { sessionManager.shutdown(); });
@@ -133,7 +154,8 @@ describe('SessionManager.cleanupContext', () => {
 
   it('summarizes after removing stale models when still over the token limit', async () => {
     for (let i = 0; i < 5; i++) {
-      sessionManager.addToConversationHistory(sessionId, { role: 'user', content: `request ${i}` });
+      sessionManager.addToConversationHistory(sessionId, userMsg(`request ${i}`));
+      sessionManager.addToConversationHistory(sessionId, modelToolCallMessage(String(i)));
       sessionManager.addToConversationHistory(sessionId, modelResultMessage(String(i)));
     }
 
@@ -141,10 +163,10 @@ describe('SessionManager.cleanupContext', () => {
 
     const context = sessionManager.getConversationContext(sessionId);
     const hasSummary = context.some(
-      msg => typeof msg.content === 'string' && msg.content.includes('[Previous conversation summary]')
+      msg => Array.isArray(msg.parts) && msg.parts[0]?.text?.includes('[Previous conversation summary]')
     );
     expect(hasSummary).toBe(true);
-    expect(sessionManager.anthropic.messages.create).toHaveBeenCalled();
+    expect(sessionManager.gemini.models.generateContent).toHaveBeenCalled();
   });
 });
 
@@ -159,7 +181,8 @@ describe('Agent switch - context continuity between orchestrators', () => {
     sessionManager = new SessionManager();
     sessionId = sessionManager.createSession(null);
     sessionManager.initializeSession(sessionId, 'cld', {}, [], {});
-    process.env.GOOGLE_API_KEY = 'dummy_key';
+    process.env.GEMINI_API_KEY = 'dummy_key';
+    process.env.ANTHROPIC_API_KEY = 'dummy_key';
   });
 
   afterEach(() => {
@@ -171,9 +194,9 @@ describe('Agent switch - context continuity between orchestrators', () => {
     const orchestratorA = new AgentOrchestrator(sessionManager, sessionId, sendToClient, AGENT_A_CONFIG);
 
     // Simulate agent A processing a conversation turn (manual mode pushes to live context)
-    sessionManager.addToConversationHistory(sessionId, { role: 'user', content: 'Build a causal loop diagram' });
+    sessionManager.addToConversationHistory(sessionId, userMsg('Build a causal loop diagram'));
     const context = sessionManager.getConversationContext(sessionId);
-    context.push({ role: 'assistant', content: [{ type: 'text', text: 'Here is the CLD.' }] });
+    context.push(modelMsg('Here is the CLD.'));
 
     // websocket.js captures the context on switch, then creates a new orchestrator
     const capturedOnSwitch = sessionManager.getConversationContext(sessionId);
@@ -184,15 +207,15 @@ describe('Agent switch - context continuity between orchestrators', () => {
     const agentBContext = sessionManager.getConversationContext(sessionId);
     expect(agentBContext).toBe(capturedOnSwitch);
     expect(agentBContext).toHaveLength(2);
-    expect(agentBContext[0].content).toBe('Build a causal loop diagram');
-    expect(agentBContext[1].content[0].text).toBe('Here is the CLD.');
+    expect(agentBContext[0].parts[0].text).toBe('Build a causal loop diagram');
+    expect(agentBContext[1].parts[0].text).toBe('Here is the CLD.');
 
     orchestratorA.destroy();
     orchestratorB.destroy();
   });
 
   it('second orchestrator sees the summarized context after summarization by the first', async () => {
-    sessionManager.anthropic = makeMockAnthropic(
+    sessionManager.gemini = makeGeminiMock(
       'Agent A built a CLD with 5 variables and 3 feedback loops.'
     );
 
@@ -200,8 +223,8 @@ describe('Agent switch - context continuity between orchestrators', () => {
 
     // Agent A accumulates a large context
     for (let i = 0; i < 10; i++) {
-      sessionManager.addToConversationHistory(sessionId, { role: 'user', content: `Step ${i}` });
-      sessionManager.addToConversationHistory(sessionId, { role: 'assistant', content: `Done ${i}` });
+      sessionManager.addToConversationHistory(sessionId, userMsg(`Step ${i}`));
+      sessionManager.addToConversationHistory(sessionId, modelMsg(`Done ${i}`));
     }
     const fullLength = sessionManager.getConversationContext(sessionId).length;
 
@@ -218,7 +241,7 @@ describe('Agent switch - context continuity between orchestrators', () => {
     expect(agentBContext).toBe(capturedOnSwitch);
     expect(agentBContext.length).toBeLessThan(fullLength);
     expect(
-      agentBContext.some(m => typeof m.content === 'string' && m.content.includes('[Previous conversation summary]'))
+      agentBContext.some(m => Array.isArray(m.parts) && m.parts[0]?.text?.includes('[Previous conversation summary]'))
     ).toBe(true);
 
     orchestratorA.destroy();

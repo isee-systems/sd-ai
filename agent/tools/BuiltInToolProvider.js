@@ -1,6 +1,7 @@
 import { VisualizationEngine } from '../utilities/VisualizationEngine.js';
 import { createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk';
-import { tool } from './builtin/toolHelpers.js';
+import { FunctionTool } from '@google/adk';
+import { tool, sanitizeSchemaForGemini } from './builtin/toolHelpers.js';
 import logger from '../../utilities/logger.js';
 import {
   createGenerateQuantitativeModelTool,
@@ -131,6 +132,32 @@ export class BuiltInToolProvider {
       version: '1.0.0',
       tools: toolsArr
     });
+  }
+
+  getAdkTools(mode = null, modelTokenCount = 0) {
+    const toolCollection = this.getTools();
+    const adkTools = [];
+
+    for (const [toolName, toolDef] of Object.entries(toolCollection.tools)) {
+      if (toolDef.nonSdkOnly) continue;
+      if (mode && toolDef.supportedModes && !toolDef.supportedModes.includes(mode)) continue;
+      if (toolDef.maxModelTokens && modelTokenCount > toolDef.maxModelTokens) continue;
+      if (toolDef.minModelTokens && modelTokenCount < toolDef.minModelTokens) continue;
+
+      adkTools.push(new FunctionTool({
+        name: toolName,
+        description: toolDef.description,
+        parameters: sanitizeSchemaForGemini(toolDef.inputSchema.toJSONSchema()),
+        execute: async (args) => {
+          const result = await toolDef.handler(args);
+          if (result.isError) throw new Error(result.content[0].text);
+          return result.content.map(b => b.text).join('\n');
+        }
+      }));
+    }
+
+    logger.log(`Built ${adkTools.length} ADK tools for mode=${mode}`);
+    return adkTools;
   }
 
   /**

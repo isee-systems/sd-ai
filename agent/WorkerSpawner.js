@@ -266,7 +266,7 @@ export class WorkerSpawner {
         const socketPath = join(sessionTempDir, socketName);
         const workerEnv = {
           OPENAI_API_KEY: process.env.OPENAI_API_KEY,
-          GOOGLE_API_KEY: process.env.GOOGLE_API_KEY,
+          GEMINI_API_KEY: process.env.GEMINI_API_KEY,
           ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
           SESSION_ID: sessionId,
           SESSION_TEMP_DIR: WorkerSpawner.CONTAINER_SESSION_PATH,

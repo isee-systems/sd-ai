@@ -1,5 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { query } from '@anthropic-ai/claude-agent-sdk';
+import { GoogleGenAI } from '@google/genai';
+import { LlmAgent, Runner, InMemorySessionService, isFinalResponse } from '@google/adk';
+import { encode } from 'gpt-tokenizer';
 import { marked } from 'marked';
 import { countTokens } from '@anthropic-ai/tokenizer';
 import { AgentConfigurationManager } from './utilities/AgentConfigurationManager.js';
@@ -14,6 +17,8 @@ import {
 } from './utilities/MessageProtocol.js';
 import logger from '../utilities/logger.js';
 import config from '../config.js';
+import { LLMWrapper } from '../utilities/LLMWrapper.js';
+import { sanitizeSchemaForGemini } from './tools/builtin/toolHelpers.js';
 
 /**
  * AgentOrchestrator
@@ -51,7 +56,13 @@ export class AgentOrchestrator {
       apiKey: process.env.ANTHROPIC_API_KEY
     });
 
-    logger.log(`AgentOrchestrator initialized for session ${sessionId} (useAgentSDK: ${this.configManager.getUseAgentSDK()})`);
+    this.gemini = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    this.adkSessionId = null;
+    this.adkSessionService = new InMemorySessionService();
+
+    this.llm = new LLMWrapper({ underlyingModel: config.agentAnthropicSummaryModel });
+
+    logger.log(`AgentOrchestrator initialized for session ${sessionId} (agent_mode: ${this.configManager.getAgentMode()})`);
   }
 
   /**
@@ -64,22 +75,34 @@ export class AgentOrchestrator {
         throw new Error(`Session not found: ${this.sessionId}`);
       }
 
-      const useAgentSDK = this.configManager.getUseAgentSDK();
-      logger.log(`Starting conversation for session ${this.sessionId} (mode: ${useAgentSDK ? 'SDK' : 'manual'})`);
+      const agentMode = this.configManager.getAgentMode();
+      logger.log(`Starting conversation for session ${this.sessionId} (agent_mode: ${agentMode})`);
       logger.log(`Built-in tools: ${this.builtInToolProvider.getToolNames().join(', ')}`);
       logger.log(`Client tools: ${this.dynamicToolProvider.getToolNames().join(', ')}`);
 
-      // Branch based on agent configuration
-      if (useAgentSDK) {
-        await this.startConversationWithSDK(userMessage, previousAgentContext);
-      } else {
-        if (previousAgentContext?.length > 0) {
-          // previousAgentContext is a reference to the live context — pop the last message
-          // (always the prior agent's unanswered user message) before adding the new one
-          previousAgentContext.pop();
-          logger.debug(`[Agent switch → manual] Prior context now has ${previousAgentContext.length} messages after pop`);
-        }
-        await this.startConversationManual(userMessage);
+      const isManual = agentMode === 'anthropic-manual' || agentMode === 'gemini-manual';
+      if (isManual && previousAgentContext?.length > 0) {
+        // previousAgentContext is a reference to the live context — pop the last message
+        // (always the prior agent's unanswered user message) before adding the new one
+        previousAgentContext.pop();
+        logger.debug(`[Agent switch → manual] Prior context now has ${previousAgentContext.length} messages after pop`);
+      }
+
+      switch (agentMode) {
+        case 'anthropic-sdk':
+          await this.startConversationWithAnthropicSDK(userMessage, previousAgentContext);
+          break;
+        case 'anthropic-manual':
+          await this.startConversationAnthropicManual(userMessage);
+          break;
+        case 'gemini-adk':
+          await this.startConversationWithADK(userMessage, previousAgentContext);
+          break;
+        case 'gemini-manual':
+          await this.startConversationGeminiManual(userMessage);
+          break;
+        default:
+          throw new Error(`Unknown agent_mode: ${agentMode}`);
       }
 
     } catch (error) {
@@ -96,7 +119,7 @@ export class AgentOrchestrator {
   /**
    * Start conversation using manual agent loop (original implementation)
    */
-  async startConversationManual(userMessage) {
+  async startConversationAnthropicManual(userMessage) {
     const session = this.sessionManager.getSession(this.sessionId);
 
     // Add user message to conversation history
@@ -114,13 +137,13 @@ export class AgentOrchestrator {
     const dynamicTools = this.dynamicToolProvider.getTools();
 
     // Start agent conversation loop
-    await this.runAgentConversation(userMessage, systemPrompt, builtInTools, dynamicTools);
+    await this.runAgentConversationAnthropicManual(userMessage, systemPrompt, builtInTools, dynamicTools);
   }
 
   /**
    * Start conversation using Claude Agent SDK
    */
-  async startConversationWithSDK(userMessage, previousAgentContext = null) {
+  async startConversationWithAnthropicSDK(userMessage, previousAgentContext = null) {
     const session = this.sessionManager.getSession(this.sessionId);
     const mode = session.mode;
 
@@ -150,13 +173,13 @@ export class AgentOrchestrator {
       }
     }
 
-    await this.runAgentConversationWithSDK(userMessage, systemPrompt, modelTokenCount, previousAgentContext);
+    await this.runAgentConversationWithAnthropicSDK(userMessage, systemPrompt, modelTokenCount, previousAgentContext);
   }
 
   /**
    * Run agent conversation using Claude Agent SDK
    */
-  async runAgentConversationWithSDK(userMessage, systemPrompt, modelTokenCount, previousAgentContext = null) {
+  async runAgentConversationWithAnthropicSDK(userMessage, systemPrompt, modelTokenCount, previousAgentContext = null) {
     // Create abort controller for stop iteration
     this.abortController = new AbortController();
 
@@ -201,20 +224,20 @@ export class AgentOrchestrator {
       logger.debug("Allowed tools are: " + allowedTools.join(', '));
 
       // Prefix tool names in system prompt
-      systemPrompt = this.prefixToolNamesInSystemPrompt(systemPrompt, builtInToolNames, clientToolNames);
+      systemPrompt = this.anthropicSDKPrefixToolNamesInSystemPrompt(systemPrompt, builtInToolNames, clientToolNames);
 
       // Build query options with MCP servers
       const queryOptions = {
         abortController: this.abortController,
         systemPrompt: systemPrompt,
-        model: config.agentModel,
+        model: config.agentAnthropicModel,
         maxTokens: 8192,
         maxTurns: maxIterations,
         mcpServers: mcpServers,
         allowedTools: allowedTools,
         permissionMode: 'bypassPermissions',
-        thinking: config.agentThinking,
-        effort: config.agentEffort,
+        thinking: config.agentAnthropicThinking,
+        effort: config.agentAnthropicEffort,
         compact: true  // Enable automatic compaction
       };
 
@@ -232,7 +255,7 @@ export class AgentOrchestrator {
         const contextToReplay = previousAgentContext.slice(0, -1);
         if (contextToReplay.length > 0) {
           logger.debug(`[Agent switch → SDK] Replaying ${contextToReplay.length} messages from prior agent.`);
-          const contextText = await this.buildPriorContextText(contextToReplay);
+          const contextText = await this.buildPriorContextTextAnthropic(contextToReplay);
           prompt = `[Prior conversation context]\n${contextText}\n[End of prior context]\n\n${userMessage}`;
         }
       }
@@ -245,7 +268,7 @@ export class AgentOrchestrator {
 
       // Process messages from SDK
       for await (const message of queryIterator) {
-        await this.handleSdkMessage(message);
+        await this.handleAnthropicSdkMessage(message);
       }
 
       // Normal completion
@@ -308,14 +331,14 @@ export class AgentOrchestrator {
   /**
    * Handle messages from Agent SDK
    */
-  async handleSdkMessage(message) {
+  async handleAnthropicSdkMessage(message) {
     switch (message.type) {
       case 'assistant':
-        await this.handleAssistantMessage(message);
+        await this.handleAnthropicSDKAssistantMessage(message);
         break;
 
       case 'result':
-        await this.handleResultMessage(message);
+        await this.handleAnthropicSDKResultMessage(message);
         break;
 
       case 'system':
@@ -337,7 +360,7 @@ export class AgentOrchestrator {
         break;
 
       case 'user':
-        await this.handleUserMessage(message);
+        await this.handleAnthropicSDKUserMessage(message);
         break;
 
       default:
@@ -348,7 +371,7 @@ export class AgentOrchestrator {
   /**
    * Handle assistant messages (text from Claude)
    */
-  async handleAssistantMessage(message) {
+  async handleAnthropicSDKAssistantMessage(message) {
     const content = message.message?.content;
     const rawTextParts = [];
 
@@ -422,7 +445,7 @@ export class AgentOrchestrator {
   /**
    * Handle user messages (tool results being sent back to Claude)
    */
-  async handleUserMessage(message) {
+  async handleAnthropicSDKUserMessage(message) {
     const content = message.message?.content;
 
     if (content && Array.isArray(content)) {
@@ -462,7 +485,7 @@ export class AgentOrchestrator {
   /**
    * Handle result messages (conversation completion)
    */
-  async handleResultMessage(message) {
+  async handleAnthropicSDKResultMessage(message) {
     if (message.subtype === 'success') {
       logger.log(`SDK conversation completed successfully for session ${this.sessionId}`);
     } else if (message.subtype === 'error') {
@@ -478,7 +501,7 @@ export class AgentOrchestrator {
    * Prefix tool names in system prompt for SDK mode
    * Scans the system prompt and adds mcp__ prefixes to tool names
    */
-  prefixToolNamesInSystemPrompt(systemPrompt, builtInToolNames, clientToolNames) {
+  anthropicSDKPrefixToolNamesInSystemPrompt(systemPrompt, builtInToolNames, clientToolNames) {
     let modifiedPrompt = systemPrompt;
 
     // Create mapping of unprefixed tool names to prefixed versions
@@ -524,7 +547,7 @@ export class AgentOrchestrator {
    * Run agent conversation with tool calling support
    * Uses Anthropic SDK directly with agentic loop
    */
-  async runAgentConversation(_userMessage, systemPrompt, builtInTools, dynamicTools) {
+  async runAgentConversationAnthropicManual(_userMessage, systemPrompt, builtInTools, dynamicTools) {
     // Clean up context (remove stale models, summarize if over limit) before first API call
     await this.sessionManager.cleanupContext(this.sessionId, config.agentMaxContextTokens);
 
@@ -576,12 +599,12 @@ export class AgentOrchestrator {
       try {
         // Call Claude API
         const response = await this.anthropic.messages.create({
-          model: config.agentModel,
+          model: config.agentAnthropicModel,
           max_tokens: 8192,
           system: systemBlocks,
           messages: messages,
-          thinking: config.agentThinking,
-          effort: config.agentEffort,
+          thinking: config.agentAnthropicThinking,
+          effort: config.agentAnthropicEffort,
           tools: tools.length > 0 ? tools : undefined
         });
 
@@ -592,7 +615,7 @@ export class AgentOrchestrator {
         }
 
         // Process response
-        continueLoop = await this.processAgentResponse(response, messages, builtInTools, dynamicTools);
+        continueLoop = await this.processAgentResponseAnthropicManual(response, messages, builtInTools, dynamicTools);
 
         // Check if stop was requested during response processing
         if (this.stopRequested) {
@@ -670,7 +693,7 @@ export class AgentOrchestrator {
    * Process agent response and handle tool calls
    * Returns true if the conversation should continue
    */
-  async processAgentResponse(response, messages, builtInTools, dynamicTools) {
+  async processAgentResponseAnthropicManual(response, messages, builtInTools, dynamicTools) {
     let hasToolCalls = false;
 
     // Process each content block
@@ -763,7 +786,7 @@ export class AgentOrchestrator {
         }
 
         // Execute tool
-        const toolResult = await this.executeToolCall(block, builtInTools, dynamicTools);
+        const toolResult = await this.anthropicManualExecuteToolCall(block, builtInTools, dynamicTools);
 
         // Check if stop was requested during tool execution
         if (this.stopRequested) {
@@ -838,7 +861,7 @@ export class AgentOrchestrator {
    * Build prior-history context text, summarizing if it exceeds the token budget.
    * Used when injecting prior agent context into an SDK session.
    */
-  async buildPriorContextText(history) {
+  async buildPriorContextTextAnthropic(history) {
     const PRIOR_CONTEXT_TOKEN_LIMIT = 10_000;
     const tokenCount = countTokens(JSON.stringify(history));
 
@@ -858,15 +881,11 @@ export class AgentOrchestrator {
           return '';
         }).filter(line => line).join('\n\n');
 
-        const response = await this.anthropic.messages.create({
-          model: config.agentSummaryModel,
-          max_tokens: 2048,
-          messages: [{
-            role: 'user',
-            content: `Summarize this conversation history concisely (2-4 paragraphs):\n\n${conversationText}`
-          }]
-        });
-        return response.content[0].text;
+        const response = await this.llm.createChatCompletion([{
+          role: 'user',
+          content: `Summarize this conversation history concisely (2-4 paragraphs):\n\n${conversationText}`
+        }], config.agentGeminiSummaryModel);
+        return response.content;
       } catch (error) {
         logger.error('Error summarizing prior context:', error);
         return '[Prior conversation condensed due to size]';
@@ -883,7 +902,7 @@ export class AgentOrchestrator {
   /**
    * Execute a tool call (built-in or client tool)
    */
-  async executeToolCall(toolUse, builtInTools, _dynamicTools) {
+  async anthropicManualExecuteToolCall(toolUse, builtInTools, _dynamicTools) {
     try {
       // Check if it's a built-in tool
       if (builtInTools.tools[toolUse.name]) {
@@ -991,6 +1010,453 @@ export class AgentOrchestrator {
   isBuiltInTool(toolName, builtInTools) {
     return toolName in builtInTools.tools;
   }
+
+  // ─── Gemini manual pathway ──────────────────────────────────────────────────
+
+  async startConversationGeminiManual(userMessage) {
+    this.sessionManager.addToConversationHistory(this.sessionId, {
+      role: 'user',
+      parts: [{ text: userMessage }]
+    });
+
+    const session = this.sessionManager.getSession(this.sessionId);
+    const mode = session.mode;
+    const systemPrompt = this.configManager.buildSystemPrompt(mode);
+    const builtInTools = this.builtInToolProvider.getTools();
+    const dynamicTools = this.dynamicToolProvider.getTools();
+
+    await this.sessionManager.cleanupContext(this.sessionId, config.agentMaxContextTokens);
+
+    const messages = this.sessionManager.getConversationContext(this.sessionId);
+    const currentModel = session?.clientModel;
+
+    let modelTokenCount = 0;
+    let modelSizeNotice = null;
+
+    if (currentModel) {
+      const modelJson = JSON.stringify(currentModel, null, 2);
+      modelTokenCount = encode(modelJson).length;
+      this.sessionManager.updateModelTokenCount(this.sessionId, modelTokenCount);
+      const modelExceedsLimit = modelTokenCount > config.agentMaxTokensForEngines;
+      logger.log(`Model token count: ${modelTokenCount} (limit: ${config.agentMaxTokensForEngines}, exceeds: ${modelExceedsLimit})`);
+
+      if (modelExceedsLimit) {
+        const generateTool = mode === 'sfd' ? 'generate_quantitative_model' : 'generate_qualitative_model';
+        modelSizeNotice = `\n\n**IMPORTANT: Model Size Notice**\n\nThe current model has exceeded ${config.agentMaxTokensForEngines} tokens (${modelTokenCount} tokens). The \`${generateTool}\` tool has been disabled. Call \`get_current_model\` to load the model to disk, then use \`read_model_section\` and \`edit_model_section\` to inspect and modify it.`;
+      }
+    }
+
+    const fullSystemPrompt = modelSizeNotice ? systemPrompt + modelSizeNotice : systemPrompt;
+    const toolDeclarations = this.convertToolsToGeminiFormat(builtInTools, dynamicTools, modelTokenCount, mode);
+
+    const geminiConfig = {
+      systemInstruction: fullSystemPrompt,
+      thinkingConfig: config.agentGeminiThinking
+    };
+    if (toolDeclarations.length > 0) {
+      geminiConfig.tools = [{ functionDeclarations: toolDeclarations }];
+    }
+
+    let continueLoop = true;
+    let completedNaturally = false;
+    const maxIterations = this.configManager.getMaxIterations();
+    let iteration = 0;
+    let retries = 0;
+
+    while (continueLoop && iteration < maxIterations && !this.stopRequested) {
+      iteration++;
+      await this.sessionManager.cleanupContext(this.sessionId, config.agentMaxContextTokens);
+
+      try {
+        const response = await this.gemini.models.generateContent({
+          model: config.agentGeminiModel,
+          contents: messages,
+          config: geminiConfig
+        });
+
+        if (this.stopRequested) break;
+
+        continueLoop = await this.processGeminiManualResponse(response, messages, builtInTools, dynamicTools);
+        if (!continueLoop) completedNaturally = true;
+
+        if (this.stopRequested) break;
+
+      } catch (error) {
+        const isQuota = error?.status === 429;
+        const isNetworkError = error?.code === 'UND_ERR_SOCKET' || error?.code === 'ECONNRESET' ||
+          (error instanceof TypeError && error.message === 'terminated');
+        if ((isQuota || isNetworkError) && retries < 3) {
+          retries++;
+          const reason = isQuota ? 'quota/rate-limited (429)' : 'network error';
+          logger.warn(`Gemini API ${reason}, retry ${retries}/3`);
+          await this.sendToClient(createAgentTextMessage(
+            this.sessionId,
+            isQuota ? 'The AI service is temporarily rate-limited. Retrying...' : 'Network connection interrupted. Retrying...'
+          ));
+          await new Promise(resolve => setTimeout(resolve, 5000));
+        } else if (isQuota) {
+          logger.error('Gemini API rate-limited after 3 retries, giving up');
+          await this.sendToClient(createErrorMessage(this.sessionId, 'The AI service is rate-limited. Please try again later.', 'AGENT_ERROR'));
+          await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'awaiting_user', 'Agent stopped due to rate limiting'));
+          continueLoop = false;
+        } else {
+          logger.error('Error in Gemini agent conversation loop:', error);
+          await this.sendToClient(createErrorMessage(this.sessionId, `Agent error: ${error.message}`, 'AGENT_ERROR'));
+          await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'awaiting_user', 'Agent stopped due to error'));
+          continueLoop = false;
+        }
+      }
+    }
+
+    if (this.stopRequested) {
+      this.stopRequested = false;
+      await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'awaiting_user', 'Agent stopped by user request'));
+    } else if (!completedNaturally && iteration >= maxIterations) {
+      logger.warn(`Agent conversation reached max iterations (${maxIterations})`);
+      await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'awaiting_user', `Reached maximum iterations (${maxIterations})`));
+    }
+  }
+
+  async processGeminiManualResponse(response, messages, builtInTools, dynamicTools) {
+    const candidate = response.candidates?.[0];
+    if (!candidate?.content) return false;
+
+    const parts = candidate.content.parts || [];
+
+    messages.push({ role: 'model', parts });
+
+    const rawTextParts = [];
+    for (const part of parts) {
+      if (part.thought) continue;
+      if (part.text) {
+        rawTextParts.push(part.text);
+        const html = await marked.parse(part.text);
+        await this.sendToClient(createAgentTextMessage(this.sessionId, html, false));
+      }
+    }
+
+    const functionCallParts = parts.filter(p => p.functionCall);
+    if (functionCallParts.length === 0) {
+      await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'success', 'Task completed successfully'));
+      return false;
+    }
+
+    const functionResponseParts = [];
+    for (const part of functionCallParts) {
+      if (this.stopRequested) return false;
+
+      const { name, args } = part.functionCall;
+      const callId = `fc_${Date.now()}_${Math.random().toString(36).substr(2, 7)}`;
+      const isBuiltIn = this.isBuiltInTool(name, builtInTools);
+
+      await this.#sendSlowToolMessageGeminiADK(name, args);
+      await this.sendToClient(createToolCallNotificationMessage(this.sessionId, callId, name, args, isBuiltIn));
+
+      logger.debug(`Tool call: ${name} (${callId}) input: ${JSON.stringify(args)}`);
+
+      const toolResult = await this.executeToolCallGeminiManual({ name, input: args }, builtInTools, dynamicTools);
+
+      if (this.stopRequested) return false;
+
+      const responseType = this.#getResponseType(name);
+      await this.sendToClient(createToolCallCompletedMessage(
+        this.sessionId, callId, name, toolResult.content, toolResult.isError, responseType
+      ));
+
+      const resultText = Array.isArray(toolResult.content)
+        ? toolResult.content.filter(b => b.type === 'text').map(b => b.text).join('\n')
+        : String(toolResult.content);
+
+      functionResponseParts.push({
+        functionResponse: { name, response: { result: resultText } }
+      });
+    }
+
+    messages.push({ role: 'user', parts: functionResponseParts });
+    return true;
+  }
+
+  // ─── Gemini ADK pathway ─────────────────────────────────────────────────────
+
+  #adkHasPriorContext = false;
+
+  async startConversationWithADK(userMessage, previousAgentContext = null) {
+    const session = this.sessionManager.getSession(this.sessionId);
+    const mode = session.mode;
+
+    this.sessionManager.addToConversationHistory(this.sessionId, {
+      role: 'user',
+      parts: [{ text: userMessage }]
+    });
+
+    let systemPrompt = this.configManager.buildSystemPrompt(mode);
+    const currentModel = session?.clientModel;
+    let modelTokenCount = 0;
+
+    if (currentModel) {
+      const modelJson = JSON.stringify(currentModel, null, 2);
+      modelTokenCount = encode(modelJson).length;
+      this.sessionManager.updateModelTokenCount(this.sessionId, modelTokenCount);
+      const modelExceedsLimit = modelTokenCount > config.agentMaxTokensForEngines;
+      logger.log(`Model token count: ${modelTokenCount} (limit: ${config.agentMaxTokensForEngines}, exceeds: ${modelExceedsLimit})`);
+
+      if (modelExceedsLimit) {
+        const generateTool = mode === 'sfd' ? 'generate_quantitative_model' : 'generate_qualitative_model';
+        systemPrompt += `\n\n**IMPORTANT: Model Size Notice**\n\nThe current model has exceeded ${config.agentMaxTokensForEngines} tokens (${modelTokenCount} tokens). The \`${generateTool}\` tool has been disabled. Call \`get_current_model\` to load the model to disk, then use \`read_model_section\` and \`edit_model_section\` to inspect and modify it.`;
+      }
+    }
+
+    this.abortController = new AbortController();
+    const maxIterations = this.configManager.getMaxIterations();
+
+    try {
+      const builtInAdkTools = this.builtInToolProvider.getAdkTools(mode, modelTokenCount);
+      const clientAdkTools = this.dynamicToolProvider.getAdkTools();
+
+      const pendingCallIds = new Map();
+
+      const agent = new LlmAgent({
+        name: this.configManager.getAgentName(),
+        model: config.agentGeminiModel,
+        instruction: systemPrompt,
+        tools: [...builtInAdkTools, ...clientAdkTools],
+        generateContentConfig: {
+          thinkingConfig: config.agentGeminiThinking
+        },
+        beforeToolCallback: async ({ tool, args }) => {
+          const callId = `adk_${Date.now()}_${Math.random().toString(36).substr(2, 7)}`;
+          const key = `${tool.name}::${JSON.stringify(args)}`;
+          pendingCallIds.set(key, callId);
+          const isBuiltIn = builtInAdkTools.some(t => t.name === tool.name);
+          await this.#sendSlowToolMessageGeminiADK(tool.name, args);
+          await this.sendToClient(createToolCallNotificationMessage(
+            this.sessionId, callId, tool.name, args, isBuiltIn
+          ));
+          logger.log(`ADK tool call: ${tool.name} (${callId})`);
+        },
+        afterToolCallback: async ({ tool, args, toolResponse }) => {
+          const key = `${tool.name}::${JSON.stringify(args)}`;
+          const callId = pendingCallIds.get(key) || `adk_${Date.now()}`;
+          pendingCallIds.delete(key);
+          const responseType = this.#getResponseType(tool.name);
+          const content = [{ type: 'text', text: String(toolResponse ?? '') }];
+          await this.sendToClient(createToolCallCompletedMessage(
+            this.sessionId, callId, tool.name, content, false, responseType
+          ));
+        }
+      });
+
+      const runner = new Runner({
+        appName: 'sd-ai',
+        agent,
+        sessionService: this.adkSessionService
+      });
+
+      if (!this.adkSessionId) {
+        this.adkSessionId = this.sessionId;
+        await this.adkSessionService.createSession({
+          appName: 'sd-ai',
+          userId: this.sessionId,
+          sessionId: this.adkSessionId
+        });
+        logger.log(`ADK session created: ${this.adkSessionId}`);
+      } else {
+        logger.log(`Resuming ADK session: ${this.adkSessionId}`);
+      }
+
+      let prompt = userMessage;
+      if (previousAgentContext?.length > 0 && !this.#adkHasPriorContext) {
+        const contextToReplay = previousAgentContext.slice(0, -1);
+        if (contextToReplay.length > 0) {
+          logger.debug(`[Agent switch → ADK] Replaying ${contextToReplay.length} messages from prior agent.`);
+          const contextText = await this.buildPriorContextTextGemini(contextToReplay);
+          prompt = `[Prior conversation context]\n${contextText}\n[End of prior context]\n\n${userMessage}`;
+        }
+        this.#adkHasPriorContext = true;
+      }
+
+      const newMessage = { role: 'user', parts: [{ text: prompt }] };
+
+      let turnCount = 0;
+      for await (const event of runner.runAsync({
+        userId: this.sessionId,
+        sessionId: this.adkSessionId,
+        newMessage,
+        abortSignal: this.abortController.signal
+      })) {
+        if (this.stopRequested) break;
+        await this.handleAdkEvent(event);
+        if (isFinalResponse(event)) turnCount++;
+        if (turnCount >= maxIterations) {
+          logger.warn(`ADK agent reached max iterations (${maxIterations})`);
+          this.abortController.abort();
+          break;
+        }
+      }
+
+      if (this.stopRequested) {
+        this.stopRequested = false;
+        logger.log(`ADK agent stopped by user for session ${this.sessionId}`);
+        await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'awaiting_user', 'Agent stopped by user request'));
+      } else if (turnCount >= maxIterations) {
+        await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'awaiting_user', `Reached maximum iterations (${maxIterations})`));
+      } else {
+        logger.log(`ADK conversation completed successfully for session ${this.sessionId}`);
+        await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'success', 'Task completed successfully'));
+      }
+
+    } catch (error) {
+      if (error.name === 'AbortError' || this.stopRequested) {
+        this.stopRequested = false;
+        logger.log(`ADK agent stopped for session ${this.sessionId}`);
+        await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'awaiting_user', 'Agent stopped by user request'));
+      } else {
+        logger.error('Error in ADK conversation loop:', error);
+        await this.sendToClient(createErrorMessage(this.sessionId, `Agent error: ${error.message}`, 'AGENT_ERROR'));
+        await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'awaiting_user', `Agent error: ${error.message}`));
+      }
+    } finally {
+      this.abortController = null;
+    }
+  }
+
+  async handleAdkEvent(event) {
+    if (event.errorCode) {
+      throw new Error(event.errorMessage || `ADK error: ${event.errorCode}`);
+    }
+
+    const content = event.content;
+    if (!content?.parts) return;
+
+    const rawTextParts = [];
+    for (const part of content.parts) {
+      if (part.thought) continue;
+      if (part.text && !event.partial) {
+        rawTextParts.push(part.text);
+        const html = await marked.parse(part.text);
+        await this.sendToClient(createAgentTextMessage(this.sessionId, html, false));
+      }
+    }
+
+    if (rawTextParts.length > 0) {
+      this.sessionManager.addToConversationHistory(this.sessionId, {
+        role: 'model',
+        parts: [{ text: rawTextParts.join('\n') }]
+      });
+    }
+  }
+
+  // ─── Shared Gemini helpers ──────────────────────────────────────────────────
+
+  async #sendSlowToolMessageGeminiADK(toolName, args) {
+    if (toolName === 'create_visualization') {
+      const vizType = args?.useAICustom ? 'AI-generated custom' : (args?.type || 'standard');
+      await this.sendToClient(createAgentTextMessage(this.sessionId, `Creating ${vizType} visualization: "${args?.title || 'visualization'}"... This may take a moment.`, false));
+    } else if (toolName === 'get_variable_data') {
+      const varCount = args?.variableNames?.length || 0;
+      const runCount = args?.runIds?.length || 0;
+      await this.sendToClient(createAgentTextMessage(this.sessionId, `Retrieving data for ${varCount} variable${varCount !== 1 ? 's' : ''} from ${runCount} run${runCount !== 1 ? 's' : ''}...`, false));
+    } else if (toolName === 'get_feedback_information') {
+      const runCount = args?.runIds?.length || 0;
+      const runText = runCount === 0 ? 'all runs' : `${runCount} run${runCount !== 1 ? 's' : ''}`;
+      await this.sendToClient(createAgentTextMessage(this.sessionId, `Analyzing feedback loops for ${runText}... This may take a moment.`, false));
+    } else if (toolName === 'run_model') {
+      await this.sendToClient(createAgentTextMessage(this.sessionId, `Running model simulation...`, false));
+    } else if (toolName === 'discuss_model_with_seldon') {
+      await this.sendToClient(createAgentTextMessage(this.sessionId, `Consulting Seldon for expert analysis...`, false));
+    } else if (toolName === 'discuss_model_across_runs') {
+      await this.sendToClient(createAgentTextMessage(this.sessionId, `Analyzing model behavior across runs...`, false));
+    } else if (toolName === 'discuss_with_mentor') {
+      await this.sendToClient(createAgentTextMessage(this.sessionId, `Consulting Seldon mentor for guidance...`, false));
+    }
+  }
+
+  executeToolCallGeminiManual(toolUse, builtInTools, _dynamicTools) {
+    try {
+      if (builtInTools.tools[toolUse.name]) {
+        return builtInTools.tools[toolUse.name].handler(toolUse.input);
+      }
+      if (this.dynamicToolProvider.isClientTool(toolUse.name)) {
+        const unprefixedName = toolUse.name.replace(/^client_/, '');
+        return this.dynamicToolProvider.requestClientExecution(unprefixedName, toolUse.input)
+          .then(result => ({ content: result, isError: false }));
+      }
+      return Promise.resolve({ content: [{ type: 'text', text: `Tool not found: ${toolUse.name}` }], isError: true });
+    } catch (error) {
+      logger.error(`Error executing tool ${toolUse.name}:`, error);
+      return Promise.resolve({ content: [{ type: 'text', text: error.message }], isError: true });
+    }
+  }
+
+  convertToolsToGeminiFormat(builtInTools, dynamicTools, modelTokenCount = 0, mode = null) {
+    const declarations = [];
+    const toolNames = new Set();
+
+    for (const [toolName, toolDef] of Object.entries(builtInTools.tools)) {
+      if (toolNames.has(toolName)) continue;
+      if (mode && toolDef.supportedModes && !toolDef.supportedModes.includes(mode)) continue;
+      if (toolDef.maxModelTokens && modelTokenCount > toolDef.maxModelTokens) continue;
+      if (toolDef.minModelTokens && modelTokenCount < toolDef.minModelTokens) continue;
+
+      toolNames.add(toolName);
+      declarations.push({
+        name: toolName,
+        description: toolDef.description,
+        parameters: sanitizeSchemaForGemini(toolDef.inputSchema.toJSONSchema())
+      });
+    }
+
+    if (dynamicTools?.tools) {
+      for (const [toolName, toolDef] of Object.entries(dynamicTools.tools)) {
+        if (toolNames.has(toolName)) continue;
+        toolNames.add(toolName);
+        declarations.push({
+          name: toolName,
+          description: toolDef.description,
+          parameters: sanitizeSchemaForGemini(toolDef.inputSchema.toJSONSchema())
+        });
+      }
+    }
+
+    return declarations;
+  }
+
+  async buildPriorContextTextGemini(history) {
+    const PRIOR_CONTEXT_TOKEN_LIMIT = 10_000;
+    const tokenCount = encode(JSON.stringify(history)).length;
+
+    if (tokenCount > PRIOR_CONTEXT_TOKEN_LIMIT) {
+      logger.log(`Prior agent context too large (${tokenCount} tokens), summarizing before ADK injection`);
+      try {
+        const conversationText = history.map((msg) => {
+          const role = msg.role === 'user' ? 'User' : 'Assistant';
+          if (!Array.isArray(msg.parts)) return '';
+          const text = msg.parts.filter(p => p.text).map(p => p.text).join('\n');
+          return text ? `${role}: ${text}` : '';
+        }).filter(line => line).join('\n\n');
+
+        const response = await this.gemini.models.generateContent({
+          model: config.agentGeminiSummaryModel,
+          contents: [{
+            role: 'user',
+            parts: [{ text: `Summarize this conversation history concisely (2-4 paragraphs):\n\n${conversationText}` }]
+          }]
+        });
+        return response.text || response.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      } catch (error) {
+        logger.error('Error summarizing prior context:', error);
+        return '[Prior conversation condensed due to size]';
+      }
+    }
+
+    return history.map(msg => {
+      const role = msg.role === 'user' ? 'User' : 'Assistant';
+      if (!Array.isArray(msg.parts)) return '';
+      const text = msg.parts.filter(p => p.text).map(p => p.text).join('\n');
+      return text ? `${role}: ${text}` : '';
+    }).filter(line => line).join('\n\n');
+  }
+
   /**
    * Get agent capabilities for session_ready message
    */
@@ -1022,6 +1488,8 @@ export class AgentOrchestrator {
     this.builtInToolProvider = null;
     this.dynamicToolProvider = null;
     this.anthropic = null;
+    this.gemini = null;
+    this.adkSessionService = null;
     this.configManager = null;
   }
 }

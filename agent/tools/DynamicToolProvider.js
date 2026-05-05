@@ -1,5 +1,6 @@
 import { StructuredOutputToZodConverter } from '../../utilities/StructuredOutputToZodConverter.js';
-import { tool } from './builtin/toolHelpers.js';
+import { FunctionTool } from '@google/adk';
+import { tool, sanitizeSchemaForGemini } from './builtin/toolHelpers.js';
 import { createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk';
 import logger from '../../utilities/logger.js';
 
@@ -184,5 +185,29 @@ export class DynamicToolProvider {
       version: '1.0.0',
       tools
     });
+  }
+
+  getAdkTools() {
+    if (!this.toolCollection) return [];
+
+    const adkTools = [];
+
+    for (const [toolName, toolDef] of Object.entries(this.toolCollection.tools)) {
+      const unprefixedName = toolName.replace(/^client_/, '');
+
+      adkTools.push(new FunctionTool({
+        name: unprefixedName,
+        description: toolDef.description,
+        parameters: sanitizeSchemaForGemini(toolDef.inputSchema.toJSONSchema()),
+        execute: async (args) => {
+          const result = await toolDef.handler(args);
+          if (result.isError) throw new Error(result.content[0].text);
+          return result.content.map(b => b.text).join('\n');
+        }
+      }));
+    }
+
+    logger.log(`Built ${adkTools.length} ADK client tools`);
+    return adkTools;
   }
 }

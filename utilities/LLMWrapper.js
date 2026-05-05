@@ -79,7 +79,7 @@ export class LLMWrapper {
     }
 
     if (!parameters.googleKey) {
-        this.#googleKey = process.env.GOOGLE_API_KEY
+        this.#googleKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
     } else {
       this.#googleKey = parameters.googleKey;
     }

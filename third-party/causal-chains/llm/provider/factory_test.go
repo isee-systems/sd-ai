@@ -107,7 +107,7 @@ func TestNewClientGeminiModels(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Setenv("GOOGLE_API_KEY", tt.envKey)
+			t.Setenv("GEMINI_API_KEY", tt.envKey)
 
 			_, _, err := NewClient(Config{
 				Model:  tt.model,
@@ -192,7 +192,7 @@ func TestNewClientDebugMode(t *testing.T) {
 			// Set appropriate API keys
 			t.Setenv("OPENAI_API_KEY", "test-openai")
 			t.Setenv("ANTHROPIC_API_KEY", "test-anthropic")
-			t.Setenv("GOOGLE_API_KEY", "test-google")
+			t.Setenv("GEMINI_API_KEY", "test-google")
 
 			_, _, err := NewClient(Config{
 				Model: tt.model,
@@ -345,7 +345,7 @@ func TestNewClientWithThinkingLevel(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Setenv("GOOGLE_API_KEY", "test-google")
+			t.Setenv("GEMINI_API_KEY", "test-google")
 			t.Setenv("ANTHROPIC_API_KEY", "test-anthropic")
 			t.Setenv("OPENAI_API_KEY", "test-openai")
 

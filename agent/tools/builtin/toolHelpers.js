@@ -20,6 +20,25 @@ export function tool({ name, description, inputSchema, execute }) {
   return sdkTool(name, description, inputSchema, execute);
 }
 
+export function sanitizeSchemaForGemini(schema) {
+  if (!schema || typeof schema !== 'object') return schema;
+  if (Array.isArray(schema)) return schema.map(sanitizeSchemaForGemini);
+
+  const out = {};
+  for (const [k, v] of Object.entries(schema)) {
+    if (k === 'exclusiveMinimum' && typeof v === 'number') {
+      out.minimum = v;
+    } else if (k === 'exclusiveMaximum' && typeof v === 'number') {
+      out.maximum = v;
+    } else if (k === 'exclusiveMinimum' || k === 'exclusiveMaximum') {
+      // boolean form (JSON Schema draft 4) — drop it
+    } else {
+      out[k] = sanitizeSchemaForGemini(v);
+    }
+  }
+  return out;
+}
+
 /**
  * Generate a unique request ID for async operations
  * @param {string} prefix - Prefix for the request ID (e.g., 'feedback', 'tool')

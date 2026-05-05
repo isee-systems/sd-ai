@@ -159,7 +159,7 @@ Reserve the feedback_dominance visualization type (stacked area) for when the us
         description: metadata.description,
         version: metadata.version,
         max_iterations: metadata.max_iterations || 20,
-        use_agent_sdk: true,
+        agent_mode: metadata.agent_mode || 'anthropic-sdk',
         supported_modes: metadata.supported_modes || []
       }
     };
@@ -196,7 +196,7 @@ Reserve the feedback_dominance visualization type (stacked area) for when the us
             description: '',
             version: '1.0',
             max_iterations: 20,
-            use_agent_sdk: true,
+            agent_mode: 'anthropic-sdk',
             supported_modes: []
           },
           content: fileContent
@@ -317,6 +317,10 @@ Reserve the feedback_dominance visualization type (stacked area) for when the us
     return this.baseConfig;
   }
 
+  getAgentName() {
+    return (this.metadata.name || 'agent').toLowerCase().replace(/[^a-z0-9]+/g, '_');
+  }
+
   /**
    * Get maximum iterations for agent conversation loop
    * @returns {number} Maximum iterations (default: 20)
@@ -326,12 +330,15 @@ Reserve the feedback_dominance visualization type (stacked area) for when the us
   }
 
   /**
-   * Whether this agent should use the Claude Agent SDK (vs manual loop)
-   * Defaults to true if not specified in agent config
+   * Returns the agent mode: 'anthropic-sdk' | 'anthropic-manual' | 'gemini-adk' | 'gemini-manual'
+   * Falls back to legacy use_agent_sdk boolean if agent_mode is not set.
    */
-  getUseAgentSDK() {
-    const val = this.metadata.use_agent_sdk;
-    if (val === undefined) return true;
-    return val !== false && val !== 'false';
+  getAgentMode() {
+    const val = this.metadata.agent_mode;
+    if (val) return val;
+    // legacy boolean fallback
+    const legacy = this.metadata.use_agent_sdk;
+    if (legacy === false || legacy === 'false') return 'anthropic-manual';
+    return 'anthropic-sdk';
   }
 }

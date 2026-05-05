@@ -3,6 +3,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'fs';
 import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenAI } from '@google/genai';
 import { countTokens } from '@anthropic-ai/tokenizer';
 import logger from '../../utilities/logger.js';
 import config from '../../config.js';
@@ -286,32 +287,32 @@ export class SessionManager {
    */
   async #summarizeMessages(messages) {
     try {
+      const isGeminiFormat = messages.some(m => Array.isArray(m.parts));
+
       const conversationText = messages.map((msg) => {
-        if (msg.role === 'user') {
-          return `User: ${typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)}`;
-        } else if (msg.role === 'assistant') {
-          if (Array.isArray(msg.content)) {
-            const textContent = msg.content
-              .filter(block => block.type === 'text')
-              .map(block => block.text || block)
-              .join('\n');
-            return textContent ? `Assistant: ${textContent}` : '';
+        if (isGeminiFormat) {
+          const role = msg.role === 'user' ? 'User' : 'Assistant';
+          if (!Array.isArray(msg.parts)) return '';
+          const text = msg.parts.filter(p => p.text).map(p => p.text).join('\n');
+          return text ? `${role}: ${text}` : '';
+        } else {
+          if (msg.role === 'user') {
+            return `User: ${typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)}`;
+          } else if (msg.role === 'assistant') {
+            if (Array.isArray(msg.content)) {
+              const textContent = msg.content
+                .filter(block => block.type === 'text')
+                .map(block => block.text || block)
+                .join('\n');
+              return textContent ? `Assistant: ${textContent}` : '';
+            }
+            return `Assistant: ${msg.content}`;
           }
-          return `Assistant: ${msg.content}`;
         }
         return '';
       }).filter(line => line).join('\n\n');
 
-      if (!this.anthropic) {
-        this.anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-      }
-
-      const response = await this.anthropic.messages.create({
-        model: config.agentSummaryModel,
-        max_tokens: 1024,
-        messages: [{
-          role: 'user',
-          content: `Please create a concise summary of the following conversation history. Focus on:
+      const summaryPrompt = `Please create a concise summary of the following conversation history. Focus on:
 - The main task or goal the user requested
 - Key decisions, findings, or results achieved
 - Important context needed for continuing the conversation
@@ -320,13 +321,38 @@ export class SessionManager {
 Keep the summary brief but informative (2-4 paragraphs maximum).
 
 Conversation history:
-${conversationText}`
-        }]
-      });
+${conversationText}`;
 
-      const summaryText = response.content[0].text;
+      let summaryText;
+      if (isGeminiFormat) {
+        if (!this.gemini) {
+          this.gemini = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+        }
+        const response = await this.gemini.models.generateContent({
+          model: config.agentGeminiSummaryModel,
+          contents: [{ role: 'user', parts: [{ text: summaryPrompt }] }]
+        });
+        summaryText = response.text || response.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      } else {
+        if (!this.anthropic) {
+          this.anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+        }
+        const response = await this.anthropic.messages.create({
+          model: config.agentAnthropicSummaryModel,
+          max_tokens: 1024,
+          messages: [{ role: 'user', content: summaryPrompt }]
+        });
+        summaryText = response.content[0].text;
+      }
+
       logger.log(`Created message history summary: ${summaryText.substring(0, 100)}...`);
 
+      if (isGeminiFormat) {
+        return {
+          role: 'user',
+          parts: [{ text: `[Previous conversation summary]\n${summaryText}\n[End of summary - continuing conversation]` }]
+        };
+      }
       return {
         role: 'user',
         content: `[Previous conversation summary]\n${summaryText}\n[End of summary - continuing conversation]`
@@ -334,6 +360,10 @@ ${conversationText}`
 
     } catch (error) {
       logger.error('Error summarizing message history:', error);
+      const isGeminiFormat = messages.some(m => Array.isArray(m.parts));
+      if (isGeminiFormat) {
+        return { role: 'user', parts: [{ text: '[Previous conversation summary: Earlier messages were condensed to save context. The conversation is continuing from this point.]' }] };
+      }
       return {
         role: 'user',
         content: '[Previous conversation summary: Earlier messages were condensed to save context. The conversation is continuing from this point.]'
@@ -362,12 +392,14 @@ ${conversationText}`
     const lastUserIdx = messages.findLastIndex(m => m.role === 'user');
     const lastMessage = lastUserIdx !== -1 ? messages[lastUserIdx] : null;
 
-    // If the last user message contains tool_results, also keep the preceding assistant
-    // message (which holds the matching tool_use blocks) to avoid orphaned tool pairs.
+    // If the last user message contains tool results (either format), also keep the preceding
+    // model turn (tool_use/functionCall blocks) to avoid orphaned pairs.
     let tailStart = lastUserIdx !== -1 ? lastUserIdx : messages.length;
-    if (lastMessage && Array.isArray(lastMessage.content) &&
-        lastMessage.content.some(b => b.type === 'tool_result') &&
-        lastUserIdx > 0 && messages[lastUserIdx - 1]?.role === 'assistant') {
+    const isClaudeToolResult = Array.isArray(lastMessage?.content) && lastMessage.content.some(b => b.type === 'tool_result');
+    const isGeminiFunctionResponse = Array.isArray(lastMessage?.parts) && lastMessage.parts.some(p => p.functionResponse);
+    const prevRole = lastUserIdx > 0 ? messages[lastUserIdx - 1]?.role : null;
+    if (lastMessage && (isClaudeToolResult || isGeminiFunctionResponse) &&
+        lastUserIdx > 0 && (prevRole === 'assistant' || prevRole === 'model')) {
       tailStart = lastUserIdx - 1;
     }
 
