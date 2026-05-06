@@ -24,6 +24,7 @@ class TokenUsageReporter {
 
     const isAnthropic = provider === 'anthropic';
     const isOpenAI = provider === 'openai';
+    const isGemini = provider === 'gemini';
 
     let tokens;
     if (isAnthropic) {
@@ -41,13 +42,15 @@ class TokenUsageReporter {
         cachedTokens: usage.prompt_tokens_details?.cached_tokens ?? 0,
         reasoningTokens: usage.completion_tokens_details?.reasoning_tokens ?? 0,
       };
-    } else {
+    } else if (isGemini) {
       tokens = {
         inputTokens: usage.promptTokenCount ?? 0,
         outputTokens: usage.candidatesTokenCount ?? 0,
         cachedTokens: usage.cachedContentTokenCount ?? 0,
         thoughtsTokens: usage.thoughtsTokenCount ?? 0,
       };
+    } else {
+      throw new Error('Unknown provider: "' + provider + '"');
     }
 
     const costs = this.#calculateCost(provider, model, tokens);
@@ -138,9 +141,10 @@ class TokenUsageReporter {
     }
 
     if (provider === 'gemini') {
-      // promptTokenCount (inputTokens) and cachedContentTokenCount (cachedTokens) are reported separately — do not subtract
+      // cachedTokens are a subset of inputTokens; bill non-cached at full rate, cached at reduced rate
       // thoughtsTokens are separate from outputTokens and billed at the output rate
-      const inputTokens = per(tokens.inputTokens, pricing.inputTokens);
+      const nonCached = tokens.inputTokens - tokens.cachedTokens;
+      const inputTokens = per(nonCached, pricing.inputTokens);
       const cachedTokens = per(tokens.cachedTokens, pricing.cachedTokens);
       const outputTokens = per(tokens.outputTokens, pricing.outputTokens);
       const thoughtsTokens = per(tokens.thoughtsTokens, pricing.outputTokens);
