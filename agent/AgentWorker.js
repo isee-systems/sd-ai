@@ -159,13 +159,13 @@ class AgentWorker {
             if (session.pendingFeedbackRequests?.has(callId)) {
               const pending = session.pendingFeedbackRequests.get(callId);
               clearTimeout(pending.timeout);
-              isError ? pending.reject(new Error(result)) : pending.resolve(result);
+              isError ? pending.reject(new Error(typeof result === 'string' ? result : JSON.stringify(result))) : pending.resolve(result);
               session.pendingFeedbackRequests.delete(callId);
             // Try model requests (clientInteractionTools, generateQuantitativeModel, etc.)
             } else if (session.pendingModelRequests?.has(callId)) {
               const pending = session.pendingModelRequests.get(callId);
               clearTimeout(pending.timeout);
-              isError ? pending.reject(new Error(result)) : pending.resolve(result);
+              isError ? pending.reject(new Error(typeof result === 'string' ? result : JSON.stringify(result))) : pending.resolve(result);
               session.pendingModelRequests.delete(callId);
             } else {
               logger.warn(`[worker:${SESSION_ID}] Unknown callId in tool_response: ${callId}`);

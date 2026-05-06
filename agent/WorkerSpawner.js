@@ -335,7 +335,7 @@ export class WorkerSpawner {
     // claude CLI subprocess spawned by the Agent SDK.
     return fork(WorkerSpawner.#WORKER_PATH, [], {
       env: { ...process.env, SESSION_ID: sessionId, SESSION_TEMP_DIR: sessionTempDir },
-      stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+      stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
       detached: true,
     });
   }

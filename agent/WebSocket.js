@@ -437,14 +437,18 @@ export class WebSocketHandler {
 
     w.on('error', (err) => logger.error(`[worker:${this.#sessionId}] process error: ${err.message}`));
 
-    //if (typeof w.pid !== 'number') {
+    // This only sets up the stdout/stderr relay for bwrap workers 
+    // (IpcWorker, which has no .pid). 
+    // Fork workers (ChildProcess, .pid is a number) skip the relay since their 
+    // output already goes to the terminal via inherit.
+    if (typeof w.pid !== 'number') {
       w.stdout?.on('data', (d) => {
         logger.log(`[worker:${this.#sessionId}] ${d.toString().trim()}`);
       });
       w.stderr?.on('data', (d) => {
         logger.error(`[worker:${this.#sessionId}] stderr: ${d.toString().trim()}`);
       });
-    //}
+    }
 
     w.on('exit', (code, signal) => {
       logger.log(`[worker:${this.#sessionId}] exited (code=${code} signal=${signal})`);

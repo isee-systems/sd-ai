@@ -451,9 +451,10 @@ export class AgentOrchestrator {
           const toolName = this.pendingToolCalls.get(block.tool_use_id) || 'unknown';
           const displayName = this.stripMcpPrefix(toolName);
 
-          // Log errors more prominently
           if (block.is_error) {
             logger.error(`Anthropic SDK: Tool error for ${toolName} (${block.tool_use_id}):`, block.content);
+          } else {
+            logger.log(`Anthropic SDK: Tool call completed: ${displayName}`);
           }
 
           const responseType = this.#getResponseType(displayName);
@@ -493,9 +494,10 @@ export class AgentOrchestrator {
           const toolName = this.pendingToolCalls.get(block.tool_use_id) || 'unknown';
           const displayName = this.stripMcpPrefix(toolName);
 
-          // Log errors more prominently
           if (block.is_error) {
             logger.error(`Anthropic SDK: Tool error for ${toolName} (${block.tool_use_id}):`, block.content);
+          } else {
+            logger.log(`Anthropic SDK: Tool call completed: ${displayName}`);
           }
 
           const responseType = this.#getResponseType(displayName);
@@ -820,6 +822,12 @@ export class AgentOrchestrator {
         // Check if stop was requested during tool execution
         if (this.stopRequested) {
           return false; // Stop processing immediately
+        }
+
+        if (toolResult.isError) {
+          logger.error(`Anthropic Manual: Tool error for ${block.name}:`, toolResult.content);
+        } else {
+          logger.log(`Anthropic Manual: Tool call completed: ${block.name}`);
         }
 
         const responseType = this.#getResponseType(block.name);
@@ -1170,6 +1178,12 @@ export class AgentOrchestrator {
 
       if (this.stopRequested) return false;
 
+      if (toolResult.isError) {
+        logger.error(`Gemini Manual: Tool error for ${name}:`, toolResult.content);
+      } else {
+        logger.log(`Gemini Manual: Tool call completed: ${name}`);
+      }
+
       const responseType = this.#getResponseType(name);
       await this.sendToClient(createToolCallCompletedMessage(
         this.sessionId, callId, name, toolResult.content, toolResult.isError, responseType
@@ -1239,12 +1253,12 @@ export class AgentOrchestrator {
           await this.sendToClient(createToolCallNotificationMessage(
             this.sessionId, callId, tool.name, args, isBuiltIn
           ));
-          logger.log(`ADK tool call: ${tool.name} (${callId})`);
         },
         afterToolCallback: async ({ tool, args, toolResponse }) => {
           const key = `${tool.name}::${JSON.stringify(args)}`;
           const callId = pendingCallIds.get(key) || `adk_${Date.now()}`;
           pendingCallIds.delete(key);
+          logger.log(`Gemini ADK: Tool call completed: ${tool.name}`);
           const responseType = this.#getResponseType(tool.name);
           const content = [{ type: 'text', text: String(toolResponse ?? '') }];
           await this.sendToClient(createToolCallCompletedMessage(
