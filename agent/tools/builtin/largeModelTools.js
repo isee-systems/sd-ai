@@ -295,7 +295,7 @@ After editing, the model is validated and processed through the quantitative eng
         z.array(z.object({
           from: z.string(),
           to: z.string(),
-          polarity: z.enum(['+', '-', '']).optional(),
+          polarity: z.enum(['+', '-']).optional(),
           reasoning: z.string().optional(),
           polarityReasoning: z.string().optional()
         })),
@@ -303,7 +303,7 @@ After editing, the model is validated and processed through the quantitative eng
         z.object({
           from: z.string(),
           to: z.string(),
-          polarity: z.enum(['+', '-', '']).optional(),
+          polarity: z.enum(['+', '-']).optional(),
           reasoning: z.string().optional(),
           polarityReasoning: z.string().optional()
         }),
@@ -475,8 +475,8 @@ After editing, the model is validated and processed through the quantitative eng
                 if (!r.from || !r.to) {
                   return handleError('Error: Relationships must have "from" and "to" fields');
                 }
-                if (r.polarity !== undefined && !['+', '-', ''].includes(r.polarity)) {
-                  return handleError(`Error: Relationship polarity must be "+", "-", or "", got "${r.polarity}"`);
+                if (r.polarity !== undefined && !['+', '-'].includes(r.polarity)) {
+                  return handleError(`Error: Relationship polarity must be "+" or "-", got "${r.polarity}"`);
                 }
               }
               model.relationships.push(...relsToAdd);
