@@ -1,4 +1,5 @@
 import logger from './logger.js';
+import { getPricing } from './pricing.js';
 
 class TokenUsageReporter {
   /**
@@ -49,12 +50,37 @@ class TokenUsageReporter {
       };
     }
 
+    const costs = this.#calculateCost(provider, model, tokens);
+    const fmt = (n, cost) => cost != null ? `${n}($${cost.toFixed(6)})` : `${n}`;
+
     if (isAnthropic) {
-      logger.log(`[usage:${provider}] input=${tokens.inputTokens} output=${tokens.outputTokens} cache_write=${tokens.cacheCreationInputTokens} cache_write_5m=${tokens.cacheCreation5mInputTokens} cache_write_1h=${tokens.cacheCreation1hInputTokens} cache_read=${tokens.cacheReadInputTokens}`);
+      logger.log(
+        `[usage:${provider}]` +
+        ` input=${fmt(tokens.inputTokens, costs?.inputTokens)}` +
+        ` output=${fmt(tokens.outputTokens, costs?.outputTokens)}` +
+        ` cache_write_5m=${fmt(tokens.cacheCreation5mInputTokens, costs?.cacheCreation5mInputTokens)}` +
+        ` cache_write_1h=${fmt(tokens.cacheCreation1hInputTokens, costs?.cacheCreation1hInputTokens)}` +
+        ` cache_read=${fmt(tokens.cacheReadInputTokens, costs?.cacheReadInputTokens)}` +
+        (costs ? ` total=$${costs.total.toFixed(6)}` : '')
+      );
     } else if (isOpenAI) {
-      logger.log(`[usage:${provider}] input=${tokens.inputTokens} output=${tokens.outputTokens} cached=${tokens.cachedTokens} reasoning=${tokens.reasoningTokens}`);
+      logger.log(
+        `[usage:${provider}]` +
+        ` input=${fmt(tokens.inputTokens, costs?.inputTokens)}` +
+        ` output=${fmt(tokens.outputTokens, costs?.outputTokens)}` +
+        ` cached=${fmt(tokens.cachedTokens, costs?.cachedTokens)}` +
+        ` reasoning=${tokens.reasoningTokens}` +
+        (costs ? ` total=$${costs.total.toFixed(6)}` : '')
+      );
     } else {
-      logger.log(`[usage:${provider}] input=${tokens.inputTokens} output=${tokens.outputTokens} cached=${tokens.cachedTokens} thoughts=${tokens.thoughtsTokens}`);
+      logger.log(
+        `[usage:${provider}]` +
+        ` input=${fmt(tokens.inputTokens, costs?.inputTokens)}` +
+        ` output=${fmt(tokens.outputTokens, costs?.outputTokens)}` +
+        ` cached=${fmt(tokens.cachedTokens, costs?.cachedTokens)}` +
+        ` thoughts=${fmt(tokens.thoughtsTokens, costs?.thoughtsTokens)}` +
+        (costs ? ` total=$${costs.total.toFixed(6)}` : '')
+      );
     }
 
     if (!this.enabled) return;
@@ -64,6 +90,7 @@ class TokenUsageReporter {
       provider,
       model,
       tokens,
+      cost: costs?.total ?? null,
       timestamp: new Date().toISOString(),
     };
 
@@ -80,6 +107,66 @@ class TokenUsageReporter {
     } catch (error) {
       console.error(`TokenUsageReporter: Error posting to ${this.url}:`, error.message);
     }
+  }
+
+  /**
+   * @param {'anthropic'|'openai'|'gemini'} provider
+   * @param {string} model
+   * @param {Object} tokens
+   * @returns {{ total: number, [key: string]: number }|null}
+   */
+  #calculateCost(provider, model, tokens) {
+    const pricing = getPricing(provider, model, tokens.inputTokens);
+    if (!pricing) return null;
+
+    const per = (count, rate) => (count / 1_000_000) * rate;
+
+    if (provider === 'anthropic') {
+      const inputTokens = per(tokens.inputTokens, pricing.inputTokens);
+      const outputTokens = per(tokens.outputTokens, pricing.outputTokens);
+      const cacheCreation5mInputTokens = per(tokens.cacheCreation5mInputTokens, pricing.cacheCreation5mInputTokens);
+      const cacheCreation1hInputTokens = per(tokens.cacheCreation1hInputTokens, pricing.cacheCreation1hInputTokens);
+      const cacheReadInputTokens = per(tokens.cacheReadInputTokens, pricing.cacheReadInputTokens);
+      return {
+        inputTokens,
+        outputTokens,
+        cacheCreation5mInputTokens,
+        cacheCreation1hInputTokens,
+        cacheReadInputTokens,
+        total: inputTokens + outputTokens + cacheCreation5mInputTokens + cacheCreation1hInputTokens + cacheReadInputTokens,
+      };
+    }
+
+    if (provider === 'gemini') {
+      // cachedTokens are a subset of inputTokens; bill non-cached at full rate, cached at reduced rate
+      // thoughtsTokens are separate from outputTokens and billed at the output rate
+      const nonCached = tokens.inputTokens - tokens.cachedTokens;
+      const inputTokens = per(nonCached, pricing.inputTokens);
+      const cachedTokens = per(tokens.cachedTokens, pricing.cachedTokens);
+      const outputTokens = per(tokens.outputTokens, pricing.outputTokens);
+      const thoughtsTokens = per(tokens.thoughtsTokens, pricing.outputTokens);
+      return {
+        inputTokens,
+        cachedTokens,
+        outputTokens,
+        thoughtsTokens,
+        total: inputTokens + cachedTokens + outputTokens + thoughtsTokens,
+      };
+    }
+
+    // openai (and unknown providers, which fall back to openai pricing)
+    // cachedTokens are a subset of inputTokens; bill non-cached at full rate, cached at reduced rate
+    // reasoningTokens are already included in outputTokens (completion_tokens), so not billed separately
+    const nonCached = tokens.inputTokens - tokens.cachedTokens;
+    const inputTokens = per(nonCached, pricing.inputTokens);
+    const cachedTokens = per(tokens.cachedTokens, pricing.cachedTokens);
+    const outputTokens = per(tokens.outputTokens, pricing.outputTokens);
+    return {
+      inputTokens,
+      cachedTokens,
+      outputTokens,
+      total: inputTokens + cachedTokens + outputTokens,
+    };
   }
 }
 

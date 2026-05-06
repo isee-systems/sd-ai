@@ -331,6 +331,13 @@ export class AgentOrchestrator {
           'awaiting_user',
           'Agent stopped by user request'
         ));
+      } else if (error.message?.includes('maximum number of turns')) {
+        logger.log(`Agent reached max turns for session ${this.sessionId}`);
+        await this.sendToClient(createAgentCompleteMessage(
+          this.sessionId,
+          'awaiting_user',
+          `Reached maximum iterations (${maxIterations})`
+        ));
       } else {
         logger.error('Error in agent conversation loop:', error);
         await this.sendToClient(createErrorMessage(
@@ -416,6 +423,7 @@ export class AgentOrchestrator {
    * Handle assistant messages (text from Claude)
    */
   async handleAnthropicSDKAssistantMessage(message) {
+    this.#logApiUsage('anthropic', message.message?.usage);
     const content = message.message?.content;
     const rawTextParts = [];
 
@@ -530,8 +538,6 @@ export class AgentOrchestrator {
    * Handle result messages (conversation completion)
    */
   async handleAnthropicSDKResultMessage(message) {
-    this.#logApiUsage('anthropic', message.usage);
-
     if (message.subtype === 'success') {
       logger.log(`SDK conversation completed successfully for session ${this.sessionId}`);
     } else if (message.subtype === 'error_max_turns') {
@@ -654,13 +660,13 @@ export class AgentOrchestrator {
           tools: tools.length > 0 ? tools : undefined
         });
 
+        this.#logApiUsage('anthropic', response.usage);
+
         // Check if stop was requested during the API call
         if (this.stopRequested) {
           logger.log(`Stop requested during API call for session ${this.sessionId}`);
           break;
         }
-
-        this.#logApiUsage('anthropic', response.usage);
 
         // Process response
         continueLoop = await this.processAgentResponseAnthropicManual(response, messages, builtInTools, dynamicTools);
@@ -1110,9 +1116,9 @@ export class AgentOrchestrator {
           config: geminiConfig
         });
 
-        if (this.stopRequested) break;
-
         this.#logApiUsage('gemini', response.usageMetadata);
+
+        if (this.stopRequested) break;
 
         continueLoop = await this.processGeminiManualResponse(response, messages, builtInTools, dynamicTools);
         if (!continueLoop) completedNaturally = true;
@@ -1316,6 +1322,7 @@ export class AgentOrchestrator {
         newMessage,
         abortSignal: this.abortController.signal
       })) {
+        if (event.usageMetadata) this.#logApiUsage('gemini', event.usageMetadata);
         if (this.stopRequested) break;
         await this.handleAdkEvent(event);
         if (isFinalResponse(event)) turnCount++;
@@ -1355,10 +1362,6 @@ export class AgentOrchestrator {
   async handleAdkEvent(event) {
     if (event.errorCode) {
       throw new Error(event.errorMessage || `ADK error: ${event.errorCode}`);
-    }
-
-    if (event.usageMetadata) {
-      this.#logApiUsage('gemini', event.usageMetadata);
     }
 
     const content = event.content;
