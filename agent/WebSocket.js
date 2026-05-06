@@ -437,8 +437,14 @@ export class WebSocketHandler {
 
     w.on('error', (err) => logger.error(`[worker:${this.#sessionId}] process error: ${err.message}`));
 
-    w.stdout?.on('data', (d) => logger.log(`[worker:${this.#sessionId}] ${d.toString().trim()}`));
-    w.stderr?.on('data', (d) => logger.error(`[worker:${this.#sessionId}] stderr: ${d.toString().trim()}`));
+    //if (typeof w.pid !== 'number') {
+      w.stdout?.on('data', (d) => {
+        logger.log(`[worker:${this.#sessionId}] ${d.toString().trim()}`);
+      });
+      w.stderr?.on('data', (d) => {
+        logger.error(`[worker:${this.#sessionId}] stderr: ${d.toString().trim()}`);
+      });
+    //}
 
     w.on('exit', (code, signal) => {
       logger.log(`[worker:${this.#sessionId}] exited (code=${code} signal=${signal})`);

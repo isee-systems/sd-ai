@@ -246,7 +246,6 @@ export class SessionManager {
     const modelPath = join(sessionTempDir, 'model.sdjson');
     mkdirSync(sessionTempDir, { recursive: true });
     writeFileSync(modelPath, JSON.stringify(model, null, 2));
-    logger.log(`Model written to: ${modelPath}`);
     const message = `The model has been written to disk at: ${modelPath}. Other tools will load it automatically — you do not need to read this file. Use the read_model_section tool if you need to inspect specific sections.`;
     return { modelPath, message };
   }
@@ -260,7 +259,6 @@ export class SessionManager {
     const filePath = join(sessionTempDir, filename);
     mkdirSync(sessionTempDir, { recursive: true });
     writeFileSync(filePath, JSON.stringify(data, null, 2));
-    logger.log(`Data written to: ${filePath}`);
     const message = `The data has been written to disk at: ${filePath}. Use the Read filesystem tool to load it into context.`;
     return { filePath, message };
   }

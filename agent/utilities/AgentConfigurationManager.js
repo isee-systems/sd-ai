@@ -151,11 +151,10 @@ Reserve the feedback_dominance visualization type (stacked area) for when the us
         // Simple YAML parser for our metadata
         const metadata = this.parseSimpleYAML(metadataText);
 
-        logger.log(`Loaded agent configuration from ${path}`);
         return { metadata, content };
       } else {
         // No frontmatter, use defaults
-        logger.log(`Loaded agent configuration from ${path} (no frontmatter)`);
+        logger.error(`Loaded agent configuration from ${path} (no frontmatter)`);
         return {
           metadata: {
             name: 'Unknown',

@@ -115,9 +115,6 @@ export class AgentOrchestrator {
 
       const agentMode = this.configManager.getAgentMode();
       logger.log(`Starting conversation for session ${this.sessionId} (agent_mode: ${agentMode})`);
-      logger.log(`Built-in tools: ${this.builtInToolProvider.getToolNames().join(', ')}`);
-      logger.log(`Client tools: ${this.dynamicToolProvider.getToolNames().join(', ')}`);
-
       const isManual = agentMode === 'anthropic-manual' || agentMode === 'gemini-manual';
       if (isManual && previousAgentContext?.length > 0) {
         // previousAgentContext is a reference to the live context — pop the last message
@@ -201,10 +198,6 @@ export class AgentOrchestrator {
       const modelJson = JSON.stringify(currentModel, null, 2);
       modelTokenCount = countTokens(modelJson);
       this.sessionManager.updateModelTokenCount(this.sessionId, modelTokenCount);
-      const modelExceedsLimit = modelTokenCount > config.agentMaxTokensForEngines;
-
-      logger.log(`Model token count: ${modelTokenCount} (limit: ${config.agentMaxTokensForEngines}, exceeds: ${modelExceedsLimit})`);
-
     }
 
     await this.runAgentConversationWithAnthropicSDK(userMessage, systemPrompt, modelTokenCount, previousAgentContext);
@@ -256,8 +249,6 @@ export class AgentOrchestrator {
         ...prefixedClientToolNames // Client tools with mcp__client__ prefix
       ];
 
-      logger.debug("Allowed tools are: " + allowedTools.join(', '));
-
       // Prefix tool names in system prompt
       systemPrompt = this.anthropicSDKPrefixToolNamesInSystemPrompt(systemPrompt, builtInToolNames, clientToolNames);
 
@@ -279,9 +270,9 @@ export class AgentOrchestrator {
       // If we have an SDK session ID, resume the conversation
       if (this.sdkSessionId) {
         queryOptions.resume = this.sdkSessionId;
-        logger.log(`Resuming SDK conversation with session_id: ${this.sdkSessionId}`);
+        logger.log(`Anthropic SDK: Resuming SDK conversation with session_id: ${this.sdkSessionId}`);
       } else {
-        logger.log(`Starting new SDK conversation`);
+        logger.log(`Anthropic SDK: Starting new SDK conversation`);
       }
 
       // Build prompt - inject prior agent's history as plain string prefix on agent switch
@@ -308,14 +299,14 @@ export class AgentOrchestrator {
 
       // Normal completion (or max turns reached)
       if (this.maxTurnsReached) {
-        logger.log(`Agent reached max iterations for session ${this.sessionId}`);
+        logger.log(`Anthropic SDK: Agent reached max iterations for session ${this.sessionId}`);
         await this.sendToClient(createAgentCompleteMessage(
           this.sessionId,
           'awaiting_user',
           `Reached maximum iterations (${maxIterations})`
         ));
       } else {
-        logger.log(`Agent conversation completed successfully for session ${this.sessionId}`);
+        logger.log(`Anthropic SDK: Agent conversation completed successfully for session ${this.sessionId}`);
         await this.sendToClient(createAgentCompleteMessage(
           this.sessionId,
           'success',
@@ -325,21 +316,21 @@ export class AgentOrchestrator {
 
     } catch (error) {
       if (error.name === 'AbortError' || this.stopRequested) {
-        logger.log(`Agent iteration stopped by user request for session ${this.sessionId}`);
+        logger.log(`Anthropic SDK: Agent iteration stopped by user request for session ${this.sessionId}`);
         await this.sendToClient(createAgentCompleteMessage(
           this.sessionId,
           'awaiting_user',
           'Agent stopped by user request'
         ));
       } else if (error.message?.includes('maximum number of turns')) {
-        logger.log(`Agent reached max turns for session ${this.sessionId}`);
+        logger.log(`Anthropic SDK: Agent reached max turns for session ${this.sessionId}`);
         await this.sendToClient(createAgentCompleteMessage(
           this.sessionId,
           'awaiting_user',
           `Reached maximum iterations (${maxIterations})`
         ));
       } else {
-        logger.error('Error in agent conversation loop:', error);
+        logger.error('Anthropic SDK: Error in agent conversation loop:', error);
         await this.sendToClient(createErrorMessage(
           this.sessionId,
           `Agent error: ${error.message}`,
@@ -396,17 +387,17 @@ export class AgentOrchestrator {
         if (message.subtype === 'init') {
           if (message.session_id) {
             this.sdkSessionId = message.session_id;
-            logger.log(`SDK initialized for session ${this.sessionId}, SDK session_id: ${this.sdkSessionId}`);
+            logger.log(`Anthropic SDK initialized for session ${this.sessionId}, SDK session_id: ${this.sdkSessionId}`);
           }
         } else if (message.subtype === 'error') {
-          logger.error(`SDK system error for session ${this.sessionId}:`, message.error || message);
+          logger.error(`Anthropic SDK system error for session ${this.sessionId}:`, message.error || message);
           await this.sendToClient(createErrorMessage(
             this.sessionId,
             message.error?.message || 'SDK system error',
             'SDK_SYSTEM_ERROR'
           ));
         } else {
-          logger.log(`Unhandled system message subtype: ${message.subtype}`, message);
+          logger.warn(`Anthropic SDK Unhandled system message subtype: ${message.subtype}`, message);
         }
         break;
 
@@ -415,7 +406,7 @@ export class AgentOrchestrator {
         break;
 
       default:
-        logger.log(`Unhandled SDK message type: ${message.type}`, message);
+        logger.warn(`Anthropic SDK: Unhandled message type: ${message.type}`, message);
     }
   }
 
@@ -455,8 +446,6 @@ export class AgentOrchestrator {
             block.input || {},
             isBuiltIn
           ));
-
-          logger.log(`Tool use notification sent: ${block.name} (${block.id}) - isBuiltIn: ${isBuiltIn}`);
         }
         else if (block.type === 'tool_result' && block.tool_use_id) {
           const toolName = this.pendingToolCalls.get(block.tool_use_id) || 'unknown';
@@ -464,9 +453,7 @@ export class AgentOrchestrator {
 
           // Log errors more prominently
           if (block.is_error) {
-            logger.error(`Tool error for ${toolName} (${block.tool_use_id}):`, block.content);
-          } else {
-            logger.log(`Tool result received in assistant message for ${toolName} (${block.tool_use_id})`);
+            logger.error(`Anthropic SDK: Tool error for ${toolName} (${block.tool_use_id}):`, block.content);
           }
 
           const responseType = this.#getResponseType(displayName);
@@ -508,13 +495,7 @@ export class AgentOrchestrator {
 
           // Log errors more prominently
           if (block.is_error) {
-            logger.error(`Tool error for ${toolName} (${block.tool_use_id}):`, block.content);
-          } else {
-            if (toolName === 'ToolSearch') {
-              logger.log(`Tool result received for ${toolName} (${block.tool_use_id}):`, JSON.stringify(block.content));
-            } else {
-              logger.log(`Tool result received for ${toolName} (${block.tool_use_id})`);
-            }
+            logger.error(`Anthropic SDK: Tool error for ${toolName} (${block.tool_use_id}):`, block.content);
           }
 
           const responseType = this.#getResponseType(displayName);
@@ -539,16 +520,16 @@ export class AgentOrchestrator {
    */
   async handleAnthropicSDKResultMessage(message) {
     if (message.subtype === 'success') {
-      logger.log(`SDK conversation completed successfully for session ${this.sessionId}`);
+      logger.log(`Anthropic SDK conversation completed successfully for session ${this.sessionId}`);
     } else if (message.subtype === 'error_max_turns') {
-      logger.log(`SDK conversation reached max iterations for session ${this.sessionId}`);
+      logger.log(`Anthropic SDK conversation reached max iterations for session ${this.sessionId}`);
       this.maxTurnsReached = true;
     } else if (message.subtype === 'error') {
-      logger.error(`SDK conversation error for session ${this.sessionId}:`, message.error || message);
+      logger.error(`Anthropic SDK conversation error for session ${this.sessionId}:`, message.error || message);
     } else if (message.subtype === 'tool_error') {
-      logger.error(`SDK tool error for session ${this.sessionId}:`, message);
+      logger.error(`Anthropic SDK tool error for session ${this.sessionId}:`, message);
     } else {
-      logger.log(`Unhandled result message subtype: ${message.subtype}`, message);
+      logger.warn(`Anthropic SDK Unhandled result message subtype: ${message.subtype}`, message);
     }
   }
 
@@ -626,7 +607,6 @@ export class AgentOrchestrator {
       const modelJson = JSON.stringify(currentModel, null, 2);
       modelTokenCount = countTokens(modelJson);
       this.sessionManager.updateModelTokenCount(this.sessionId, modelTokenCount);
-      logger.log(`Model token count: ${modelTokenCount} (limit: ${config.agentMaxTokensForEngines}, exceeds: ${modelTokenCount > config.agentMaxTokensForEngines})`);
     }
 
     const systemBlocks = [
@@ -664,7 +644,6 @@ export class AgentOrchestrator {
 
         // Check if stop was requested during the API call
         if (this.stopRequested) {
-          logger.log(`Stop requested during API call for session ${this.sessionId}`);
           break;
         }
 
@@ -673,7 +652,6 @@ export class AgentOrchestrator {
 
         // Check if stop was requested during response processing
         if (this.stopRequested) {
-          logger.log(`Stop requested during response processing for session ${this.sessionId}`);
           break;
         }
 
@@ -685,14 +663,14 @@ export class AgentOrchestrator {
         if ((isOverloaded || isNetworkError) && overloadedRetries < 3) {
           overloadedRetries++;
           const reason = isOverloaded ? 'overloaded (529)' : 'network error';
-          logger.warn(`Anthropic API ${reason}, retry ${overloadedRetries}/3`);
+          logger.warn(`Anthropic Manual: Anthropic API ${reason}, retry ${overloadedRetries}/3`);
           await this.sendToClient(createAgentTextMessage(
             this.sessionId,
             isOverloaded ? 'The AI service is temporarily overloaded. Retrying...' : 'Network connection interrupted. Retrying...'
           ));
           await new Promise(resolve => setTimeout(resolve, 5000));
         } else if (isOverloaded) {
-          logger.error('Anthropic API overloaded (529) after 3 retries, giving up');
+          logger.error('Anthropic Manual: Anthropic API overloaded (529) after 3 retries, giving up');
           await this.sendToClient(createErrorMessage(
             this.sessionId,
             'The AI service is overloaded. Please try again later.',
@@ -705,7 +683,7 @@ export class AgentOrchestrator {
           ));
           continueLoop = false;
         } else {
-          logger.error('Error in agent conversation loop:', error);
+          logger.error('Anthropic Manual: Error in agent conversation loop:', error);
           await this.sendToClient(createErrorMessage(
             this.sessionId,
             `Agent error: ${error.message}`,
@@ -722,7 +700,7 @@ export class AgentOrchestrator {
     }
 
     if (this.stopRequested) {
-      logger.log(`Agent iteration stopped by user request for session ${this.sessionId}`);
+      logger.log(`Anthropic Manual: Agent iteration stopped by user request for session ${this.sessionId}`);
       this.stopRequested = false; // Reset for next conversation
 
       // Send agent_complete message to notify client that agent has stopped
@@ -732,7 +710,7 @@ export class AgentOrchestrator {
         'Agent stopped by user request'
       ));
     } else if (iteration >= maxIterations) {
-      logger.warn(`Agent conversation reached max iterations (${maxIterations})`);
+      logger.warn(`Anthropic Manual: Agent conversation reached max iterations (${maxIterations})`);
 
       // Send agent_complete message when max iterations reached
       await this.sendToClient(createAgentCompleteMessage(
@@ -754,7 +732,6 @@ export class AgentOrchestrator {
     for (const block of response.content) {
       // Check if stop was requested before processing each block
       if (this.stopRequested) {
-        logger.log(`Stop requested during content block processing for session ${this.sessionId}`);
         return false; // Stop processing immediately
       }
 
@@ -775,8 +752,6 @@ export class AgentOrchestrator {
         messages[messages.length - 1].content.push({ type: 'text', text: block.text });
       } else if (block.type === 'tool_use') {
         hasToolCalls = true;
-
-        logger.debug(`Tool call: ${block.name} (${block.id}) input: ${JSON.stringify(block.input)}`);
 
         // Notify client that tool call is happening (for UI display)
         const isBuiltIn = this.isBuiltInTool(block.name, builtInTools);
@@ -844,7 +819,6 @@ export class AgentOrchestrator {
 
         // Check if stop was requested during tool execution
         if (this.stopRequested) {
-          logger.log(`Stop requested during tool execution for session ${this.sessionId}`);
           return false; // Stop processing immediately
         }
 
@@ -930,7 +904,7 @@ export class AgentOrchestrator {
         return '';
       }).filter(line => line).join('\n\n');
 
-      logger.log(`Summarizing prior agent context (${history.length} messages) before injection`);
+      logger.log(`Anthropic: Summarizing prior agent context (${history.length} messages) before injection`);
       const response = await this.anthropic.messages.create({
         model: config.agentAnthropicSummaryModel,
         max_tokens: 1024,
@@ -941,7 +915,7 @@ export class AgentOrchestrator {
       }
       return response.content[0].text;
     } catch (error) {
-      logger.error('Error summarizing prior context:', error);
+      logger.error('Anthropic: Error summarizing prior context:', error);
       return '[Prior conversation condensed due to size]';
     }
   }
@@ -979,7 +953,7 @@ export class AgentOrchestrator {
       };
 
     } catch (error) {
-      logger.error(`Error executing tool ${toolUse.name}:`, error);
+      logger.error(`Anthropic Manual: Error executing tool ${toolUse.name}:`, error);
       return {
         content: { error: error.message },
         isError: true
@@ -997,23 +971,20 @@ export class AgentOrchestrator {
     // Convert built-in tools
     for (const [toolName, toolDef] of Object.entries(builtInTools.tools)) {
       if (toolNames.has(toolName)) {
-        logger.warn(`Duplicate tool name detected: ${toolName} (from built-in tools)`);
+        logger.warn(`Anthropic: Duplicate tool name detected: ${toolName} (from built-in tools)`);
         continue;
       }
 
       // Skip tools that don't support the current mode
       if (mode && toolDef.supportedModes && !toolDef.supportedModes.includes(mode)) {
-        logger.log(`Excluding tool ${toolName} - not supported in mode: ${mode}`);
         continue;
       }
 
       // Skip tools whose model token constraints aren't met
       if (toolDef.maxModelTokens && modelTokenCount > toolDef.maxModelTokens) {
-        logger.log(`Excluding tool ${toolName} - model token count ${modelTokenCount} exceeds max ${toolDef.maxModelTokens}`);
         continue;
       }
       if (toolDef.minModelTokens && modelTokenCount < toolDef.minModelTokens) {
-        logger.log(`Excluding tool ${toolName} - model token count ${modelTokenCount} below min ${toolDef.minModelTokens}`);
         continue;
       }
 
@@ -1030,7 +1001,7 @@ export class AgentOrchestrator {
     if (dynamicTools && dynamicTools.tools) {
       for (const [toolName, toolDef] of Object.entries(dynamicTools.tools)) {
         if (toolNames.has(toolName)) {
-          logger.warn(`Duplicate tool name detected: ${toolName} (from client tools) - skipping client version, using built-in`);
+          logger.warn(`Anthropic: Duplicate tool name detected: ${toolName} (from client tools) - skipping client version, using built-in`);
           continue;
         }
         toolNames.add(toolName);
@@ -1091,7 +1062,6 @@ export class AgentOrchestrator {
       const modelJson = JSON.stringify(currentModel, null, 2);
       modelTokenCount = encode(modelJson).length;
       this.sessionManager.updateModelTokenCount(this.sessionId, modelTokenCount);
-      logger.log(`Model token count: ${modelTokenCount} (limit: ${config.agentMaxTokensForEngines}, exceeds: ${modelTokenCount > config.agentMaxTokensForEngines})`);
     }
 
     const toolDeclarations = this.convertToolsToGeminiFormat(builtInTools, dynamicTools, modelTokenCount, mode);
@@ -1132,19 +1102,19 @@ export class AgentOrchestrator {
         if ((isQuota || isNetworkError) && retries < 3) {
           retries++;
           const reason = isQuota ? 'quota/rate-limited (429)' : 'network error';
-          logger.warn(`Gemini API ${reason}, retry ${retries}/3`);
+          logger.warn(`Gemini Manual: Gemini API ${reason}, retry ${retries}/3`);
           await this.sendToClient(createAgentTextMessage(
             this.sessionId,
             isQuota ? 'The AI service is temporarily rate-limited. Retrying...' : 'Network connection interrupted. Retrying...'
           ));
           await new Promise(resolve => setTimeout(resolve, 5000));
         } else if (isQuota) {
-          logger.error('Gemini API rate-limited after 3 retries, giving up');
+          logger.error('Gemini Manual: Gemini API rate-limited after 3 retries, giving up');
           await this.sendToClient(createErrorMessage(this.sessionId, 'The AI service is rate-limited. Please try again later.', 'AGENT_ERROR'));
           await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'awaiting_user', 'Agent stopped due to rate limiting'));
           continueLoop = false;
         } else {
-          logger.error('Error in Gemini agent conversation loop:', error);
+          logger.error('Gemini Manual: Error in Gemini agent conversation loop:', error);
           await this.sendToClient(createErrorMessage(this.sessionId, `Agent error: ${error.message}`, 'AGENT_ERROR'));
           await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'awaiting_user', 'Agent stopped due to error'));
           continueLoop = false;
@@ -1156,7 +1126,7 @@ export class AgentOrchestrator {
       this.stopRequested = false;
       await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'awaiting_user', 'Agent stopped by user request'));
     } else if (!completedNaturally && iteration >= maxIterations) {
-      logger.warn(`Agent conversation reached max iterations (${maxIterations})`);
+      logger.warn(`Gemini Manual: Agent conversation reached max iterations (${maxIterations})`);
       await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'awaiting_user', `Reached maximum iterations (${maxIterations})`));
     }
   }
@@ -1195,8 +1165,6 @@ export class AgentOrchestrator {
 
       await this.#sendSlowToolMessageGeminiADK(name, args);
       await this.sendToClient(createToolCallNotificationMessage(this.sessionId, callId, name, args, isBuiltIn));
-
-      logger.debug(`Tool call: ${name} (${callId}) input: ${JSON.stringify(args)}`);
 
       const toolResult = await this.executeToolCallGeminiManual({ name, input: args }, builtInTools, dynamicTools);
 
@@ -1246,6 +1214,7 @@ export class AgentOrchestrator {
 
     this.abortController = new AbortController();
     const maxIterations = this.configManager.getMaxIterations();
+    let maxIterationsHit = false;
 
     try {
       const builtInAdkTools = this.builtInToolProvider.getAdkTools(mode, modelTokenCount);
@@ -1297,9 +1266,9 @@ export class AgentOrchestrator {
           userId: this.sessionId,
           sessionId: this.adkSessionId
         });
-        logger.log(`ADK session created: ${this.adkSessionId}`);
+        logger.log(`Gemini ADK: session created: ${this.adkSessionId}`);
       } else {
-        logger.log(`Resuming ADK session: ${this.adkSessionId}`);
+        logger.log(`Gemini ADK: Resuming session: ${this.adkSessionId}`);
       }
 
       let prompt = userMessage;
@@ -1327,7 +1296,8 @@ export class AgentOrchestrator {
         await this.handleAdkEvent(event);
         if (isFinalResponse(event)) turnCount++;
         if (turnCount >= maxIterations) {
-          logger.warn(`ADK agent reached max iterations (${maxIterations})`);
+          logger.warn(`Gemini ADK: agent reached max iterations (${maxIterations})`);
+          maxIterationsHit = true;
           this.abortController.abort();
           break;
         }
@@ -1335,22 +1305,25 @@ export class AgentOrchestrator {
 
       if (this.stopRequested) {
         this.stopRequested = false;
-        logger.log(`ADK agent stopped by user for session ${this.sessionId}`);
         await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'awaiting_user', 'Agent stopped by user request'));
-      } else if (turnCount >= maxIterations) {
+      } else if (maxIterationsHit) {
+        logger.log(`Gemini ADK: max iterations hit ${this.sessionId}`);
         await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'awaiting_user', `Reached maximum iterations (${maxIterations})`));
       } else {
-        logger.log(`ADK conversation completed successfully for session ${this.sessionId}`);
+        logger.log(`Gemini ADK: conversation completed successfully for session ${this.sessionId}`);
         await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'success', 'Task completed successfully'));
       }
 
     } catch (error) {
-      if (error.name === 'AbortError' || this.stopRequested) {
+      if (maxIterationsHit) {
+        logger.log(`Gemini ADK: agent reached max iterations for session ${this.sessionId}`);
+        await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'awaiting_user', `Reached maximum iterations (${maxIterations})`));
+      } else if (error.name === 'AbortError' || this.stopRequested) {
         this.stopRequested = false;
-        logger.log(`ADK agent stopped for session ${this.sessionId}`);
+        logger.log(`Gemini ADK: agent stopped for session ${this.sessionId}`);
         await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'awaiting_user', 'Agent stopped by user request'));
       } else {
-        logger.error('Error in ADK conversation loop:', error);
+        logger.error('Gemini ADK: in ADK conversation loop:', error);
         await this.sendToClient(createErrorMessage(this.sessionId, `Agent error: ${error.message}`, 'AGENT_ERROR'));
         await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'awaiting_user', `Agent error: ${error.message}`));
       }
@@ -1422,7 +1395,7 @@ export class AgentOrchestrator {
       }
       return Promise.resolve({ content: [{ type: 'text', text: `Tool not found: ${toolUse.name}` }], isError: true });
     } catch (error) {
-      logger.error(`Error executing tool ${toolUse.name}:`, error);
+      logger.error(`Gemini Manual: Error executing tool ${toolUse.name}:`, error);
       return Promise.resolve({ content: [{ type: 'text', text: error.message }], isError: true });
     }
   }
@@ -1469,7 +1442,7 @@ export class AgentOrchestrator {
         return text ? `${role}: ${text}` : '';
       }).filter(line => line).join('\n\n');
 
-      logger.log(`Summarizing prior agent context (${history.length} messages) before injection`);
+      logger.log(`Gemini: Summarizing prior agent context (${history.length} messages) before injection`);
       const response = await this.gemini.models.generateContent({
         model: config.agentGeminiSummaryModel,
         contents: [{
@@ -1482,7 +1455,7 @@ export class AgentOrchestrator {
       }
       return response.text || response.candidates?.[0]?.content?.parts?.[0]?.text || '';
     } catch (error) {
-      logger.error('Error summarizing prior context:', error);
+      logger.error('Gemini: Error summarizing prior context:', error);
       return '[Prior conversation condensed due to size]';
     }
   }
@@ -1514,7 +1487,6 @@ export class AgentOrchestrator {
     const cacheKey = systemPrompt + JSON.stringify(toolDeclarations.map(t => t.name));
 
     if (this.#geminiManualCacheName && this.#geminiManualCacheKey === cacheKey) {
-      logger.log(`[gemini-cache] reusing cache ${this.#geminiManualCacheName}`);
       return {
         cachedContent: this.#geminiManualCacheName,
         thinkingConfig: config.agentGeminiThinking
@@ -1525,7 +1497,6 @@ export class AgentOrchestrator {
     if (this.#geminiManualCacheName) {
       try {
         await this.gemini.caches.delete({ name: this.#geminiManualCacheName });
-        logger.log(`[gemini-cache] deleted stale cache ${this.#geminiManualCacheName}`);
       } catch (e) {
         logger.warn('[gemini-cache] failed to delete stale cache:', e.message);
       }
@@ -1549,7 +1520,6 @@ export class AgentOrchestrator {
 
       this.#geminiManualCacheName = cache.name;
       this.#geminiManualCacheKey = cacheKey;
-      logger.log(`[gemini-cache] created cache ${cache.name}`);
 
       return {
         cachedContent: cache.name,
