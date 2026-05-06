@@ -138,10 +138,9 @@ class TokenUsageReporter {
     }
 
     if (provider === 'gemini') {
-      // cachedTokens are a subset of inputTokens; bill non-cached at full rate, cached at reduced rate
+      // promptTokenCount (inputTokens) and cachedContentTokenCount (cachedTokens) are reported separately — do not subtract
       // thoughtsTokens are separate from outputTokens and billed at the output rate
-      const nonCached = tokens.inputTokens - tokens.cachedTokens;
-      const inputTokens = per(nonCached, pricing.inputTokens);
+      const inputTokens = per(tokens.inputTokens, pricing.inputTokens);
       const cachedTokens = per(tokens.cachedTokens, pricing.cachedTokens);
       const outputTokens = per(tokens.outputTokens, pricing.outputTokens);
       const thoughtsTokens = per(tokens.thoughtsTokens, pricing.outputTokens);
