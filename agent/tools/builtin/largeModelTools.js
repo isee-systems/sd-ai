@@ -62,6 +62,7 @@ Filtering:
         const modelContent = readFileSync(modelPath, 'utf-8');
         const model = JSON.parse(modelContent);
 
+        const norm = s => s.toLowerCase().replace(/[ _]/g, '_');
         const limit = filter?.limit || 500;
         let result = {};
 
@@ -73,34 +74,31 @@ Filtering:
           case 'variables':
             let variables = model.variables || [];
 
-            // Apply filters (case-insensitive)
+            // Apply filters (case-insensitive, spaces and underscores treated as equivalent)
             if (filter?.variableNames && filter.variableNames.length > 0) {
-              const lowerFilterNames = filter.variableNames.map(name => name.toLowerCase());
+              const normFilterNames = filter.variableNames.map(name => norm(name));
               variables = variables.filter(v => {
-                const lowerName = v.name.toLowerCase();
-                if (lowerFilterNames.includes(lowerName)) {
-                  return true;
-                }
+                if (normFilterNames.includes(norm(v.name))) return true;
                 const baseName = v.name.includes('.') ? v.name.split('.').pop() : v.name;
-                return lowerFilterNames.includes(baseName.toLowerCase());
+                return normFilterNames.includes(norm(baseName));
               });
             }
             if (filter?.variableType) {
               variables = variables.filter(v => v.type === filter.variableType);
             }
             if (filter?.moduleName) {
-              const modulePrefix = filter.moduleName.toLowerCase() + '.';
-              variables = variables.filter(v => v.name.toLowerCase().startsWith(modulePrefix));
+              const normModule = norm(filter.moduleName);
+              variables = variables.filter(v => norm(v.name).startsWith(normModule + '.'));
             }
             if (filter?.usedInEquation) {
-              const searchTerm = filter.usedInEquation.replace(/ /g, '_').toLowerCase();
+              const searchTerm = norm(filter.usedInEquation);
               variables = variables.filter(v => {
-                if (v.equation && v.equation.toLowerCase().includes(searchTerm)) {
+                if (v.equation && norm(v.equation).includes(searchTerm)) {
                   return true;
                 }
                 if (v.arrayEquations && Array.isArray(v.arrayEquations)) {
                   return v.arrayEquations.some(ae =>
-                    ae.equation && ae.equation.toLowerCase().includes(searchTerm)
+                    ae.equation && norm(ae.equation).includes(searchTerm)
                   );
                 }
                 return false;
@@ -127,10 +125,12 @@ Filtering:
             let relationships = model.relationships || [];
 
             if (filter?.relationshipFrom) {
-              relationships = relationships.filter(r => r.from === filter.relationshipFrom);
+              const normFrom = norm(filter.relationshipFrom);
+              relationships = relationships.filter(r => norm(r.from) === normFrom);
             }
             if (filter?.relationshipTo) {
-              relationships = relationships.filter(r => r.to === filter.relationshipTo);
+              const normTo = norm(filter.relationshipTo);
+              relationships = relationships.filter(r => norm(r.to) === normTo);
             }
 
             const totalRels = relationships.length;
@@ -148,7 +148,8 @@ Filtering:
             let modules = model.modules || [];
 
             if (filter?.moduleName) {
-              modules = modules.filter(m => m.name === filter.moduleName);
+              const normModule = norm(filter.moduleName);
+              modules = modules.filter(m => norm(m.name) === normModule);
             }
 
             result = {
@@ -324,6 +325,10 @@ After editing, the model is validated and processed through the quantitative eng
         return createErrorResponse(errorMessage, error);
       };
 
+      // Variable names are stored with spaces; equations use underscores.
+      // Normalize any underscore-style names the AI sends back to space-style.
+      const normName = n => typeof n === 'string' ? n.replace(/_/g, ' ') : n;
+
       try {
         const session = sessionManager.getSession(sessionId);
         if (!session) {
@@ -380,6 +385,7 @@ After editing, the model is validated and processed through the quantitative eng
                 return handleError('Error: For variables add operation, data must be an array of variable objects. Example: [{name: "var1", type: "stock", equation: "100"}]');
               }
               const varsToAdd = data;
+              for (const v of varsToAdd) { if (v.name) v.name = normName(v.name); }
               const errors = [];
               for (let i = 0; i < varsToAdd.length; i++) {
                 const v = varsToAdd[i];
@@ -402,7 +408,9 @@ After editing, the model is validated and processed through the quantitative eng
                 return handleError('Error: For variables update operation, data must be an array of variable objects. Example: [{name: "Population", equation: "2000"}]');
               }
               for (const update of data) {
-                const varName = update.name;
+                const varName = normName(update.name);
+                update.name = varName;
+                if (update.newName) update.newName = normName(update.newName);
                 if (!varName) {
                   return handleError('Error: Must specify "name" field to update a variable');
                 }
@@ -447,7 +455,8 @@ After editing, the model is validated and processed through the quantitative eng
               if (!Array.isArray(data)) {
                 return handleError('Error: For variables remove operation, data must be an array of variable name strings. Example: ["var1", "var2"]');
               }
-              model.variables = model.variables.filter(v => !data.includes(v.name));
+              const normalizedRemoveNames = data.map(normName);
+              model.variables = model.variables.filter(v => !normalizedRemoveNames.includes(v.name));
             }
             break;
 
@@ -459,6 +468,8 @@ After editing, the model is validated and processed through the quantitative eng
               }
               const relsToAdd = data;
               for (const r of relsToAdd) {
+                r.from = normName(r.from);
+                r.to = normName(r.to);
                 if (!r.from || !r.to) {
                   return handleError('Error: Relationships must have "from" and "to" fields');
                 }
@@ -468,6 +479,8 @@ After editing, the model is validated and processed through the quantitative eng
               }
               model.relationships.push(...relsToAdd);
             } else if (operation === 'update') {
+              data.from = normName(data.from);
+              data.to = normName(data.to);
               if (!data.from || !data.to) {
                 return handleError('Error: Must specify "from" and "to" fields to update a relationship');
               }
@@ -482,7 +495,7 @@ After editing, the model is validated and processed through the quantitative eng
                 return handleError('Error: For relationships remove operation, data must be an array of {from, to} objects. Example: [{from: "var1", to: "var2"}]');
               }
               model.relationships = model.relationships.filter(r =>
-                !data.some(rem => rem.from === r.from && rem.to === r.to)
+                !data.some(rem => normName(rem.from) === r.from && normName(rem.to) === r.to)
               );
             }
             break;
@@ -494,6 +507,7 @@ After editing, the model is validated and processed through the quantitative eng
                 return handleError('Error: For modules update operation, data must be an array of module objects. Example: [{name: "Module1", parentModule: null}]');
               }
               for (const m of data) {
+                m.name = normName(m.name);
                 if (!m.name || m.parentModule === undefined) {
                   return handleError('Error: Modules must have "name" and "parentModule" fields');
                 }
@@ -504,6 +518,7 @@ After editing, the model is validated and processed through the quantitative eng
                 return handleError('Error: For modules add operation, data must be an array of module objects. Example: [{name: "Module1", parentModule: null}]');
               }
               for (const m of data) {
+                m.name = normName(m.name);
                 if (!m.name || m.parentModule === undefined) {
                   return handleError('Error: Modules must have "name" and "parentModule" fields');
                 }
@@ -513,7 +528,8 @@ After editing, the model is validated and processed through the quantitative eng
               if (!Array.isArray(data)) {
                 return handleError('Error: For modules remove operation, data must be an array of module name strings. Example: ["Module1", "Module2"]');
               }
-              model.modules = model.modules.filter(m => !data.includes(m.name));
+              const normalizedRemoveModules = data.map(normName);
+              model.modules = model.modules.filter(m => !normalizedRemoveModules.includes(m.name));
             }
             break;
         }
