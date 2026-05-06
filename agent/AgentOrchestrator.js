@@ -115,6 +115,9 @@ export class AgentOrchestrator {
 
       const agentMode = this.configManager.getAgentMode();
       logger.log(`Starting conversation for session ${this.sessionId} (agent_mode: ${agentMode})`);
+
+      await this.#fetchCurrentModel();
+
       const isManual = agentMode === 'anthropic-manual' || agentMode === 'gemini-manual';
       if (isManual && previousAgentContext?.length > 0) {
         // previousAgentContext is a reference to the live context — pop the last message
@@ -1549,6 +1552,15 @@ export class AgentOrchestrator {
         cfg.tools = [{ functionDeclarations: toolDeclarations }];
       }
       return cfg;
+    }
+  }
+
+  async #fetchCurrentModel() {
+    const tool = this.builtInToolProvider.getTools().tools.get_current_model;
+    if (!tool) return;
+    const result = await tool.handler({});
+    if (result.isError) {
+      logger.warn(`Failed to fetch current model before processing request: ${result.content?.[0]?.text ?? 'unknown error'}`);
     }
   }
 
