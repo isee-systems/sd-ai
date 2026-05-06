@@ -115,32 +115,41 @@ export const openai = {
 /**
  * Returns the pricing tier for a given provider/model/inputTokenCount.
  * Unknown providers fall back to the OpenAI pricing table.
- * Unknown models fall back to the provider's "default" entry.
+ * Unknown models fall back to the provider's "default" entry, then to openai's default.
  * @param {string} provider - 'anthropic' | 'openai' | 'gemini' (others fall back to openai)
  * @param {string} model
  * @param {number} inputTokens - used to select the correct tier for tiered models
- * @returns {Object|null} pricing object with per-token-type rates
+ * @returns {Object} pricing object with per-token-type rates
  */
 export function getPricing(provider, model, inputTokens = 0) {
-  let table, aliases;
+  let table, aliases, resolvedProvider;
   if (provider === 'anthropic') {
-    table = anthropic; aliases = {};
+    table = anthropic; aliases = {}; resolvedProvider = 'anthropic';
   } else if (provider === 'openai') {
-    table = openai; aliases = openaiAliases;
+    table = openai; aliases = openaiAliases; resolvedProvider = 'openai';
   } else if (provider === 'gemini') {
-    table = gemini; aliases = {};
+    table = gemini; aliases = {}; resolvedProvider = 'gemini';
   } else {
-    logger.error(`[pricing] unknown provider "${provider}" — falling back to openai pricing`);
-    table = openai; aliases = openaiAliases;
+    logger.error(`!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!`);
+    logger.error(`[pricing] !!! UNKNOWN PROVIDER "${provider}" !!! falling back to openai pricing — UPDATE pricing.js`);
+    logger.error(`!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!`);
+    table = openai; aliases = openaiAliases; resolvedProvider = 'openai';
   }
 
   const resolvedModel = aliases[model] ?? model;
   let entry = table[resolvedModel];
   if (!entry) {
-    logger.error(`[pricing] unknown model "${model}" for provider "${provider}" — falling back to default rates`);
+    logger.error(`!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!`);
+    logger.error(`[pricing] !!! UNKNOWN MODEL "${model}" for provider "${resolvedProvider}" !!! falling back to "${resolvedProvider}" default rates — UPDATE pricing.js`);
+    logger.error(`!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!`);
     entry = table['default'];
+    if (!entry) {
+      logger.error(`!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!`);
+      logger.error(`[pricing] !!! NO DEFAULT for provider "${resolvedProvider}" !!! falling back to openai default rates — UPDATE pricing.js`);
+      logger.error(`!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!`);
+      entry = openai['default'];
+    }
   }
-  if (!entry) return null;
 
   if (Array.isArray(entry)) {
     for (const tier of entry) {
