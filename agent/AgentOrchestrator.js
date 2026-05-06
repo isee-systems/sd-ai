@@ -614,7 +614,7 @@ export class AgentOrchestrator {
     }
 
     const systemBlocks = [
-      { type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral', ttl: '1h' } }
+      { type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral', ttl: '5m' } }
     ];
 
     // Convert tool servers to Anthropic tool format (with conditional filtering)
@@ -1026,7 +1026,7 @@ export class AgentOrchestrator {
 
     // Cache all tool definitions up to the last one — stable within a session
     if (tools.length > 0) {
-      tools[tools.length - 1] = { ...tools[tools.length - 1], cache_control: { type: 'ephemeral', ttl: '1h' } };
+      tools[tools.length - 1] = { ...tools[tools.length - 1], cache_control: { type: 'ephemeral', ttl: '5m' } };
     }
 
     return tools;
@@ -1522,7 +1522,7 @@ export class AgentOrchestrator {
 
     try {
       const cacheConfig = {
-        ttl: '3600s',
+        ttl: '300s',
         systemInstruction: systemPrompt
       };
       if (toolDeclarations.length > 0) {
