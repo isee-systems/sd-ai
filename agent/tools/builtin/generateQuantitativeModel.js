@@ -23,19 +23,19 @@ export function createGenerateQuantitativeModelTool(sessionManager, sessionId, s
     }),
     handler: async ({ prompt, parameters }) => {
       try {
+        const session = sessionManager.getSession(sessionId);
+        if (!session) {
+          throw new Error(`Session not found: ${sessionId}`);
+        }
+
         const currentModel = sessionManager.getClientModel(sessionId);
-        const result = await callQuantitativeEngine(prompt, currentModel, parameters);
+        const result = await callQuantitativeEngine(prompt, currentModel, { ...parameters, clientId: session.clientId });
 
         if (!result.success) {
           return createErrorResponse(result.error);
         }
 
         // Automatically push the generated model to the client
-        const session = sessionManager.getSession(sessionId);
-        if (!session) {
-          throw new Error(`Session not found: ${sessionId}`);
-        }
-
         const requestId = generateRequestId('model');
         await sendToClient(createUpdateModelMessage(sessionId, requestId, result.model));
 

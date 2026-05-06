@@ -8,7 +8,7 @@ import GenerateMetricsReporter from './../../utilities/GenerateMetricsReporter.j
 import config from './../../config.js'
 
 const router = express.Router()
-const reporter = new GenerateMetricsReporter(config.reporterURL)
+const reporter = new GenerateMetricsReporter(config.metricsReporterURL)
 
 router.post("/:engine/generate", async (req, res) => {
     const enginePath = path.join(process.cwd(), 'engines', req.params.engine, 'engine.js');

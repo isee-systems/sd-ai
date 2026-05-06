@@ -98,7 +98,7 @@ export class AgentOrchestrator {
     this.llm = new LLMWrapper({ underlyingModel: config.agentAnthropicSummaryModel });
 
     const clientId = sessionManager.getSession(sessionId)?.clientId ?? null;
-    this.tokenReporter = new TokenUsageReporter(config.agentTokenReporterURL, clientId);
+    this.tokenReporter = new TokenUsageReporter(config.tokenReporterURL, clientId);
 
     logger.log(`AgentOrchestrator initialized for session ${sessionId} (agent_mode: ${this.configManager.getAgentMode()})`);
   }
@@ -530,8 +530,9 @@ export class AgentOrchestrator {
    * Handle result messages (conversation completion)
    */
   async handleAnthropicSDKResultMessage(message) {
+    this.#logApiUsage('anthropic', message.usage);
+
     if (message.subtype === 'success') {
-      this.#logApiUsage('anthropic-sdk', message.usage);
       logger.log(`SDK conversation completed successfully for session ${this.sessionId}`);
     } else if (message.subtype === 'error_max_turns') {
       logger.log(`SDK conversation reached max iterations for session ${this.sessionId}`);
@@ -659,7 +660,7 @@ export class AgentOrchestrator {
           break;
         }
 
-        this.#logApiUsage('anthropic-manual', response.usage);
+        this.#logApiUsage('anthropic', response.usage);
 
         // Process response
         continueLoop = await this.processAgentResponseAnthropicManual(response, messages, builtInTools, dynamicTools);
@@ -930,7 +931,7 @@ export class AgentOrchestrator {
         messages: [{ role: 'user', content: `Summarize this conversation history concisely (2-4 paragraphs):\n\n${conversationText}` }]
       });
       if (response.usage) {
-        this.#logApiUsage('anthropic-manual', response.usage, config.agentAnthropicSummaryModel);
+        this.#logApiUsage('anthropic', response.usage, config.agentAnthropicSummaryModel);
       }
       return response.content[0].text;
     } catch (error) {
@@ -1111,7 +1112,7 @@ export class AgentOrchestrator {
 
         if (this.stopRequested) break;
 
-        this.#logApiUsage('gemini-manual', response.usageMetadata);
+        this.#logApiUsage('gemini', response.usageMetadata);
 
         continueLoop = await this.processGeminiManualResponse(response, messages, builtInTools, dynamicTools);
         if (!continueLoop) completedNaturally = true;
@@ -1357,7 +1358,7 @@ export class AgentOrchestrator {
     }
 
     if (event.usageMetadata) {
-      this.#logApiUsage('gemini-adk', event.usageMetadata);
+      this.#logApiUsage('gemini', event.usageMetadata);
     }
 
     const content = event.content;
@@ -1474,7 +1475,7 @@ export class AgentOrchestrator {
         }]
       });
       if (response.usageMetadata) {
-        this.#logApiUsage('gemini-manual', response.usageMetadata, config.agentGeminiSummaryModel);
+        this.#logApiUsage('gemini', response.usageMetadata, config.agentGeminiSummaryModel);
       }
       return response.text || response.candidates?.[0]?.content?.parts?.[0]?.text || '';
     } catch (error) {
@@ -1564,14 +1565,12 @@ export class AgentOrchestrator {
     }
   }
 
-  #logApiUsage(method, usage, model = null) {
+  #logApiUsage(provider, usage, model = null) {
     if (!usage) return;
     const resolvedModel = model ?? (
-      (method === 'anthropic-manual' || method === 'anthropic-sdk')
-        ? config.agentAnthropicModel
-        : config.agentGeminiModel
+      provider === 'anthropic' ? config.agentAnthropicModel : config.agentGeminiModel
     );
-    this.tokenReporter.report({ method, model: resolvedModel, usage }).catch(() => {});
+    this.tokenReporter.report({ provider, model: resolvedModel, usage }).catch(() => {});
   }
 
   destroy() {

@@ -22,6 +22,12 @@ class Engine {
 
     additionalParameters()  {
          return [{
+            name: "clientId",
+            type: "string",
+            required: false,
+            uiElement: "hidden",
+            description: "A unique identifier for the end user of this session"
+        },{
             name: "googleKey",
             type: "string",
             required: false,

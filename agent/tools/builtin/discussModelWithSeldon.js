@@ -22,11 +22,17 @@ export function createDiscussModelWithSeldonTool(sessionManager, sessionId, send
     }),
     handler: async ({ prompt, parameters }) => {
       try {
+        const session = sessionManager.getSession(sessionId);
+        if (!session) {
+          throw new Error(`Session not found: ${sessionId}`);
+        }
+
         const model = sessionManager.getClientModel(sessionId);
         if (!model) {
           return createErrorResponse('No model available in session');
         }
 
+        const baseParameters = { ...parameters, clientId: session.clientId };
         const sessionTempDir = sessionManager.getSessionTempDir(sessionId);
         const feedbackPath = join(sessionTempDir, 'feedback.json');
         const feedbackContent = existsSync(feedbackPath)
@@ -34,7 +40,7 @@ export function createDiscussModelWithSeldonTool(sessionManager, sessionId, send
           : undefined;
 
         const behaviorContent = loadBehaviorContent(sessionTempDir, parameters?.runIds);
-        const enrichedParameters = behaviorContent ? { ...parameters, behaviorContent } : parameters;
+        const enrichedParameters = behaviorContent ? { ...baseParameters, behaviorContent } : baseParameters;
 
         const result = await callSeldonEngine(prompt, model, feedbackContent, enrichedParameters);
 
@@ -44,12 +50,6 @@ export function createDiscussModelWithSeldonTool(sessionManager, sessionId, send
 
         // Check if feedback information is required but not provided
         if (result.output.feedbackInformationRequired && !feedbackContent) {
-          // Get feedback information from client
-          const session = sessionManager.getSession(sessionId);
-          if (!session) {
-            throw new Error(`Session not found: ${sessionId}`);
-          }
-
           const requestId = generateRequestId('feedback');
 
           // Send request to client for feedback data (empty array means all runs)

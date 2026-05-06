@@ -21,11 +21,17 @@ export function createGenerateLtmNarrativeTool(sessionManager, sessionId, sendTo
     }),
     handler: async ({ parameters }) => {
       try {
+        const session = sessionManager.getSession(sessionId);
+        if (!session) {
+          throw new Error(`Session not found: ${sessionId}`);
+        }
+
         const model = sessionManager.getClientModel(sessionId);
         if (!model) {
           return createErrorResponse('No model available in session');
         }
 
+        const baseParameters = { ...parameters, clientId: session.clientId };
         const sessionTempDir = sessionManager.getSessionTempDir(sessionId);
         const feedbackPath = join(sessionTempDir, 'feedback.json');
         let feedbackContent = existsSync(feedbackPath)
@@ -33,13 +39,9 @@ export function createGenerateLtmNarrativeTool(sessionManager, sessionId, sendTo
           : undefined;
 
         const behaviorContent = loadBehaviorContent(sessionTempDir, parameters?.runIds);
-        const enrichedParameters = behaviorContent ? { ...parameters, behaviorContent } : parameters;
+        const enrichedParameters = behaviorContent ? { ...baseParameters, behaviorContent } : baseParameters;
 
         if (!feedbackContent) {
-          const session = sessionManager.getSession(sessionId);
-          if (!session) {
-            throw new Error(`Session not found: ${sessionId}`);
-          }
 
           const requestId = generateRequestId('feedback');
 

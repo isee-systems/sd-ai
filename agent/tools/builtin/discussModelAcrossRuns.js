@@ -23,11 +23,17 @@ export function createDiscussModelAcrossRunsTool(sessionManager, sessionId, send
     }),
     handler: async ({ prompt, runName, parameters }) => {
       try {
+        const session = sessionManager.getSession(sessionId);
+        if (!session) {
+          throw new Error(`Session not found: ${sessionId}`);
+        }
+
         const model = sessionManager.getClientModel(sessionId);
         if (!model) {
           return createErrorResponse('No model available in session');
         }
 
+        const baseParameters = { ...parameters, clientId: session.clientId };
         const sessionTempDir = sessionManager.getSessionTempDir(sessionId);
         const feedbackPath = join(sessionTempDir, 'feedback.json');
         const feedbackContent = existsSync(feedbackPath)
@@ -38,7 +44,7 @@ export function createDiscussModelAcrossRunsTool(sessionManager, sessionId, send
 
         // Add feedbackContent and behaviorContent to parameters if available
         const engineParams = {
-          ...parameters,
+          ...baseParameters,
           ...(feedbackContent && { feedbackContent }),
           ...(behaviorContent && { behaviorContent })
         };
@@ -51,12 +57,6 @@ export function createDiscussModelAcrossRunsTool(sessionManager, sessionId, send
 
         // Check if feedback information is required but not provided
         if (result.output.feedbackInformationRequired && !feedbackContent) {
-          // Get comparative feedback information from client (all runs)
-          const session = sessionManager.getSession(sessionId);
-          if (!session) {
-            throw new Error(`Session not found: ${sessionId}`);
-          }
-
           const requestId = generateRequestId('feedback');
 
           // Send request to client for comparative feedback data (empty array means all runs)
@@ -84,7 +84,7 @@ export function createDiscussModelAcrossRunsTool(sessionManager, sessionId, send
 
           // Retry the call with comparative feedback information
           const retryParams = {
-            ...parameters,
+            ...baseParameters,
             feedbackContent: feedbackData.feedbackContent,
             ...(behaviorContent && { behaviorContent })
           };
