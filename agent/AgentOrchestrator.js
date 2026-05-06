@@ -219,7 +219,7 @@ export class AgentOrchestrator {
 
     try {
       // Build tools list - combine SDK filesystem tools with MCP servers
-      const builtInSdkTools = ['Read', 'Edit', 'Write', 'Glob', 'Grep'];
+      const builtInSdkTools = ['Read', /*'Edit', 'Write',*/ 'Glob', 'Grep'];
 
       let mcpServers = {
         builtin: this.builtInToolProvider.getMcpServer()

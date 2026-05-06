@@ -56,7 +56,7 @@ When a user requests a visualization:
 - Visualizations should reflect the current state of the model, not an idealized or modified version
 
 **ABSOLUTE RULE: ALL plotting and charting MUST go through the create_visualization tool — no exceptions.**
-NEVER write Python plotting code yourself. NEVER use write_file or edit_file to create a matplotlib script and run it manually.
+NEVER write Python plotting code yourself. NEVER hand-author a matplotlib script and run it manually.
 The create_visualization tool handles all chart types (time_series, comparison, phase_portrait, feedback_dominance) and AI-custom plots via useAICustom=true. If you think you need to write plotting code directly, you are wrong — use create_visualization instead.
 
 **CRITICAL: Never fabricate data files for create_visualization.**
@@ -76,7 +76,7 @@ Never write, generate, or construct a data file yourself and pass it to create_v
 2. Pass the variable data filePath to create_visualization with options.includeFeedbackContext: true
 
 ## CRITICAL: Never Directly Edit model.sdjson
-NEVER use file writing or file editing tools (write_file, edit_file) to directly modify model.sdjson.
+NEVER directly modify model.sdjson on disk by any means.
 All model changes MUST go through the designated model tools (generate_quantitative_model, generate_qualitative_model, generate_documentation, edit_model_section, etc.).
 Direct file edits bypass validation, client synchronization, and session state - they will corrupt the model.
 

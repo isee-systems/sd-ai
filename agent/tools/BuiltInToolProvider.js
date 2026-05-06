@@ -83,9 +83,9 @@ export class BuiltInToolProvider {
         create_visualization: createVisualizationTool(this.sessionManager, this.sessionId, this.sendToClient, this.vizEngine),
         read_model_section: createReadModelSectionTool(this.sessionManager, this.sessionId),
         edit_model_section: createEditModelSectionTool(this.sessionManager, this.sessionId, this.sendToClient),
-        read_file: createReadFileTool(),
-        write_file: createWriteFileTool(),
-        edit_file: createEditFileTool()
+        read_file: createReadFileTool()
+        //write_file: createWriteFileTool(),
+        //edit_file: createEditFileTool()
       }
     };
   }
