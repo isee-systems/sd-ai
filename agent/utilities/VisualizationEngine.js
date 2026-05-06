@@ -33,8 +33,9 @@ export class VisualizationEngine {
     // Normalize and resolve the session temp directory for security checks
     this.resolvedTempDir = resolve(normalize(this.sessionTempDir));
 
+    const clientId = sessionManager.getSession(sessionId)?.clientId ?? null;
     // Cache LLM wrapper to avoid recreating it for each visualization
-    this.llm = new LLMWrapper();
+    this.llm = new LLMWrapper({ clientId });
   }
 
   /**

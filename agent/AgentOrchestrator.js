@@ -95,9 +95,8 @@ export class AgentOrchestrator {
     this.adkSessionId = null;
     this.adkSessionService = new InMemorySessionService();
 
-    this.llm = new LLMWrapper({ underlyingModel: config.agentAnthropicSummaryModel });
-
     const clientId = sessionManager.getSession(sessionId)?.clientId ?? null;
+    this.llm = new LLMWrapper({ clientId, underlyingModel: config.agentAnthropicSummaryModel });
     this.tokenReporter = new TokenUsageReporter(config.tokenReporterURL, clientId);
 
     logger.log(`AgentOrchestrator initialized for session ${sessionId} (agent_mode: ${this.configManager.getAgentMode()})`);
