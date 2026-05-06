@@ -208,6 +208,7 @@ OPENAI_API_KEY="sk-asdjkshd" # if you're doing work with engines that use the LL
 GEMINI_API_KEY="asdjkshd" # if you're doing work with engines using Gemini models (causal-chains, seldon, quantitative, qualitative)
 AUTHENTICATION_KEY="my_secret_key" # only needed for securing publically accessible deployments. Requires client pass an Authentication header matching this value. e.g. `curl -H "Authentication: my_super_secret_value_in_env_file"` to the engine generate request only
 REPORTER_URL="https://your-metrics-server.com/api/metrics" # optional URL to POST engine usage metrics to. If not set, metrics reporting is disabled.
+TOKEN_REPORTER_URL="https://your-metrics-server.com/api/token-usage" # optional URL to POST agent LLM token usage and cost to. If not set, token reporting is disabled.
 ```
 3. npm install
 4. npm start
@@ -221,7 +222,7 @@ We recommend VSCode using a launch.json for the Node type applications (you get 
 Some engines require additional dependencies to be installed on your system:
 
 - **Go 1.24.0 or later** - Required for the causal-chains engine ([installation guide](https://go.dev/doc/install))
-- **Python 3.x** - Required for the causal-decoder engine
+- **Python 3.x** - Required for the causal-decoder engine and the and the agentic tools
 
 These dependencies are automatically built/installed when you run `npm install` via postinstall hooks, but only if the respective toolchains are available on your PATH.
 
@@ -304,6 +305,63 @@ For each call to `/api/v1/:engine/generate`, the following JSON data is posted t
 - `timestamp` (string): ISO 8601 timestamp of when the report was generated
 
 The reporter sends metrics asynchronously and will not block or affect the engine response, even if the reporting endpoint is unavailable.
+
+## Token Usage Reporting
+
+The agent uses `TokenUsageReporter` to track token usage and cost for every LLM call made using this service. This is separate from the engine metrics above — it covers the agent's internal Anthropic, Gemini, and OpenAI calls rather than top-level HTTP engine requests.
+
+### Configuration
+
+Set `TOKEN_REPORTER_URL` in your `.env` file to enable reporting:
+```
+TOKEN_REPORTER_URL="https://your-metrics-server.com/api/token-usage"
+```
+
+Reporting is only active when **both** `TOKEN_REPORTER_URL` is set **and** the client provided a `clientId` in the `initialize_session` WebSocket message or as an additional parameter to an engine call. If either is missing, usage is still logged to the server console but not POSTed anywhere.
+
+### Console Logging
+
+Regardless of whether remote reporting is enabled, every LLM call logs a line to the server console:
+```
+[usage:anthropic] input=1234($0.003702) output=256($0.003840) cache_write_5m=0($0.000000) cache_write_1h=0($0.000000) cache_read=512($0.000461) total=$0.008003
+[usage:gemini]    input=800($0.000160) output=120($0.000072) cached=200($0.000010) thoughts=40($0.000024) total=$0.000266
+[usage:openai]    input=600($0.000300) output=150($0.000225) cached=100($0.000025) reasoning=0 total=$0.000550
+```
+
+Per-token costs are shown in parentheses when pricing data is available for the model. If pricing is unknown the token counts are shown without a cost.
+
+### Reported Payload
+
+When remote reporting is active, the following JSON is POSTed to `TOKEN_REPORTER_URL` for each LLM call:
+
+```json
+{
+  "clientId": "client-provided-id",
+  "provider": "anthropic",
+  "model": "claude-sonnet-4-6",
+  "tokens": {
+    "inputTokens": 1234,
+    "outputTokens": 256,
+    "cacheCreation5mInputTokens": 0,
+    "cacheCreation1hInputTokens": 0,
+    "cacheReadInputTokens": 512
+  },
+  "cost": 0.008003,
+  "timestamp": "2024-01-15T10:30:00.000Z"
+}
+```
+
+The `tokens` shape varies by provider:
+
+| Provider | Token fields |
+|---|---|
+| `anthropic` | `inputTokens`, `outputTokens`, `cacheCreation5mInputTokens`, `cacheCreation1hInputTokens`, `cacheReadInputTokens` |
+| `gemini` | `inputTokens`, `outputTokens`, `cachedTokens`, `thoughtsTokens` |
+| `openai` | `inputTokens`, `outputTokens`, `cachedTokens`, `reasoningTokens` |
+
+`cost` is the total dollar cost of the call, or `null` if pricing data is unavailable for the model.
+
+The reporter fires asynchronously and never blocks or fails the agent response if the reporting endpoint is unavailable.
 
 ## Testing
 ### Unit Tests
