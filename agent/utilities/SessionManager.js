@@ -26,7 +26,7 @@ export class SessionManager {
     this.sessions = new Map();
 
     // Use configured temp directory or default to OS tmpdir
-    const baseTempDir = config.sessionTempDir || tmpdir();
+    const baseTempDir = config.agentSessionTempDir || tmpdir();
     this.tempBasePath = join(baseTempDir, 'sd-agent');
 
     // Configuration

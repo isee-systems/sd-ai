@@ -3,10 +3,24 @@ import { ThinkingLevel } from "@google/genai";
 
 const config = {
     "port": 3000,
+    "websocketPort": 3000,
+
+    /*
+    * Reporting URLs
+    */
     "metricsReporterURL": process.env.METRICS_REPORTER_URL || null, // Optional URL to POST engine usage metrics
     "tokenReporterURL": process.env.TOKEN_REPORTER_URL || null, // Optional URL to POST agent LLM token usage
-    "websocketPort": 3000,
-    "sessionTempDir": process.env.SESSION_TEMP_DIR || null, // Optional custom temp directory for session files (defaults to OS tmpdir/sd-agent)
+    
+    /*
+    * Defaults for the engines that use LLMWrapper and the agent tools that use those engines
+    */
+    "buildDefaultModel": 'gemini-3-flash-preview low', //LLMWrapper underlyingModel default for building model tools
+    "nonBuildDefaultModel": 'gemini-3-flash-preview low', //LLMWrapper underlyingModel default for non-building model tools
+    
+    /*
+    * These settings control the operation of the agents
+    */
+    "agentSessionTempDir": process.env.AGENT_SESSION_TEMP_DIR || null, // Optional custom temp directory for session files (defaults to OS tmpdir/sd-agent)
     "agentMaxTokensForEngines": 32_000, // Maximum tokens before force switching to file-based editing
     "agentMaxContextTokens": 32_000, // Maximum tokens for conversation history sent to Claude API
     "agentTargetedEditingMinimum": 250, //Above this size, models can be edited without quantitative/qualitative engine

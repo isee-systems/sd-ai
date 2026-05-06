@@ -167,8 +167,8 @@ export class LLMWrapper {
       {label: "Claude Haiku 4.5", value: 'claude-haiku-4-5'},
   ];
 
-  static BUILD_DEFAULT_MODEL = 'gemini-3-flash-preview low'; //'claude-opus-4-6';
-  static NON_BUILD_DEFAULT_MODEL = 'gemini-3-flash-preview low'; //'claude-opus-4-6';
+  static BUILD_DEFAULT_MODEL = config.buildDefaultModel;
+  static NON_BUILD_DEFAULT_MODEL = config.nonBuildDefaultModel;
   static EVAL_MODEL = process.env.EVAL_MODEL ?? 'gemini-2.5-flash';
   
   static SCHEMA_STRINGS = {
