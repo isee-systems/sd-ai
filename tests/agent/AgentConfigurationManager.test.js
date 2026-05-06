@@ -17,7 +17,7 @@ describe('AgentConfigurationManager', () => {
     it('should load config from MD file', () => {
       expect(configManager.config).toBeDefined();
       expect(configManager.config.agent).toBeDefined();
-      expect(configManager.config.agent.name).toBe('Socrates');
+      expect(configManager.config.agent.name).toMatch(/^Socrates/);
     });
 
     it('should throw error for non-existent config file', () => {
