@@ -114,7 +114,7 @@ class AgentWorker {
 
         case 'initialize': {
           this.#sessionManager.createSessionWithId(SESSION_ID, this.#mockWs, SESSION_TEMP_DIR);
-          this.#sessionManager.initializeSession(SESSION_ID, msg.mode, msg.model, msg.tools, msg.context);
+          this.#sessionManager.initializeSession(SESSION_ID, msg.mode, msg.model, msg.tools, msg.context, msg.clientId);
           for (const h of (msg.conversationHistory || [])) {
             this.#sessionManager.addToConversationHistory(SESSION_ID, h);
           }

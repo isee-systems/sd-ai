@@ -76,6 +76,7 @@ function sendInit(worker, extras = {}) {
     context: {},
     conversationHistory: [],
     isAgentSwitch: false,
+    clientId: 'test-client',
     ...extras,
   });
 }

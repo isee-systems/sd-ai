@@ -219,7 +219,7 @@ export class WebSocketHandler {
         throw new Error('Invalid or missing mode. Must be "cld" or "sfd".');
       }
 
-      this.#sessionManager.initializeSession(this.#sessionId, message.mode, message.model, message.tools, message.context);
+      this.#sessionManager.initializeSession(this.#sessionId, message.mode, message.model, message.tools, message.context, message.clientId);
 
       if (message.historicalMessages && message.historicalMessages.length > 0) {
         for (const histMsg of message.historicalMessages) {
@@ -304,6 +304,7 @@ export class WebSocketHandler {
         model: session.clientModel,
         tools: session.clientTools,
         context: session.context,
+        clientId: session.clientId,
         conversationHistory,
         isAgentSwitch: isSwitching,
       });

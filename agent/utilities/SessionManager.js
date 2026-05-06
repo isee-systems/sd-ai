@@ -88,6 +88,7 @@ export class SessionManager {
       clientModel: null,
       clientTools: [],
       context: {},
+      clientId: null,
 
       // Model token tracking
       modelTokenCount: 0,
@@ -134,6 +135,7 @@ export class SessionManager {
       clientModel: null,
       clientTools: [],
       context: {},
+      clientId: null,
       modelTokenCount: 0,
       pendingToolCalls: new Map(),
       conversationContext: [],
@@ -158,7 +160,7 @@ export class SessionManager {
   /**
    * Initialize a session with model and tools
    */
-  initializeSession(sessionId, mode, model, tools, context) {
+  initializeSession(sessionId, mode, model, tools, context, clientId) {
     const session = this.getSession(sessionId);
     if (!session) {
       throw new Error(`Session not found: ${sessionId}`);
@@ -168,15 +170,20 @@ export class SessionManager {
     if (mode !== 'cld' && mode !== 'sfd') {
       throw new Error(`Invalid mode: ${mode}. Must be 'cld' or 'sfd'`);
     }
-
+    
     // Set model type (can only be set once)
     if (session.mode && session.mode !== mode) {
       throw new Error(`Cannot change model type from ${session.mode} to ${mode} during session`);
     }
     session.mode = mode;
 
+    if (clientId == null) {
+      throw new Error('clientId is required');
+    }
+
     session.clientTools = tools || [];
     session.context = context || {};
+    session.clientId = clientId;
     this.updateClientModel(sessionId, model);
 
     logger.log(`Session initialized: ${sessionId} with mode=${mode} and ${tools.length} client tools`);

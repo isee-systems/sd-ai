@@ -61,7 +61,7 @@ describe('SessionManager.cleanupContext', () => {
   beforeEach(() => {
     sessionManager = new SessionManager();
     sessionId = sessionManager.createSession(null);
-    sessionManager.initializeSession(sessionId, 'cld', {}, [], {});
+    sessionManager.initializeSession(sessionId, 'cld', {}, [], {}, 'test-client');
     sessionManager.gemini = makeGeminiMock();
   });
 
@@ -139,7 +139,7 @@ describe('SessionManager.cleanupContext', () => {
   beforeEach(() => {
     sessionManager = new SessionManager();
     sessionId = sessionManager.createSession(null);
-    sessionManager.initializeSession(sessionId, 'cld', {}, [], {});
+    sessionManager.initializeSession(sessionId, 'cld', {}, [], {}, 'test-client');
     sessionManager.gemini = makeGeminiMock();
   });
 
@@ -180,7 +180,7 @@ describe('Agent switch - context continuity between orchestrators', () => {
   beforeEach(() => {
     sessionManager = new SessionManager();
     sessionId = sessionManager.createSession(null);
-    sessionManager.initializeSession(sessionId, 'cld', {}, [], {});
+    sessionManager.initializeSession(sessionId, 'cld', {}, [], {}, 'test-client');
     process.env.GEMINI_API_KEY = 'dummy_key';
     process.env.ANTHROPIC_API_KEY = 'dummy_key';
   });

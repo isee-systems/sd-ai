@@ -18,6 +18,7 @@ import {
 import logger from '../utilities/logger.js';
 import config from '../config.js';
 import { LLMWrapper } from '../utilities/LLMWrapper.js';
+import TokenUsageReporter from '../utilities/TokenUsageReporter.js';
 import { sanitizeSchemaForGemini } from './tools/builtin/toolHelpers.js';
 
 // Normalize a single message to Gemini format {role:'user'|'model', parts:[{text}]}.
@@ -95,6 +96,9 @@ export class AgentOrchestrator {
     this.adkSessionService = new InMemorySessionService();
 
     this.llm = new LLMWrapper({ underlyingModel: config.agentAnthropicSummaryModel });
+
+    const clientId = sessionManager.getSession(sessionId)?.clientId ?? null;
+    this.tokenReporter = new TokenUsageReporter(config.agentTokenReporterURL, clientId);
 
     logger.log(`AgentOrchestrator initialized for session ${sessionId} (agent_mode: ${this.configManager.getAgentMode()})`);
   }
@@ -920,11 +924,15 @@ export class AgentOrchestrator {
       }).filter(line => line).join('\n\n');
 
       logger.log(`Summarizing prior agent context (${history.length} messages) before injection`);
-      const response = await this.llm.createChatCompletion([{
-        role: 'user',
-        content: `Summarize this conversation history concisely (2-4 paragraphs):\n\n${conversationText}`
-      }], config.agentAnthropicSummaryModel);
-      return response.content;
+      const response = await this.anthropic.messages.create({
+        model: config.agentAnthropicSummaryModel,
+        max_tokens: 1024,
+        messages: [{ role: 'user', content: `Summarize this conversation history concisely (2-4 paragraphs):\n\n${conversationText}` }]
+      });
+      if (response.usage) {
+        this.#logApiUsage('anthropic-manual', response.usage, config.agentAnthropicSummaryModel);
+      }
+      return response.content[0].text;
     } catch (error) {
       logger.error('Error summarizing prior context:', error);
       return '[Prior conversation condensed due to size]';
@@ -1465,6 +1473,9 @@ export class AgentOrchestrator {
           parts: [{ text: `Summarize this conversation history concisely (2-4 paragraphs):\n\n${conversationText}` }]
         }]
       });
+      if (response.usageMetadata) {
+        this.#logApiUsage('gemini-manual', response.usageMetadata, config.agentGeminiSummaryModel);
+      }
       return response.text || response.candidates?.[0]?.content?.parts?.[0]?.text || '';
     } catch (error) {
       logger.error('Error summarizing prior context:', error);
@@ -1553,15 +1564,14 @@ export class AgentOrchestrator {
     }
   }
 
-  #logApiUsage(method, usage) {
+  #logApiUsage(method, usage, model = null) {
     if (!usage) return;
-    if (method === 'anthropic-manual' || method === 'anthropic-sdk') {
-      const { input_tokens = 0, output_tokens = 0, cache_creation_input_tokens = 0, cache_read_input_tokens = 0 } = usage;
-      logger.log(`[usage:${method}] input=${input_tokens} output=${output_tokens} cache_write=${cache_creation_input_tokens} cache_read=${cache_read_input_tokens}`);
-    } else {
-      const { promptTokenCount = 0, candidatesTokenCount = 0, cachedContentTokenCount = 0, thoughtsTokenCount = 0 } = usage;
-      logger.log(`[usage:${method}] prompt=${promptTokenCount} output=${candidatesTokenCount} cached=${cachedContentTokenCount} thoughts=${thoughtsTokenCount}`);
-    }
+    const resolvedModel = model ?? (
+      (method === 'anthropic-manual' || method === 'anthropic-sdk')
+        ? config.agentAnthropicModel
+        : config.agentGeminiModel
+    );
+    this.tokenReporter.report({ method, model: resolvedModel, usage }).catch(() => {});
   }
 
   destroy() {

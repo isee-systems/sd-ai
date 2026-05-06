@@ -179,7 +179,7 @@ describe('SessionManager.createSessionWithId', () => {
     try {
       sm.createSessionWithId('test-id-5', null, tempDir);
       expect(() => {
-        sm.initializeSession('test-id-5', 'sfd', null, [], {});
+        sm.initializeSession('test-id-5', 'sfd', null, [], {}, 'test-client');
       }).not.toThrow();
       expect(sm.getSession('test-id-5').mode).toBe('sfd');
     } finally {

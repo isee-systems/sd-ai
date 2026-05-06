@@ -22,7 +22,7 @@ describe('SessionManager', () => {
       const context = { description: 'Test context' };
 
       const sessionId = sessionManager.createSession(null); // null WebSocket for testing
-      sessionManager.initializeSession(sessionId, mode, model, tools, context);
+      sessionManager.initializeSession(sessionId, mode, model, tools, context, 'test-client');
 
       const session = sessionManager.getSession(sessionId);
       expect(session).toBeDefined();
