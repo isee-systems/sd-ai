@@ -281,7 +281,7 @@ export class WorkerSpawner {
 
         const proc = spawn(bwrapBin, bwrapArgs, {
           env: workerEnv,
-          stdio: ['pipe', 'pipe', 'pipe'],
+          stdio: ['inherit', 'inherit', 'inherit'],
         });
 
         const worker = new IpcWorker(proc, socketPath);
