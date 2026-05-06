@@ -150,19 +150,8 @@ export class LLMWrapper {
   }
 
   static MODELS = [
-      {label: "GPT-5.5", value: 'gpt-5.5 medium'},
-      {label: "GPT-5.4", value: 'gpt-5.4 medium'},
-      {label: "GPT-5.3", value: 'gpt-5.3 medium'},
-      {label: "GPT-5.2", value: 'gpt-5.2 medium'},
-      {label: "GPT-5.1", value: 'gpt-5.1 medium'},
-      {label: "GPT-5", value: 'gpt-5'},
-      {label: "GPT-5-mini", value: 'gpt-5-mini'},
-      {label: "GPT-5-nano", value: 'gpt-5-nano'},
-      {label: "GPT-4.1", value: 'gpt-4.1'},
-      {label: "GPT-4.1-mini", value: 'gpt-4.1-mini'},
-      {label: "GPT-4.1-nano", value: 'gpt-4.1-nano'},
-      {label: "GPT-4o", value: 'gpt-4o'},
-      {label: "GPT-4o-mini", value: 'gpt-4o-mini'},
+      {label: "GPT-5 latest", value: 'gpt-5'},
+      {label: "GPT-5-mini latest", value: 'gpt-5-mini'},
       {label: "Gemini 3.1-pro-preview", value: 'gemini-3.1-pro-preview'},
       {label: "Gemini 3-flash-preview", value: 'gemini-3-flash-preview'},
       {label: "Gemini 3-flash-preview high", value: 'gemini-3-flash-preview high'},
@@ -170,16 +159,12 @@ export class LLMWrapper {
       {label: "Gemini 3-flash-preview low", value: 'gemini-3-flash-preview low'},
       {label: "Gemini 3-flash-preview minimal", value: 'gemini-3-flash-preview minimal'},
       {label: "Gemini 2.5-flash", value: 'gemini-2.5-flash'},
-      {label: "Gemini 2.5-flash-lite", value: 'gemini-2.5-flash-lite'},
       {label: "Gemini 2.5-pro", value: 'gemini-2.5-pro'},
+      {label: "Claude Opus 4.7", value: 'claude-opus-4-7'},
       {label: "Claude Opus 4.6", value: 'claude-opus-4-6'},
       {label: "Claude Sonnet 4.6", value: 'claude-sonnet-4-6'},
-      {label: "Claude Haiku 4.5", value: 'claude-haiku-4-5'},
-      {label: "Claude Opus 4.5", value: 'claude-opus-4-5'},
       {label: "Claude Sonnet 4.5", value: 'claude-sonnet-4-5'},
-      {label: "o1", value: 'o1'},
-      {label: "o3", value: 'o3'},
-      {label: "o4-mini", value: 'o4-mini'}
+      {label: "Claude Haiku 4.5", value: 'claude-haiku-4-5'},
   ];
 
   static BUILD_DEFAULT_MODEL = 'gemini-3-flash-preview low'; //'claude-opus-4-6';

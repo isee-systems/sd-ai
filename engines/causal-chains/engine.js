@@ -19,7 +19,7 @@ class Engine {
     constructor() {
     }
 
-    static DEFAULT_MODEL = 'o4-mini';
+    static DEFAULT_MODEL = 'gpt-5-mini';
 
     static description() {
         return `This engine improves conformance to user instructions about feedback complexity by prompting the LLM to 
