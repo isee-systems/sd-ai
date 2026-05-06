@@ -328,6 +328,8 @@ After editing, the model is validated and processed through the quantitative eng
       // Variable names are stored with spaces; equations use underscores.
       // Normalize any underscore-style names the AI sends back to space-style.
       const normName = n => typeof n === 'string' ? n.replace(/_/g, ' ') : n;
+      // Case-insensitive, space=underscore normalizer for search comparisons only.
+      const normSearch = s => typeof s === 'string' ? s.toLowerCase().replace(/[ _]/g, '_') : s;
 
       try {
         const session = sessionManager.getSession(sessionId);
@@ -414,7 +416,7 @@ After editing, the model is validated and processed through the quantitative eng
                 if (!varName) {
                   return handleError('Error: Must specify "name" field to update a variable');
                 }
-                const index = model.variables.findIndex(v => v.name === varName);
+                const index = model.variables.findIndex(v => normSearch(v.name) === normSearch(varName));
                 if (index >= 0) {
                   const oldVariable = model.variables[index];
                   const oldName = oldVariable.name;
@@ -455,8 +457,8 @@ After editing, the model is validated and processed through the quantitative eng
               if (!Array.isArray(data)) {
                 return handleError('Error: For variables remove operation, data must be an array of variable name strings. Example: ["var1", "var2"]');
               }
-              const normalizedRemoveNames = data.map(normName);
-              model.variables = model.variables.filter(v => !normalizedRemoveNames.includes(v.name));
+              const normalizedRemoveNames = data.map(n => normSearch(n));
+              model.variables = model.variables.filter(v => !normalizedRemoveNames.includes(normSearch(v.name)));
             }
             break;
 
@@ -484,7 +486,7 @@ After editing, the model is validated and processed through the quantitative eng
               if (!data.from || !data.to) {
                 return handleError('Error: Must specify "from" and "to" fields to update a relationship');
               }
-              const index = model.relationships.findIndex(r => r.from === data.from && r.to === data.to);
+              const index = model.relationships.findIndex(r => normSearch(r.from) === normSearch(data.from) && normSearch(r.to) === normSearch(data.to));
               if (index >= 0) {
                 model.relationships[index] = { ...model.relationships[index], ...data };
               } else {
@@ -495,7 +497,7 @@ After editing, the model is validated and processed through the quantitative eng
                 return handleError('Error: For relationships remove operation, data must be an array of {from, to} objects. Example: [{from: "var1", to: "var2"}]');
               }
               model.relationships = model.relationships.filter(r =>
-                !data.some(rem => normName(rem.from) === r.from && normName(rem.to) === r.to)
+                !data.some(rem => normSearch(rem.from) === normSearch(r.from) && normSearch(rem.to) === normSearch(r.to))
               );
             }
             break;
@@ -528,8 +530,8 @@ After editing, the model is validated and processed through the quantitative eng
               if (!Array.isArray(data)) {
                 return handleError('Error: For modules remove operation, data must be an array of module name strings. Example: ["Module1", "Module2"]');
               }
-              const normalizedRemoveModules = data.map(normName);
-              model.modules = model.modules.filter(m => !normalizedRemoveModules.includes(m.name));
+              const normalizedRemoveModules = data.map(n => normSearch(n));
+              model.modules = model.modules.filter(m => !normalizedRemoveModules.includes(normSearch(m.name)));
             }
             break;
         }
