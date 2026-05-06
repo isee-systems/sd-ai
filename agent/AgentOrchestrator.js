@@ -212,6 +212,7 @@ export class AgentOrchestrator {
   async runAgentConversationWithAnthropicSDK(userMessage, systemPrompt, modelTokenCount, previousAgentContext = null) {
     // Create abort controller for stop iteration
     this.abortController = new AbortController();
+    this.maxTurnsReached = false;
 
     const mode = this.sessionManager.getSession(this.sessionId)?.mode;
 
@@ -301,13 +302,22 @@ export class AgentOrchestrator {
         await this.handleAnthropicSdkMessage(message);
       }
 
-      // Normal completion
-      logger.log(`Agent conversation completed successfully for session ${this.sessionId}`);
-      await this.sendToClient(createAgentCompleteMessage(
-        this.sessionId,
-        'success',
-        'Task completed successfully'
-      ));
+      // Normal completion (or max turns reached)
+      if (this.maxTurnsReached) {
+        logger.log(`Agent reached max iterations for session ${this.sessionId}`);
+        await this.sendToClient(createAgentCompleteMessage(
+          this.sessionId,
+          'awaiting_user',
+          `Reached maximum iterations (${maxIterations})`
+        ));
+      } else {
+        logger.log(`Agent conversation completed successfully for session ${this.sessionId}`);
+        await this.sendToClient(createAgentCompleteMessage(
+          this.sessionId,
+          'success',
+          'Task completed successfully'
+        ));
+      }
 
     } catch (error) {
       if (error.name === 'AbortError' || this.stopRequested) {
@@ -519,6 +529,9 @@ export class AgentOrchestrator {
     if (message.subtype === 'success') {
       this.#logApiUsage('anthropic-sdk', message.usage);
       logger.log(`SDK conversation completed successfully for session ${this.sessionId}`);
+    } else if (message.subtype === 'error_max_turns') {
+      logger.log(`SDK conversation reached max iterations for session ${this.sessionId}`);
+      this.maxTurnsReached = true;
     } else if (message.subtype === 'error') {
       logger.error(`SDK conversation error for session ${this.sessionId}:`, message.error || message);
     } else if (message.subtype === 'tool_error') {
