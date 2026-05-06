@@ -27,33 +27,34 @@ class TokenUsageReporter {
     let tokens;
     if (isAnthropic) {
       tokens = {
-        input_tokens: usage.input_tokens ?? 0,
-        output_tokens: usage.output_tokens ?? 0,
-        cache_creation_input_tokens: usage.cache_creation_input_tokens ?? 0,
-        cache_read_input_tokens: usage.cache_read_input_tokens ?? 0,
+        inputTokens: usage.input_tokens ?? 0,
+        outputTokens: usage.output_tokens ?? 0,
+        cacheCreation5mInputTokens: usage.cache_creation?.ephemeral_5m_input_tokens ?? 0,
+        cacheCreation1hInputTokens: usage.cache_creation?.ephemeral_1h_input_tokens ?? 0,
+        cacheReadInputTokens: usage.cache_read_input_tokens ?? 0,
       };
     } else if (isOpenAI) {
       tokens = {
-        input_tokens: usage.prompt_tokens ?? 0,
-        output_tokens: usage.completion_tokens ?? 0,
-        cached_tokens: usage.prompt_tokens_details?.cached_tokens ?? 0,
-        reasoning_tokens: usage.completion_tokens_details?.reasoning_tokens ?? 0,
+        inputTokens: usage.prompt_tokens ?? 0,
+        outputTokens: usage.completion_tokens ?? 0,
+        cachedTokens: usage.prompt_tokens_details?.cached_tokens ?? 0,
+        reasoningTokens: usage.completion_tokens_details?.reasoning_tokens ?? 0,
       };
     } else {
       tokens = {
-        input_tokens: usage.promptTokenCount ?? 0,
-        output_tokens: usage.candidatesTokenCount ?? 0,
-        cached_tokens: usage.cachedContentTokenCount ?? 0,
-        thoughts_tokens: usage.thoughtsTokenCount ?? 0,
+        inputTokens: usage.promptTokenCount ?? 0,
+        outputTokens: usage.candidatesTokenCount ?? 0,
+        cachedTokens: usage.cachedContentTokenCount ?? 0,
+        thoughtsTokens: usage.thoughtsTokenCount ?? 0,
       };
     }
 
     if (isAnthropic) {
-      logger.log(`[usage:${provider}] input=${tokens.input_tokens} output=${tokens.output_tokens} cache_write=${tokens.cache_creation_input_tokens} cache_read=${tokens.cache_read_input_tokens}`);
+      logger.log(`[usage:${provider}] input=${tokens.inputTokens} output=${tokens.outputTokens} cache_write=${tokens.cacheCreationInputTokens} cache_write_5m=${tokens.cacheCreation5mInputTokens} cache_write_1h=${tokens.cacheCreation1hInputTokens} cache_read=${tokens.cacheReadInputTokens}`);
     } else if (isOpenAI) {
-      logger.log(`[usage:${provider}] input=${tokens.input_tokens} output=${tokens.output_tokens} cached=${tokens.cached_tokens} reasoning=${tokens.reasoning_tokens}`);
+      logger.log(`[usage:${provider}] input=${tokens.inputTokens} output=${tokens.outputTokens} cached=${tokens.cachedTokens} reasoning=${tokens.reasoningTokens}`);
     } else {
-      logger.log(`[usage:${provider}] input=${tokens.input_tokens} output=${tokens.output_tokens} cached=${tokens.cached_tokens} thoughts=${tokens.thoughts_tokens}`);
+      logger.log(`[usage:${provider}] input=${tokens.inputTokens} output=${tokens.outputTokens} cached=${tokens.cachedTokens} thoughts=${tokens.thoughtsTokens}`);
     }
 
     if (!this.enabled) return;
