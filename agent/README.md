@@ -32,6 +32,18 @@ The **server** maintains (in-memory only):
 - Conversation context (can be seeded with historical messages)
 - Pending tool calls, feedback requests, and model interaction requests
 
+### Worker Process Architecture
+
+Each agent session runs in a dedicated **worker subprocess** spawned by `WorkerSpawner` and managed by `AgentWorker`. The main process owns WebSocket connections; all agent execution (LLM calls, tool execution) happens inside the worker.
+
+**On Linux with bubblewrap installed:** the worker runs inside a bwrap sandbox. Only the session's temp directory is writable; the rest of the filesystem is read-only or not mounted. IPC between the main process and the worker uses a Unix domain socket (`<tempDir>/ipc-<random>.sock`) that crosses the sandbox boundary without needing `--forward-fd`.
+
+**On macOS / Linux without bwrap:** falls back to a plain Node.js `fork()`. The fork runs in its own process group (`detached: true`) so killing the group also terminates any grandchild processes (e.g. the Claude CLI subprocess spawned by the Anthropic Agent SDK).
+
+IPC messages between the main process and worker:
+- **Main → Worker:** `initialize`, `select_agent`, `chat`, `stop`, `tool_response`, `model_updated`, `get_context`, `shutdown`
+- **Worker → Main:** `to_client` (relayed to the WebSocket), `context_response`, `worker_error`
+
 ### Model Type Enforcement
 
 Each session works with ONE model type that cannot be changed:
@@ -43,11 +55,11 @@ The model type is declared at session initialization and enforced throughout.
 ### Message Flow
 
 ```
-Client ← WebSocket → Server ← Tools → SD-AI Engines
-   ↓                                        ↑
- Model,                              Quantitative,
- Runs,                               Qualitative,
- History                             Seldon, etc.
+Client ← WebSocket → Main Process → Worker Process ← Tools → SD-AI Engines
+   ↓                                     ↑                         ↑
+ Model,                             (IPC socket               Quantitative,
+ Runs,                              or Node IPC)              Qualitative,
+ History                                                       Seldon, etc.
 ```
 
 ## API Endpoints
@@ -124,6 +136,7 @@ Establishes a session with authentication, model type, initial model, and option
 - `authenticationKey` — Server authentication (required only if `AUTHENTICATION_KEY` env var is set)
 - `clientProduct` — Client identifier (e.g., `"sd-web"`, `"sd-desktop"`)
 - `clientVersion` — Client version for compatibility checking
+- `clientId` — Optional unique identifier for the end user (used for token usage reporting)
 - `mode` — Either `"cld"` or `"sfd"` — **cannot be changed during session**
 - `model` — Initial model state (can be empty)
 - `tools` — Optional array of custom client tool definitions (see Client Tool Registration below). Core model operations are all built-in and do not need to be registered here.
@@ -675,6 +688,7 @@ Each built-in tool is a plain object returned by a factory function. The fields 
 |---|---|---|
 | `maxModelTokens` | `number` | If the current model's token count exceeds this value, the tool is excluded from the agent's tool list. Used for tools that receive the full model (e.g., `generate_quantitative_model`). |
 | `minModelTokens` | `number` | If the current model's token count is below this value, the tool is excluded. Used for tools that only make sense for large models (e.g., `read_model_section`, `edit_model_section`). |
+| `nonSdkOnly` | `boolean` | If `true`, the tool is excluded from the Anthropic SDK (`sdk`) mode's MCP server and the Google ADK tool list. It is only available in `manual` loop mode. Use this for tools that duplicate functionality already provided natively by the SDK (e.g. file system tools). |
 
 Token counting runs on every conversation turn for all sessions. The token thresholds use `agentMaxTokensForEngines` from `config.js` (default: 100,000).
 
@@ -710,6 +724,9 @@ All core tools are registered server-side. Clients do not need to register them.
 ### Large Model Utilities
 - **read_model_section** — Read a section of a large model without loading it entirely
 - **edit_model_section** — Edit a section of a large model in place
+
+### File Utilities
+- **read_file** — Read a file from the session temp directory (supports line range and search filtering)
 
 ---
 
