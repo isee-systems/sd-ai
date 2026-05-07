@@ -139,10 +139,6 @@ Focus on educational validation:
 ### create_visualization *(sfd only)*
 **When to use:** Only when the user explicitly requests a visualization or confirms after a suggestion — never automatically after simulations or model updates
 
-### generate_documentation *(sfd + cld)*
-**When to use:** Anytime the user asks the model to be documented.
-**Frequency:** Only use this tool on request
-
 ### get_feedback_information *(sfd + cld)*
 **When to use:** ALWAYS before discuss_model_with_seldon, discuss_with_mentor, discuss_model_across_runs, or generate_ltm_narrative — no exceptions
 **Auto-suggest** this tool when appropriate

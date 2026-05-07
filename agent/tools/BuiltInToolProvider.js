@@ -8,7 +8,6 @@ import {
   createGenerateQualitativeModelTool,
   createDiscussModelWithSeldonTool,
   createDiscussModelAcrossRunsTool,
-  createGenerateDocumentationTool,
   createGenerateLtmNarrativeTool,
   createDiscussWithMentorTool,
   createGetFeedbackInformationTool,
@@ -40,7 +39,6 @@ import {
  * - discuss_model_with_seldon
  * - discuss_model_across_runs
  * - discuss_with_mentor
- * - generate_documentation
  * - generate_ltm_narrative
  * - create_visualization
  * - get_feedback_information
@@ -71,7 +69,6 @@ export class BuiltInToolProvider {
         generate_qualitative_model: createGenerateQualitativeModelTool(this.sessionManager, this.sessionId, this.sendToClient),
         discuss_model_with_seldon: createDiscussModelWithSeldonTool(this.sessionManager, this.sessionId, this.sendToClient),
         discuss_model_across_runs: createDiscussModelAcrossRunsTool(this.sessionManager, this.sessionId, this.sendToClient),
-        generate_documentation: createGenerateDocumentationTool(this.sessionManager, this.sessionId, this.sendToClient),
         generate_ltm_narrative: createGenerateLtmNarrativeTool(this.sessionManager, this.sessionId, this.sendToClient),
         discuss_with_mentor: createDiscussWithMentorTool(this.sessionManager, this.sessionId, this.sendToClient),
         get_feedback_information: createGetFeedbackInformationTool(this.sessionManager, this.sessionId, this.sendToClient),

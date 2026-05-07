@@ -682,9 +682,6 @@ All core tools are registered server-side. Clients do not need to register them.
 - **discuss_model_with_seldon** — Deep technical discussion with feedback loop analysis
 - **discuss_model_across_runs** — Compare behavior across simulation runs
 - **discuss_with_mentor** — User-friendly mentoring discussion
-
-### Documentation
-- **generate_documentation** — Auto-document model variables
 - **generate_ltm_narrative** — Feedback loop dominance narratives (LTM)
 
 ### Visualization

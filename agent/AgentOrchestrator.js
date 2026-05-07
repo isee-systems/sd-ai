@@ -369,7 +369,7 @@ export class AgentOrchestrator {
   #getResponseType(displayName) {
     if (['generate_ltm_narrative'].includes(displayName)) return 'ltm-discuss';
     if (['discuss_model_with_seldon', 'discuss_model_across_runs', 'discuss_with_mentor'].includes(displayName)) return 'discuss';
-    if (['generate_quantitative_model', 'generate_qualitative_model', 'generate_documentation'].includes(displayName)) return 'model';
+    if (['generate_quantitative_model', 'generate_qualitative_model'].includes(displayName)) return 'model';
     return 'other';
   }
 

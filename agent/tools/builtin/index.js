@@ -8,7 +8,6 @@ export { createGenerateQuantitativeModelTool } from './generateQuantitativeModel
 export { createGenerateQualitativeModelTool } from './generateQualitativeModel.js';
 export { createDiscussModelWithSeldonTool } from './discussModelWithSeldon.js';
 export { createDiscussModelAcrossRunsTool } from './discussModelAcrossRuns.js';
-export { createGenerateDocumentationTool } from './generateDocumentation.js';
 export { createGenerateLtmNarrativeTool } from './generateLtmNarrative.js';
 export { createDiscussWithMentorTool } from './discussWithMentor.js';
 export { createGetFeedbackInformationTool } from './getFeedbackInformation.js';

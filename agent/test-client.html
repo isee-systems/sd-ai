@@ -646,12 +646,6 @@
             const parsed = JSON.parse(result.content[0].text);
             model = parsed.model;
           }
-        } else if (toolName === 'generate_documentation') {
-          // Documentation engine also returns model
-          if (result.content && result.content[0] && result.content[0].text) {
-            const parsed = JSON.parse(result.content[0].text);
-            model = parsed.model;
-          }
         } else if (toolName === 'update_model' || toolName === 'get_current_model') {
           // Client tools that return models directly
           if (result.model) {
