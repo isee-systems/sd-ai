@@ -68,6 +68,7 @@ function toAnthropicMessage(msg) {
 export class AgentOrchestrator {
   #geminiManualCacheName = null;
   #geminiManualCacheKey = null;
+  #geminiManualCacheExpiry = null;
   #pendingMessages = [];
 
   constructor(sessionManager, sessionId, sendToClient, configPath) {
@@ -1103,7 +1104,7 @@ export class AgentOrchestrator {
     const toolDeclarations = this.convertToolsToGeminiFormat(builtInTools, dynamicTools, modelTokenCount, mode);
 
     // Build or reuse per-session Gemini context cache (system prompt + tools)
-    const geminiConfig = await this.#getGeminiManualConfig(systemPrompt, toolDeclarations);
+    let geminiConfig = await this.#getGeminiManualConfig(systemPrompt, toolDeclarations);
 
     const maxIterations = this.configManager.getMaxIterations();
 
@@ -1137,7 +1138,16 @@ export class AgentOrchestrator {
           const isQuota = error?.status === 429;
           const isNetworkError = error?.code === 'UND_ERR_SOCKET' || error?.code === 'ECONNRESET' ||
             (error instanceof TypeError && error.message === 'terminated');
-          if ((isQuota || isNetworkError) && retries < 3) {
+          const isStaleCacheError = error?.status === 403 &&
+            typeof error?.message === 'string' && error.message.includes('CachedContent not found');
+          if (isStaleCacheError && retries < 1) {
+            retries++;
+            logger.warn('Gemini Manual: cached content expired mid-session, recreating cache');
+            this.#geminiManualCacheName = null;
+            this.#geminiManualCacheKey = null;
+            this.#geminiManualCacheExpiry = null;
+            geminiConfig = await this.#getGeminiManualConfig(systemPrompt, toolDeclarations);
+          } else if ((isQuota || isNetworkError) && retries < 3) {
             retries++;
             const reason = isQuota ? 'quota/rate-limited (429)' : 'network error';
             logger.warn(`Gemini Manual: Gemini API ${reason}, retry ${retries}/3`);
@@ -1572,14 +1582,18 @@ export class AgentOrchestrator {
     // Build a cache key from the stable inputs — recreate if they change (e.g. tool set changes on model resize)
     const cacheKey = systemPrompt + JSON.stringify(toolDeclarations.map(t => t.name));
 
-    if (this.#geminiManualCacheName && this.#geminiManualCacheKey === cacheKey) {
+    const cacheStillValid = this.#geminiManualCacheName &&
+      this.#geminiManualCacheKey === cacheKey &&
+      this.#geminiManualCacheExpiry && Date.now() < this.#geminiManualCacheExpiry;
+
+    if (cacheStillValid) {
       return {
         cachedContent: this.#geminiManualCacheName,
         thinkingConfig: config.agentGeminiThinking
       };
     }
 
-    // Delete the old cache if the key changed
+    // Delete the old cache if the key changed or it expired
     if (this.#geminiManualCacheName) {
       try {
         await this.gemini.caches.delete({ name: this.#geminiManualCacheName });
@@ -1588,6 +1602,7 @@ export class AgentOrchestrator {
       }
       this.#geminiManualCacheName = null;
       this.#geminiManualCacheKey = null;
+      this.#geminiManualCacheExpiry = null;
     }
 
     try {
@@ -1606,6 +1621,7 @@ export class AgentOrchestrator {
 
       this.#geminiManualCacheName = cache.name;
       this.#geminiManualCacheKey = cacheKey;
+      this.#geminiManualCacheExpiry = Date.now() + 270_000; // 270s, 30s before 300s TTL
 
       return {
         cachedContent: cache.name,
