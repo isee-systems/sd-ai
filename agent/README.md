@@ -900,9 +900,3 @@ npm start
 ```
 
 WebSocket server available at: `ws://localhost:3000/api/v1/agent`
-
-### Testing
-
-Use the included test client: `agent/test-client.html`
-
-Open in a browser and connect to test all message types.
