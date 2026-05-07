@@ -24,20 +24,40 @@ const APP_ROOT = dirname(__dirname);  // sd-ai root (parent of agent/)
  * .kill, on('exit'), on('error')).
  */
 class IpcWorker extends EventEmitter {
-  #proc;
+  #proc = null;
   #server;
+  #socketPath;
   #socket = null;
   #sendQueue = [];
-  #connected = true;   // true while the process is still alive
+  #connected = true;
   #socketConnected = false;
 
-  constructor(proc, socketPath) {
-    super();
-    this.#proc = proc;
+  /**
+   * Create the server socket and wait until it is bound and listening.
+   * The socket file exists on disk before this promise resolves, so bwrap
+   * can be spawned immediately after with no race condition.
+   * Call worker.attach(proc) right after spawning the sandboxed process.
+   */
+  static async listen(socketPath) {
+    const server = net.createServer();
+    try { unlinkSync(socketPath); } catch { /* no stale socket to remove */ }
+    await new Promise((resolve, reject) => {
+      server.once('listening', resolve);
+      server.once('error', reject);
+      server.listen(socketPath);
+    });
+    return new IpcWorker(server, socketPath);
+  }
 
-    this.#server = net.createServer((socket) => {
+  constructor(server, socketPath) {
+    super();
+    this.#server = server;
+    this.#socketPath = socketPath;
+
+    server.on('connection', (socket) => {
       this.#socket = socket;
       this.#socketConnected = true;
+      this.emit('socket-connected');
 
       for (const chunk of this.#sendQueue) socket.write(chunk);
       this.#sendQueue = [];
@@ -60,16 +80,18 @@ class IpcWorker extends EventEmitter {
       socket.on('error', (err) => this.emit('error', err));
     });
 
-    this.#server.on('error', (err) => this.emit('error', err));
-    try { unlinkSync(socketPath); } catch { /* no stale socket to remove */ }
-    this.#server.listen(socketPath);
+    server.on('error', (err) => this.emit('error', err));
+  }
 
+  /** Wire up the sandboxed process after the socket is already listening. */
+  attach(proc) {
+    this.#proc = proc;
     proc.on('error', (err) => this.emit('error', err));
     proc.on('exit', (code, signal) => {
       this.#connected = false;
       this.#socket?.destroy();
       this.#server.close();
-      unlink(socketPath, () => {});
+      unlink(this.#socketPath, () => {});
       this.emit('exit', code, signal);
     });
   }
@@ -253,55 +275,74 @@ export class WorkerSpawner {
    * Returns an IpcWorker (bwrap) or ChildProcess (fork) — both expose the
    * same .send() / on('message') / .connected interface used by WebSocket.js.
    */
-  static spawn(sessionId, sessionTempDir) {
+  static async spawn(sessionId, sessionTempDir) {
     if (process.platform === 'linux') {
       const bwrapBin = WorkerSpawner.#findBinary('bwrap');
       if (bwrapBin && !WorkerSpawner.#bwrapBroken) {
-        logger.log(`[worker:${sessionId}] Spawning sandboxed worker via bwrap`);
+        const MAX_ATTEMPTS = 3;
+        for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+          const attemptLabel = attempt > 1 ? ` (attempt ${attempt}/${MAX_ATTEMPTS})` : '';
+          logger.log(`[worker:${sessionId}] Spawning sandboxed worker via bwrap${attemptLabel}`);
 
-        mkdirSync(sessionTempDir, { recursive: true });
-        // Unique name per spawn so the old IpcWorker's async unlink-on-exit
-        // never races with the new IpcWorker's socket (agent-switch scenario).
-        const socketName = `ipc-${randomBytes(4).toString('hex')}.sock`;
-        const socketPath = join(sessionTempDir, socketName);
-        const workerEnv = {
-          OPENAI_API_KEY: process.env.OPENAI_API_KEY,
-          GEMINI_API_KEY: process.env.GEMINI_API_KEY,
-          ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
-          SESSION_ID: sessionId,
-          SESSION_TEMP_DIR: WorkerSpawner.CONTAINER_SESSION_PATH,
-          WORKER_IPC_SOCKET: `${WorkerSpawner.CONTAINER_SESSION_PATH}/${socketName}`,
-          // claude CLI requires HOME to locate ~/.claude/ for config and session state.
-          // Point it at /session so each sandbox gets a fresh, writable home dir.
-          HOME: WorkerSpawner.CONTAINER_SESSION_PATH,
-          PATH: process.env.PATH,
-        };
-        const bwrapArgs = WorkerSpawner.#buildBwrapArgs(sessionTempDir);
-        logger.log(`[worker:${sessionId}] bwrap args: ${bwrapArgs.join(' ')}`);
+          mkdirSync(sessionTempDir, { recursive: true });
+          // Unique name per spawn so the old IpcWorker's async unlink-on-exit
+          // never races with the new IpcWorker's socket (agent-switch scenario).
+          const socketName = `ipc-${randomBytes(4).toString('hex')}.sock`;
+          const socketPath = join(sessionTempDir, socketName);
+          const workerEnv = {
+            OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+            GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+            ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+            SESSION_ID: sessionId,
+            SESSION_TEMP_DIR: WorkerSpawner.CONTAINER_SESSION_PATH,
+            WORKER_IPC_SOCKET: `${WorkerSpawner.CONTAINER_SESSION_PATH}/${socketName}`,
+            // claude CLI requires HOME to locate ~/.claude/ for config and session state.
+            // Point it at /session so each sandbox gets a fresh, writable home dir.
+            HOME: WorkerSpawner.CONTAINER_SESSION_PATH,
+            PATH: process.env.PATH,
+          };
+          const bwrapArgs = WorkerSpawner.#buildBwrapArgs(sessionTempDir);
+          logger.log(`[worker:${sessionId}] bwrap args: ${bwrapArgs.join(' ')}`);
 
-        const proc = spawn(bwrapBin, bwrapArgs, {
-          env: workerEnv,
-          stdio: ['inherit', 'inherit', 'inherit'],
-        });
+          // Socket file is on disk before bwrap starts — no race condition.
+          const worker = await IpcWorker.listen(socketPath);
 
-        const worker = new IpcWorker(proc, socketPath);
+          const proc = spawn(bwrapBin, bwrapArgs, {
+            env: workerEnv,
+            stdio: ['inherit', 'inherit', 'inherit'],
+          });
+          worker.attach(proc);
 
-        worker.once('exit', (code, signal) => {
-          if (!worker.socketConnected && code !== 0 && code !== null) {
+          // Wait for either a successful IPC connection or an early bwrap exit.
+          const earlyExit = await new Promise((resolve) => {
+            worker.once('socket-connected', () => resolve(null));
+            worker.once('exit', (code, signal) => {
+              if (!worker.socketConnected) resolve({ code, signal });
+            });
+          });
+
+          if (earlyExit === null) return worker; // socket connected — worker is up
+
+          const { code, signal } = earlyExit;
+          if (attempt < MAX_ATTEMPTS) {
+            logger.warn(
+              `[worker:${sessionId}] bwrap exited early (code=${code} signal=${signal}) — attempt ${attempt}/${MAX_ATTEMPTS}, retrying in 3s...`
+            );
+            await new Promise(r => setTimeout(r, 3000));
+          } else {
             WorkerSpawner.#bwrapBroken = true;
             const fallbackNote = WorkerSpawner.#allowUnsandboxedFallback
               ? 'Future workers will fall back to unsandboxed fork (ALLOW_UNSANDBOXED_FALLBACK=true).'
               : 'Worker spawning will now FAIL until bwrap is fixed (set ALLOW_UNSANDBOXED_FALLBACK=true to override).';
             logger.error(
-              `[worker:${sessionId}] bwrap exited early (code=${code} signal=${signal}) — sandbox unavailable. See stderr above.\n` +
+              `[worker:${sessionId}] bwrap exited early (code=${code} signal=${signal}) — sandbox unavailable after ${MAX_ATTEMPTS} attempts. See stderr above.\n` +
               fallbackNote + '\n' +
               'Fix: update bubblewrap (apt-get upgrade bubblewrap) or ensure user namespaces are enabled.'
             );
             WorkerSpawner.#logBwrapDiagnostics(bwrapBin);
           }
-        });
-
-        return worker;
+        }
+        // All attempts failed — fall through to bwrapBroken handling below.
       }
       if (WorkerSpawner.#bwrapBroken) {
         if (!WorkerSpawner.#allowUnsandboxedFallback) {

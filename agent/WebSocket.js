@@ -293,7 +293,14 @@ export class WebSocketHandler {
       if (this.#ws.readyState !== 1) return;
 
       const tempDir = this.#sessionManager.getSessionTempDir(this.#sessionId);
-      this.#worker = WorkerSpawner.spawn(this.#sessionId, tempDir);
+      this.#worker = await WorkerSpawner.spawn(this.#sessionId, tempDir);
+
+      // Guard: WS may have closed during bwrap retry delays (up to 9s).
+      if (this.#ws.readyState !== 1) {
+        this.#killWorker();
+        return;
+      }
+
       liveWorkers.add(this.#worker);
       this.#setupWorkerRelay(this.#worker);
 
