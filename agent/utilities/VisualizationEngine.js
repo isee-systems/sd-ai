@@ -33,9 +33,7 @@ export class VisualizationEngine {
     // Normalize and resolve the session temp directory for security checks
     this.resolvedTempDir = resolve(normalize(this.sessionTempDir));
 
-    const clientId = sessionManager.getSession(sessionId)?.clientId ?? null;
-    // Cache LLM wrapper to avoid recreating it for each visualization
-    this.llm = new LLMWrapper({ clientId });
+    this.clientId = sessionManager.getSession(sessionId)?.clientId ?? null;
   }
 
   /**
@@ -239,9 +237,10 @@ ${periodsConstant}
 Generate ONLY working Python code, no explanations.`;
 
     try {
-      // Get LLM parameters with lower temperature for faster, more deterministic responses
-      const { temperature } = this.llm.getLLMParameters(0.1);
-      const underlyingModel = options.underlyingModel;
+      // Construct a properly-configured LLMWrapper so getLLMParameters can parse the model
+      // name and extract any thinking-level suffix (e.g., 'gemini-3-flash-preview low').
+      const vizLLM = new LLMWrapper({ clientId: this.clientId, underlyingModel: options.underlyingModel });
+      const { temperature, underlyingModel: parsedModel, reasoningEffort } = vizLLM.getLLMParameters(0.1);
 
       // Create messages array.
       // systemPrompt is stable across requests and will be cached.
@@ -253,11 +252,12 @@ Generate ONLY working Python code, no explanations.`;
         { role: 'user', content: userPrompt }
       ];
 
-      const response = await this.llm.createChatCompletion(
+      const response = await vizLLM.createChatCompletion(
         messages,
-        underlyingModel,
+        parsedModel,
         null, // no zodSchema
-        temperature
+        temperature,
+        reasoningEffort
       );
 
       // Extract Python code from response content
