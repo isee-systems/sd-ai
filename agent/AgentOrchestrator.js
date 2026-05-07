@@ -615,6 +615,14 @@ export class AgentOrchestrator {
     for (let i = 0; i < messages.length; i++) {
       messages[i] = toAnthropicMessage(messages[i]);
     }
+    // Drop any messages that converted to empty content (e.g. Gemini tool call/response
+    // parts that have no text), which Anthropic rejects.
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const content = messages[i].content;
+      if (!content || (typeof content === 'string' && content.trim() === '') || (Array.isArray(content) && content.length === 0)) {
+        messages.splice(i, 1);
+      }
+    }
 
     // Check model token count and update session state
     const session = this.sessionManager.getSession(this.sessionId);
@@ -1598,7 +1606,7 @@ export class AgentOrchestrator {
       try {
         await this.gemini.caches.delete({ name: this.#geminiManualCacheName });
       } catch (e) {
-        logger.warn('[gemini-cache] failed to delete stale cache:', e.message);
+        // Gemini may have already expired the cache — ignore deletion failures
       }
       this.#geminiManualCacheName = null;
       this.#geminiManualCacheKey = null;
