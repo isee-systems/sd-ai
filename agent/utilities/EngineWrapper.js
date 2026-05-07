@@ -209,7 +209,7 @@ export async function callSeldonMentorEngine(prompt, model, feedbackContent, par
     };
 
     const beBrief = "\n\n**CRITICAL**\nBe brief in your response.";
-    seldonParams.systemPrompt = SeldonEngineBrain.MENTOR_SYSTEM_PROMPT + beBrief 
+    mentorParams.systemPrompt = SeldonEngineBrain.MENTOR_SYSTEM_PROMPT + beBrief
 
     const result = await engine.generate(prompt, model, mentorParams);
 
