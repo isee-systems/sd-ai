@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import { GoogleGenAI } from '@google/genai';
 import { LlmAgent, Runner, InMemorySessionService, isFinalResponse } from '@google/adk';
+import { setMaxListeners } from 'events';
 import { encode } from 'gpt-tokenizer';
 import { marked } from 'marked';
 import { countTokens } from '@anthropic-ai/tokenizer';
@@ -1229,6 +1230,9 @@ export class AgentOrchestrator {
     }
 
     this.abortController = new AbortController();
+    // @google/genai attaches an abort listener per HTTP request without removing it on
+    // success, so a multi-tool ADK turn easily exceeds Node's default limit of 10.
+    setMaxListeners(0, this.abortController.signal);
     const maxIterations = this.configManager.getMaxIterations();
     let maxIterationsHit = false;
 
