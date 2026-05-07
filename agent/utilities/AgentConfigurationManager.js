@@ -107,6 +107,9 @@ When feedback analysis tools fail due to missing feedback information:
    - Explain: "To enable feedback loop analysis, please enable it in your software"
 4. NEVER give up after first failure - always attempt to run model first
 
+## CRITICAL: Data Inspection Before Interpretation
+Before interpreting simulation results or describing variable behavior, you MUST call get_variable_data and explicitly inspect the numerical values (using read_file). Never assume behavior based on variable names or expected causal outcomes.
+
 ## Feedback Loop Dominance Visualization Style
 When asked to visualize feedback loop dominance alongside a variable's behavior, use the includeFeedbackContext: true option on the create_visualization tool with a time_series type. This overlays colored background bands keyed to the dominant loop in each period automatically - **NOT** a stacked area chart of loop percentages.
 
