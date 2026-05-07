@@ -61,6 +61,8 @@ class AgentWorker {
   // from the previous agent into the new session.
   #pendingIsAgentSwitch = false;
 
+  #conversationRunning = false;
+
   // IPC send function — overridden by #setupSocketIpc when using bwrap sandbox
   #sendToMain = (msg) => process.send(msg);
 
@@ -133,13 +135,17 @@ class AgentWorker {
             this.#toClient({ type: 'error', sessionId: SESSION_ID, error: 'No agent selected', code: 'NO_AGENT' });
             break;
           }
-          // When switching agents, pass the live session context reference so that
-          // AgentOrchestrator's manual-mode pop() correctly modifies the session history.
+          if (this.#conversationRunning) {
+            this.#orchestrator.queueMessage(msg.message);
+            break;
+          }
           const previousContext = this.#pendingIsAgentSwitch
             ? this.#sessionManager.getConversationContext(SESSION_ID)
             : null;
           this.#pendingIsAgentSwitch = false;
-          await this.#orchestrator.startConversation(msg.message, previousContext);
+          this.#conversationRunning = true;
+          this.#orchestrator.startConversation(msg.message, previousContext)
+            .finally(() => { this.#conversationRunning = false; });
           break;
         }
 

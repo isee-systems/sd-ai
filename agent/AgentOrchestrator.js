@@ -68,6 +68,7 @@ function toAnthropicMessage(msg) {
 export class AgentOrchestrator {
   #geminiManualCacheName = null;
   #geminiManualCacheKey = null;
+  #pendingMessages = [];
 
   constructor(sessionManager, sessionId, sendToClient, configPath) {
     this.sessionManager = sessionManager;
@@ -298,6 +299,18 @@ export class AgentOrchestrator {
       // Process messages from SDK
       for await (const message of queryIterator) {
         await this.handleAnthropicSdkMessage(message);
+      }
+
+      // Process any messages queued while the SDK was running. Each queued message
+      // gets a fresh maxTurns budget — even if the prior run hit the limit.
+      while (!this.stopRequested && this.#pendingMessages.length > 0) {
+        const next = this.#pendingMessages.shift();
+        logger.log(`Anthropic SDK: processing queued message (remaining: ${this.#pendingMessages.length})`);
+        this.maxTurnsReached = false;
+        const followUpIterator = query({ prompt: next, options: { ...queryOptions, resume: this.sdkSessionId } });
+        for await (const message of followUpIterator) {
+          await this.handleAnthropicSdkMessage(message);
+        }
       }
 
       // Normal completion (or max turns reached)
@@ -621,108 +634,120 @@ export class AgentOrchestrator {
     // Convert tool servers to Anthropic tool format (with conditional filtering)
     const tools = this.convertToolsToAnthropicFormat(builtInTools, dynamicTools, modelTokenCount, mode);
 
-    let continueLoop = true;
     const maxIterations = this.configManager.getMaxIterations();
-    let iteration = 0;
-    let overloadedRetries = 0; // max 3 total per conversation turn
 
-    while (continueLoop && iteration < maxIterations && !this.stopRequested) {
-      iteration++;
+    while (true) {
+      let continueLoop = true;
+      let iteration = 0;
+      let overloadedRetries = 0;
 
-      // Summarize context in-place if it has grown over the token limit
-      await this.sessionManager.cleanupContext(this.sessionId, config.agentMaxContextTokens);
+      while (continueLoop && iteration < maxIterations && !this.stopRequested) {
+        iteration++;
 
-      try {
-        // Call Claude API
-        const thinkingEnabled = config.agentAnthropicThinking?.type !== 'disabled';
-        const response = await this.anthropic.messages.create({
-          model: config.agentAnthropicModel,
-          max_tokens: 8192,
-          system: systemBlocks,
-          messages: messages,
-          thinking: config.agentAnthropicThinking,
-          ...(thinkingEnabled && { effort: config.agentAnthropicEffort }),
-          tools: tools.length > 0 ? tools : undefined
-        });
+        // Summarize context in-place if it has grown over the token limit
+        await this.sessionManager.cleanupContext(this.sessionId, config.agentMaxContextTokens);
 
-        this.#logApiUsage('anthropic', response.usage);
+        try {
+          // Call Claude API
+          const thinkingEnabled = config.agentAnthropicThinking?.type !== 'disabled';
+          const response = await this.anthropic.messages.create({
+            model: config.agentAnthropicModel,
+            max_tokens: 8192,
+            system: systemBlocks,
+            messages: messages,
+            thinking: config.agentAnthropicThinking,
+            ...(thinkingEnabled && { effort: config.agentAnthropicEffort }),
+            tools: tools.length > 0 ? tools : undefined
+          });
 
-        // Check if stop was requested during the API call
-        if (this.stopRequested) {
-          break;
-        }
+          this.#logApiUsage('anthropic', response.usage);
 
-        // Process response
-        continueLoop = await this.processAgentResponseAnthropicManual(response, messages, builtInTools, dynamicTools);
+          // Check if stop was requested during the API call
+          if (this.stopRequested) {
+            break;
+          }
 
-        // Check if stop was requested during response processing
-        if (this.stopRequested) {
-          break;
-        }
+          // Process response
+          continueLoop = await this.processAgentResponseAnthropicManual(response, messages, builtInTools, dynamicTools);
 
-      } catch (error) {
-        const isOverloaded = error?.status === 529 || error?.error?.type === 'overloaded_error';
-        const isNetworkError = error?.cause?.code === 'UND_ERR_SOCKET' || error?.code === 'UND_ERR_SOCKET' ||
-          error?.code === 'ECONNRESET' || error?.cause?.code === 'ECONNRESET' ||
-          (error instanceof TypeError && error.message === 'terminated');
-        if ((isOverloaded || isNetworkError) && overloadedRetries < 3) {
-          overloadedRetries++;
-          const reason = isOverloaded ? 'overloaded (529)' : 'network error';
-          logger.warn(`Anthropic Manual: Anthropic API ${reason}, retry ${overloadedRetries}/3`);
-          await this.sendToClient(createAgentTextMessage(
-            this.sessionId,
-            isOverloaded ? 'The AI service is temporarily overloaded. Retrying...' : 'Network connection interrupted. Retrying...'
-          ));
-          await new Promise(resolve => setTimeout(resolve, 5000));
-        } else if (isOverloaded) {
-          logger.error('Anthropic Manual: Anthropic API overloaded (529) after 3 retries, giving up');
-          await this.sendToClient(createErrorMessage(
-            this.sessionId,
-            'The AI service is overloaded. Please try again later.',
-            'AGENT_ERROR'
-          ));
-          await this.sendToClient(createAgentCompleteMessage(
-            this.sessionId,
-            'awaiting_user',
-            'Agent stopped due to overloaded API'
-          ));
-          continueLoop = false;
-        } else {
-          logger.error('Anthropic Manual: Error in agent conversation loop:', error);
-          await this.sendToClient(createErrorMessage(
-            this.sessionId,
-            `Agent error: ${error.message}`,
-            'AGENT_ERROR'
-          ));
-          await this.sendToClient(createAgentCompleteMessage(
-            this.sessionId,
-            'awaiting_user',
-            'Agent stopped due to error'
-          ));
-          continueLoop = false;
+          // Check if stop was requested during response processing
+          if (this.stopRequested) {
+            break;
+          }
+
+        } catch (error) {
+          const isOverloaded = error?.status === 529 || error?.error?.type === 'overloaded_error';
+          const isNetworkError = error?.cause?.code === 'UND_ERR_SOCKET' || error?.code === 'UND_ERR_SOCKET' ||
+            error?.code === 'ECONNRESET' || error?.cause?.code === 'ECONNRESET' ||
+            (error instanceof TypeError && error.message === 'terminated');
+          if ((isOverloaded || isNetworkError) && overloadedRetries < 3) {
+            overloadedRetries++;
+            const reason = isOverloaded ? 'overloaded (529)' : 'network error';
+            logger.warn(`Anthropic Manual: Anthropic API ${reason}, retry ${overloadedRetries}/3`);
+            await this.sendToClient(createAgentTextMessage(
+              this.sessionId,
+              isOverloaded ? 'The AI service is temporarily overloaded. Retrying...' : 'Network connection interrupted. Retrying...'
+            ));
+            await new Promise(resolve => setTimeout(resolve, 5000));
+          } else if (isOverloaded) {
+            logger.error('Anthropic Manual: Anthropic API overloaded (529) after 3 retries, giving up');
+            await this.sendToClient(createErrorMessage(
+              this.sessionId,
+              'The AI service is overloaded. Please try again later.',
+              'AGENT_ERROR'
+            ));
+            await this.sendToClient(createAgentCompleteMessage(
+              this.sessionId,
+              'awaiting_user',
+              'Agent stopped due to overloaded API'
+            ));
+            continueLoop = false;
+          } else {
+            logger.error('Anthropic Manual: Error in agent conversation loop:', error);
+            await this.sendToClient(createErrorMessage(
+              this.sessionId,
+              `Agent error: ${error.message}`,
+              'AGENT_ERROR'
+            ));
+            await this.sendToClient(createAgentCompleteMessage(
+              this.sessionId,
+              'awaiting_user',
+              'Agent stopped due to error'
+            ));
+            continueLoop = false;
+          }
         }
       }
-    }
 
-    if (this.stopRequested) {
-      logger.log(`Anthropic Manual: Agent iteration stopped by user request for session ${this.sessionId}`);
-      this.stopRequested = false; // Reset for next conversation
+      if (this.stopRequested) {
+        logger.log(`Anthropic Manual: Agent iteration stopped by user request for session ${this.sessionId}`);
+        this.stopRequested = false;
+        await this.sendToClient(createAgentCompleteMessage(
+          this.sessionId,
+          'awaiting_user',
+          'Agent stopped by user request'
+        ));
+        break;
+      }
+      const reachedMax = iteration >= maxIterations;
+      if (this.#pendingMessages.length === 0) {
+        if (reachedMax) {
+          logger.warn(`Anthropic Manual: Agent conversation reached max iterations (${maxIterations})`);
+          await this.sendToClient(createAgentCompleteMessage(
+            this.sessionId,
+            'awaiting_user',
+            `Reached maximum iterations (${maxIterations})`
+          ));
+        }
+        break;
+      }
 
-      // Send agent_complete message to notify client that agent has stopped
-      await this.sendToClient(createAgentCompleteMessage(
-        this.sessionId,
-        'awaiting_user',
-        'Agent stopped by user request'
-      ));
-    } else if (iteration >= maxIterations) {
-      logger.warn(`Anthropic Manual: Agent conversation reached max iterations (${maxIterations})`);
-
-      // Send agent_complete message when max iterations reached
-      await this.sendToClient(createAgentCompleteMessage(
-        this.sessionId,
-        'awaiting_user',
-        `Reached maximum iterations (${maxIterations})`
-      ));
+      if (reachedMax) {
+        logger.warn(`Anthropic Manual: max iterations (${maxIterations}) hit; draining queued message with fresh budget`);
+      }
+      const next = this.#pendingMessages.shift();
+      logger.log(`Anthropic Manual: processing queued message (remaining: ${this.#pendingMessages.length})`);
+      this.sessionManager.addToConversationHistory(this.sessionId, { role: 'user', content: next });
     }
   }
 
@@ -1080,65 +1105,82 @@ export class AgentOrchestrator {
     // Build or reuse per-session Gemini context cache (system prompt + tools)
     const geminiConfig = await this.#getGeminiManualConfig(systemPrompt, toolDeclarations);
 
-    let continueLoop = true;
-    let completedNaturally = false;
     const maxIterations = this.configManager.getMaxIterations();
-    let iteration = 0;
-    let retries = 0;
 
-    while (continueLoop && iteration < maxIterations && !this.stopRequested) {
-      iteration++;
-      await this.sessionManager.cleanupContext(this.sessionId, config.agentMaxContextTokens);
+    while (true) {
+      let continueLoop = true;
+      let completedNaturally = false;
+      let iteration = 0;
+      let retries = 0;
 
-      try {
-        const response = await this.gemini.models.generateContent({
-          model: config.agentGeminiModel,
-          contents: messages,
-          config: geminiConfig
-        });
+      while (continueLoop && iteration < maxIterations && !this.stopRequested) {
+        iteration++;
+        await this.sessionManager.cleanupContext(this.sessionId, config.agentMaxContextTokens);
 
-        this.#logApiUsage('gemini', response.usageMetadata);
+        try {
+          const response = await this.gemini.models.generateContent({
+            model: config.agentGeminiModel,
+            contents: messages,
+            config: geminiConfig
+          });
 
-        if (this.stopRequested) break;
+          this.#logApiUsage('gemini', response.usageMetadata);
 
-        continueLoop = await this.processGeminiManualResponse(response, messages, builtInTools, dynamicTools);
-        if (!continueLoop) completedNaturally = true;
+          if (this.stopRequested) break;
 
-        if (this.stopRequested) break;
+          continueLoop = await this.processGeminiManualResponse(response, messages, builtInTools, dynamicTools);
+          if (!continueLoop) completedNaturally = true;
 
-      } catch (error) {
-        const isQuota = error?.status === 429;
-        const isNetworkError = error?.code === 'UND_ERR_SOCKET' || error?.code === 'ECONNRESET' ||
-          (error instanceof TypeError && error.message === 'terminated');
-        if ((isQuota || isNetworkError) && retries < 3) {
-          retries++;
-          const reason = isQuota ? 'quota/rate-limited (429)' : 'network error';
-          logger.warn(`Gemini Manual: Gemini API ${reason}, retry ${retries}/3`);
-          await this.sendToClient(createAgentTextMessage(
-            this.sessionId,
-            isQuota ? 'The AI service is temporarily rate-limited. Retrying...' : 'Network connection interrupted. Retrying...'
-          ));
-          await new Promise(resolve => setTimeout(resolve, 5000));
-        } else if (isQuota) {
-          logger.error('Gemini Manual: Gemini API rate-limited after 3 retries, giving up');
-          await this.sendToClient(createErrorMessage(this.sessionId, 'The AI service is rate-limited. Please try again later.', 'AGENT_ERROR'));
-          await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'awaiting_user', 'Agent stopped due to rate limiting'));
-          continueLoop = false;
-        } else {
-          logger.error('Gemini Manual: Error in Gemini agent conversation loop:', error);
-          await this.sendToClient(createErrorMessage(this.sessionId, `Agent error: ${error.message}`, 'AGENT_ERROR'));
-          await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'awaiting_user', 'Agent stopped due to error'));
-          continueLoop = false;
+          if (this.stopRequested) break;
+
+        } catch (error) {
+          const isQuota = error?.status === 429;
+          const isNetworkError = error?.code === 'UND_ERR_SOCKET' || error?.code === 'ECONNRESET' ||
+            (error instanceof TypeError && error.message === 'terminated');
+          if ((isQuota || isNetworkError) && retries < 3) {
+            retries++;
+            const reason = isQuota ? 'quota/rate-limited (429)' : 'network error';
+            logger.warn(`Gemini Manual: Gemini API ${reason}, retry ${retries}/3`);
+            await this.sendToClient(createAgentTextMessage(
+              this.sessionId,
+              isQuota ? 'The AI service is temporarily rate-limited. Retrying...' : 'Network connection interrupted. Retrying...'
+            ));
+            await new Promise(resolve => setTimeout(resolve, 5000));
+          } else if (isQuota) {
+            logger.error('Gemini Manual: Gemini API rate-limited after 3 retries, giving up');
+            await this.sendToClient(createErrorMessage(this.sessionId, 'The AI service is rate-limited. Please try again later.', 'AGENT_ERROR'));
+            await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'awaiting_user', 'Agent stopped due to rate limiting'));
+            continueLoop = false;
+          } else {
+            logger.error('Gemini Manual: Error in Gemini agent conversation loop:', error);
+            await this.sendToClient(createErrorMessage(this.sessionId, `Agent error: ${error.message}`, 'AGENT_ERROR'));
+            await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'awaiting_user', 'Agent stopped due to error'));
+            continueLoop = false;
+          }
         }
       }
-    }
 
-    if (this.stopRequested) {
-      this.stopRequested = false;
-      await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'awaiting_user', 'Agent stopped by user request'));
-    } else if (!completedNaturally && iteration >= maxIterations) {
-      logger.warn(`Gemini Manual: Agent conversation reached max iterations (${maxIterations})`);
-      await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'awaiting_user', `Reached maximum iterations (${maxIterations})`));
+      if (this.stopRequested) {
+        this.stopRequested = false;
+        await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'awaiting_user', 'Agent stopped by user request'));
+        break;
+      }
+      const reachedMax = !completedNaturally && iteration >= maxIterations;
+      if (this.#pendingMessages.length === 0) {
+        if (reachedMax) {
+          logger.warn(`Gemini Manual: Agent conversation reached max iterations (${maxIterations})`);
+          await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'awaiting_user', `Reached maximum iterations (${maxIterations})`));
+        }
+        break;
+      }
+
+      if (reachedMax) {
+        logger.warn(`Gemini Manual: max iterations (${maxIterations}) hit; draining queued message with fresh budget`);
+      }
+      const next = this.#pendingMessages.shift();
+      logger.log(`Gemini Manual: processing queued message (remaining: ${this.#pendingMessages.length})`);
+      this.sessionManager.addToConversationHistory(this.sessionId, { role: 'user', parts: [{ text: next }] });
+      messages.push({ role: 'user', parts: [{ text: next }] });
     }
   }
 
@@ -1302,25 +1344,43 @@ export class AgentOrchestrator {
         this.#adkHasPriorContext = true;
       }
 
-      const newMessage = { role: 'user', parts: [{ text: prompt }] };
+      let currentMessage = { role: 'user', parts: [{ text: prompt }] };
 
       let turnCount = 0;
-      for await (const event of runner.runAsync({
-        userId: this.sessionId,
-        sessionId: this.adkSessionId,
-        newMessage,
-        abortSignal: this.abortController.signal
-      })) {
-        if (event.usageMetadata) this.#logApiUsage('gemini', event.usageMetadata);
-        if (this.stopRequested) break;
-        await this.handleAdkEvent(event);
-        if (isFinalResponse(event)) turnCount++;
-        if (turnCount >= maxIterations) {
-          logger.warn(`Gemini ADK: agent reached max iterations (${maxIterations})`);
-          maxIterationsHit = true;
-          this.abortController.abort();
-          break;
+      while (true) {
+        for await (const event of runner.runAsync({
+          userId: this.sessionId,
+          sessionId: this.adkSessionId,
+          newMessage: currentMessage,
+          abortSignal: this.abortController.signal
+        })) {
+          if (event.usageMetadata) this.#logApiUsage('gemini', event.usageMetadata);
+          if (this.stopRequested) break;
+          await this.handleAdkEvent(event);
+          if (isFinalResponse(event)) turnCount++;
+          if (turnCount >= maxIterations) {
+            logger.warn(`Gemini ADK: agent reached max iterations (${maxIterations})`);
+            maxIterationsHit = true;
+            this.abortController.abort();
+            break;
+          }
         }
+
+        if (this.stopRequested) break;
+        if (this.#pendingMessages.length === 0) break;
+
+        if (maxIterationsHit) {
+          logger.warn(`Gemini ADK: max iterations (${maxIterations}) hit; draining queued message with fresh budget`);
+          maxIterationsHit = false;
+          // Previous run aborted the controller — create a fresh one for the next run.
+          this.abortController = new AbortController();
+          setMaxListeners(0, this.abortController.signal);
+        }
+
+        const next = this.#pendingMessages.shift();
+        logger.log(`Gemini ADK: processing queued message (remaining: ${this.#pendingMessages.length})`);
+        currentMessage = { role: 'user', parts: [{ text: next }] };
+        turnCount = 0;
       }
 
       if (this.stopRequested) {
@@ -1499,7 +1559,13 @@ export class AgentOrchestrator {
   stopIteration() {
     logger.log(`Stop iteration requested for session ${this.sessionId}`);
     this.stopRequested = true;
+    this.#pendingMessages = [];
     this.abortController?.abort();
+  }
+
+  queueMessage(message) {
+    this.#pendingMessages.push(message);
+    logger.debug(`[orchestrator:${this.sessionId}] Message queued (depth: ${this.#pendingMessages.length})`);
   }
 
   async #getGeminiManualConfig(systemPrompt, toolDeclarations) {
