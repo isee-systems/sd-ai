@@ -30,7 +30,9 @@ const config = {
     "agentGeminiSummaryModel": 'gemini-3.1-flash-preview', // Model used for conversation history summarization MUST BE gemini models
     "agentAnthropicEffort": "low",
     "agentAnthropicThinking": { type: "disabled" },
-    "agentGeminiThinking": { thinkingLevel: ThinkingLevel.LOW }
+    "agentGeminiThinking": { thinkingLevel: ThinkingLevel.LOW },
+    "agentToolHighEffortBuildDefaultModel": 'gemini-3-flash-preview high', //LLMWrapper underlyingModel default for building model tools
+    "agentToolHighEffortNonBuildDefaultModel": 'gemini-3-flash-preview high', //LLMWrapper underlyingModel default for non-building model tools
 };
 
 export default config

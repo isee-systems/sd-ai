@@ -240,7 +240,8 @@ Generate ONLY working Python code, no explanations.`;
 
     try {
       // Get LLM parameters with lower temperature for faster, more deterministic responses
-      const { underlyingModel, temperature } = this.llm.getLLMParameters(0.1);
+      const { temperature } = this.llm.getLLMParameters(0.1);
+      const underlyingModel = options.underlyingModel;
 
       // Create messages array.
       // systemPrompt is stable across requests and will be cached.

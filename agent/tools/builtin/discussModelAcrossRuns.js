@@ -4,6 +4,7 @@ import { join } from 'path';
 import { createFeedbackRequestMessage } from '../../utilities/MessageProtocol.js';
 import { callSeldonILEEngine } from '../../utilities/EngineWrapper.js';
 import { generateRequestId, createSuccessResponse, createErrorResponse, loadBehaviorContent } from './toolHelpers.js';
+import config from '../../../config.js';
 
 /**
  * Have a user-friendly discussion about the model without jargon, with ability to compare runs
@@ -14,6 +15,7 @@ export function createDiscussModelAcrossRunsTool(sessionManager, sessionId, send
     supportedModes: ['sfd'],
     inputSchema: z.object({
       prompt: z.string().describe('Question or topic for discussion'),
+      difficulty: z.enum(["normal", "hard"]).describe("The expected difficulty of this task"),
       runName: z.string().optional().describe('Simulation run identifier of the most recent run matching the way the behavioral content is being passed to this too.'),
       parameters: z.object({
         problemStatement: z.string().optional().describe('Description of dynamic issue to address'),
@@ -21,7 +23,7 @@ export function createDiscussModelAcrossRunsTool(sessionManager, sessionId, send
         runIds: z.array(z.string()).optional().describe('Run IDs to include as behavior data; defaults to the last run')
       }).optional()
     }),
-    handler: async ({ prompt, runName, parameters }) => {
+    handler: async ({ prompt, difficulty, runName, parameters }) => {
       try {
         const session = sessionManager.getSession(sessionId);
         if (!session) {
@@ -33,7 +35,8 @@ export function createDiscussModelAcrossRunsTool(sessionManager, sessionId, send
           return createErrorResponse('No model available in session');
         }
 
-        const baseParameters = { ...parameters, clientId: session.clientId };
+        const underlyingModel = difficulty === 'normal' ? config.nonBuildDefaultModel : config.agentToolHighEffortNonBuildDefaultModel;
+        const baseParameters = { ...parameters, clientId: session.clientId, underlyingModel };
         const sessionTempDir = sessionManager.getSessionTempDir(sessionId);
         const feedbackPath = join(sessionTempDir, 'feedback.json');
         const feedbackContent = existsSync(feedbackPath)

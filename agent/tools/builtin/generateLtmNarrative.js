@@ -4,6 +4,7 @@ import { join } from 'path';
 import { createFeedbackRequestMessage } from '../../utilities/MessageProtocol.js';
 import { callLTMEngine } from '../../utilities/EngineWrapper.js';
 import { generateRequestId, createSuccessResponse, createErrorResponse, loadBehaviorContent } from './toolHelpers.js';
+import config from '../../../config.js';
 
 /**
  * Generate a narrative explanation of feedback loops and their influence on model behavior
@@ -13,13 +14,14 @@ export function createGenerateLtmNarrativeTool(sessionManager, sessionId, sendTo
     description: 'Generate a narrative explanation of feedback loops and their influence on model behavior (Loops That Matter analysis).',
     supportedModes: ['sfd'],
     inputSchema: z.object({
+      difficulty: z.enum(["normal", "hard"]).describe("The expected difficulty of this task"),
       parameters: z.object({
         problemStatement: z.string().optional().describe('Description of dynamic issue to address'),
         backgroundKnowledge: z.string().optional().describe('Background information for LLM'),
         runIds: z.array(z.string()).optional().describe('Run IDs to include as behavior data; defaults to the last run')
       }).optional()
     }),
-    handler: async ({ parameters }) => {
+    handler: async ({ difficulty, parameters }) => {
       try {
         const session = sessionManager.getSession(sessionId);
         if (!session) {
@@ -31,7 +33,8 @@ export function createGenerateLtmNarrativeTool(sessionManager, sessionId, sendTo
           return createErrorResponse('No model available in session');
         }
 
-        const baseParameters = { ...parameters, clientId: session.clientId };
+        const underlyingModel = difficulty === 'normal' ? config.nonBuildDefaultModel : config.agentToolHighEffortNonBuildDefaultModel;
+        const baseParameters = { ...parameters, clientId: session.clientId, underlyingModel };
         const sessionTempDir = sessionManager.getSessionTempDir(sessionId);
         const feedbackPath = join(sessionTempDir, 'feedback.json');
         let feedbackContent = existsSync(feedbackPath)

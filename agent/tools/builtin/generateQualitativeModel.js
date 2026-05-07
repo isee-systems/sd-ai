@@ -14,20 +14,22 @@ export function createGenerateQualitativeModelTool(sessionManager, sessionId, se
     maxModelTokens: config.agentMaxTokensForEngines,
     inputSchema: z.object({
       prompt: z.string().describe('Description of the model to generate'),
+      difficulty: z.enum(["normal", "hard"]).describe("The expected difficulty of this task"),
       parameters: z.object({
         problemStatement: z.string().optional().describe('Description of dynamic issue to address'),
         backgroundKnowledge: z.string().optional().describe('Background information for LLM')
       }).optional()
     }),
-    handler: async ({ prompt, parameters }) => {
+    handler: async ({ prompt, difficulty, parameters }) => {
       try {
         const session = sessionManager.getSession(sessionId);
         if (!session) {
           throw new Error(`Session not found: ${sessionId}`);
         }
 
+        const underlyingModel = difficulty === 'normal' ? config.buildDefaultModel : config.agentToolHighEffortBuildDefaultModel;
         const currentModel = sessionManager.getClientModel(sessionId);
-        const result = await callQualitativeEngine(prompt, currentModel, { ...parameters, clientId: session.clientId });
+        const result = await callQualitativeEngine(prompt, currentModel, { ...parameters, underlyingModel, clientId: session.clientId });
 
         if (!result.success) {
           return createErrorResponse(result.error);

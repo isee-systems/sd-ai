@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { createSuccessResponse, createErrorResponse } from './toolHelpers.js';
+import config from '../../../config.js';
 
 // Detect run-keyed format: { runId: { time: [...], varName: [...], ... } }
 export function isRunKeyedFormat(data) {
@@ -47,6 +48,7 @@ Use useAICustom=true to have AI generate custom matplotlib code for complex visu
       description: z.string().optional().describe('Description of what the visualization shows'),
       usePython: z.boolean().optional().describe('Use Python/matplotlib. Default: true'),
       useAICustom: z.boolean().optional().describe('Use AI to generate custom Python visualization code. Default: false'),
+      difficulty: z.enum(["normal", "hard"]).optional().describe("The expected difficulty of this task (only used when useAICustom=true)"),
       dataDescription: z.string().optional().describe('Description of the data for AI (when useAICustom=true)'),
       visualizationGoal: z.string().optional().describe('What insight to convey (when useAICustom=true)'),
       options: z.object({
@@ -64,7 +66,7 @@ Use useAICustom=true to have AI generate custom matplotlib code for complex visu
         customRequirements: z.string().optional().describe('Additional freeform requirements passed to the AI when useAICustom=true')
       }).optional()
     }),
-    handler: async ({ type, filePath, variables, title, description, usePython, useAICustom, dataDescription, visualizationGoal, options }) => {
+    handler: async ({ type, filePath, variables, title, description, usePython, useAICustom, difficulty, dataDescription, visualizationGoal, options }) => {
       try {
         const fileContent = readFileSync(filePath, 'utf8');
         const rawData = JSON.parse(fileContent);
@@ -142,6 +144,7 @@ Use useAICustom=true to have AI generate custom matplotlib code for complex visu
           }
         }
 
+        const underlyingModel = difficulty === 'hard' ? config.agentToolHighEffortNonBuildDefaultModel : config.nonBuildDefaultModel;
         const vizOptions = {
           ...options,
           ...extraOptions,
@@ -149,6 +152,7 @@ Use useAICustom=true to have AI generate custom matplotlib code for complex visu
           description,
           usePython,
           useAICustom,
+          underlyingModel,
           dataDescription: dataDescription,
           visualizationGoal
         };

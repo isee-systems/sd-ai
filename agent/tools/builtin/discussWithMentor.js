@@ -4,6 +4,7 @@ import { join } from 'path';
 import { createFeedbackRequestMessage } from '../../utilities/MessageProtocol.js';
 import { callSeldonMentorEngine } from '../../utilities/EngineWrapper.js';
 import { generateRequestId, createSuccessResponse, createErrorResponse, loadBehaviorContent } from './toolHelpers.js';
+import config from '../../../config.js';
 
 /**
  * Ask thoughtful questions to the user to guide their learning
@@ -14,13 +15,14 @@ export function createDiscussWithMentorTool(sessionManager, sessionId, sendToCli
     supportedModes: ['sfd', 'cld'],
     inputSchema: z.object({
       prompt: z.string().describe('The question or guidance to provide to the user'),
+      difficulty: z.enum(["normal", "hard"]).describe("The expected difficulty of this task"),
       parameters: z.object({
         problemStatement: z.string().optional().describe('Description of dynamic issue to address'),
         backgroundKnowledge: z.string().optional().describe('Background information for LLM'),
         runIds: z.array(z.string()).optional().describe('Run IDs to include as behavior data; defaults to the last run')
       }).optional()
     }),
-    handler: async ({ prompt, parameters }) => {
+    handler: async ({ prompt, difficulty, parameters }) => {
       try {
         const session = sessionManager.getSession(sessionId);
         if (!session) {
@@ -32,7 +34,8 @@ export function createDiscussWithMentorTool(sessionManager, sessionId, sendToCli
           return createErrorResponse('No model available in session');
         }
 
-        const baseParameters = { ...parameters, clientId: session.clientId };
+        const underlyingModel = difficulty === 'normal' ? config.nonBuildDefaultModel : config.agentToolHighEffortNonBuildDefaultModel;
+        const baseParameters = { ...parameters, clientId: session.clientId, underlyingModel };
         const sessionTempDir = sessionManager.getSessionTempDir(sessionId);
         const feedbackPath = join(sessionTempDir, 'feedback.json');
         const feedbackContent = existsSync(feedbackPath)
