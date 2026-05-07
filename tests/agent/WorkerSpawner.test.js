@@ -42,43 +42,43 @@ describe('WorkerSpawner.spawn', () => {
     }
   });
 
-  function spawn(sessionId = 'sess_spawner_test') {
+  async function spawn(sessionId = 'sess_spawner_test') {
     const tempDir = makeTempDir();
-    const worker = WorkerSpawner.spawn(sessionId, tempDir);
+    const worker = await WorkerSpawner.spawn(sessionId, tempDir);
     workers.push({ worker, tempDir });
     return { worker, tempDir };
   }
 
-  it('returns an object with a send() method (ChildProcess IPC interface)', () => {
-    const { worker } = spawn();
+  it('returns an object with a send() method (ChildProcess IPC interface)', async () => {
+    const { worker } = await spawn();
     expect(typeof worker.send).toBe('function');
   });
 
-  it('returns an object with a kill() method', () => {
-    const { worker } = spawn();
+  it('returns an object with a kill() method', async () => {
+    const { worker } = await spawn();
     expect(typeof worker.kill).toBe('function');
   });
 
-  it('returned process has a pid', () => {
-    const { worker } = spawn();
+  it('returned process has a pid', async () => {
+    const { worker } = await spawn();
     expect(typeof worker.pid).toBe('number');
     expect(worker.pid).toBeGreaterThan(0);
   });
 
-  it('returned process is initially alive (exitCode is null)', () => {
-    const { worker } = spawn();
+  it('returned process is initially alive (exitCode is null)', async () => {
+    const { worker } = await spawn();
     expect(worker.exitCode).toBeNull();
   });
 
-  it('can send IPC messages without throwing', () => {
-    const { worker } = spawn();
+  it('can send IPC messages without throwing', async () => {
+    const { worker } = await spawn();
     expect(() => {
       worker.send({ type: 'get_context', requestId: 'probe' });
     }).not.toThrow();
   });
 
   it('IPC channel is active — worker responds to get_context', async () => {
-    const { worker } = spawn();
+    const { worker } = await spawn();
 
     const response = await new Promise((resolve, reject) => {
       const t = setTimeout(() => reject(new Error('IPC timeout')), 8000);
@@ -96,7 +96,7 @@ describe('WorkerSpawner.spawn', () => {
   }, 10000);
 
   it('process exits after SIGKILL', async () => {
-    const { worker } = spawn();
+    const { worker } = await spawn();
 
     const exitCode = await new Promise((resolve, reject) => {
       const t = setTimeout(() => reject(new Error('Kill timeout')), 5000);
@@ -111,9 +111,9 @@ describe('WorkerSpawner.spawn', () => {
     expect(exitCode.signal === 'SIGKILL' || exitCode.code !== undefined).toBe(true);
   }, 8000);
 
-  it('each spawned worker gets its own process (distinct pids)', () => {
-    const { worker: w1 } = spawn('sess_a');
-    const { worker: w2 } = spawn('sess_b');
+  it('each spawned worker gets its own process (distinct pids)', async () => {
+    const { worker: w1 } = await spawn('sess_a');
+    const { worker: w2 } = await spawn('sess_b');
     expect(w1.pid).not.toBe(w2.pid);
   });
 });
