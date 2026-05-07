@@ -14,6 +14,7 @@ import { readdirSync, readFileSync } from 'fs';
 import logger from '../utilities/logger.js';
 import utils from '../utilities/utils.js';
 import config from '../config.js';
+import { ProviderDisplayNames } from '../utilities/TokenUsageReporter.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -70,6 +71,8 @@ function getAvailableAgents() {
             name: metadata.name || file.replace('.md', ''),
             role: metadata.role || 'Agent',
             supportedModes: metadata.supported_modes || [],
+            supportedProviders: (metadata.supported_providers?.length ? metadata.supported_providers : ['anthropic', 'google'])
+              .map(id => ({ id, name: ProviderDisplayNames[id] ?? id })),
             description: metadata.description || ''
           });
         }
@@ -309,16 +312,21 @@ export class WebSocketHandler {
         isAgentSwitch: isSwitching,
       });
 
-      this.#worker.send({ type: 'select_agent', agentId: message.agentId });
+      const supportedProviders = selectedAgent.supportedProviders; // [{id, name}]
+      const provider = supportedProviders.length === 1
+        ? supportedProviders[0].id
+        : (message.provider ?? config.agentDefaultProvider);
+      this.#worker.send({ type: 'select_agent', agentId: message.agentId, provider });
       this.#pendingAgentSwitch = isSwitching;
 
       await this.#sendToClient(createAgentSelectedMessage(this.#sessionId, selectedAgent.id, selectedAgent.name));
+      const providerLabel = ProviderDisplayNames[provider] ?? provider;
       if (isSwitching) {
-        await this.#sendToClient(createAgentTextMessage(this.#sessionId, `I've switched to ${selectedAgent.name}. How can I help you?`, false));
-        logger.log(`Agent switched to: ${message.agentId} for session ${this.#sessionId}`);
+        await this.#sendToClient(createAgentTextMessage(this.#sessionId, `I've switched to ${selectedAgent.name} (${providerLabel}). How can I help you?`, false));
+        logger.log(`Agent switched to: ${message.agentId} (${provider}) for session ${this.#sessionId}`);
       } else {
-        await this.#sendToClient(createAgentTextMessage(this.#sessionId, 'What can I do for you today?', false));
-        logger.log(`Agent selected: ${message.agentId} for session ${this.#sessionId}`);
+        await this.#sendToClient(createAgentTextMessage(this.#sessionId, `${selectedAgent.name} (${providerLabel}) — What can I do for you today?`, false));
+        logger.log(`Agent selected: ${message.agentId} (${provider}) for session ${this.#sessionId}`);
       }
     } catch (error) {
       logger.error(`Failed to select agent for session ${this.#sessionId}:`, error);

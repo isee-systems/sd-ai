@@ -1,6 +1,18 @@
 import logger from './logger.js';
 import { getPricing } from './pricing.js';
 
+export const Provider = Object.freeze({
+  ANTHROPIC: 'anthropic',
+  OPENAI: 'openai',
+  GOOGLE: 'google',
+});
+
+export const ProviderDisplayNames = Object.freeze({
+  [Provider.ANTHROPIC]: 'Claude',
+  [Provider.GOOGLE]: 'Gemini',
+  [Provider.OPENAI]: 'OpenAI',
+});
+
 class TokenUsageReporter {
   /**
    * @param {string|null} url - Optional URL to POST token usage to. If null, reporting is disabled.
@@ -15,16 +27,16 @@ class TokenUsageReporter {
   /**
    * Reports token usage for an agent LLM call.
    * @param {Object} params
-   * @param {string} params.provider - LLM provider: 'anthropic' | 'openai' | 'gemini'
+   * @param {string} params.provider - LLM provider: use Provider.ANTHROPIC | Provider.OPENAI | Provider.GOOGLE
    * @param {string} params.model - Specific model name, e.g. 'claude-sonnet-4-6' or 'gemini-3-flash-preview'
    * @param {Object} params.usage - Raw usage object from the LLM provider
    */
   async report({ provider, model, usage }) {
     if (!usage) return;
 
-    const isAnthropic = provider === 'anthropic';
-    const isOpenAI = provider === 'openai';
-    const isGemini = provider === 'gemini';
+    const isAnthropic = provider === Provider.ANTHROPIC;
+    const isOpenAI = provider === Provider.OPENAI;
+    const isGemini = provider === Provider.GOOGLE;
 
     let tokens;
     if (isAnthropic) {
@@ -113,7 +125,7 @@ class TokenUsageReporter {
   }
 
   /**
-   * @param {'anthropic'|'openai'|'gemini'} provider
+   * @param {string} provider - use Provider enum
    * @param {string} model
    * @param {Object} tokens
    * @returns {{ total: number, [key: string]: number }|null}
@@ -124,7 +136,7 @@ class TokenUsageReporter {
 
     const per = (count, rate) => (count / 1_000_000) * rate;
 
-    if (provider === 'anthropic') {
+    if (provider === Provider.ANTHROPIC) {
       const inputTokens = per(tokens.inputTokens, pricing.inputTokens);
       const outputTokens = per(tokens.outputTokens, pricing.outputTokens);
       const cacheCreation5mInputTokens = per(tokens.cacheCreation5mInputTokens, pricing.cacheCreation5mInputTokens);
@@ -140,7 +152,7 @@ class TokenUsageReporter {
       };
     }
 
-    if (provider === 'gemini') {
+    if (provider === Provider.GOOGLE) {
       // cachedTokens are a subset of inputTokens; bill non-cached at full rate, cached at reduced rate
       // thoughtsTokens are separate from outputTokens and billed at the output rate
       const nonCached = tokens.inputTokens - tokens.cachedTokens;

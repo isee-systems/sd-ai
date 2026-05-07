@@ -24,6 +24,7 @@ const config = {
     "agentMaxTokensForEngines": 32_000, // Maximum tokens before force switching to file-based editing
     "agentMaxContextTokens": 32_000, // Maximum tokens for conversation history sent to Claude API
     "agentTargetedEditingMinimum": 250, //Above this size, models can be edited without quantitative/qualitative engine
+    "agentDefaultProvider": 'anthropic', // Default LLM provider when client does not specify one ('anthropic' | 'google')
     "agentAnthropicModel": 'claude-sonnet-4-6', // Model used for agent conversations MUST BE Anthropic models
     "agentAnthropicSummaryModel": 'claude-haiku-4-5', // Model used for conversation history summarization MUST BE Anthropic models
     "agentGeminiModel": 'gemini-3-flash-preview', // Model used for agent conversations MUST BE gemini models

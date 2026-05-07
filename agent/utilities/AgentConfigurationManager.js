@@ -298,15 +298,18 @@ Reserve the feedback_dominance visualization type (stacked area) for when the us
   }
 
   /**
-   * Returns the agent mode: 'anthropic-sdk' | 'anthropic-manual' | 'gemini-adk' | 'gemini-manual'
-   * Falls back to legacy use_agent_sdk boolean if agent_mode is not set.
+   * Returns the loop strategy: 'sdk' | 'manual'.
+   * Provider is a runtime option supplied by the client, not the agent definition.
    */
   getAgentMode() {
     const val = this.metadata.agent_mode;
-    if (val) return val;
+    if (val === 'sdk' || val === 'manual') return val;
+    // legacy qualified forms
+    if (val === 'anthropic-sdk' || val === 'gemini-adk') return 'sdk';
+    if (val === 'anthropic-manual' || val === 'gemini-manual') return 'manual';
     // legacy boolean fallback
     const legacy = this.metadata.use_agent_sdk;
-    if (legacy === false || legacy === 'false') return 'anthropic-manual';
-    return 'anthropic-sdk';
+    if (legacy === false || legacy === 'false') return 'manual';
+    return 'sdk';
   }
 }

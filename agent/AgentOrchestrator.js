@@ -19,7 +19,7 @@ import {
 import logger from '../utilities/logger.js';
 import config from '../config.js';
 import { LLMWrapper } from '../utilities/LLMWrapper.js';
-import TokenUsageReporter from '../utilities/TokenUsageReporter.js';
+import TokenUsageReporter, { Provider } from '../utilities/TokenUsageReporter.js';
 import { sanitizeSchemaForGemini } from './tools/builtin/toolHelpers.js';
 
 // Normalize a single message to Gemini format {role:'user'|'model', parts:[{text}]}.
@@ -71,11 +71,12 @@ export class AgentOrchestrator {
   #geminiManualCacheExpiry = null;
   #pendingMessages = [];
 
-  constructor(sessionManager, sessionId, sendToClient, configPath) {
+  constructor(sessionManager, sessionId, sendToClient, configPath, provider = config.agentDefaultProvider) {
     this.sessionManager = sessionManager;
     this.sessionId = sessionId;
     this.sendToClient = sendToClient;
     this.stopRequested = false;
+    this.provider = provider;
 
     // SDK-specific properties (for SDK mode)
     this.abortController = null;
@@ -102,7 +103,7 @@ export class AgentOrchestrator {
     this.llm = new LLMWrapper({ clientId, underlyingModel: config.agentAnthropicSummaryModel });
     this.tokenReporter = new TokenUsageReporter(config.tokenReporterURL, clientId);
 
-    logger.log(`AgentOrchestrator initialized for session ${sessionId} (agent_mode: ${this.configManager.getAgentMode()})`);
+    logger.log(`AgentOrchestrator initialized for session ${sessionId} (loop: ${this.configManager.getAgentMode()}, provider: ${this.provider})`);
   }
 
   /**
@@ -115,12 +116,12 @@ export class AgentOrchestrator {
         throw new Error(`Session not found: ${this.sessionId}`);
       }
 
-      const agentMode = this.configManager.getAgentMode();
-      logger.log(`Starting conversation for session ${this.sessionId} (agent_mode: ${agentMode})`);
+      const loopStyle = this.configManager.getAgentMode(); // 'sdk' | 'manual'
+      logger.log(`Starting conversation for session ${this.sessionId} (loop: ${loopStyle}, provider: ${this.provider})`);
 
       await this.#fetchCurrentModel();
 
-      const isManual = agentMode === 'anthropic-manual' || agentMode === 'gemini-manual';
+      const isManual = loopStyle === 'manual';
       if (isManual && previousAgentContext?.length > 0) {
         // previousAgentContext is a reference to the live context — pop the last message
         // (always the prior agent's unanswered user message) before adding the new one
@@ -128,21 +129,21 @@ export class AgentOrchestrator {
         logger.debug(`[Agent switch → manual] Prior context now has ${previousAgentContext.length} messages after pop`);
       }
 
-      switch (agentMode) {
+      switch (`${this.provider}-${loopStyle}`) {
         case 'anthropic-sdk':
           await this.startConversationWithAnthropicSDK(userMessage, previousAgentContext);
           break;
         case 'anthropic-manual':
           await this.startConversationAnthropicManual(userMessage);
           break;
-        case 'gemini-adk':
+        case 'google-sdk':
           await this.startConversationWithADK(userMessage, previousAgentContext);
           break;
-        case 'gemini-manual':
+        case 'google-manual':
           await this.startConversationGeminiManual(userMessage);
           break;
         default:
-          throw new Error(`Unknown agent_mode: ${agentMode}`);
+          throw new Error(`Unknown combination: provider=${this.provider}, loop=${loopStyle}`);
       }
 
     } catch (error) {
@@ -431,7 +432,7 @@ export class AgentOrchestrator {
    * Handle assistant messages (text from Claude)
    */
   async handleAnthropicSDKAssistantMessage(message) {
-    this.#logApiUsage('anthropic', message.message?.usage);
+    this.#logApiUsage(Provider.ANTHROPIC, message.message?.usage);
     const content = message.message?.content;
     const rawTextParts = [];
 
@@ -669,7 +670,7 @@ export class AgentOrchestrator {
             tools: tools.length > 0 ? tools : undefined
           });
 
-          this.#logApiUsage('anthropic', response.usage);
+          this.#logApiUsage(Provider.ANTHROPIC, response.usage);
 
           // Check if stop was requested during the API call
           if (this.stopRequested) {
@@ -956,7 +957,7 @@ export class AgentOrchestrator {
         messages: [{ role: 'user', content: `Summarize this conversation history concisely (2-4 paragraphs):\n\n${conversationText}` }]
       });
       if (response.usage) {
-        this.#logApiUsage('anthropic', response.usage, config.agentAnthropicSummaryModel);
+        this.#logApiUsage(Provider.ANTHROPIC, response.usage, config.agentAnthropicSummaryModel);
       }
       return response.content[0].text;
     } catch (error) {
@@ -1133,7 +1134,7 @@ export class AgentOrchestrator {
             config: geminiConfig
           });
 
-          this.#logApiUsage('gemini', response.usageMetadata);
+          this.#logApiUsage(Provider.GOOGLE, response.usageMetadata);
 
           if (this.stopRequested) break;
 
@@ -1372,7 +1373,7 @@ export class AgentOrchestrator {
           newMessage: currentMessage,
           abortSignal: this.abortController.signal
         })) {
-          if (event.usageMetadata) this.#logApiUsage('gemini', event.usageMetadata);
+          if (event.usageMetadata) this.#logApiUsage(Provider.GOOGLE, event.usageMetadata);
           if (this.stopRequested) break;
           await this.handleAdkEvent(event);
           if (isFinalResponse(event)) turnCount++;
@@ -1549,7 +1550,7 @@ export class AgentOrchestrator {
         }]
       });
       if (response.usageMetadata) {
-        this.#logApiUsage('gemini', response.usageMetadata, config.agentGeminiSummaryModel);
+        this.#logApiUsage(Provider.GOOGLE, response.usageMetadata, config.agentGeminiSummaryModel);
       }
       return response.text || response.candidates?.[0]?.content?.parts?.[0]?.text || '';
     } catch (error) {
@@ -1660,7 +1661,7 @@ export class AgentOrchestrator {
   #logApiUsage(provider, usage, model = null) {
     if (!usage) return;
     const resolvedModel = model ?? (
-      provider === 'anthropic' ? config.agentAnthropicModel : config.agentGeminiModel
+      provider === Provider.ANTHROPIC ? config.agentAnthropicModel : config.agentGeminiModel
     );
     this.tokenReporter.report({ provider, model: resolvedModel, usage }).catch(() => {});
   }

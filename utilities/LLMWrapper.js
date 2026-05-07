@@ -4,7 +4,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { zodResponseFormat } from "openai/helpers/zod";
 import { extractJsonFromContent } from "./jsonUtils.js";
-import TokenUsageReporter from "./TokenUsageReporter.js";
+import TokenUsageReporter, { Provider } from "./TokenUsageReporter.js";
 import config from "../config.js";
 
 export const ModelType = Object.freeze({
@@ -608,7 +608,7 @@ export class LLMWrapper {
     }
 
     const completion = await this.#openAIAPI.chat.completions.create(completionParams);
-    this.#tokenReporter.report({ provider: 'openai', model, usage: completion.usage });
+    this.#tokenReporter.report({ provider: Provider.OPENAI, model, usage: completion.usage });
     const message = completion.choices[0].message;
     // Reasoning models (e.g. GLM-5) emit chain-of-thought in reasoning_content and
     // leave content null. Try to extract a valid JSON block from the reasoning text
@@ -657,7 +657,7 @@ export class LLMWrapper {
     }
 
     const result = await this.#geminiAPI.models.generateContent(requestConfig);
-    this.#tokenReporter.report({ provider: 'gemini', model, usage: result.usageMetadata });
+    this.#tokenReporter.report({ provider: Provider.GOOGLE, model, usage: result.usageMetadata });
 
     // Convert Gemini response to OpenAI format
     return {
@@ -699,7 +699,7 @@ export class LLMWrapper {
       completionParams,
       { headers }
     );
-    this.#tokenReporter.report({ provider: 'anthropic', model, usage: completion.usage });
+    this.#tokenReporter.report({ provider: Provider.ANTHROPIC, model, usage: completion.usage });
 
     // With output_format, the response is always in content[0].text as JSON
     if (zodSchema) {

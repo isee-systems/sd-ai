@@ -30,6 +30,7 @@
 import { AgentOrchestrator } from './AgentOrchestrator.js';
 import { SessionManager } from './utilities/SessionManager.js';
 import logger from '../utilities/logger.js';
+import config from '../config.js';
 import { join } from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
@@ -126,7 +127,8 @@ class AgentWorker {
 
         case 'select_agent': {
           const configPath = join(__dirname, 'config', `${msg.agentId}.md`);
-          this.#orchestrator = new AgentOrchestrator(this.#sessionManager, SESSION_ID, (m) => this.#toClient(m), configPath);
+          const provider = msg.provider ?? config.agentDefaultProvider;
+          this.#orchestrator = new AgentOrchestrator(this.#sessionManager, SESSION_ID, (m) => this.#toClient(m), configPath, provider);
           break;
         }
 

@@ -171,17 +171,19 @@ The `historicalMessages` field lets clients provide conversation history from a 
 
 #### 2. Select Agent
 
-Chooses which agent personality to use.
+Chooses which agent personality and LLM provider to use.
 
 ```json
 {
   "type": "select_agent",
   "sessionId": "sess_abc123",
-  "agentId": "socrates"
+  "agentId": "socrates",
+  "provider": "google"
 }
 ```
 
-Available agents are returned in `session_ready`. Agents are discovered from `.md` files in `agent/config/`.
+- `agentId` — ID of the agent to use (e.g., `"socrates"`, `"merlin"`). Available agents are returned in `session_ready`.
+- `provider` — LLM provider ID: `"anthropic"` or `"google"` (values from the `Provider` enum in `utilities/TokenUsageReporter.js`). Defaults to `agentDefaultProvider` in `config.js`. If the agent's `supportedProviders` list has exactly one entry, that provider is always used regardless of this field.
 
 #### 3. Chat Message
 
@@ -291,18 +293,26 @@ Sent after successful initialization. Lists available agents.
       "id": "socrates",
       "name": "Socrates",
       "supportedModes": ["sfd", "cld"],
+      "supportedProviders": [
+        {"id": "anthropic", "name": "Claude"},
+        {"id": "google", "name": "Gemini"}
+      ],
       "description": "System Dynamics mentor who uses Socratic questioning..."
     },
     {
       "id": "merlin",
       "name": "Merlin",
       "supportedModes": ["sfd", "cld"],
+      "supportedProviders": [
+        {"id": "anthropic", "name": "Claude"},
+        {"id": "google", "name": "Gemini"}
+      ],
       "description": "..."
     }
   ],
   "defaults": {
-    "sfd": "merlin",
-    "cld": "merlin"
+    "sfd": "socrates",
+    "cld": "socrates"
   },
   "timestamp": "2025-01-15T10:30:00.100Z"
 }
@@ -721,11 +731,21 @@ name: "Socrates"
 description: "System Dynamics mentor who uses Socratic questioning..."
 version: "1.0"
 max_iterations: 20
+agent_mode: manual          # Loop strategy: 'sdk' (managed framework) or 'manual' (explicit loop)
 supported_modes:
   - sfd
   - cld
+supported_providers:        # LLM provider IDs this agent accepts (Provider enum values); omit to allow all
+  - anthropic
+  - google
 ---
 ```
+
+**`agent_mode`** controls the loop strategy — it does _not_ select the LLM provider:
+- `sdk` — uses a managed agent framework (Anthropic Agent SDK or Google ADK) that handles iteration and tool calling internally
+- `manual` — uses an explicit `while` loop that calls the provider API directly
+
+**`supported_providers`** lists which LLM providers are valid for this agent. The client selects the actual provider at runtime via the `provider` field in `select_agent`. If the list has exactly one entry, that provider is always used. If the field is absent, all providers are allowed.
 
 The Markdown body below the frontmatter is the agent's full system prompt/instructions.
 
@@ -776,7 +796,8 @@ ws.on('message', (data) => {
 
     case 'session_ready':
       const agentId = message.defaults?.sfd || message.availableAgents[0]?.id;
-      ws.send(JSON.stringify({ type: 'select_agent', sessionId, agentId }));
+      // Optionally specify a provider; omit to use the server default (anthropic)
+      ws.send(JSON.stringify({ type: 'select_agent', sessionId, agentId, provider: 'anthropic' }));
       break;
 
     case 'agent_selected':

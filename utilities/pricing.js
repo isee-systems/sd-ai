@@ -1,4 +1,5 @@
 import logger from './logger.js';
+import { Provider } from './TokenUsageReporter.js';
 
 // LLM pricing — USD per 1 million tokens
 // Each provider section has a 'default' fallback for unknown models.
@@ -116,19 +117,19 @@ export const openai = {
  * Returns the pricing tier for a given provider/model/inputTokenCount.
  * Unknown providers fall back to the OpenAI pricing table.
  * Unknown models fall back to the provider's "default" entry, then to openai's default.
- * @param {string} provider - 'anthropic' | 'openai' | 'gemini' (others fall back to openai)
+ * @param {string} provider - use Provider enum from TokenUsageReporter.js (others fall back to openai)
  * @param {string} model
  * @param {number} inputTokens - used to select the correct tier for tiered models
  * @returns {Object} pricing object with per-token-type rates
  */
 export function getPricing(provider, model, inputTokens = 0) {
   let table, aliases, resolvedProvider;
-  if (provider === 'anthropic') {
-    table = anthropic; aliases = {}; resolvedProvider = 'anthropic';
-  } else if (provider === 'openai') {
-    table = openai; aliases = openaiAliases; resolvedProvider = 'openai';
-  } else if (provider === 'gemini') {
-    table = gemini; aliases = {}; resolvedProvider = 'gemini';
+  if (provider === Provider.ANTHROPIC) {
+    table = anthropic; aliases = {}; resolvedProvider = Provider.ANTHROPIC;
+  } else if (provider === Provider.OPENAI) {
+    table = openai; aliases = openaiAliases; resolvedProvider = Provider.OPENAI;
+  } else if (provider === Provider.GOOGLE) {
+    table = gemini; aliases = {}; resolvedProvider = Provider.GOOGLE;
   } else {
     logger.error(`!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!`);
     logger.error(`[pricing] !!! UNKNOWN PROVIDER "${provider}" !!! falling back to openai pricing — UPDATE pricing.js`);
