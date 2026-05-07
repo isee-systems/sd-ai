@@ -898,7 +898,7 @@ export class AgentOrchestrator {
         // Add tool_result following Claude's API requirements
         const resultText = Array.isArray(toolResult.content)
           ? toolResult.content.filter(b => b.type === 'text').map(b => b.text).join('\n')
-          : toolResult.content;
+          : typeof toolResult.content === 'string' ? toolResult.content : JSON.stringify(toolResult.content);
         messages.push({
           role: 'user',
           content: [{
@@ -993,14 +993,14 @@ export class AgentOrchestrator {
 
       // Tool not found
       return {
-        content: { error: `Tool not found: ${toolUse.name}` },
+        content: `Tool not found: ${toolUse.name}`,
         isError: true
       };
 
     } catch (error) {
       logger.error(`Anthropic Manual: Error executing tool ${toolUse.name}:`, error);
       return {
-        content: { error: error.message },
+        content: error.message,
         isError: true
       };
     }
