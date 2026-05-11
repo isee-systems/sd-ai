@@ -47,7 +47,7 @@ apiRouter.use("/evals", v1EvalsTestDetails);
 apiRouter.use("/leaderboard", v1Leaderboard);
 
 app.use("/api/v1", (req, res, next) => {
-  if (!isDraining) {
+  if (isDraining) {
     return res.status(503).send('This server is being taken offline');
   }
   next();
