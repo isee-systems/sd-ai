@@ -70,6 +70,7 @@ export const SDModelSchema = z.object({
   relationships: z.array(SDRelationshipSchema).optional(),
   specs: z.record(z.string(), z.any()).optional(),
   modules: z.array(z.any()).optional(),
+  unitWarnings: z.array(z.any()).optional(),
   errors: z.array(z.any()).optional(),
   explanation: z.string().optional(),
   title: z.string().optional()
@@ -77,8 +78,7 @@ export const SDModelSchema = z.object({
 
 export const GetCurrentModelResponseSchema = SDModelSchema;
 
-export const UpdateModelResponseSchema = z.object({}).catchall(z.any())
-  .describe('Response from the client after updating the model');
+export const UpdateModelResponseSchema = SDModelSchema;
 
 export const RunModelResponseSchema = z.object({
   runId: z.any().describe('ID of the completed simulation run')

@@ -198,7 +198,15 @@ export class SessionManager {
     if (session) {
       session.clientModel = model;
       if (model) {
-        return this.#writeModelToDisk(sessionId, model);
+        const result = this.#writeModelToDisk(sessionId, model);
+        const parts = [];
+        if (model.errors?.length) {
+          parts.push(`Errors: ${model.errors.map(e => typeof e === 'string' ? e : JSON.stringify(e)).join('; ')}`);
+        }
+        if (model.unitWarnings?.length) {
+          parts.push(`Unit warnings: ${model.unitWarnings.map(w => typeof w === 'string' ? w : JSON.stringify(w)).join('; ')}`);
+        }
+        return { ...result, issues: parts.length ? parts.join('\n') : null };
       }
     }
   }

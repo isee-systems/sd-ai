@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
-import { createUpdateModelMessage } from '../../utilities/MessageProtocol.js';
+import { createUpdateModelMessage, UpdateModelResponseSchema } from '../../utilities/MessageProtocol.js';
 import { generateRequestId, createSuccessResponse, createErrorResponse } from './toolHelpers.js';
 import config from '../../../config.js';
 
@@ -567,11 +567,15 @@ After editing, the model is validated and processed through the quantitative eng
           session.pendingModelRequests.set(updateRequestId, { resolve, reject, timeout });
         });
 
-        await updatePromise;
+        const clientResult = await updatePromise;
+        const parsed = UpdateModelResponseSchema.parse(clientResult);
 
-        sessionManager.updateClientModel(sessionId, model);
+        const { issues } = sessionManager.updateClientModel(sessionId, parsed);
 
-        return createSuccessResponse(`Successfully edited ${section} section (${operation} operation). The model has been validated, processed, and sent to the client.`);
+        return createSuccessResponse({
+          message: `Successfully edited ${section} section (${operation} operation). The model has been validated, processed, and sent to the client.`,
+          ...(issues && { issues })
+        });
       } catch (error) {
         return handleError(`Failed to edit model section: ${error.message}`, error);
       }

@@ -50,9 +50,9 @@ export function createGetCurrentModelTool(sessionManager, sessionId, sendToClien
         const modelData = await resultPromise;
         const parsed = GetCurrentModelResponseSchema.parse(modelData);
 
-        const { modelPath, message } = sessionManager.updateClientModel(sessionId, parsed);
+        const { modelPath, message, issues } = sessionManager.updateClientModel(sessionId, parsed);
 
-        return createSuccessResponse({ message, modelPath });
+        return createSuccessResponse({ message, modelPath, ...(issues && { issues }) });
       } catch (error) {
         return createErrorResponse(`Failed to get current model: ${error.message}`, error);
       }
@@ -104,7 +104,9 @@ export function createUpdateModelTool(sessionManager, sessionId, sendToClient) {
         const result = await resultPromise;
         const parsed = UpdateModelResponseSchema.parse(result);
 
-        return createSuccessResponse({ success: true, ...parsed });
+        const { message, issues } = sessionManager.updateClientModel(sessionId, parsed);
+
+        return createSuccessResponse({ success: true, message, modelPath, ...(issues && { issues }) });
       } catch (error) {
         return createErrorResponse(`Failed to update model: ${error.message}`, error);
       }

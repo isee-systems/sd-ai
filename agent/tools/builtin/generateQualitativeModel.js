@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { createUpdateModelMessage } from '../../utilities/MessageProtocol.js';
+import { createUpdateModelMessage, UpdateModelResponseSchema } from '../../utilities/MessageProtocol.js';
 import { callQualitativeEngine } from '../../utilities/EngineWrapper.js';
 import { generateRequestId, createSuccessResponse, createErrorResponse } from './toolHelpers.js';
 import config from '../../../config.js';
@@ -52,15 +52,17 @@ export function createGenerateQualitativeModelTool(sessionManager, sessionId, se
           session.pendingModelRequests.set(requestId, { resolve, reject, timeout });
         });
 
-        await updatePromise;
+        const clientResult = await updatePromise;
+        const parsed = UpdateModelResponseSchema.parse(clientResult);
 
-        const { modelPath, message } = sessionManager.updateClientModel(sessionId, result.model);
+        const { modelPath, message, issues } = sessionManager.updateClientModel(sessionId, parsed);
 
         return createSuccessResponse({
           message: `Model generated and pushed to client. ${message}`,
           modelPath,
           supportingInfo: result.supportingInfo,
-          pushedToClient: true
+          pushedToClient: true,
+          ...(issues && { issues })
         });
       } catch (error) {
         return createErrorResponse(error.message);
