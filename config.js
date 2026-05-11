@@ -2,8 +2,8 @@ import { ThinkingLevel } from "@google/genai";
 
 
 const config = {
-    "port": 3000,
-    "websocketPort": 3000,
+    "port": process.env.PORT || 3000,
+    "websocketPort": process.env.WEBSOCKET_PORT || 3000,
 
     /*
     * Reporting URLs
