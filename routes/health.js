@@ -20,13 +20,17 @@ export function createHealthRouter(getIsDraining, setIsDraining, sessionManager)
     }
 
     if (getIsDraining()) {
-      return res.status(503).json({
+      return res.status(200).json({
         status: 'draining',
-        sessions: sessionManager.sessions.size,
+        sessions: sessionManager.sessions.size
       });
     }
+    
     setIsDraining(true);
-    res.status(200).json({ status: 'ready' });
+    res.status(200).json({ 
+      status: 'ready',
+      sessions: sessionManager.sessions.size 
+    });
   });
 
   return router;
