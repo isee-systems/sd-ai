@@ -3,8 +3,11 @@ import express from 'express';
 export function createHealthRouter(getIsDraining, setIsDraining, sessionManager) {
   const router = express.Router();
 
-  router.get('/ready', (_req, res) => {
-    res.status(200).json({ status: 'ok' });
+  router.get('/status', (_req, res) => {
+    if (sessionManager.sessions.size > 0)
+      return res.status(226).json({status: 'ok', sessions: sessionManager.sessions.size  })
+    
+    return res.status(200).json({ status: 'ok', sessions: sessionManager.sessions.size  });
   });
 
   router.get('/lock', (req, res) => {
@@ -25,7 +28,7 @@ export function createHealthRouter(getIsDraining, setIsDraining, sessionManager)
         sessions: sessionManager.sessions.size
       });
     }
-    
+
     setIsDraining(true);
     res.status(200).json({ 
       status: 'ready',
