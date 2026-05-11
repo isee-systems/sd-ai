@@ -42,6 +42,7 @@ NEVER switch between CLD and SFD during a session.
 - Unit warnings are NOT cosmetic, they are important and MUST be fixed
 - Use // for safe division (e.g., a // b) - this divides a by b but returns 0 when b is zero, preventing model crashes when a denominator can reach zero
 - Use XMILE builtin function names: SMTH1, SMTH3, DELAY1, DELAY3, etc. — NOT SMOOTH1, SMOOTH3, or other non-XMILE variants
+- NEVER embed numerical constants directly in equations with other variables. ALWAYS create separate named variables for all constants.
 
 ## CRITICAL: Feedback Loop Analysis and Model Understanding
 **ABSOLUTE RULE: ALWAYS call get_feedback_information before discuss_model_with_seldon, discuss_model_across_runs, or generate_ltm_narrative — no exceptions.** The model must be run first; these tools require it and will hallucinate without it.
