@@ -1,0 +1,33 @@
+import express from 'express';
+
+export function createHealthRouter(getIsDraining, setIsDraining, sessionManager) {
+  const router = express.Router();
+
+  router.get('/ready', (_req, res) => {
+    res.status(200).json({ status: 'ok' });
+  });
+
+  router.get('/lock', (req, res) => {
+    const ip = req.socket.remoteAddress;
+    // Allow only local/internal calls
+    if (ip !== '127.0.0.1' && ip !== '::1') {
+      return res.status(403).send('Only direct server calls allowed');
+    }
+
+    const token = req.headers['x-internal-secret'];
+    if (token !== process.env.INTERNAL_SECRET) {
+      return res.status(403).send('Unauthorized');
+    }
+
+    if (getIsDraining()) {
+      return res.status(503).json({
+        status: 'draining',
+        sessions: sessionManager.sessions.size,
+      });
+    }
+    setIsDraining(true);
+    res.status(200).json({ status: 'ready' });
+  });
+
+  return router;
+}

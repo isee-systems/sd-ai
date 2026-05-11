@@ -13,6 +13,8 @@ import v1EvalsList from './routes/v1/evalsList.js'
 import v1EvalsTestDetails from './routes/v1/evalsTestDetails.js'
 import v1Leaderboard from './routes/v1/leaderboard.js'
 
+import { createHealthRouter } from './routes/health.js';
+
 import { SessionManager } from './agent/utilities/SessionManager.js'
 import { WebSocketHandler } from './agent/WebSocket.js'
 
@@ -26,16 +28,30 @@ if (app.get('env') === 'production') {
   app.set('trust proxy', 1) // trust first proxy
 }
 
+let isDraining = false; //controls whether this server accepts requests
 // Initialize Session Manager (before routes)
 const sessionManager = new SessionManager();
 
-app.use("/api/v1/initialize", v1Initialize);
-app.use("/api/v1/engines", v1Engines);
-app.use("/api/v1/engines/", v1EngineParameters); //:engine/parameters
-app.use("/api/v1/engines/", v1EngineGenerate); //:engine/generate
-app.use("/api/v1/evals", v1EvalsList);
-app.use("/api/v1/evals", v1EvalsTestDetails);
-app.use("/api/v1/leaderboard", v1Leaderboard);
+app.use('/', createHealthRouter(() => isDraining, 
+                              (val) => { isDraining = val }, 
+                              sessionManager));
+
+
+const apiRouter = express.Router();
+apiRouter.use("/initialize", v1Initialize);
+apiRouter.use("/engines", v1Engines);
+apiRouter.use("/engines/", v1EngineParameters); //:engine/parameters
+apiRouter.use("/engines/", v1EngineGenerate); //:engine/generate
+apiRouter.use("/evals", v1EvalsList);
+apiRouter.use("/evals", v1EvalsTestDetails);
+apiRouter.use("/leaderboard", v1Leaderboard);
+
+app.use("/api/v1", (req, res, next) => {
+  if (!isDraining) {
+    return res.status(503).send('This server is being taken offline');
+  }
+  next();
+}, apiRouter);
 
 // Create HTTP server for REST API
 const server = createServer(app);
@@ -63,6 +79,11 @@ if (useSamePort) {
 }
 
 wss.on('connection', (ws) => {
+  if (isDraining) {
+    ws.close(1008, 'This server is being taken offline'); // 1008 = Policy Violation
+    return;
+  }
+
   new WebSocketHandler(ws, sessionManager);
 });
 
