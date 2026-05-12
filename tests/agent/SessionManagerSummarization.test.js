@@ -7,8 +7,8 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const AGENT_A_CONFIG = path.join(__dirname, '../../agent/config/socrates.md');
-const AGENT_B_CONFIG = path.join(__dirname, '../../agent/config/merlin.md');
+const AGENT_A_CONFIG = { path: path.join(__dirname, '../../agent/config/socrates.md') };
+const AGENT_B_CONFIG = { path: path.join(__dirname, '../../agent/config/merlin.md') };
 
 function makeGeminiMock(summaryText = 'Mocked summary.') {
   return {

@@ -10,11 +10,11 @@ describe('AgentConfigurationManager', () => {
 
   beforeEach(() => {
     const configPath = path.join(__dirname, '../../agent/config/socrates.md');
-    configManager = new AgentConfigurationManager(configPath);
+    configManager = new AgentConfigurationManager({ path: configPath });
   });
 
   describe('constructor', () => {
-    it('should load config from MD file', () => {
+    it('should load config from MD file via path option', () => {
       expect(configManager.config).toBeDefined();
       expect(configManager.config.agent).toBeDefined();
       expect(configManager.config.agent.name).toMatch(/^Socrates/);
@@ -22,8 +22,20 @@ describe('AgentConfigurationManager', () => {
 
     it('should throw error for non-existent config file', () => {
       expect(() => {
-        new AgentConfigurationManager('/non/existent/path.md');
+        new AgentConfigurationManager({ path: '/non/existent/path.md' });
       }).toThrow();
+    });
+
+    it('should load config from markdownContent option', () => {
+      const md = `---\nname: "TestAgent"\nagent_mode: sdk\nsupported_modes:\n  - sfd\nsupported_providers:\n  - anthropic\n---\n## Instructions\nDo things.\n`;
+      const mgr = new AgentConfigurationManager({ markdownContent: md });
+      expect(mgr.config.agent.name).toBe('TestAgent');
+      expect(mgr.configPath).toBeNull();
+    });
+
+    it('should throw for markdownContent missing required frontmatter fields', () => {
+      const md = `---\nname: "NoMode"\n---\n## Instructions\nDo things.\n`;
+      expect(() => new AgentConfigurationManager({ markdownContent: md })).toThrow(/agent_mode/);
     });
   });
 

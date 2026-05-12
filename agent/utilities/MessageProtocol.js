@@ -128,9 +128,12 @@ export const InitializeSessionMessageSchema = z.object({
 const SelectAgentMessageSchema = z.object({
   type: z.literal('select_agent').describe('Message type identifier'),
   sessionId: z.string().describe('Unique session identifier'),
-  agentId: z.string().describe('Agent ID to use (e.g., "merlin", "socrates")'),
+  agentId: z.string().optional().describe('Agent ID to use (e.g., "merlin", "socrates")'),
+  agentConfig: z.string().optional().describe('Custom agent configuration as a markdown string with YAML frontmatter (name, agent_mode, supported_modes, supported_providers) followed by agent instructions'),
   provider: z.enum(['anthropic', 'google']).optional().default('anthropic').describe('LLM provider to use; ignored if agent supports only one provider'),
   timestamp: z.string().optional().describe('ISO 8601 timestamp of when the message was created')
+}).refine(msg => msg.agentId || msg.agentConfig, {
+  message: 'Either agentId or agentConfig must be provided'
 });
 
 export const ChatMessageSchema = z.object({
@@ -219,12 +222,13 @@ export function createSessionReadyMessage(sessionId, availableAgents, defaults) 
   };
 }
 
-export function createAgentSelectedMessage(sessionId, agentId, agentName) {
+export function createAgentSelectedMessage(sessionId, agentId, agentName, supportedProviders = []) {
   return {
     type: 'agent_selected',
     sessionId,
     agentId,
     agentName,
+    supportedProviders,
     timestamp: new Date().toISOString()
   };
 }

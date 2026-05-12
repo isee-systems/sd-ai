@@ -78,7 +78,7 @@ ws://localhost:3000/api/v1/agent
 2. **Server sends** `session_created` with session ID
 3. **Client sends** `initialize_session` with auth, model type, initial model, and optional custom tools
 4. **Server validates** and sends `session_ready` with available agents
-5. **Client sends** `select_agent` to choose an agent (e.g., `"socrates"`, `"merlin"`)
+5. **Client sends** `select_agent` to choose an agent by ID (e.g., `"socrates"`, `"merlin"`) or supply a custom agent config inline
 6. **Server sends** `agent_selected` confirmation
 7. **Normal conversation** begins with `chat` messages
 
@@ -184,7 +184,9 @@ The `historicalMessages` field lets clients provide conversation history from a 
 
 #### 2. Select Agent
 
-Chooses which agent personality and LLM provider to use.
+Chooses which agent personality and LLM provider to use. Either `agentId` or `agentConfig` must be provided.
+
+**Option A — select a built-in agent by ID:**
 
 ```json
 {
@@ -195,8 +197,23 @@ Chooses which agent personality and LLM provider to use.
 }
 ```
 
-- `agentId` — ID of the agent to use (e.g., `"socrates"`, `"merlin"`). Available agents are returned in `session_ready`.
-- `provider` — LLM provider ID: `"anthropic"` or `"google"` (values from the `Provider` enum in `utilities/TokenUsageReporter.js`). Defaults to `agentDefaultProvider` in `config.js`. If the agent's `supportedProviders` list has exactly one entry, that provider is always used regardless of this field.
+**Option B — supply a custom agent configuration inline:**
+
+```json
+{
+  "type": "select_agent",
+  "sessionId": "sess_abc123",
+  "agentConfig": "---\nname: \"My Agent\"\nagent_mode: sdk\nsupported_modes:\n  - sfd\nsupported_providers:\n  - anthropic\n  - google\n---\n\n## Instructions\nYou are a custom agent...",
+  "provider": "anthropic"
+}
+```
+
+The `agentConfig` string must be a Markdown document with valid YAML frontmatter containing at minimum `name` and `agent_mode`. Its format is identical to the agent `.md` files in `agent/config/` — see [Agent Configuration](#agent-configuration) for the full frontmatter reference. The Markdown body below the frontmatter becomes the agent's system prompt.
+
+**Fields:**
+- `agentId` — ID of a built-in agent (e.g., `"socrates"`, `"merlin"`). Available agent IDs are returned in `session_ready`. Required if `agentConfig` is not provided.
+- `agentConfig` — Full agent configuration as a Markdown string. Required if `agentId` is not provided. Server returns `AGENT_SELECTION_ERROR` if the frontmatter is missing or invalid.
+- `provider` — LLM provider: `"anthropic"` or `"google"`. Defaults to `agentDefaultProvider` in `config.js`. Ignored when the agent's `supportedProviders` has exactly one entry.
 
 #### 3. Chat Message
 
@@ -341,9 +358,17 @@ Confirms the selected agent is ready.
   "sessionId": "sess_abc123",
   "agentId": "socrates",
   "agentName": "Socrates",
+  "supportedProviders": [
+    {"id": "anthropic", "name": "Claude (Anthropic)"},
+    {"id": "google", "name": "Gemini (Google)"}
+  ],
   "timestamp": "2025-01-15T10:30:00.200Z"
 }
 ```
+
+- `agentId` — `"custom"` when a custom `agentConfig` was used; otherwise the built-in agent ID.
+- `agentName` — Display name from the agent's frontmatter.
+- `supportedProviders` — Providers this agent accepts, in `{id, name}` form. Same format as the `supportedProviders` array in `session_ready`. Use this to populate a provider selector after agent selection — especially important for custom agents where the supported providers are only known after the server parses the config.
 
 #### 4. Agent Text
 
@@ -628,6 +653,14 @@ Reports errors during processing.
   "timestamp": "2025-01-15T10:30:09.000Z"
 }
 ```
+
+**Known error codes:**
+
+| Code | Cause |
+|---|---|
+| `AGENT_SELECTION_ERROR` | `select_agent` failed — e.g. unknown `agentId`, or `agentConfig` frontmatter is missing required `name` / `agent_mode` fields. The session remains active; send another `select_agent` to recover. |
+| `TOOL_TIMEOUT` | A built-in or custom tool did not receive a `tool_call_response` within its timeout. |
+| `NO_AGENT` | A `chat` message arrived before `select_agent` was sent. |
 
 Note that receiving an `error` message does not mean the agent has stopped — the agent may still continue iterating. Wait for `agent_complete` before treating the agent as idle.
 

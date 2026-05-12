@@ -126,9 +126,11 @@ class AgentWorker {
         }
 
         case 'select_agent': {
-          const configPath = join(__dirname, 'config', `${msg.agentId}.md`);
+          const agentConfig = msg.agentConfig !== undefined
+            ? { markdownContent: msg.agentConfig }
+            : { path: join(__dirname, 'config', `${msg.agentId}.md`) };
           const provider = msg.provider ?? config.agentDefaultProvider;
-          this.#orchestrator = new AgentOrchestrator(this.#sessionManager, SESSION_ID, (m) => this.#toClient(m), configPath, provider);
+          this.#orchestrator = new AgentOrchestrator(this.#sessionManager, SESSION_ID, (m) => this.#toClient(m), agentConfig, provider);
           break;
         }
 

@@ -117,12 +117,34 @@ When asked to visualize feedback loop dominance alongside a variable's behavior,
 Reserve the feedback_dominance visualization type (stacked area) for when the user explicitly wants the quantitative percentage breakdown of loop contributions over time.
 `;
 
-  constructor(configPath) {
-    this.configPath = configPath;
-    const { metadata, content } = this.loadConfig(configPath);
+  static REQUIRED_FRONTMATTER_FIELDS = ['name', 'agent_mode'];
+
+  /**
+   * @param {{ path: string } | { markdownContent: string }} agentConfig
+   */
+  constructor({ path, markdownContent } = {}) {
+    if (markdownContent !== undefined) {
+      this.configPath = null;
+      const { metadata, content } = this.#parseContent(markdownContent);
+      this.#validateFrontmatter(metadata);
+      this.#init(metadata, content);
+    } else {
+      this.configPath = path;
+      const { metadata, content } = this.#loadFile(path);
+      this.#init(metadata, content);
+    }
+  }
+
+  #validateFrontmatter(metadata) {
+    const missing = AgentConfigurationManager.REQUIRED_FRONTMATTER_FIELDS.filter(f => !metadata[f]);
+    if (missing.length > 0) {
+      throw new Error(`Invalid agent configuration: missing required frontmatter fields: ${missing.join(', ')}`);
+    }
+  }
+
+  #init(metadata, content) {
     this.metadata = metadata;
     this.systemPrompt = content;
-    // Store a basic config structure for backwards compatibility
     this.config = {
       agent: {
         name: metadata.name,
@@ -136,46 +158,39 @@ Reserve the feedback_dominance visualization type (stacked area) for when the us
     this.baseConfig = this.config.agent;
   }
 
-  /**
-   * Load configuration from MD file (READ-ONLY)
-   * Parses YAML frontmatter and returns metadata + content
-   */
-  loadConfig(path) {
+  #parseContent(fileContent) {
+    const frontmatterRegex = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/;
+    const match = fileContent.match(frontmatterRegex);
+
+    if (match) {
+      const metadata = this.parseSimpleYAML(match[1]);
+      return { metadata, content: match[2] };
+    }
+
+    logger.error('Agent configuration has no frontmatter, using defaults');
+    return {
+      metadata: {
+        name: 'Unknown',
+        description: '',
+        version: '1.0',
+        max_iterations: 20,
+        agent_mode: 'anthropic-sdk',
+        supported_modes: []
+      },
+      content: fileContent
+    };
+  }
+
+  #loadFile(path) {
     try {
       const fileContent = readFileSync(path, 'utf8');
-
-      // Parse YAML frontmatter if present
-      const frontmatterRegex = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/;
-      const match = fileContent.match(frontmatterRegex);
-
-      if (match) {
-        const metadataText = match[1];
-        const content = match[2];
-
-        // Simple YAML parser for our metadata
-        const metadata = this.parseSimpleYAML(metadataText);
-
-        return { metadata, content };
-      } else {
-        // No frontmatter, use defaults
-        logger.error(`Loaded agent configuration from ${path} (no frontmatter)`);
-        return {
-          metadata: {
-            name: 'Unknown',
-            description: '',
-            version: '1.0',
-            max_iterations: 20,
-            agent_mode: 'anthropic-sdk',
-            supported_modes: []
-          },
-          content: fileContent
-        };
-      }
+      return this.#parseContent(fileContent);
     } catch (err) {
       logger.error(`Failed to load config from ${path}:`, err);
       throw new Error(`Configuration file not found or invalid: ${path}`);
     }
   }
+
 
   /**
    * Simple YAML parser for frontmatter metadata

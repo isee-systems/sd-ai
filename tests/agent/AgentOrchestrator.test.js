@@ -5,7 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const CONFIG = path.join(__dirname, '../../agent/config/socrates.md');
+const CONFIG = { path: path.join(__dirname, '../../agent/config/socrates.md') };
 
 // Minimal tool bag accepted by isBuiltInTool and execute helpers
 const EMPTY_TOOLS = { tools: {} };

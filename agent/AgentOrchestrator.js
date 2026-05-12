@@ -71,7 +71,7 @@ export class AgentOrchestrator {
   #geminiManualCacheExpiry = null;
   #pendingMessages = [];
 
-  constructor(sessionManager, sessionId, sendToClient, configPath, provider = config.agentDefaultProvider) {
+  constructor(sessionManager, sessionId, sendToClient, agentConfig, provider = config.agentDefaultProvider) {
     this.sessionManager = sessionManager;
     this.sessionId = sessionId;
     this.sendToClient = sendToClient;
@@ -84,7 +84,7 @@ export class AgentOrchestrator {
     this.pendingToolCalls = new Map(); // Track tool_use_id -> tool_name mapping
 
     // Load configuration
-    this.configManager = new AgentConfigurationManager(configPath);
+    this.configManager = new AgentConfigurationManager(agentConfig);
 
     // Create tool providers
     this.builtInToolProvider = new BuiltInToolProvider(sessionManager, sessionId, sendToClient);

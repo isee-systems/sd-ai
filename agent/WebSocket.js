@@ -266,11 +266,25 @@ export class WebSocketHandler {
 
   async #handleSelectAgent(message) {
     try {
-      const { agents } = getAvailableAgents();
-      const selectedAgent = agents.find(agent => agent.id === message.agentId);
+      let selectedAgent;
 
-      if (!selectedAgent) {
-        throw new Error(`Agent '${message.agentId}' not found. Available agents: ${agents.map(a => a.id).join(', ')}`);
+      if (message.agentConfig) {
+        const metadata = parseFrontmatter(message.agentConfig);
+        if (!metadata.name || !metadata.agent_mode) {
+          throw new Error('agentConfig must have valid YAML frontmatter with name and agent_mode fields');
+        }
+        selectedAgent = {
+          id: 'custom',
+          name: metadata.name,
+          supportedProviders: (metadata.supported_providers?.length ? metadata.supported_providers : ['anthropic', 'google'])
+            .map(id => ({ id, name: ProviderDisplayNames[id] ?? id }))
+        };
+      } else {
+        const { agents } = getAvailableAgents();
+        selectedAgent = agents.find(agent => agent.id === message.agentId);
+        if (!selectedAgent) {
+          throw new Error(`Agent '${message.agentId}' not found. Available agents: ${agents.map(a => a.id).join(', ')}`);
+        }
       }
 
       const isSwitching = this.#worker !== null;
@@ -323,17 +337,20 @@ export class WebSocketHandler {
       const provider = supportedProviders.length === 1
         ? supportedProviders[0].id
         : (message.provider ?? config.agentDefaultProvider);
-      this.#worker.send({ type: 'select_agent', agentId: message.agentId, provider });
+      const workerSelectMsg = message.agentConfig
+        ? { type: 'select_agent', agentConfig: message.agentConfig, provider }
+        : { type: 'select_agent', agentId: message.agentId, provider };
+      this.#worker.send(workerSelectMsg);
       this.#pendingAgentSwitch = isSwitching;
 
-      await this.#sendToClient(createAgentSelectedMessage(this.#sessionId, selectedAgent.id, selectedAgent.name));
+      await this.#sendToClient(createAgentSelectedMessage(this.#sessionId, selectedAgent.id, selectedAgent.name, selectedAgent.supportedProviders));
       const providerLabel = ProviderDisplayNames[provider] ?? provider;
       if (isSwitching) {
         await this.#sendToClient(createAgentTextMessage(this.#sessionId, `I've switched to ${selectedAgent.name} (${providerLabel}). How can I help you?`, false));
-        logger.log(`Agent switched to: ${message.agentId} (${provider}) for session ${this.#sessionId}`);
+        logger.log(`Agent switched to: ${selectedAgent.id} (${provider}) for session ${this.#sessionId}`);
       } else {
         await this.#sendToClient(createAgentTextMessage(this.#sessionId, `${selectedAgent.name} (${providerLabel}) — What can I do for you today?`, false));
-        logger.log(`Agent selected: ${message.agentId} (${provider}) for session ${this.#sessionId}`);
+        logger.log(`Agent selected: ${selectedAgent.id} (${provider}) for session ${this.#sessionId}`);
       }
     } catch (error) {
       logger.error(`Failed to select agent for session ${this.#sessionId}:`, error);
