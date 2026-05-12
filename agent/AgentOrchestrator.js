@@ -768,11 +768,17 @@ export class AgentOrchestrator {
   async processAgentResponseAnthropicManual(response, messages, builtInTools, dynamicTools) {
     let hasToolCalls = false;
 
-    // Process each content block
+    // Collect all assistant content blocks and tool results before touching messages.
+    // This ensures every tool_use is always paired with its tool_result in one atomic
+    // write, preventing orphaned tool_use blocks if processing is interrupted mid-response.
+    const assistantContent = [];
+    const toolResults = [];
+
+    // Process each content block (stream to client, execute tools)
     for (const block of response.content) {
       // Check if stop was requested before processing each block
       if (this.stopRequested) {
-        return false; // Stop processing immediately
+        return false; // Stop processing immediately (nothing added to messages yet)
       }
 
       if (block.type === 'text') {
@@ -785,11 +791,7 @@ export class AgentOrchestrator {
           false
         ));
 
-        // Append to the live session context (messages IS the session context)
-        if (!messages[messages.length - 1] || messages[messages.length - 1].role !== 'assistant') {
-          messages.push({ role: 'assistant', content: [] });
-        }
-        messages[messages.length - 1].content.push({ type: 'text', text: block.text });
+        assistantContent.push({ type: 'text', text: block.text });
       } else if (block.type === 'tool_use') {
         hasToolCalls = true;
 
@@ -859,7 +861,7 @@ export class AgentOrchestrator {
 
         // Check if stop was requested during tool execution
         if (this.stopRequested) {
-          return false; // Stop processing immediately
+          return false; // Stop processing immediately (nothing added to messages yet)
         }
 
         if (toolResult.isError) {
@@ -880,36 +882,30 @@ export class AgentOrchestrator {
           responseType
         ));
 
-        // Add tool use and result to messages
-        if (!messages[messages.length - 1] || messages[messages.length - 1].role !== 'assistant') {
-          messages.push({
-            role: 'assistant',
-            content: []
-          });
-        }
-
-        // Add tool_use block
-        messages[messages.length - 1].content.push({
-          type: 'tool_use',
-          id: block.id,
-          name: block.name,
-          input: block.input
-        });
-
-        // Add tool_result following Claude's API requirements
         const resultText = Array.isArray(toolResult.content)
           ? toolResult.content.filter(b => b.type === 'text').map(b => b.text).join('\n')
           : typeof toolResult.content === 'string' ? toolResult.content : JSON.stringify(toolResult.content);
-        messages.push({
-          role: 'user',
-          content: [{
-            type: 'tool_result',
-            tool_use_id: block.id,
-            content: resultText,
-            is_error: toolResult.isError || false
-          }]
-        });
+
+        assistantContent.push({ type: 'tool_use', id: block.id, name: block.name, input: block.input });
+        toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: resultText, is_error: toolResult.isError || false });
       }
+    }
+
+    // Atomically commit the full response to messages: one assistant message containing
+    // all content blocks (text + all tool_uses), then one user message with all tool_results.
+    // Keeping every tool_use paired with its tool_result in the same write prevents the
+    // "tool_use without tool_result" API error that occurs when context summarisation
+    // truncates the middle of an interleaved sequence.
+    if (assistantContent.length > 0) {
+      if (!messages[messages.length - 1] || messages[messages.length - 1].role !== 'assistant') {
+        messages.push({ role: 'assistant', content: [] });
+      }
+      for (const block of assistantContent) {
+        messages[messages.length - 1].content.push(block);
+      }
+    }
+    if (toolResults.length > 0) {
+      messages.push({ role: 'user', content: toolResults });
     }
 
     // If we had tool calls, continue the loop to let Claude process results
