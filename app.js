@@ -28,13 +28,10 @@ if (app.get('env') === 'production') {
   app.set('trust proxy', 1) // trust first proxy
 }
 
-let isDraining = false; //controls whether this server accepts requests
 // Initialize Session Manager (before routes)
 const sessionManager = new SessionManager();
 
-app.use('/', createHealthRouter(() => isDraining, 
-                              (val) => { isDraining = val }, 
-                              sessionManager));
+app.use('/', createHealthRouter(sessionManager));
 
 
 const apiRouter = express.Router();
@@ -46,12 +43,7 @@ apiRouter.use("/evals", v1EvalsList);
 apiRouter.use("/evals", v1EvalsTestDetails);
 apiRouter.use("/leaderboard", v1Leaderboard);
 
-app.use("/api/v1", (req, res, next) => {
-  if (isDraining) {
-    return res.status(503).send('This server is being taken offline');
-  }
-  next();
-}, apiRouter);
+app.use("/api/v1", apiRouter);
 
 // Create HTTP server for REST API
 const server = createServer(app);
@@ -79,11 +71,6 @@ if (useSamePort) {
 }
 
 wss.on('connection', (ws) => {
-  if (isDraining) {
-    ws.close(1008, 'This server is being taken offline'); // 1008 = Policy Violation
-    return;
-  }
-
   new WebSocketHandler(ws, sessionManager);
 });
 
