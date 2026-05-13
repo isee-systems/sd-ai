@@ -377,7 +377,11 @@ export class WorkerSpawner {
     return fork(WorkerSpawner.#WORKER_PATH, [], {
       env: { ...process.env, SESSION_ID: sessionId, SESSION_TEMP_DIR: sessionTempDir },
       stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
-      detached: true,
+      // detached only on Unix: puts the worker in its own process group so
+      // process.kill(-pid) can kill grandchildren (e.g. the claude CLI).
+      // On Windows, detached + inherited stdio breaks the IPC channel (EBADF),
+      // and negative-PID group killing isn't supported anyway.
+      detached: process.platform !== 'win32',
     });
   }
 }

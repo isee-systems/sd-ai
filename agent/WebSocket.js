@@ -19,8 +19,9 @@ import { ProviderDisplayNames } from '../utilities/TokenUsageReporter.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 function parseFrontmatter(content) {
+  const normalized = content.replace(/\r\n/g, '\n');
   const frontmatterRegex = /^---\n([\s\S]*?)\n---/;
-  const match = content.match(frontmatterRegex);
+  const match = normalized.match(frontmatterRegex);
   if (!match) return {};
 
   const metadata = {};
@@ -107,7 +108,7 @@ const liveWorkers = new Set();
 // subprocess launched by the Agent SDK — without this they become orphans at
 // 100% CPU after the worker is gone.
 function killWorkerProcess(w, signal) {
-  if (typeof w.pid === 'number') {
+  if (typeof w.pid === 'number' && process.platform !== 'win32') {
     process.kill(-w.pid, signal);
   } else {
     w.kill(signal);
