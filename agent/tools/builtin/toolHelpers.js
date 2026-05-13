@@ -24,6 +24,7 @@ export function tool({ name, description, inputSchema, execute }) {
 const GEMINI_UNSUPPORTED_KEYS = new Set([
   '$schema',
   'additionalProperties',
+  'propertyNames',
   'exclusiveMinimum',  // handled below for numeric form; boolean form is dropped
   'exclusiveMaximum',
 ]);
