@@ -76,6 +76,11 @@ export const gemini = {
     cachedTokens: 0.05,
     outputTokens: 3.00,
   },
+  'gemini-3.1-flash-lite-preview' : {
+    inputTokens: 0.25,
+    cachedTokens: 0.025,
+    outputTokens: 1.50,
+  },
   default: {
     inputTokens: 4.00,
     cachedTokens: 0.40,
