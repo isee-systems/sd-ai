@@ -515,7 +515,7 @@ export class AgentOrchestrator {
           const displayName = this.stripMcpPrefix(toolName);
 
           if (block.is_error) {
-            logger.error(`Anthropic SDK: Tool error for ${toolName} (${block.tool_use_id}):`, block.content);
+            logger.log(`Anthropic SDK: Tool error for ${toolName} (${block.tool_use_id}):`, block.content);
           } else {
             logger.log(`Anthropic SDK: Tool call completed: ${displayName}`);
           }
@@ -867,7 +867,7 @@ export class AgentOrchestrator {
         }
 
         if (toolResult.isError) {
-          logger.error(`Anthropic Manual: Tool error for ${block.name}:`, toolResult.content);
+          logger.log(`Anthropic Manual: Tool error for ${block.name}:`, toolResult.content);
         } else {
           logger.log(`Anthropic Manual: Tool call completed: ${block.name}`);
         }
@@ -1241,7 +1241,7 @@ export class AgentOrchestrator {
       if (this.stopRequested) return false;
 
       if (toolResult.isError) {
-        logger.error(`Gemini Manual: Tool error for ${name}:`, toolResult.content);
+        logger.log(`Gemini Manual: Tool error for ${name}:`, toolResult.content);
       } else {
         logger.log(`Gemini Manual: Tool call completed: ${name}`);
       }
