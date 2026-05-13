@@ -68,9 +68,11 @@ class TokenUsageReporter {
     const costs = this.#calculateCost(provider, model, tokens);
     const fmt = (n, cost) => cost != null ? `${n}($${cost.toFixed(6)})` : `${n}`;
 
+    const clientTag = this.clientId ? ` client=${this.clientId}` : '';
     if (isAnthropic) {
       logger.log(
         `[usage:${provider}]` +
+        clientTag +
         ` input=${fmt(tokens.inputTokens, costs?.inputTokens)}` +
         ` output=${fmt(tokens.outputTokens, costs?.outputTokens)}` +
         ` cache_write_5m=${fmt(tokens.cacheCreation5mInputTokens, costs?.cacheCreation5mInputTokens)}` +
@@ -81,6 +83,7 @@ class TokenUsageReporter {
     } else if (isOpenAI) {
       logger.log(
         `[usage:${provider}]` +
+        clientTag +
         ` input=${fmt(tokens.inputTokens, costs?.inputTokens)}` +
         ` output=${fmt(tokens.outputTokens, costs?.outputTokens)}` +
         ` cached=${fmt(tokens.cachedTokens, costs?.cachedTokens)}` +
@@ -90,6 +93,7 @@ class TokenUsageReporter {
     } else {
       logger.log(
         `[usage:${provider}]` +
+        clientTag +
         ` input=${fmt(tokens.inputTokens, costs?.inputTokens)}` +
         ` output=${fmt(tokens.outputTokens, costs?.outputTokens)}` +
         ` cached=${fmt(tokens.cachedTokens, costs?.cachedTokens)}` +
