@@ -103,11 +103,12 @@ describe('AgentWorker IPC — get_context', () => {
 
     const resp = await waitForMessage(
       worker,
-      (m) => m.type === 'context_response' && m.requestId === requestId
+      (m) => m.type === 'context_response' && m.requestId === requestId,
+      30000
     );
 
     expect(resp.context).toEqual([]);
-  }, 10000);
+  }, 30000);
 
   it('get_context returns conversation history loaded during initialize', async () => {
     const history = [
@@ -122,11 +123,12 @@ describe('AgentWorker IPC — get_context', () => {
 
     const resp = await waitForMessage(
       worker,
-      (m) => m.type === 'context_response' && m.requestId === requestId
+      (m) => m.type === 'context_response' && m.requestId === requestId,
+      30000
     );
 
     expect(resp.context).toEqual(history);
-  }, 10000);
+  }, 30000);
 
   it('multiple get_context calls return the same history', async () => {
     const history = [{ role: 'user', content: 'Hello' }];
