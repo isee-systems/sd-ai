@@ -343,7 +343,7 @@ export class WebSocketHandler {
       this.#worker.send(workerSelectMsg);
       this.#pendingAgentSwitch = isSwitching;
 
-      await this.#sendToClient(createAgentSelectedMessage(this.#sessionId, selectedAgent.id, selectedAgent.name, selectedAgent.supportedProviders));
+      await this.#sendToClient(createAgentSelectedMessage(this.#sessionId, selectedAgent.id, selectedAgent.name, selectedAgent.supportedProviders, provider));
       const providerLabel = ProviderDisplayNames[provider] ?? provider;
       if (isSwitching) {
         await this.#sendToClient(createAgentTextMessage(this.#sessionId, `I've switched to ${selectedAgent.name} (${providerLabel}). How can I help you?`, false));

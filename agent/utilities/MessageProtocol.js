@@ -222,13 +222,14 @@ export function createSessionReadyMessage(sessionId, availableAgents, defaults) 
   };
 }
 
-export function createAgentSelectedMessage(sessionId, agentId, agentName, supportedProviders = []) {
+export function createAgentSelectedMessage(sessionId, agentId, agentName, supportedProviders, currentProvider) {
   return {
     type: 'agent_selected',
     sessionId,
     agentId,
     agentName,
     supportedProviders,
+    currentProvider,
     timestamp: new Date().toISOString()
   };
 }

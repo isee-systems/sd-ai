@@ -362,6 +362,7 @@ Confirms the selected agent is ready.
     {"id": "anthropic", "name": "Claude (Anthropic)"},
     {"id": "google", "name": "Gemini (Google)"}
   ],
+  "currentProvider": "anthropic",
   "timestamp": "2025-01-15T10:30:00.200Z"
 }
 ```
@@ -369,6 +370,7 @@ Confirms the selected agent is ready.
 - `agentId` — `"custom"` when a custom `agentConfig` was used; otherwise the built-in agent ID.
 - `agentName` — Display name from the agent's frontmatter.
 - `supportedProviders` — Providers this agent accepts, in `{id, name}` form. Same format as the `supportedProviders` array in `session_ready`. Use this to populate a provider selector after agent selection — especially important for custom agents where the supported providers are only known after the server parses the config.
+- `currentProvider` — The provider ID that was actually selected for this session (e.g. `"anthropic"` or `"google"`). Resolved from the `provider` field of the `select_agent` message, falling back to `agentDefaultProvider` in config, or forced to the single entry when `supportedProviders` has exactly one item.
 
 #### 4. Agent Text
 
