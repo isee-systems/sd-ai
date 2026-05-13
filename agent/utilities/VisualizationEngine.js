@@ -265,9 +265,9 @@ Generate ONLY working Python code, no explanations.`;
 
       // Remove markdown code blocks if present
       if (pythonCode.startsWith('```python')) {
-        pythonCode = pythonCode.replace(/```python\n/, '').replace(/\n```$/, '');
+        pythonCode = pythonCode.replace(/```python\r?\n/, '').replace(/\r?\n```$/, '');
       } else if (pythonCode.startsWith('```')) {
-        pythonCode = pythonCode.replace(/```\n/, '').replace(/\n```$/, '');
+        pythonCode = pythonCode.replace(/```\r?\n/, '').replace(/\r?\n```$/, '');
       }
 
       return pythonCode;

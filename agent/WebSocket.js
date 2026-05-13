@@ -1,4 +1,5 @@
 import { WorkerSpawner } from './WorkerSpawner.js';
+import { AgentConfigurationManager } from './utilities/AgentConfigurationManager.js';
 import {
   validateClientMessage,
   createSessionCreatedMessage,
@@ -18,42 +19,6 @@ import { ProviderDisplayNames } from '../utilities/TokenUsageReporter.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-function parseFrontmatter(content) {
-  const normalized = content.replace(/\r\n/g, '\n');
-  const frontmatterRegex = /^---\n([\s\S]*?)\n---/;
-  const match = normalized.match(frontmatterRegex);
-  if (!match) return {};
-
-  const metadata = {};
-  const lines = match[1].split('\n');
-  let currentArray = null;
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-
-    if (trimmed.startsWith('- ') && currentArray) {
-      currentArray.push(trimmed.substring(2).trim());
-    } else if (trimmed.includes(':')) {
-      const colonIndex = trimmed.indexOf(':');
-      const key = trimmed.substring(0, colonIndex).trim();
-      const value = trimmed.substring(colonIndex + 1).trim();
-
-      if (value === '') {
-        currentArray = [];
-        metadata[key] = currentArray;
-      } else {
-        let parsedValue = value.replace(/^["']|["']$/g, '');
-        if (!isNaN(parsedValue) && parsedValue !== '') parsedValue = Number(parsedValue);
-        metadata[key] = parsedValue;
-        currentArray = null;
-      }
-    }
-  }
-
-  return metadata;
-}
-
 function getAvailableAgents() {
   const configDir = join(__dirname, 'config');
   const agents = [];
@@ -64,7 +29,7 @@ function getAvailableAgents() {
     for (const file of files) {
       try {
         const content = readFileSync(join(configDir, file), 'utf8');
-        const metadata = parseFrontmatter(content);
+        const metadata = AgentConfigurationManager.parseContent(content).metadata;
 
         if (metadata?.name) {
           agents.push({
@@ -270,7 +235,7 @@ export class WebSocketHandler {
       let selectedAgent;
 
       if (message.agentConfig) {
-        const metadata = parseFrontmatter(message.agentConfig);
+        const metadata = AgentConfigurationManager.parseContent(message.agentConfig).metadata;
         if (!metadata.name || !metadata.agent_mode) {
           throw new Error('agentConfig must have valid YAML frontmatter with name and agent_mode fields');
         }

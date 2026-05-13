@@ -125,7 +125,7 @@ Reserve the feedback_dominance visualization type (stacked area) for when the us
   constructor({ path, markdownContent } = {}) {
     if (markdownContent !== undefined) {
       this.configPath = null;
-      const { metadata, content } = this.#parseContent(markdownContent);
+      const { metadata, content } = AgentConfigurationManager.parseContent(markdownContent);
       this.#validateFrontmatter(metadata);
       this.#init(metadata, content);
     } else {
@@ -158,12 +158,12 @@ Reserve the feedback_dominance visualization type (stacked area) for when the us
     this.baseConfig = this.config.agent;
   }
 
-  #parseContent(fileContent) {
-    const frontmatterRegex = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/;
-    const match = fileContent.match(frontmatterRegex);
+  static parseContent(fileContent) {
+    const normalized = fileContent.replace(/\r\n/g, '\n');
+    const match = normalized.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
 
     if (match) {
-      const metadata = this.parseSimpleYAML(match[1]);
+      const metadata = AgentConfigurationManager.#parseSimpleYAML(match[1]);
       return { metadata, content: match[2] };
     }
 
@@ -184,7 +184,7 @@ Reserve the feedback_dominance visualization type (stacked area) for when the us
   #loadFile(path) {
     try {
       const fileContent = readFileSync(path, 'utf8');
-      return this.#parseContent(fileContent);
+      return AgentConfigurationManager.parseContent(fileContent);
     } catch (err) {
       logger.error(`Failed to load config from ${path}:`, err);
       throw new Error(`Configuration file not found or invalid: ${path}`);
@@ -192,10 +192,7 @@ Reserve the feedback_dominance visualization type (stacked area) for when the us
   }
 
 
-  /**
-   * Simple YAML parser for frontmatter metadata
-   */
-  parseSimpleYAML(yamlText) {
+  static #parseSimpleYAML(yamlText) {
     const metadata = {};
     const lines = yamlText.split('\n');
     let currentKey = null;

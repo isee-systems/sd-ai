@@ -83,7 +83,7 @@ if (matchingFiles.length > 0) {
 
 if (isContinuing) {
   const previousFileName = matchingFiles[0];
-  previousResults = fs.readFileSync(previousFileName, 'utf-8').split('\n').filter(Boolean).map(l => JSON.parse(l))
+  previousResults = fs.readFileSync(previousFileName, 'utf-8').split(/\r?\n/).filter(Boolean).map(l => JSON.parse(l))
   experimentResultsName = previousFileName.replace(inProgressFileSuffix,"")
 } else {
   const experimentId = uniqueFileId();

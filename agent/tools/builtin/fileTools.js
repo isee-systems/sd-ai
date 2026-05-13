@@ -31,7 +31,7 @@ Filtering options to avoid reading more than needed:
         }
 
         const raw = readFileSync(filePath, 'utf-8');
-        let lines = raw.split('\n');
+        let lines = raw.split(/\r?\n/);
         const totalLines = lines.length;
 
         if (startLine !== undefined || endLine !== undefined) {
