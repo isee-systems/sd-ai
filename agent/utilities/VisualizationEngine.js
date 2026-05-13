@@ -434,6 +434,36 @@ Generate ONLY working Python code, no explanations.`;
     }
   }
 
+  // Returns a Python snippet that filters a flat {time, var1, ...} data dict to options.timeRange.
+  #timeRangeFilterFlat(options) {
+    if (!options?.timeRange) return '';
+    const { start, end } = options.timeRange;
+    return `
+# Apply time range filter
+_time_arr = data['time']
+_indices = [i for i, t in enumerate(_time_arr) if t >= ${start} and t <= ${end}]
+for _key in list(data.keys()):
+    if isinstance(data[_key], list) and len(data[_key]) == len(_time_arr):
+        data[_key] = [data[_key][i] for i in _indices]
+`;
+  }
+
+  // Returns a Python snippet that filters a run-keyed {runId: {time, var1,...}} data dict to options.timeRange.
+  #timeRangeFilterRunKeyed(options) {
+    if (!options?.timeRange) return '';
+    const { start, end } = options.timeRange;
+    return `
+# Apply time range filter per run
+for _run_id in list(data.keys()):
+    _run = data[_run_id]
+    _time_arr = _run.get('time', [])
+    _indices = [i for i, t in enumerate(_time_arr) if t >= ${start} and t <= ${end}]
+    for _key in list(_run.keys()):
+        if isinstance(_run[_key], list) and len(_run[_key]) == len(_time_arr):
+            _run[_key] = [_run[_key][i] for i in _indices]
+`;
+  }
+
   /**
    * Generate Python script for visualization
    */
@@ -478,6 +508,11 @@ line_handles = [l for l in ax.lines if not l.get_label().startswith('_')]
 ax.legend(handles=band_handles + line_handles, loc='best')`
       : `ax.legend(loc='best')`;
 
+    const su = options.seriesUnits || {};
+    const unitValues = variables.map(v => su[v]).filter(Boolean);
+    const sharedUnit = unitValues.length === variables.length && new Set(unitValues).size === 1 ? unitValues[0] : null;
+    const yAxisLabel = sharedUnit ? `Value (${sharedUnit})` : 'Value';
+
     return `
 import matplotlib
 matplotlib.use('Agg')
@@ -489,20 +524,22 @@ warnings.filterwarnings('ignore')
 # Load data
 with open('${dataPath}', 'r') as f:
     data = json.load(f)
-
+${this.#timeRangeFilterFlat(options)}
 fig, ax = plt.subplots(figsize=(${(options.width || 800)/100}, ${(options.height || 600)/100}))
 
 # Background highlight periods (drawn first so lines render on top)
 ${highlightPeriodsCode}
 
 # Plot each variable
-${variables.map((v, idx) => `
-ax.plot(data['time'], data['${v}'], label='${v.replaceAll('_', ' ')}', linewidth=2, zorder=3)
-`).join('')}
+${variables.map(v => {
+      const units = su[v];
+      const label = units ? `${v.replaceAll('_', ' ')} (${units})` : v.replaceAll('_', ' ');
+      return `\nax.plot(data['time'], data['${v}'], label='${label}', linewidth=2, zorder=3)`;
+    }).join('')}
 
 # Styling
 ax.set_xlabel('Time (${options.timeUnits || 'units'})', fontsize=12)
-ax.set_ylabel('Value', fontsize=12)
+ax.set_ylabel('${yAxisLabel}', fontsize=12)
 ax.set_title('${options.title || 'Time Series'}', fontsize=14, fontweight='bold')
 ${legendCode}
 ax.grid(True, alpha=0.3)
@@ -519,6 +556,10 @@ print('Visualization saved')
    */
   generatePhasePortraitScript(dataPath, outputPath, variables, options) {
     const [xVar, yVar] = variables;
+    const su = options.seriesUnits || {};
+    const xLabel = su[xVar] ? `${xVar.replaceAll('_', ' ')} (${su[xVar]})` : xVar.replaceAll('_', ' ');
+    const yLabel = su[yVar] ? `${yVar.replaceAll('_', ' ')} (${su[yVar]})` : yVar.replaceAll('_', ' ');
+    const timeLabel = options.timeUnits ? `Time (${options.timeUnits})` : 'Time';
     return `
 import matplotlib
 matplotlib.use('Agg')
@@ -530,7 +571,7 @@ warnings.filterwarnings('ignore')
 
 with open('${dataPath}', 'r') as f:
     data = json.load(f)
-
+${this.#timeRangeFilterFlat(options)}
 fig, ax = plt.subplots(figsize=(8, 6))
 
 time = np.array(data['time'])
@@ -543,14 +584,14 @@ ax.plot(x, y, 'k-', alpha=0.3, linewidth=0.5)
 ax.scatter(x[0], y[0], c='green', s=100, marker='o', label='Start', zorder=5)
 ax.scatter(x[-1], y[-1], c='red', s=100, marker='s', label='End', zorder=5)
 
-ax.set_xlabel('${xVar}', fontsize=12)
-ax.set_ylabel('${yVar}', fontsize=12)
-ax.set_title('Phase Portrait: ${yVar} vs ${xVar}', fontsize=14, fontweight='bold')
+ax.set_xlabel('${xLabel}', fontsize=12)
+ax.set_ylabel('${yLabel}', fontsize=12)
+ax.set_title('Phase Portrait: ${yVar.replaceAll('_', ' ')} vs ${xVar.replaceAll('_', ' ')}', fontsize=14, fontweight='bold')
 ax.legend()
 ax.grid(True, alpha=0.3)
 
 cbar = plt.colorbar(scatter, ax=ax)
-cbar.set_label('Time', fontsize=10)
+cbar.set_label('${timeLabel}', fontsize=10)
 
 plt.tight_layout()
 plt.savefig('${outputPath}', format='svg', bbox_inches='tight')
@@ -575,6 +616,7 @@ print('Visualization saved')
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+import matplotlib.ticker
 import numpy as np
 import json
 import warnings
@@ -582,7 +624,7 @@ warnings.filterwarnings('ignore')
 
 with open('${dataPath}', 'r') as f:
     data = json.load(f)
-
+${this.#timeRangeFilterFlat(options)}
 fig, ax = plt.subplots(figsize=(${(options.width || 800)/100}, ${(options.height || 600)/100}))
 
 # Get time array
@@ -631,8 +673,9 @@ if len(loop_data) > 0 and len(time) > 0:
     colors = plt.cm.tab10(np.linspace(0, 1, len(loop_data)))
     ax.stackplot(time, *loop_data, labels=loop_labels, colors=colors, alpha=0.7)
 
+    ax.yaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda y, _: f'{y:.0f}%'))
     ax.set_xlabel('Time (${options.timeUnits || 'units'})', fontsize=12)
-    ax.set_ylabel('Loop Dominance', fontsize=12)
+    ax.set_ylabel('Percent of Behavior Explained', fontsize=12)
     ax.set_title('${options.title || 'Feedback Loop Dominance Over Time'}', fontsize=14, fontweight='bold')
     ax.legend(loc='upper left', bbox_to_anchor=(1.02, 1), borderaxespad=0)
     ax.grid(True, alpha=0.3)
@@ -664,7 +707,7 @@ warnings.filterwarnings('ignore')
 
 with open('${dataPath}', 'r') as f:
     data = json.load(f)
-
+${this.#timeRangeFilterRunKeyed(options)}
 fig, ax = plt.subplots(figsize=(${(options.width || 800)/100}, ${(options.height || 600)/100}))
 
 colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
@@ -681,7 +724,7 @@ for idx, (label, time_data, values) in enumerate(run_items):
     ax.plot(time_data, values, label=label, color=color, linestyle=line_style, linewidth=2)
 
 ax.set_xlabel('Time', fontsize=12)
-ax.set_ylabel('${variable}', fontsize=12)
+ax.set_ylabel('${options.seriesUnits?.[variable] ? `${variable} (${options.seriesUnits[variable]})` : variable}', fontsize=12)
 ax.set_title('${options.title || `Comparison: ${variable}`}', fontsize=14, fontweight='bold')
 ax.legend(loc='best')
 ax.grid(True, alpha=0.3)

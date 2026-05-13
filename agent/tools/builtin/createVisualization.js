@@ -52,7 +52,8 @@ Use useAICustom=true to have AI generate custom matplotlib code for complex visu
       dataDescription: z.string().optional().describe('Description of the data for AI (when useAICustom=true)'),
       visualizationGoal: z.string().optional().describe('What insight to convey (when useAICustom=true)'),
       options: z.object({
-        timeUnits: z.string().optional().describe('Label for the time axis (e.g. "Years", "Months")'),
+        timeUnits: z.string().describe('Units for the time axis (e.g. "Years", "Months")'),
+        seriesUnits: z.record(z.string(), z.string()).describe('Units per variable name (e.g. { "Population": "People", "GDP": "Dollars" }). Use an empty object {} for feedback_dominance charts.'),
         timeRange: z.object({ start: z.number(), end: z.number() }).optional().describe('Restrict the plot to a time window'),
         highlightPeriods: z.array(z.object({
           start: z.number(),
@@ -64,7 +65,7 @@ Use useAICustom=true to have AI generate custom matplotlib code for complex visu
         height: z.number().optional().describe('Output height in pixels (default 600)'),
         includeFeedbackContext: z.boolean().optional().describe('When true, reads feedback.json and overlays dominant-loop periods as highlight bands on the chart. Useful for time_series plots where you want to show which feedback loop was driving behavior.'),
         customRequirements: z.string().optional().describe('Additional freeform requirements passed to the AI when useAICustom=true')
-      }).optional()
+      })
     }),
     handler: async ({ type, filePath, variables, title, description, usePython, useAICustom, difficulty, dataDescription, visualizationGoal, options }) => {
       try {
