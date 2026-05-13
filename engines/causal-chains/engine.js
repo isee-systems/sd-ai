@@ -37,8 +37,8 @@ focus on chains of relationships, rather then individual links.`
                 return ["cld"];
             }
         } catch (err) {
-            logger.log("Error checking supporting modes on causal-chains...");
-            logger.log(err);
+            //logger.log("Error checking supporting modes on causal-chains...");
+            //logger.log(err);
             // fine to fallthrough to the return below
         }
 
