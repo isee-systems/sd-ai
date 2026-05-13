@@ -414,6 +414,8 @@ export class AgentOrchestrator {
             message.error?.message || 'SDK system error',
             'SDK_SYSTEM_ERROR'
           ));
+        } else if (message.subtype === 'api_retry') {
+          logger.log(`Anthropic SDK: API retry attempt ${message.attempt}/${message.max_retries} for session ${this.sessionId} (status: ${message.error_status}, delay: ${Math.round(message.retry_delay_ms / 1000)}s)`);
         } else {
           logger.warn(`Anthropic SDK Unhandled system message subtype: ${message.subtype}`, message);
         }
@@ -470,7 +472,7 @@ export class AgentOrchestrator {
           const displayName = this.stripMcpPrefix(toolName);
 
           if (block.is_error) {
-            logger.error(`Anthropic SDK: Tool error for ${toolName} (${block.tool_use_id}):`, block.content);
+            logger.log(`Anthropic SDK: Tool error for ${toolName} (${block.tool_use_id}):`, block.content);
           } else {
             logger.log(`Anthropic SDK: Tool call completed: ${displayName}`);
           }
@@ -545,9 +547,9 @@ export class AgentOrchestrator {
       logger.log(`Anthropic SDK conversation reached max iterations for session ${this.sessionId}`);
       this.maxTurnsReached = true;
     } else if (message.subtype === 'error') {
-      logger.error(`Anthropic SDK conversation error for session ${this.sessionId}:`, message.error || message);
+      logger.warn(`Anthropic SDK conversation error for session ${this.sessionId}:`, message.error || message);
     } else if (message.subtype === 'tool_error') {
-      logger.error(`Anthropic SDK tool error for session ${this.sessionId}:`, message);
+      logger.log(`Anthropic SDK tool error for session ${this.sessionId}:`, message);
     } else {
       logger.warn(`Anthropic SDK Unhandled result message subtype: ${message.subtype}`, message);
     }
