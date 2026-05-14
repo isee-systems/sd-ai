@@ -160,7 +160,7 @@ export class SessionManager {
   /**
    * Initialize a session with model and tools
    */
-  initializeSession(sessionId, mode, model, tools, context, clientId) {
+  initializeSession(sessionId, mode, model, tools, context, clientId, capabilities = {}) {
     const session = this.getSession(sessionId);
     if (!session) {
       throw new Error(`Session not found: ${sessionId}`);
@@ -170,7 +170,7 @@ export class SessionManager {
     if (mode !== 'cld' && mode !== 'sfd') {
       throw new Error(`Invalid mode: ${mode}. Must be 'cld' or 'sfd'`);
     }
-    
+
     // Set model type (can only be set once)
     if (session.mode && session.mode !== mode) {
       throw new Error(`Cannot change model type from ${session.mode} to ${mode} during session`);
@@ -184,6 +184,9 @@ export class SessionManager {
     session.clientTools = tools || [];
     session.context = context || {};
     session.clientId = clientId;
+    session.supportsArrays = capabilities.supportsArrays ?? false;
+    session.supportsModules = capabilities.supportsModules ?? false;
+    session.supportsSubTypes = capabilities.supportsSubTypes ?? false;
     this.updateClientModel(sessionId, model);
 
     logger.log(`Session initialized: ${sessionId} with mode=${mode} and ${tools.length} client tools`);

@@ -188,7 +188,18 @@ export class WebSocketHandler {
         throw new Error('Invalid or missing mode. Must be "cld" or "sfd".');
       }
 
-      this.#sessionManager.initializeSession(this.#sessionId, message.mode, message.model, message.tools, message.context, message.clientId);
+      const capabilities = {
+        supportsArrays: message?.supportsArrays,
+        supportsModules: message?.supportsModules,
+        supportsSubTypes: message?.supportsSubTypes
+      };
+
+      if (message.clientProduct === 'Stella Architect Beta' && message.clientVersion === '4.3') {
+        capabilities.supportsArrays = true;
+        capabilities.supportsModules = true;
+        capabilities.supportsSubTypes = false;
+      }
+      this.#sessionManager.initializeSession(this.#sessionId, message.mode, message.model, message.tools, message.context, message.clientId, capabilities);
 
       if (message.historicalMessages && message.historicalMessages.length > 0) {
         for (const histMsg of message.historicalMessages) {
@@ -297,6 +308,9 @@ export class WebSocketHandler {
         clientId: session.clientId,
         conversationHistory,
         isAgentSwitch: isSwitching,
+        supportsArrays: session.supportsArrays,
+        supportsModules: session.supportsModules,
+        supportsSubTypes: session.supportsSubTypes,
       });
 
       const supportedProviders = selectedAgent.supportedProviders; // [{id, name}]

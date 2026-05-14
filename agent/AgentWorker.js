@@ -117,7 +117,12 @@ class AgentWorker {
 
         case 'initialize': {
           this.#sessionManager.createSessionWithId(SESSION_ID, this.#mockWs, SESSION_TEMP_DIR);
-          this.#sessionManager.initializeSession(SESSION_ID, msg.mode, msg.model, msg.tools, msg.context, msg.clientId);
+          const capabilities = {
+            supportsArrays: msg.supportsArrays,
+            supportsModules: msg.supportsModules,
+            supportsSubTypes: msg.supportsSubTypes,
+          };
+          this.#sessionManager.initializeSession(SESSION_ID, msg.mode, msg.model, msg.tools, msg.context, msg.clientId, capabilities);
           for (const h of (msg.conversationHistory || [])) {
             this.#sessionManager.addToConversationHistory(SESSION_ID, h);
           }

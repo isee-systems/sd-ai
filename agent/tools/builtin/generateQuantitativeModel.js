@@ -18,8 +18,6 @@ export function createGenerateQuantitativeModelTool(sessionManager, sessionId, s
       parameters: z.object({
         problemStatement: z.string().optional().describe('Description of dynamic issue to address'),
         backgroundKnowledge: z.string().optional().describe('Background information for LLM'),
-        supportsArrays: z.boolean().optional().describe('Whether client supports arrayed models'),
-        supportsModules: z.boolean().optional().describe('Whether client supports modules')
       }).optional()
     }),
     handler: async ({ prompt, difficulty, parameters }) => {
@@ -31,7 +29,15 @@ export function createGenerateQuantitativeModelTool(sessionManager, sessionId, s
 
         const underlyingModel = difficulty === 'normal' ? config.buildDefaultModel : config.agentToolHighEffortBuildDefaultModel;
         const currentModel = sessionManager.getClientModel(sessionId);
-        const result = await callQuantitativeEngine(prompt, currentModel, { ...parameters, underlyingModel, clientId: session.clientId });
+
+        const sessionCapabilities = {
+          supportsArrays: session.supportsArrays,
+          supportsModules: session.supportsModules,
+          supportsSubTypes: session.supportsSubTypes
+        };
+        const mergedParameters = { ...sessionCapabilities, ...parameters, underlyingModel, clientId: session.clientId };
+
+        const result = await callQuantitativeEngine(prompt, currentModel, mergedParameters);
 
         if (!result.success) {
           return createErrorResponse(result.error);

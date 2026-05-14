@@ -114,6 +114,12 @@ to experiment with the specific prompts passed to the LLM.`;
                 required: false,
                 uiElement: "hidden",
                 description: "Whether or not your client can handle models with modules"
+            },{
+                name: "supportsSubTypes",
+                type: "boolean",
+                required: false,
+                uiElement: "hidden",
+                description: "Whether or not your client can handle models with queues, conveyors or ovens"
             }
         ]);
     }

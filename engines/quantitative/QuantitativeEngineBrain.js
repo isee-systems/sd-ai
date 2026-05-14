@@ -41,6 +41,37 @@ When constructing modular models, you MUST create cross-level ghost variables fo
 FAILURE TO CREATE AND LINK GHOST VARIABLES WILL BREAK SIMULATION. This is non-negotiable.
 REFERENCING THE ORIGINAL SOURCE VARIABLE DIRECTLY FROM A CONSUMING MODULE WILL BREAK SIMULATION. Always use the ghost.`
 
+    static SUB_TYPE_REQUIREMENTS_SECTION =
+`CRITICAL DISCRETE-ENTITY SUB-TYPE REQUIREMENTS:
+
+WHEN TO USE DISCRETE ENTITY SUB-TYPES:
+- Use sub-types ONLY when the model explicitly requires discrete-event, queue, or pipeline semantics
+- DO NOT use sub-types for standard continuous stocks and flows — they add significant complexity
+- Only introduce sub-types when specifically requested by the user
+
+STOCK SUB-TYPES — set 'subType' on the variable and include 'additionalProperties':
+- 'queue': A waiting line that holds discrete items until they can be processed. Set subType: 'queue' and provide additionalProperties with the relevant queue settings.
+- 'oven': A batch processor where items are held for a fixed cook time (processTime) then released together. Set subType: 'oven' and provide additionalProperties with at minimum processTime.
+- 'conveyor': A pipeline delay where items travel for a fixed transit time (processTime) before exiting from the other end. Set subType: 'conveyor' and provide additionalProperties with at minimum processTime.
+
+FLOW SUB-TYPES — set 'subType' only; DO NOT write an equation for these flows; leave 'equation' empty:
+- 'discreteOutflow': The automatic output flow from a conveyor or oven.
+- 'conveyorLeakage': The automatic leakage flow from a conveyor.
+- 'queueOutflow': The automatic output flow from a queue.
+- 'queueOverflow': The automatic overflow flow emitted when a full queue cannot accept new items (only when overflow is enabled on the queue).
+
+EQUATION RULES FOR SUB-TYPED VARIABLES:
+- For 'queue', 'oven', and 'conveyor' stocks: the 'equation' field is the initial value, exactly like a regular stock.
+- For flow sub-types ('discreteOutflow', 'conveyorLeakage', 'queueOutflow', 'queueOverflow'): leave 'equation' as an empty string — these flows are automatically computed.
+- All timing, capacity, and behavioral settings go in 'additionalProperties', NOT in equations.
+- The 'additionalProperties' object is only required for 'queue', 'oven', and 'conveyor' stocks; omit it for flow sub-types.
+
+RELATIONSHIP REQUIREMENTS FOR SUB-TYPED FLOWS:
+- When a flow's sub-type properties (additionalProperties) contain expressions that reference other variables, you MUST create relationships pointing FROM those variables TO the flow.
+- Treat sub-type property expressions exactly like normal equations: any variable name appearing in an additionalProperties value requires a relationship arrow from that variable to the flow.
+- These expressions must follow XMILE syntax and use underscores for spaces in variable names (e.g. 'service_time' not 'service time').
+- Failure to add these relationships will break the simulation's dependency graph.`
+
     static ARRAY_REQUIREMENTS_SECTION =
 `CRITICAL ARRAY REQUIREMENTS:
 
@@ -444,7 +475,7 @@ NEVER identify feedback loops for the user in explanatory text. Let users discov
     static PROFESSIONAL_MODE_INTRO =
 `You are a System Dynamics Professional Modeler. Generate stock and flow models from user-provided text following these mandatory rules:`
 
-    static generateSystemPrompt(mentorMode, supportsArrays, supportsModules) {
+    static generateSystemPrompt(mentorMode, supportsArrays, supportsModules, supportsSubTypes) {
         let prompt = "";
 
         // Add intro based on mode
@@ -462,6 +493,11 @@ NEVER identify feedback loops for the user in explanatory text. Let users discov
         // Add array requirements if arrays are supported
         if (supportsArrays) {
             prompt += QuantitativeEngineBrain.ARRAY_REQUIREMENTS_SECTION + "\n\n";
+        }
+
+        // Add sub-type requirements if sub-types are supported
+        if (supportsSubTypes) {
+            prompt += QuantitativeEngineBrain.SUB_TYPE_REQUIREMENTS_SECTION + "\n\n";
         }
 
         // Always add mandatory process section
@@ -524,7 +560,8 @@ NEVER identify feedback loops for the user in explanatory text. Let users discov
         backgroundPrompt: QuantitativeEngineBrain.DEFAULT_BACKGROUND_PROMPT,
         problemStatementPrompt: QuantitativeEngineBrain.DEFAULT_PROBLEM_STATEMENT_PROMPT,
         supportsArrays: false,
-        supportsModules: false
+        supportsModules: false,
+        supportsSubTypes: false
     };
 
     #llmWrapper;
@@ -532,12 +569,13 @@ NEVER identify feedback loops for the user in explanatory text. Let users discov
     constructor(params) {
         Object.assign(this.#data, params);
 
-        // Generate system prompt based on mentor mode, array support, and module support if not explicitly provided
+        // Generate system prompt based on mentor mode, array support, module support, and sub-type support if not explicitly provided
         if (!this.#data.systemPrompt) {
             this.#data.systemPrompt = QuantitativeEngineBrain.generateSystemPrompt(
                 this.#data.mentorMode,
                 this.#data.supportsArrays,
-                this.#data.supportsModules
+                this.#data.supportsModules,
+                this.#data.supportsSubTypes
             );
         }
 
@@ -842,6 +880,19 @@ NEVER identify feedback loops for the user in explanatory text. Let users discov
                     }
                 });
             }
+
+            // Process additionalProperties expressions for sub-typed variables
+            if (v.subType && v.additionalProperties && typeof v.additionalProperties === 'object') {
+                for (const [key, val] of Object.entries(v.additionalProperties)) {
+                    if (typeof val === 'string') {
+                        const original = val;
+                        v.additionalProperties[key] = this.#replaceVariableNamesInEquation(val, variableNameMap);
+                        if (original !== v.additionalProperties[key]) {
+                            logger.debug(`[XMILE Conversion] Variable "${v.name}" additionalProperties.${key}: "${original}" → "${v.additionalProperties[key]}"`);
+                        }
+                    }
+                }
+            }
         });
     }
 
@@ -907,7 +958,8 @@ NEVER identify feedback loops for the user in explanatory text. Let users discov
         this.#data.systemPrompt = QuantitativeEngineBrain.generateSystemPrompt(
             this.#data.mentorMode,
             this.#data.supportsArrays,
-            this.#data.supportsModules
+            this.#data.supportsModules,
+            this.#data.supportsSubTypes
         );
     }
 
@@ -915,7 +967,7 @@ NEVER identify feedback loops for the user in explanatory text. Let users discov
         //start with the system prompt
         const { underlyingModel, systemRole, temperature, reasoningEffort } = this.#llmWrapper.getLLMParameters();
         let systemPrompt = this.#data.systemPrompt;
-        let responseFormat = this.#llmWrapper.generateQuantitativeSDJSONResponseSchema(this.#data.mentorMode, this.#data.supportsArrays);
+        let responseFormat = this.#llmWrapper.generateQuantitativeSDJSONResponseSchema(this.#data.mentorMode, this.#data.supportsArrays, this.#data.supportsSubTypes);
 
         if (!this.#llmWrapper.model.hasStructuredOutput) {
             throw new Error("Unsupported LLM " + this.#data.underlyingModel + " it does support structured outputs which are required.");

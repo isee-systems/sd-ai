@@ -93,7 +93,9 @@ Contains the engines used by [Stella](https://www.iseesystems.com/store/products
                 {x: <number>, y: <number>}
                 ...
             ]
-        }
+        },
+        subType?: <string>, # Discrete-entity sub-type (see below)
+        additionalProperties?: { # Sub-type-specific settings (see below) }
     }],
     relationships: [{
         reasoning?: <string>, # Explanation for why this relationship is here
@@ -148,6 +150,65 @@ Models can be organized into modules for better structure and encapsulation:
   - Leave `equation` field empty (empty string)
   - Ghost variable has same local name as source but exists in consuming module
   - All equations in consuming module reference the ghost, not the original source
+
+### Discrete-Entity Sub-Types in SD-JSON
+Variables can have a `subType` field that identifies them as discrete-event processing elements. Sub-types are a refinement of `type` — the top-level `type` field remains `"stock"` or `"flow"`.
+
+**Stock sub-types** — also set `additionalProperties` with the relevant configuration:
+
+| `subType` | Description |
+|-----------|-------------|
+| `"queue"` | A waiting line that holds discrete items until they are dispatched. |
+| `"oven"` | A batch processor where items are held for a fixed cook time then released together. |
+| `"conveyor"` | A pipeline delay where items travel a fixed transit time before exiting from the other end. |
+
+**Flow sub-types** — automatically managed flows. Set `subType` only; leave `equation` as an empty string:
+
+| `subType` | Description |
+|-----------|-------------|
+| `"discreteOutflow"` | The output flow from a conveyor or oven. |
+| `"conveyorLeakage"` | The leakage flow from a conveyor. |
+| `"queueOutflow"` | The output flow from a queue. |
+| `"queueOverflow"` | The overflow flow emitted when a full queue cannot accept new items (requires `overflow: true` on the queue). |
+
+**`additionalProperties`** fields for conveyor and oven stocks:
+
+| Field | Type | Applies to | Description |
+|-------|------|------------|-------------|
+| `processTime` | string (equation) | conveyor, oven | Transit time (conveyor) or cook time (oven). Required. |
+| `capacity` | string (equation) | conveyor, oven | Maximum number of items the element can hold. |
+| `inflowLimit` | string (equation) | conveyor, oven | Maximum inflow rate per time step. |
+| `fillTime` | string (equation) | conveyor, oven | Time to fill the element before processing begins. |
+| `cleanTime` | string (equation) | conveyor, oven | Clean-up time after emptying before accepting new items. |
+| `leakFraction` | string (equation) | conveyor, oven | Fraction of contents that leak out per time step. |
+| `exponential` | boolean | conveyor, oven | If true, leakage is exponential (constant fraction); if false (default), linear. |
+| `leakZoneStart` | string (equation) | conveyor, oven | Start position (0–100%) of the leak zone along the element. |
+| `leakZoneEnd` | string (equation) | conveyor, oven | End position (0–100%) of the leak zone along the element. |
+| `leakIntegers` | boolean | conveyor, oven | If true, leakage amounts are rounded to whole integers. |
+| `sample` | string (equation) | conveyor, oven | Re-samples transit/cook time when this expression is non-zero. |
+| `arrest` | string (equation) | conveyor, oven | Halts movement when this expression is non-zero. |
+| `spreadFlow` | string enum | conveyor only | How inflows distribute along the conveyor: `"none"` (default, front-entry), `"even"`, `"destination"`, `"distribution"` (requires `distribEq`), `"source"`. |
+| `distribEq` | string (equation) | conveyor only | Distribution table equation used when `spreadFlow` is `"distribution"`. |
+| `ignorePrevZones` | boolean | conveyor only | If true, each leak zone operates independently of losses from earlier zones. |
+| `forceLeakFraction` | boolean | conveyor only | If true, the same leak fraction is applied regardless of transit duration. |
+
+**`additionalProperties`** fields for queue stocks:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `fifoEnabled` | boolean | If true, dispatches in FIFO order; if false (default), LIFO. |
+| `oneAtATime` | boolean | If true, accepts only one batch per time step. |
+| `splitBatches` | boolean | If true, incoming batches can be split when entering. |
+| `discrete` | boolean | If true, operates on integer quantities only (discrete mode). |
+| `timeStamped` | boolean | If true, items carry a time-stamp recording when they arrived. |
+| `attribEq` | string (equation) | Attribute value assigned to each item on entry. |
+| `timeStampEq` | string (equation) | Time-stamp value assigned to each item on entry. |
+| `prioritizeAttrib` | boolean | If true, inflows are prioritized by attribute value. |
+| `roundRobin` | boolean | If true, competing outflows are served in round-robin order. |
+| `queueOutflowPriority` | string (equation) | Dispatch priority for the queue outflow. |
+| `purgeEq` | string (equation) | Items older than this age (in time units) are automatically removed. |
+| `attribFilter` | string (equation) | Only items whose attribute matches this expression can exit. |
+| `overflow` | boolean | If true, a `queueOverflow` flow is automatically created for excess items. |
 
 ## Discussion Engine JSON response
 ```

@@ -65,6 +65,12 @@ Works by sending an LLM the user's request along with a set of systems thinking 
             required: false,
             uiElement: "hidden",
             description: "Whether or not your client can handle models with modules"
+        },{
+            name: "supportsSubTypes",
+            type: "boolean",
+            required: false,
+            uiElement: "hidden",
+            description: "Whether or not your client can handle models with queues, conveyors or ovens"
         }];
     }
 

@@ -239,7 +239,7 @@ describe('createEditModelSectionTool normalization', () => {
   function makeEditTool(sendToClient) {
     session = {
       mode: 'sfd',
-      context: { supportsArrays: false, supportsModules: true },
+      context: { supportsArrays: false, supportsModules: true, supportsSubTypes: true },
       pendingModelRequests: new Map(),
     };
     const sessionManager = {

@@ -133,8 +133,7 @@ Focus on educational validation:
 **Auto-suggest** this tool when appropriate
 
 ### generate_quantitative_model *(sfd only)*
-**When to use:** For sfd models - keep them simple
-**Default parameters:** {"supportsArrays":false,"supportsModules":false}
+**When to use:** For sfd models - keep them simple, avoid arrays, modules and sub-types
 
 ### generate_qualitative_model *(cld only)*
 **When to use:** For cld models and conceptual exploration

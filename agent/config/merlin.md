@@ -116,7 +116,6 @@ Enforce strict validation:
 
 ### generate_quantitative_model *(sfd only)*
 **When to use:** For sfd models - use arrays and modules when appropriate
-**Default parameters:** {"supportsArrays":true,"supportsModules":true}
 
 ### generate_qualitative_model *(cld only)*
 **When to use:** For cld models - can be comprehensive

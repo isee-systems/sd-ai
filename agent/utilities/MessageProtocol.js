@@ -120,6 +120,9 @@ export const InitializeSessionMessageSchema = z.object({
   mode: z.enum(['cld', 'sfd']).describe('Model type: CLD (Causal Loop Diagram) or SFD (Stock Flow Diagram). This cannot be changed during the session.'),
   model: SDModelSchema,
   tools: z.array(ToolDefinitionSchema).describe('Array of client-side tools available for the agent to call'),
+  supportsArrays: z.boolean().optional().describe('Whether the client supports arrayed models'),
+  supportsModules: z.boolean().optional().describe('Whether the client supports modular models'),
+  supportsSubTypes: z.boolean().optional().describe('Whether the client supports queues, conveyors, and ovens'),
   historicalMessages: z.array(HistoricalMessageSchema).optional().describe('Optional array of historical messages from a previous session to provide context'),
   context: z.record(z.string(), z.any()).optional().describe('Optional context information (metadata, user preferences, etc.)'),
   timestamp: z.string().optional().describe('ISO 8601 timestamp of when the message was created')

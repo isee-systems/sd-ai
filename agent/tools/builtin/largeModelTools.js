@@ -542,9 +542,6 @@ After editing, the model is validated and processed through the quantitative eng
           return handleError('Error: Model editing is only supported for quantitative (SFD) models');
         }
 
-        const supportsArrays = session.context?.supportsArrays || false;
-        const supportsModules = session.context?.supportsModules || false;
-
         if (!model.variables || !Array.isArray(model.variables)) {
           return handleError('Model validation failed: model.variables must be an array.');
         }
