@@ -225,6 +225,7 @@ export class AgentOrchestrator {
 
     while (true) {
       let continueLoop = true;
+      let completedNaturally = false;
       let iteration = 0;
       let overloadedRetries = 0;
 
@@ -256,6 +257,7 @@ export class AgentOrchestrator {
 
           // Process response
           continueLoop = await this.processAgentResponseAnthropicManual(response, messages, builtInTools, dynamicTools);
+          if (!continueLoop && !this.stopRequested) completedNaturally = true;
 
           // Check if stop was requested during response processing
           if (this.stopRequested) {
@@ -289,6 +291,7 @@ export class AgentOrchestrator {
               'Agent stopped due to overloaded API'
             ));
             continueLoop = false;
+            completedNaturally = true;
           } else {
             logger.error('Anthropic Manual: Error in agent conversation loop:', error);
             await this.sendToClient(createErrorMessage(
@@ -302,6 +305,7 @@ export class AgentOrchestrator {
               'Agent stopped due to error'
             ));
             continueLoop = false;
+            completedNaturally = true;
           }
         }
       }
@@ -316,7 +320,7 @@ export class AgentOrchestrator {
         ));
         break;
       }
-      const reachedMax = iteration >= maxIterations;
+      const reachedMax = !completedNaturally && iteration >= maxIterations;
       if (this.#pendingMessages.length === 0) {
         if (reachedMax) {
           logger.warn(`Anthropic Manual: Agent conversation reached max iterations (${maxIterations})`);
@@ -1154,11 +1158,13 @@ export class AgentOrchestrator {
             await this.sendToClient(createErrorMessage(this.sessionId, 'The AI service is rate-limited. Please try again later.', 'AGENT_ERROR'));
             await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'awaiting_user', 'Agent stopped due to rate limiting'));
             continueLoop = false;
+            completedNaturally = true;
           } else {
             logger.error('Gemini Manual: Error in Gemini agent conversation loop:', error);
             await this.sendToClient(createErrorMessage(this.sessionId, `Agent error: ${error.message}`, 'AGENT_ERROR'));
             await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'awaiting_user', 'Agent stopped due to error'));
             continueLoop = false;
+            completedNaturally = true;
           }
         }
       }
