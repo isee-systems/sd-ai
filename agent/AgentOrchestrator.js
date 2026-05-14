@@ -154,6 +154,11 @@ export class AgentOrchestrator {
         error.message,
         'CONVERSATION_ERROR'
       ));
+      await this.sendToClient(createAgentCompleteMessage(
+        this.sessionId,
+        'awaiting_user',
+        `Agent error: ${error.message}`
+      ));
     }
   }
 
@@ -896,18 +901,18 @@ export class AgentOrchestrator {
       return true;
     }
 
-    // If stop_reason is end_turn, we're done
-    if (response.stop_reason === 'end_turn') {
-      await this.sendToClient(createAgentCompleteMessage(
-        this.sessionId,
-        'success',
-        'Task completed successfully'
-      ));
-      return false;
+    // Continue if stop_reason is max_tokens
+    if (response.stop_reason === 'max_tokens') {
+      return true;
     }
 
-    // Continue if stop_reason is max_tokens or other reasons
-    return response.stop_reason === 'max_tokens';
+    // Any other stop reason (end_turn, stop_sequence, etc.) — complete
+    await this.sendToClient(createAgentCompleteMessage(
+      this.sessionId,
+      'success',
+      'Task completed successfully'
+    ));
+    return false;
   }
 
   /**
@@ -1184,7 +1189,10 @@ export class AgentOrchestrator {
 
   async processGeminiManualResponse(response, messages, builtInTools, dynamicTools) {
     const candidate = response.candidates?.[0];
-    if (!candidate?.content) return false;
+    if (!candidate?.content) {
+      await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'success', 'Task completed successfully'));
+      return false;
+    }
 
     const parts = candidate.content.parts || [];
 
