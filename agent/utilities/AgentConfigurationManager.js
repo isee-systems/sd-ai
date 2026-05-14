@@ -277,27 +277,6 @@ Reserve the feedback_dominance visualization type (stacked area) for when the us
     return prompt;
   }
 
-  /**
-   * Get action sequence for a specific trigger
-   */
-  getActionSequence(triggerType) {
-    return this.baseConfig.actionSequence?.[triggerType] || [];
-  }
-
-  /**
-   * Get tool policy
-   */
-  getToolPolicy(toolName) {
-    return this.baseConfig.toolPolicies?.[toolName];
-  }
-
-  /**
-   * Get base config (for inspection)
-   */
-  getBaseConfig() {
-    return this.baseConfig;
-  }
-
   getAgentName() {
     return (this.metadata.name || 'agent').toLowerCase().replace(/[^a-z0-9]+/g, '_');
   }
@@ -317,12 +296,6 @@ Reserve the feedback_dominance visualization type (stacked area) for when the us
   getAgentMode() {
     const val = this.metadata.agent_mode;
     if (val === 'sdk' || val === 'manual') return val;
-    // legacy qualified forms
-    if (val === 'anthropic-sdk' || val === 'gemini-adk') return 'sdk';
-    if (val === 'anthropic-manual' || val === 'gemini-manual') return 'manual';
-    // legacy boolean fallback
-    const legacy = this.metadata.use_agent_sdk;
-    if (legacy === false || legacy === 'false') return 'manual';
     return 'sdk';
   }
 }
