@@ -7,7 +7,7 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CONFIG = { path: path.join(__dirname, '../../agent/config/socrates.md') };
 
-// Minimal tool bag accepted by isBuiltInTool and execute helpers
+// Minimal tool bag accepted by #isBuiltInTool and execute helpers
 const EMPTY_TOOLS = { tools: {} };
 
 function makeOrchestrator(sessionManager, sessionId) {
@@ -323,6 +323,8 @@ describe('processGeminiManualResponse', () => {
     expect(userResp.role).toBe('user');
     expect(userResp.parts).toHaveLength(1);
     expect(userResp.parts[0].functionResponse.name).toBe('my_tool');
+
+    expect(orc.executeToolCallGeminiManual).toHaveBeenCalledWith({ name: 'my_tool', input: { x: 1 } });
   });
 
   // ── multiple function calls — all responses in ONE user message ───────────
@@ -347,6 +349,9 @@ describe('processGeminiManualResponse', () => {
     expect(userResp.parts).toHaveLength(2);
     expect(userResp.parts[0].functionResponse.name).toBe('tool_a');
     expect(userResp.parts[1].functionResponse.name).toBe('tool_b');
+
+    expect(orc.executeToolCallGeminiManual).toHaveBeenCalledWith({ name: 'tool_a', input: {} });
+    expect(orc.executeToolCallGeminiManual).toHaveBeenCalledWith({ name: 'tool_b', input: {} });
   });
 
   // ── thought parts are ignored by the text renderer ───────────────────────
@@ -412,6 +417,7 @@ describe('processGeminiManualResponse', () => {
     expect(messages[0].role).toBe('model');
     // Only one tool was executed before the stop
     expect(orc.executeToolCallGeminiManual).toHaveBeenCalledTimes(1);
+    expect(orc.executeToolCallGeminiManual).toHaveBeenCalledWith({ name: 'tool_a', input: {} });
   });
 
   // ── tool errors are included in the response parts ────────────────────────
@@ -431,5 +437,7 @@ describe('processGeminiManualResponse', () => {
     const functionResp = messages[1].parts[0].functionResponse;
     expect(functionResp.name).toBe('bad_tool');
     expect(functionResp.response.result).toBe('Something failed');
+
+    expect(orc.executeToolCallGeminiManual).toHaveBeenCalledWith({ name: 'bad_tool', input: {} });
   });
 });

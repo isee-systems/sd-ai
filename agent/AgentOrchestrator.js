@@ -178,434 +178,6 @@ export class AgentOrchestrator {
     const dynamicTools = this.dynamicToolProvider.getTools();
 
     // Start agent conversation loop
-    await this.runAgentConversationAnthropicManual(userMessage, systemPrompt, builtInTools, dynamicTools);
-  }
-
-  /**
-   * Start conversation using Claude Agent SDK
-   */
-  async startConversationWithAnthropicSDK(userMessage, previousAgentContext = null) {
-    const session = this.sessionManager.getSession(this.sessionId);
-    const mode = session.mode;
-
-    // Track user message for cross-mode replay (SDK → manual on future switch)
-    this.sessionManager.addToConversationHistory(this.sessionId, {
-      role: 'user',
-      content: userMessage
-    });
-
-    let systemPrompt = this.configManager.buildSystemPrompt(mode);
-
-    // Check model token count and handle large models (for SDK mode)
-    const currentModel = session?.clientModel;
-    let modelTokenCount = 0;
-
-    if (currentModel) {
-      const modelJson = JSON.stringify(currentModel, null, 2);
-      modelTokenCount = countTokens(modelJson);
-      this.sessionManager.updateModelTokenCount(this.sessionId, modelTokenCount);
-    }
-
-    await this.runAgentConversationWithAnthropicSDK(userMessage, systemPrompt, modelTokenCount, previousAgentContext);
-  }
-
-  /**
-   * Run agent conversation using Claude Agent SDK
-   */
-  async runAgentConversationWithAnthropicSDK(userMessage, systemPrompt, modelTokenCount, previousAgentContext = null) {
-    // Create abort controller for stop iteration
-    this.abortController = new AbortController();
-    this.maxTurnsReached = false;
-
-    const mode = this.sessionManager.getSession(this.sessionId)?.mode;
-
-    const maxIterations = this.configManager.getMaxIterations();
-
-    try {
-      // Build tools list - combine SDK filesystem tools with MCP servers
-      const builtInSdkTools = ['Read', /*'Edit', 'Write',*/ 'Glob', 'Grep'];
-
-      let mcpServers = {
-        builtin: this.builtInToolProvider.getMcpServer()
-      };
-
-      // Get client MCP server and derive allowed tool names from the same source
-      const clientMcpServer = this.dynamicToolProvider.getMcpServer();
-      const clientToolNames = this.dynamicToolProvider.getToolNames(); // client_* prefixed, used for system prompt
-      const prefixedClientToolNames = clientToolNames.map(name => `mcp__client__${name.replace(/^client_/, '')}`);
-      if (clientMcpServer) {
-        mcpServers.client = clientMcpServer;
-      }
-
-      // Build allowed tools list with MCP prefixes, filtered by mode and model token count
-      const allBuiltInTools = this.builtInToolProvider.getTools();
-      const builtInToolNames = this.builtInToolProvider.getToolNames()
-        .filter(name => {
-          const toolDef = allBuiltInTools.tools[name];
-          if (toolDef?.nonSdkOnly) return false;
-          if (toolDef?.supportedModes && !toolDef.supportedModes.includes(mode)) return false;
-          if (toolDef?.maxModelTokens && modelTokenCount > toolDef.maxModelTokens) return false;
-          if (toolDef?.minModelTokens && modelTokenCount < toolDef.minModelTokens) return false;
-          return true;
-        })
-        .map(name => `mcp__builtin__${name}`);
-      let allowedTools = [
-        ...builtInSdkTools,      // SDK filesystem tools (no prefix)
-        ...builtInToolNames,     // Built-in tools with mcp__builtin__ prefix
-        ...prefixedClientToolNames // Client tools with mcp__client__ prefix
-      ];
-
-      // Prefix tool names in system prompt
-      systemPrompt = this.anthropicSDKPrefixToolNamesInSystemPrompt(systemPrompt, builtInToolNames, clientToolNames);
-
-      // Build query options with MCP servers
-      const queryOptions = {
-        abortController: this.abortController,
-        systemPrompt: systemPrompt,
-        model: config.agentAnthropicModel,
-        maxTokens: 8192,
-        maxTurns: maxIterations,
-        mcpServers: mcpServers,
-        allowedTools: allowedTools,
-        permissionMode: 'bypassPermissions',
-        thinking: config.agentAnthropicThinking,
-        ...(config.agentAnthropicThinking?.type !== 'disabled' && { effort: config.agentAnthropicEffort }),
-        compact: true  // Enable automatic compaction
-      };
-
-      // If we have an SDK session ID, resume the conversation
-      if (this.sdkSessionId) {
-        queryOptions.resume = this.sdkSessionId;
-        logger.log(`Anthropic SDK: Resuming SDK conversation with session_id: ${this.sdkSessionId}`);
-      } else {
-        logger.log(`Anthropic SDK: Starting new SDK conversation`);
-      }
-
-      // Build prompt - inject prior agent's history as plain string prefix on agent switch
-      let prompt = userMessage;
-      if (previousAgentContext?.length > 0 && !this.sdkSessionId) {
-        const contextToReplay = previousAgentContext.slice(0, -1).map(toAnthropicMessage);
-        if (contextToReplay.length > 0) {
-          logger.debug(`[Agent switch → SDK] Replaying ${contextToReplay.length} messages from prior agent.`);
-          const contextText = await this.buildPriorContextTextAnthropic(contextToReplay);
-          prompt = `[Prior conversation context]\n${contextText}\n[End of prior context]\n\n${userMessage}`;
-        }
-      }
-
-      // Create query iterator with Agent SDK
-      const queryIterator = query({
-        prompt,
-        options: queryOptions
-      });
-
-      // Process messages from SDK
-      for await (const message of queryIterator) {
-        await this.handleAnthropicSdkMessage(message);
-      }
-
-      // Process any messages queued while the SDK was running. Each queued message
-      // gets a fresh maxTurns budget — even if the prior run hit the limit.
-      while (!this.stopRequested && this.#pendingMessages.length > 0) {
-        const next = this.#pendingMessages.shift();
-        logger.log(`Anthropic SDK: processing queued message (remaining: ${this.#pendingMessages.length})`);
-        this.maxTurnsReached = false;
-        const followUpIterator = query({ prompt: next, options: { ...queryOptions, resume: this.sdkSessionId } });
-        for await (const message of followUpIterator) {
-          await this.handleAnthropicSdkMessage(message);
-        }
-      }
-
-      // Normal completion (or max turns reached)
-      if (this.maxTurnsReached) {
-        logger.log(`Anthropic SDK: Agent reached max iterations for session ${this.sessionId}`);
-        await this.sendToClient(createAgentCompleteMessage(
-          this.sessionId,
-          'awaiting_user',
-          `Reached maximum iterations (${maxIterations})`
-        ));
-      } else {
-        logger.log(`Anthropic SDK: Agent conversation completed successfully for session ${this.sessionId}`);
-        await this.sendToClient(createAgentCompleteMessage(
-          this.sessionId,
-          'success',
-          'Task completed successfully'
-        ));
-      }
-
-    } catch (error) {
-      if (error.name === 'AbortError' || this.stopRequested) {
-        logger.log(`Anthropic SDK: Agent iteration stopped by user request for session ${this.sessionId}`);
-        await this.sendToClient(createAgentCompleteMessage(
-          this.sessionId,
-          'awaiting_user',
-          'Agent stopped by user request'
-        ));
-      } else if (error.message?.includes('maximum number of turns')) {
-        logger.log(`Anthropic SDK: Agent reached max turns for session ${this.sessionId}`);
-        await this.sendToClient(createAgentCompleteMessage(
-          this.sessionId,
-          'awaiting_user',
-          `Reached maximum iterations (${maxIterations})`
-        ));
-      } else {
-        logger.error('Anthropic SDK: Error in agent conversation loop:', error);
-        await this.sendToClient(createErrorMessage(
-          this.sessionId,
-          `Agent error: ${error.message}`,
-          'AGENT_ERROR'
-        ));
-        await this.sendToClient(createAgentCompleteMessage(
-          this.sessionId,
-          'awaiting_user',
-          `Agent error: ${error.message}`
-        ));
-      }
-    } finally {
-      this.abortController = null;
-    }
-  }
-
-  /**
-   * Determine the response type for a completed tool call (using stripped tool name)
-   */
-  #getResponseType(displayName) {
-    if (['generate_ltm_narrative'].includes(displayName)) return 'ltm-discuss';
-    if (['discuss_model_with_seldon', 'discuss_model_across_runs', 'discuss_with_mentor'].includes(displayName)) return 'discuss';
-    if (['generate_quantitative_model', 'generate_qualitative_model'].includes(displayName)) return 'model';
-    return 'other';
-  }
-
-  /**
-   * Remove MCP prefix from tool names for client display
-   */
-  stripMcpPrefix(toolName) {
-    if (toolName.startsWith('mcp__builtin__')) {
-      return toolName.substring('mcp__builtin__'.length);
-    }
-    if (toolName.startsWith('mcp__client__')) {
-      return toolName.substring('mcp__client__'.length);
-    }
-    return toolName;
-  }
-
-  /**
-   * Handle messages from Agent SDK
-   */
-  async handleAnthropicSdkMessage(message) {
-    switch (message.type) {
-      case 'assistant':
-        await this.handleAnthropicSDKAssistantMessage(message);
-        break;
-
-      case 'result':
-        await this.handleAnthropicSDKResultMessage(message);
-        break;
-
-      case 'system':
-        if (message.subtype === 'init') {
-          if (message.session_id) {
-            this.sdkSessionId = message.session_id;
-            logger.log(`Anthropic SDK initialized for session ${this.sessionId}, SDK session_id: ${this.sdkSessionId}`);
-          }
-        } else if (message.subtype === 'error') {
-          logger.error(`Anthropic SDK system error for session ${this.sessionId}:`, message.error || message);
-          await this.sendToClient(createErrorMessage(
-            this.sessionId,
-            message.error?.message || 'SDK system error',
-            'SDK_SYSTEM_ERROR'
-          ));
-        } else if (message.subtype === 'api_retry') {
-          logger.log(`Anthropic SDK: API retry attempt ${message.attempt}/${message.max_retries} for session ${this.sessionId} (status: ${message.error_status}, delay: ${Math.round(message.retry_delay_ms / 1000)}s)`);
-        } else {
-          logger.warn(`Anthropic SDK Unhandled system message subtype: ${message.subtype}`, message);
-        }
-        break;
-
-      case 'user':
-        await this.handleAnthropicSDKUserMessage(message);
-        break;
-
-      default:
-        logger.warn(`Anthropic SDK: Unhandled message type: ${message.type}`, message);
-    }
-  }
-
-  /**
-   * Handle assistant messages (text from Claude)
-   */
-  async handleAnthropicSDKAssistantMessage(message) {
-    this.#logApiUsage(Provider.ANTHROPIC, message.message?.usage);
-    const content = message.message?.content;
-    const rawTextParts = [];
-
-    if (content && Array.isArray(content)) {
-      for (const block of content) {
-        if (block.type === 'text' && block.text) {
-          rawTextParts.push(block.text);
-          const html = await marked.parse(block.text);
-          await this.sendToClient(createAgentTextMessage(this.sessionId, html, false));
-        }
-        else if (block.type === 'thinking' && block.thinking) {
-          //claude code is too chatty -- don't send these!
-          /*const html = await marked.parse(block.thinking);
-          await this.sendToClient(createAgentTextMessage(this.sessionId, html, true));*/
-        }
-        else if (block.type === 'tool_use' && block.name) {
-          this.pendingToolCalls.set(block.id, block.name);
-
-          const isFilesystemTool = ['Read', 'Edit', 'Write', 'Glob', 'Grep'].includes(block.name);
-          const isBuiltInMcpTool = block.name.startsWith('mcp__builtin__');
-          const isBuiltIn = isFilesystemTool || isBuiltInMcpTool;
-
-          const displayName = this.stripMcpPrefix(block.name);
-
-          await this.sendToClient(createToolCallNotificationMessage(
-            this.sessionId,
-            block.id,
-            displayName,
-            block.input || {},
-            isBuiltIn
-          ));
-        }
-        else if (block.type === 'tool_result' && block.tool_use_id) {
-          const toolName = this.pendingToolCalls.get(block.tool_use_id) || 'unknown';
-          const displayName = this.stripMcpPrefix(toolName);
-
-          if (block.is_error) {
-            logger.log(`Anthropic SDK: Tool error for ${toolName} (${block.tool_use_id}):`, block.content);
-          } else {
-            logger.log(`Anthropic SDK: Tool call completed: ${displayName}`);
-          }
-
-          const responseType = this.#getResponseType(displayName);
-
-          await this.sendToClient(createToolCallCompletedMessage(
-            this.sessionId,
-            block.tool_use_id,
-            displayName,
-            block.content,
-            block.is_error || false,
-            responseType
-          ));
-
-          this.pendingToolCalls.delete(block.tool_use_id);
-        }
-      }
-    }
-
-    // Track client-facing text for cross-mode replay (SDK → manual)
-    if (rawTextParts.length > 0) {
-      this.sessionManager.addToConversationHistory(this.sessionId, {
-        role: 'assistant',
-        content: rawTextParts.join('\n')
-      });
-    }
-  }
-
-  /**
-   * Handle user messages (tool results being sent back to Claude)
-   */
-  async handleAnthropicSDKUserMessage(message) {
-    const content = message.message?.content;
-
-    if (content && Array.isArray(content)) {
-      for (const block of content) {
-        if (block.type === 'tool_result' && block.tool_use_id) {
-          const toolName = this.pendingToolCalls.get(block.tool_use_id) || 'unknown';
-          const displayName = this.stripMcpPrefix(toolName);
-
-          if (block.is_error) {
-            logger.log(`Anthropic SDK: Tool error for ${toolName} (${block.tool_use_id}):`, block.content);
-          } else {
-            logger.log(`Anthropic SDK: Tool call completed: ${displayName}`);
-          }
-
-          const responseType = this.#getResponseType(displayName);
-
-          await this.sendToClient(createToolCallCompletedMessage(
-            this.sessionId,
-            block.tool_use_id,
-            displayName,
-            block.content,
-            block.is_error || false,
-            responseType
-          ));
-
-          this.pendingToolCalls.delete(block.tool_use_id);
-        }
-      }
-    }
-  }
-
-  /**
-   * Handle result messages (conversation completion)
-   */
-  async handleAnthropicSDKResultMessage(message) {
-    if (message.subtype === 'success') {
-      logger.log(`Anthropic SDK conversation completed successfully for session ${this.sessionId}`);
-    } else if (message.subtype === 'error_max_turns') {
-      logger.log(`Anthropic SDK conversation reached max iterations for session ${this.sessionId}`);
-      this.maxTurnsReached = true;
-    } else if (message.subtype === 'error') {
-      logger.warn(`Anthropic SDK conversation error for session ${this.sessionId}:`, message.error || message);
-    } else if (message.subtype === 'tool_error') {
-      logger.log(`Anthropic SDK tool error for session ${this.sessionId}:`, message);
-    } else {
-      logger.warn(`Anthropic SDK Unhandled result message subtype: ${message.subtype}`, message);
-    }
-  }
-
-  /**
-   * Prefix tool names in system prompt for SDK mode
-   * Scans the system prompt and adds mcp__ prefixes to tool names
-   */
-  anthropicSDKPrefixToolNamesInSystemPrompt(systemPrompt, builtInToolNames, clientToolNames) {
-    let modifiedPrompt = systemPrompt;
-
-    // Create mapping of unprefixed tool names to prefixed versions
-    const toolNameMapping = {};
-
-    // Built-in tools: tool_name -> mcp__builtin__tool_name
-    for (const prefixedName of builtInToolNames) {
-      const unprefixedName = prefixedName.replace(/^mcp__builtin__/, '');
-      toolNameMapping[unprefixedName] = prefixedName;
-    }
-
-    // Client tools: client_tool_name -> mcp__client__tool_name
-    for (const clientToolName of clientToolNames) {
-      const unprefixedName = clientToolName.replace(/^client_/, '');
-      const prefixedName = `mcp__client__${unprefixedName}`;
-      toolNameMapping[clientToolName] = prefixedName;
-      // Also map the unprefixed name
-      toolNameMapping[unprefixedName] = prefixedName;
-    }
-
-    // Replace tool names in the system prompt
-    // Look for patterns like `tool_name` or **tool_name** or tool_name (surrounded by word boundaries)
-    for (const [unprefixed, prefixed] of Object.entries(toolNameMapping)) {
-      // Match tool names in backticks, bold, or standalone
-      const patterns = [
-        new RegExp(`\`${unprefixed}\``, 'g'),           // `tool_name`
-        new RegExp(`\\*\\*${unprefixed}\\*\\*`, 'g'),   // **tool_name**
-        new RegExp(`\\b${unprefixed}\\b`, 'g')          // tool_name (word boundary)
-      ];
-
-      for (const pattern of patterns) {
-        modifiedPrompt = modifiedPrompt.replace(pattern, (match) => {
-          // Preserve the formatting around the tool name
-          return match.replace(unprefixed, prefixed);
-        });
-      }
-    }
-
-    return modifiedPrompt;
-  }
-
-  /**
-   * Run agent conversation with tool calling support
-   * Uses Anthropic SDK directly with agentic loop
-   */
-  async runAgentConversationAnthropicManual(_userMessage, systemPrompt, builtInTools, dynamicTools) {
     // Clean up context (remove stale models, summarize if over limit) before first API call
     await this.sessionManager.cleanupContext(this.sessionId, config.agentMaxContextTokens);
 
@@ -628,9 +200,7 @@ export class AgentOrchestrator {
     }
 
     // Check model token count and update session state
-    const session = this.sessionManager.getSession(this.sessionId);
     const currentModel = session?.clientModel;
-    const mode = session?.mode;
     let modelTokenCount = 0;
 
     if (currentModel) {
@@ -644,7 +214,7 @@ export class AgentOrchestrator {
     ];
 
     // Convert tool servers to Anthropic tool format (with conditional filtering)
-    const tools = this.convertToolsToAnthropicFormat(builtInTools, dynamicTools, modelTokenCount, mode);
+    const tools = this.#convertToolsToAnthropicFormat(builtInTools, dynamicTools, modelTokenCount, mode);
 
     const maxIterations = this.configManager.getMaxIterations();
 
@@ -764,6 +334,417 @@ export class AgentOrchestrator {
   }
 
   /**
+   * Start conversation using Claude Agent SDK
+   */
+  async startConversationWithAnthropicSDK(userMessage, previousAgentContext = null) {
+    const session = this.sessionManager.getSession(this.sessionId);
+    const mode = session.mode;
+
+    // Track user message for cross-mode replay (SDK → manual on future switch)
+    this.sessionManager.addToConversationHistory(this.sessionId, {
+      role: 'user',
+      content: userMessage
+    });
+
+    let systemPrompt = this.configManager.buildSystemPrompt(mode);
+
+    // Check model token count and handle large models (for SDK mode)
+    const currentModel = session?.clientModel;
+    let modelTokenCount = 0;
+
+    if (currentModel) {
+      const modelJson = JSON.stringify(currentModel, null, 2);
+      modelTokenCount = countTokens(modelJson);
+      this.sessionManager.updateModelTokenCount(this.sessionId, modelTokenCount);
+    }
+
+    // Create abort controller for stop iteration
+    this.abortController = new AbortController();
+    this.maxTurnsReached = false;
+
+    const maxIterations = this.configManager.getMaxIterations();
+
+    try {
+      // Build tools list - combine SDK filesystem tools with MCP servers
+      const builtInSdkTools = ['Read', /*'Edit', 'Write',*/ 'Glob', 'Grep'];
+
+      let mcpServers = {
+        builtin: this.builtInToolProvider.getMcpServer()
+      };
+
+      // Get client MCP server and derive allowed tool names from the same source
+      const clientMcpServer = this.dynamicToolProvider.getMcpServer();
+      const clientToolNames = this.dynamicToolProvider.getToolNames(); // client_* prefixed, used for system prompt
+      const prefixedClientToolNames = clientToolNames.map(name => `mcp__client__${name.replace(/^client_/, '')}`);
+      if (clientMcpServer) {
+        mcpServers.client = clientMcpServer;
+      }
+
+      // Build allowed tools list with MCP prefixes, filtered by mode and model token count
+      const allBuiltInTools = this.builtInToolProvider.getTools();
+      const builtInToolNames = this.builtInToolProvider.getToolNames()
+        .filter(name => {
+          const toolDef = allBuiltInTools.tools[name];
+          if (toolDef?.nonSdkOnly) return false;
+          if (toolDef?.supportedModes && !toolDef.supportedModes.includes(mode)) return false;
+          if (toolDef?.maxModelTokens && modelTokenCount > toolDef.maxModelTokens) return false;
+          if (toolDef?.minModelTokens && modelTokenCount < toolDef.minModelTokens) return false;
+          return true;
+        })
+        .map(name => `mcp__builtin__${name}`);
+      let allowedTools = [
+        ...builtInSdkTools,      // SDK filesystem tools (no prefix)
+        ...builtInToolNames,     // Built-in tools with mcp__builtin__ prefix
+        ...prefixedClientToolNames // Client tools with mcp__client__ prefix
+      ];
+
+      // Prefix tool names in system prompt
+      systemPrompt = this.#anthropicSDKPrefixToolNamesInSystemPrompt(systemPrompt, builtInToolNames, clientToolNames);
+
+      // Build query options with MCP servers
+      const queryOptions = {
+        abortController: this.abortController,
+        systemPrompt: systemPrompt,
+        model: config.agentAnthropicModel,
+        maxTokens: 8192,
+        maxTurns: maxIterations,
+        mcpServers: mcpServers,
+        allowedTools: allowedTools,
+        permissionMode: 'bypassPermissions',
+        thinking: config.agentAnthropicThinking,
+        ...(config.agentAnthropicThinking?.type !== 'disabled' && { effort: config.agentAnthropicEffort }),
+        compact: true  // Enable automatic compaction
+      };
+
+      // If we have an SDK session ID, resume the conversation
+      if (this.sdkSessionId) {
+        queryOptions.resume = this.sdkSessionId;
+        logger.log(`Anthropic SDK: Resuming SDK conversation with session_id: ${this.sdkSessionId}`);
+      } else {
+        logger.log(`Anthropic SDK: Starting new SDK conversation`);
+      }
+
+      // Build prompt - inject prior agent's history as plain string prefix on agent switch
+      let prompt = userMessage;
+      if (previousAgentContext?.length > 0 && !this.sdkSessionId) {
+        const contextToReplay = previousAgentContext.slice(0, -1).map(toAnthropicMessage);
+        if (contextToReplay.length > 0) {
+          logger.debug(`[Agent switch → SDK] Replaying ${contextToReplay.length} messages from prior agent.`);
+          const contextText = await this.#buildPriorContextTextAnthropic(contextToReplay);
+          prompt = `[Prior conversation context]\n${contextText}\n[End of prior context]\n\n${userMessage}`;
+        }
+      }
+
+      // Create query iterator with Agent SDK
+      const queryIterator = query({
+        prompt,
+        options: queryOptions
+      });
+
+      // Process messages from SDK
+      for await (const message of queryIterator) {
+        await this.#handleAnthropicSdkMessage(message);
+      }
+
+      // Process any messages queued while the SDK was running. Each queued message
+      // gets a fresh maxTurns budget — even if the prior run hit the limit.
+      while (!this.stopRequested && this.#pendingMessages.length > 0) {
+        const next = this.#pendingMessages.shift();
+        logger.log(`Anthropic SDK: processing queued message (remaining: ${this.#pendingMessages.length})`);
+        this.maxTurnsReached = false;
+        const followUpIterator = query({ prompt: next, options: { ...queryOptions, resume: this.sdkSessionId } });
+        for await (const message of followUpIterator) {
+          await this.#handleAnthropicSdkMessage(message);
+        }
+      }
+
+      // Normal completion (or max turns reached)
+      if (this.maxTurnsReached) {
+        logger.log(`Anthropic SDK: Agent reached max iterations for session ${this.sessionId}`);
+        await this.sendToClient(createAgentCompleteMessage(
+          this.sessionId,
+          'awaiting_user',
+          `Reached maximum iterations (${maxIterations})`
+        ));
+      } else {
+        logger.log(`Anthropic SDK: Agent conversation completed successfully for session ${this.sessionId}`);
+        await this.sendToClient(createAgentCompleteMessage(
+          this.sessionId,
+          'success',
+          'Task completed successfully'
+        ));
+      }
+
+    } catch (error) {
+      if (error.name === 'AbortError' || this.stopRequested) {
+        logger.log(`Anthropic SDK: Agent iteration stopped by user request for session ${this.sessionId}`);
+        await this.sendToClient(createAgentCompleteMessage(
+          this.sessionId,
+          'awaiting_user',
+          'Agent stopped by user request'
+        ));
+      } else if (error.message?.includes('maximum number of turns')) {
+        logger.log(`Anthropic SDK: Agent reached max turns for session ${this.sessionId}`);
+        await this.sendToClient(createAgentCompleteMessage(
+          this.sessionId,
+          'awaiting_user',
+          `Reached maximum iterations (${maxIterations})`
+        ));
+      } else {
+        logger.error('Anthropic SDK: Error in agent conversation loop:', error);
+        await this.sendToClient(createErrorMessage(
+          this.sessionId,
+          `Agent error: ${error.message}`,
+          'AGENT_ERROR'
+        ));
+        await this.sendToClient(createAgentCompleteMessage(
+          this.sessionId,
+          'awaiting_user',
+          `Agent error: ${error.message}`
+        ));
+      }
+    } finally {
+      this.abortController = null;
+    }
+  }
+
+  /**
+   * Determine the response type for a completed tool call (using stripped tool name)
+   */
+  #getResponseType(displayName) {
+    if (['generate_ltm_narrative'].includes(displayName)) return 'ltm-discuss';
+    if (['discuss_model_with_seldon', 'discuss_model_across_runs', 'discuss_with_mentor'].includes(displayName)) return 'discuss';
+    if (['generate_quantitative_model', 'generate_qualitative_model'].includes(displayName)) return 'model';
+    return 'other';
+  }
+
+  /**
+   * Remove MCP prefix from tool names for client display
+   */
+  #stripMcpPrefix(toolName) {
+    if (toolName.startsWith('mcp__builtin__')) {
+      return toolName.substring('mcp__builtin__'.length);
+    }
+    if (toolName.startsWith('mcp__client__')) {
+      return toolName.substring('mcp__client__'.length);
+    }
+    return toolName;
+  }
+
+  /**
+   * Handle messages from Agent SDK
+   */
+  async #handleAnthropicSdkMessage(message) {
+    switch (message.type) {
+      case 'assistant':
+        await this.#handleAnthropicSDKAssistantMessage(message);
+        break;
+
+      case 'result':
+        await this.#handleAnthropicSDKResultMessage(message);
+        break;
+
+      case 'system':
+        if (message.subtype === 'init') {
+          if (message.session_id) {
+            this.sdkSessionId = message.session_id;
+            logger.log(`Anthropic SDK initialized for session ${this.sessionId}, SDK session_id: ${this.sdkSessionId}`);
+          }
+        } else if (message.subtype === 'error') {
+          logger.error(`Anthropic SDK system error for session ${this.sessionId}:`, message.error || message);
+          await this.sendToClient(createErrorMessage(
+            this.sessionId,
+            message.error?.message || 'SDK system error',
+            'SDK_SYSTEM_ERROR'
+          ));
+        } else if (message.subtype === 'api_retry') {
+          logger.log(`Anthropic SDK: API retry attempt ${message.attempt}/${message.max_retries} for session ${this.sessionId} (status: ${message.error_status}, delay: ${Math.round(message.retry_delay_ms / 1000)}s)`);
+        } else {
+          logger.warn(`Anthropic SDK Unhandled system message subtype: ${message.subtype}`, message);
+        }
+        break;
+
+      case 'user':
+        await this.#handleAnthropicSDKUserMessage(message);
+        break;
+
+      default:
+        logger.warn(`Anthropic SDK: Unhandled message type: ${message.type}`, message);
+    }
+  }
+
+  /**
+   * Handle assistant messages (text from Claude)
+   */
+  async #handleAnthropicSDKAssistantMessage(message) {
+    this.#logApiUsage(Provider.ANTHROPIC, message.message?.usage);
+    const content = message.message?.content;
+    const rawTextParts = [];
+
+    if (content && Array.isArray(content)) {
+      for (const block of content) {
+        if (block.type === 'text' && block.text) {
+          rawTextParts.push(block.text);
+          const html = await marked.parse(block.text);
+          await this.sendToClient(createAgentTextMessage(this.sessionId, html, false));
+        }
+        else if (block.type === 'thinking' && block.thinking) {
+          //claude code is too chatty -- don't send these!
+          /*const html = await marked.parse(block.thinking);
+          await this.sendToClient(createAgentTextMessage(this.sessionId, html, true));*/
+        }
+        else if (block.type === 'tool_use' && block.name) {
+          this.pendingToolCalls.set(block.id, block.name);
+
+          const isFilesystemTool = ['Read', 'Edit', 'Write', 'Glob', 'Grep'].includes(block.name);
+          const isBuiltInMcpTool = block.name.startsWith('mcp__builtin__');
+          const isBuiltIn = isFilesystemTool || isBuiltInMcpTool;
+
+          const displayName = this.#stripMcpPrefix(block.name);
+
+          await this.sendToClient(createToolCallNotificationMessage(
+            this.sessionId,
+            block.id,
+            displayName,
+            block.input || {},
+            isBuiltIn
+          ));
+        }
+        else if (block.type === 'tool_result' && block.tool_use_id) {
+          const toolName = this.pendingToolCalls.get(block.tool_use_id) || 'unknown';
+          const displayName = this.#stripMcpPrefix(toolName);
+
+          if (block.is_error) {
+            logger.log(`Anthropic SDK: Tool error for ${toolName} (${block.tool_use_id}):`, block.content);
+          } else {
+            logger.log(`Anthropic SDK: Tool call completed: ${displayName}`);
+          }
+
+          const responseType = this.#getResponseType(displayName);
+
+          await this.sendToClient(createToolCallCompletedMessage(
+            this.sessionId,
+            block.tool_use_id,
+            displayName,
+            block.content,
+            block.is_error || false,
+            responseType
+          ));
+
+          this.pendingToolCalls.delete(block.tool_use_id);
+        }
+      }
+    }
+
+    // Track client-facing text for cross-mode replay (SDK → manual)
+    if (rawTextParts.length > 0) {
+      this.sessionManager.addToConversationHistory(this.sessionId, {
+        role: 'assistant',
+        content: rawTextParts.join('\n')
+      });
+    }
+  }
+
+  /**
+   * Handle user messages (tool results being sent back to Claude)
+   */
+  async #handleAnthropicSDKUserMessage(message) {
+    const content = message.message?.content;
+
+    if (content && Array.isArray(content)) {
+      for (const block of content) {
+        if (block.type === 'tool_result' && block.tool_use_id) {
+          const toolName = this.pendingToolCalls.get(block.tool_use_id) || 'unknown';
+          const displayName = this.#stripMcpPrefix(toolName);
+
+          if (block.is_error) {
+            logger.log(`Anthropic SDK: Tool error for ${toolName} (${block.tool_use_id}):`, block.content);
+          } else {
+            logger.log(`Anthropic SDK: Tool call completed: ${displayName}`);
+          }
+
+          const responseType = this.#getResponseType(displayName);
+
+          await this.sendToClient(createToolCallCompletedMessage(
+            this.sessionId,
+            block.tool_use_id,
+            displayName,
+            block.content,
+            block.is_error || false,
+            responseType
+          ));
+
+          this.pendingToolCalls.delete(block.tool_use_id);
+        }
+      }
+    }
+  }
+
+  /**
+   * Handle result messages (conversation completion)
+   */
+  async #handleAnthropicSDKResultMessage(message) {
+    if (message.subtype === 'success') {
+      logger.log(`Anthropic SDK conversation completed successfully for session ${this.sessionId}`);
+    } else if (message.subtype === 'error_max_turns') {
+      logger.log(`Anthropic SDK conversation reached max iterations for session ${this.sessionId}`);
+      this.maxTurnsReached = true;
+    } else if (message.subtype === 'error') {
+      logger.warn(`Anthropic SDK conversation error for session ${this.sessionId}:`, message.error || message);
+    } else if (message.subtype === 'tool_error') {
+      logger.log(`Anthropic SDK tool error for session ${this.sessionId}:`, message);
+    } else {
+      logger.warn(`Anthropic SDK Unhandled result message subtype: ${message.subtype}`, message);
+    }
+  }
+
+  /**
+   * Prefix tool names in system prompt for SDK mode
+   * Scans the system prompt and adds mcp__ prefixes to tool names
+   */
+  #anthropicSDKPrefixToolNamesInSystemPrompt(systemPrompt, builtInToolNames, clientToolNames) {
+    let modifiedPrompt = systemPrompt;
+
+    // Create mapping of unprefixed tool names to prefixed versions
+    const toolNameMapping = {};
+
+    // Built-in tools: tool_name -> mcp__builtin__tool_name
+    for (const prefixedName of builtInToolNames) {
+      const unprefixedName = prefixedName.replace(/^mcp__builtin__/, '');
+      toolNameMapping[unprefixedName] = prefixedName;
+    }
+
+    // Client tools: client_tool_name -> mcp__client__tool_name
+    for (const clientToolName of clientToolNames) {
+      const unprefixedName = clientToolName.replace(/^client_/, '');
+      const prefixedName = `mcp__client__${unprefixedName}`;
+      toolNameMapping[clientToolName] = prefixedName;
+      // Also map the unprefixed name
+      toolNameMapping[unprefixedName] = prefixedName;
+    }
+
+    // Replace tool names in the system prompt
+    // Look for patterns like `tool_name` or **tool_name** or tool_name (surrounded by word boundaries)
+    for (const [unprefixed, prefixed] of Object.entries(toolNameMapping)) {
+      // Match tool names in backticks, bold, or standalone
+      const patterns = [
+        new RegExp(`\`${unprefixed}\``, 'g'),           // `tool_name`
+        new RegExp(`\\*\\*${unprefixed}\\*\\*`, 'g'),   // **tool_name**
+        new RegExp(`\\b${unprefixed}\\b`, 'g')          // tool_name (word boundary)
+      ];
+
+      for (const pattern of patterns) {
+        modifiedPrompt = modifiedPrompt.replace(pattern, (match) => {
+          // Preserve the formatting around the tool name
+          return match.replace(unprefixed, prefixed);
+        });
+      }
+    }
+
+    return modifiedPrompt;
+  }
+
+  /**
    * Process agent response and handle tool calls
    * Returns true if the conversation should continue
    */
@@ -798,7 +779,7 @@ export class AgentOrchestrator {
         hasToolCalls = true;
 
         // Notify client that tool call is happening (for UI display)
-        const isBuiltIn = this.isBuiltInTool(block.name, builtInTools);
+        const isBuiltIn = this.#isBuiltInTool(block.name, builtInTools);
         await this.sendToClient(createToolCallNotificationMessage(
           this.sessionId,
           block.id,
@@ -933,7 +914,7 @@ export class AgentOrchestrator {
    * Build prior-history context text, summarizing if it exceeds the token budget.
    * Used when injecting prior agent context into an SDK session.
    */
-  async buildPriorContextTextAnthropic(history) {
+  async #buildPriorContextTextAnthropic(history) {
     try {
       const conversationText = history.map((msg) => {
         if (msg.role === 'user') {
@@ -1008,7 +989,7 @@ export class AgentOrchestrator {
   /**
    * Convert tool servers to Anthropic tool format
    */
-  convertToolsToAnthropicFormat(builtInTools, dynamicTools, modelTokenCount = 0, mode = null) {
+  #convertToolsToAnthropicFormat(builtInTools, dynamicTools, modelTokenCount = 0, mode = null) {
     const tools = [];
     const toolNames = new Set();
 
@@ -1069,7 +1050,7 @@ export class AgentOrchestrator {
   /**
    * Check if a tool is a built-in tool
    */
-  isBuiltInTool(toolName, builtInTools) {
+  #isBuiltInTool(toolName, builtInTools) {
     return toolName in builtInTools.tools;
   }
 
@@ -1108,7 +1089,7 @@ export class AgentOrchestrator {
       this.sessionManager.updateModelTokenCount(this.sessionId, modelTokenCount);
     }
 
-    const toolDeclarations = this.convertToolsToGeminiFormat(builtInTools, dynamicTools, modelTokenCount, mode);
+    const toolDeclarations = this.#convertToolsToGeminiFormat(builtInTools, dynamicTools, modelTokenCount, mode);
 
     // Build or reuse per-session Gemini context cache (system prompt + tools)
     let geminiConfig = await this.#getGeminiManualConfig(systemPrompt, toolDeclarations);
@@ -1231,12 +1212,12 @@ export class AgentOrchestrator {
 
       const { name, args } = part.functionCall;
       const callId = `fc_${Date.now()}_${Math.random().toString(36).substr(2, 7)}`;
-      const isBuiltIn = this.isBuiltInTool(name, builtInTools);
+      const isBuiltIn = this.#isBuiltInTool(name, builtInTools);
 
-      await this.#sendSlowToolMessageGeminiADK(name, args);
+      await this.#sendSlowToolMessageGemini(name, args);
       await this.sendToClient(createToolCallNotificationMessage(this.sessionId, callId, name, args, isBuiltIn));
 
-      const toolResult = await this.executeToolCallGeminiManual({ name, input: args }, builtInTools, dynamicTools);
+      const toolResult = await this.executeToolCallGeminiManual({ name, input: args });
 
       if (this.stopRequested) return false;
 
@@ -1314,7 +1295,7 @@ export class AgentOrchestrator {
           const key = `${tool.name}::${JSON.stringify(args)}`;
           pendingCallIds.set(key, callId);
           const isBuiltIn = builtInAdkTools.some(t => t.name === tool.name);
-          await this.#sendSlowToolMessageGeminiADK(tool.name, args);
+          await this.#sendSlowToolMessageGemini(tool.name, args);
           await this.sendToClient(createToolCallNotificationMessage(
             this.sessionId, callId, tool.name, args, isBuiltIn
           ));
@@ -1355,7 +1336,7 @@ export class AgentOrchestrator {
         const contextToReplay = previousAgentContext.slice(0, -1).map(toGeminiMessage);
         if (contextToReplay.length > 0) {
           logger.debug(`[Agent switch → ADK] Replaying ${contextToReplay.length} messages from prior agent.`);
-          const contextText = await this.buildPriorContextTextGemini(contextToReplay);
+          const contextText = await this.#buildPriorContextTextGemini(contextToReplay);
           prompt = `[Prior conversation context]\n${contextText}\n[End of prior context]\n\n${userMessage}`;
         }
         this.#adkHasPriorContext = true;
@@ -1373,7 +1354,7 @@ export class AgentOrchestrator {
         })) {
           if (event.usageMetadata) this.#logApiUsage(Provider.GOOGLE, event.usageMetadata);
           if (this.stopRequested) break;
-          await this.handleAdkEvent(event);
+          await this.#handleAdkEvent(event);
           if (isFinalResponse(event)) turnCount++;
           if (turnCount >= maxIterations) {
             logger.warn(`Gemini ADK: agent reached max iterations (${maxIterations})`);
@@ -1429,7 +1410,7 @@ export class AgentOrchestrator {
     }
   }
 
-  async handleAdkEvent(event) {
+  async #handleAdkEvent(event) {
     if (event.errorCode) {
       throw new Error(event.errorMessage || `ADK error: ${event.errorCode}`);
     }
@@ -1457,7 +1438,7 @@ export class AgentOrchestrator {
 
   // ─── Shared Gemini helpers ──────────────────────────────────────────────────
 
-  async #sendSlowToolMessageGeminiADK(toolName, args) {
+  async #sendSlowToolMessageGemini(toolName, args) {
     if (toolName === 'create_visualization') {
       const vizType = args?.useAICustom ? 'AI-generated custom' : (args?.type || 'standard');
       await this.sendToClient(createAgentTextMessage(this.sessionId, `Creating ${vizType} visualization: "${args?.title || 'visualization'}"... This may take a moment.`, false));
@@ -1480,8 +1461,9 @@ export class AgentOrchestrator {
     }
   }
 
-  executeToolCallGeminiManual(toolUse, builtInTools, _dynamicTools) {
+  executeToolCallGeminiManual(toolUse) {
     try {
+      const builtInTools = this.builtInToolProvider.getTools();
       if (builtInTools.tools[toolUse.name]) {
         return builtInTools.tools[toolUse.name].handler(toolUse.input);
       }
@@ -1497,7 +1479,7 @@ export class AgentOrchestrator {
     }
   }
 
-  convertToolsToGeminiFormat(builtInTools, dynamicTools, modelTokenCount = 0, mode = null) {
+  #convertToolsToGeminiFormat(builtInTools, dynamicTools, modelTokenCount = 0, mode = null) {
     const declarations = [];
     const toolNames = new Set();
 
@@ -1530,7 +1512,7 @@ export class AgentOrchestrator {
     return declarations;
   }
 
-  async buildPriorContextTextGemini(history) {
+  async #buildPriorContextTextGemini(history) {
     try {
       const conversationText = history.map((msg) => {
         const role = msg.role === 'user' ? 'User' : 'Assistant';
@@ -1555,34 +1537,6 @@ export class AgentOrchestrator {
       logger.error('Gemini: Error summarizing prior context:', error);
       return '[Prior conversation condensed due to size]';
     }
-  }
-
-  /**
-   * Get agent capabilities for session_ready message
-   */
-  getAgentCapabilities() {
-    return {
-      builtInTools: this.builtInToolProvider.getToolNames(),
-      clientTools: this.dynamicToolProvider.getToolNames()
-    };
-  }
-
-  /**
-   * Destroy the orchestrator and cleanup resources
-   */
-  /**
-   * Request the agent to stop iterating
-   */
-  stopIteration() {
-    logger.log(`Stop iteration requested for session ${this.sessionId}`);
-    this.stopRequested = true;
-    this.#pendingMessages = [];
-    this.abortController?.abort();
-  }
-
-  queueMessage(message) {
-    this.#pendingMessages.push(message);
-    logger.debug(`[orchestrator:${this.sessionId}] Message queued (depth: ${this.#pendingMessages.length})`);
   }
 
   async #getGeminiManualConfig(systemPrompt, toolDeclarations) {
@@ -1647,6 +1601,25 @@ export class AgentOrchestrator {
     }
   }
 
+  /**
+   * Request the agent to stop iterating
+   */
+  stopIteration() {
+    logger.log(`Stop iteration requested for session ${this.sessionId}`);
+    this.stopRequested = true;
+    this.#pendingMessages = [];
+    this.abortController?.abort();
+  }
+
+
+  /**
+   * Queue a new message from the user to be processed
+   */
+  queueMessage(message) {
+    this.#pendingMessages.push(message);
+    logger.debug(`[orchestrator:${this.sessionId}] Message queued (depth: ${this.#pendingMessages.length})`);
+  }
+
   async #fetchCurrentModel() {
     const tool = this.builtInToolProvider.getTools().tools.get_current_model;
     if (!tool) return;
@@ -1664,6 +1637,10 @@ export class AgentOrchestrator {
     this.tokenReporter.report({ provider, model: resolvedModel, usage }).catch(() => {});
   }
 
+
+  /**
+   * Destroy the orchestrator and cleanup resources
+   */
   destroy() {
     logger.log(`AgentOrchestrator destroyed for session ${this.sessionId}`);
 
