@@ -167,7 +167,7 @@ Variables can have a `subType` field that identifies them as discrete-event proc
 | `subType` | Description |
 |-----------|-------------|
 | `"discreteOutflow"` | The output flow from a conveyor or oven. |
-| `"conveyorLeakage"` | The leakage flow from a conveyor. |
+| `"conveyorLeakage"` | The leakage flow from a conveyor. Set `additionalProperties` to configure leakage behavior. |
 | `"queueOutflow"` | The output flow from a queue. |
 | `"queueOverflow"` | The overflow flow emitted when a full queue cannot accept new items (requires `overflow: true` on the queue). |
 
@@ -178,19 +178,29 @@ Variables can have a `subType` field that identifies them as discrete-event proc
 | `processTime` | string (equation) | conveyor, oven | Transit time (conveyor) or cook time (oven). Required. |
 | `capacity` | string (equation) | conveyor, oven | Maximum number of items the element can hold. |
 | `inflowLimit` | string (equation) | conveyor, oven | Maximum inflow rate per time step. |
-| `fillTime` | string (equation) | conveyor, oven | Time to fill the element before processing begins. |
-| `cleanTime` | string (equation) | conveyor, oven | Clean-up time after emptying before accepting new items. |
-| `leakFraction` | string (equation) | conveyor, oven | Fraction of contents that leak out per time step. |
-| `exponential` | boolean | conveyor, oven | If true, leakage is exponential (constant fraction); if false (default), linear. |
-| `leakZoneStart` | string (equation) | conveyor, oven | Start position (0–100%) of the leak zone along the element. |
-| `leakZoneEnd` | string (equation) | conveyor, oven | End position (0–100%) of the leak zone along the element. |
-| `leakIntegers` | boolean | conveyor, oven | If true, leakage amounts are rounded to whole integers. |
+| `fillTime` | string (equation) | oven only | Time to fill the element before processing begins. |
+| `cleanTime` | string (equation) | oven only | Clean-up time after emptying before accepting new items. |
 | `sample` | string (equation) | conveyor, oven | Re-samples transit/cook time when this expression is non-zero. |
 | `arrest` | string (equation) | conveyor, oven | Halts movement when this expression is non-zero. |
-| `spreadFlow` | string enum | conveyor only | How inflows distribute along the conveyor: `"none"` (default, front-entry), `"even"`, `"destination"`, `"distribution"` (requires `distribEq`), `"source"`. |
-| `distribEq` | string (equation) | conveyor only | Distribution table equation used when `spreadFlow` is `"distribution"`. |
-| `ignorePrevZones` | boolean | conveyor only | If true, each leak zone operates independently of losses from earlier zones. |
-| `forceLeakFraction` | boolean | conveyor only | If true, the same leak fraction is applied regardless of transit duration. |
+
+**`additionalProperties`** fields for regular flows (inflows to a conveyor):
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `spreadFlow` | string enum | How this flow distributes along the conveyor when it enters: `"none"` (default, front-entry), `"even"`, `"destination"`, `"distribution"` (requires `distribEq`), `"source"`. |
+| `distribEq` | string (equation) | Distribution table equation. Required when `spreadFlow` is `"distribution"`. |
+
+**`additionalProperties`** fields for `conveyorLeakage` flows:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `leakFraction` | string (equation) | Fraction of conveyor contents that leak out per time step. |
+| `exponential` | boolean | If true, leakage is exponential (constant fraction); if false (default), linear. |
+| `leakZoneStart` | string (equation) | Start position (0–100%) along the conveyor where leakage begins. Leave empty for leakage across the entire length. |
+| `leakZoneEnd` | string (equation) | End position (0–100%) along the conveyor where leakage ends. Leave empty for leakage across the entire length. |
+| `leakIntegers` | boolean | If true, leakage amounts are rounded to whole integers. |
+| `ignorePrevZones` | boolean | If true, each leak zone operates independently of losses from earlier zones. |
+| `forceLeakFraction` | boolean | If true, the same leak fraction is applied regardless of transit duration. |
 
 **`additionalProperties`** fields for queue stocks:
 
@@ -200,14 +210,9 @@ Variables can have a `subType` field that identifies them as discrete-event proc
 | `oneAtATime` | boolean | If true, accepts only one batch per time step. |
 | `splitBatches` | boolean | If true, incoming batches can be split when entering. |
 | `discrete` | boolean | If true, operates on integer quantities only (discrete mode). |
-| `timeStamped` | boolean | If true, items carry a time-stamp recording when they arrived. |
-| `attribEq` | string (equation) | Attribute value assigned to each item on entry. |
-| `timeStampEq` | string (equation) | Time-stamp value assigned to each item on entry. |
-| `prioritizeAttrib` | boolean | If true, inflows are prioritized by attribute value. |
 | `roundRobin` | boolean | If true, competing outflows are served in round-robin order. |
 | `queueOutflowPriority` | string (equation) | Dispatch priority for the queue outflow. |
 | `purgeEq` | string (equation) | Items older than this age (in time units) are automatically removed. |
-| `attribFilter` | string (equation) | Only items whose attribute matches this expression can exit. |
 | `overflow` | boolean | If true, a `queueOverflow` flow is automatically created for excess items. |
 
 ## Discussion Engine JSON response
