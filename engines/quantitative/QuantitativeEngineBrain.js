@@ -56,7 +56,7 @@ STOCK SUB-TYPES — set 'subType' and include 'additionalProperties':
 
 FLOW SUB-TYPES — leave 'equation' empty; automatically computed:
 - 'discreteOutflow': Output from a conveyor or oven.
-- 'conveyorLeakage': Leakage from a conveyor. Set additionalProperties: leakFraction (required), exponential, leakZoneStart, leakZoneEnd, leakIntegers, ignorePrevZones, forceLeakFraction.
+- 'conveyorLeakage': Leakage from a conveyor. Set additionalProperties: leakFraction (required, units of 1/time_unit when exponential, dimensionless otherwise), exponential (default true), leakZoneStart, leakZoneEnd, leakIntegers, ignorePrevZones, forceLeakFraction.
 - 'queueOutflow': Output from a queue.
 - 'queueOverflow': Overflow from a full queue (requires overflow: true on the queue).
 
