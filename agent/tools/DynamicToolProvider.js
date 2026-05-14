@@ -23,14 +23,14 @@ export class DynamicToolProvider {
 
     const session = sessionManager.getSession(sessionId);
     const clientTools = session?.clientTools || [];
-    this.toolCollection = this.createToolCollectionFromClientTools(clientTools);
+    this.toolCollection = this.#createToolCollectionFromClientTools(clientTools);
     logger.log(`DynamicToolProvider initialized for session ${sessionId} with ${clientTools.length} client tools`);
   }
 
   /**
    * Create tool collection from client tool definitions
    */
-  createToolCollectionFromClientTools(clientTools) {
+  #createToolCollectionFromClientTools(clientTools) {
     const tools = {};
 
     for (const toolDef of clientTools) {
@@ -38,7 +38,7 @@ export class DynamicToolProvider {
       tools[toolName] = {
         description: toolDef.description,
         inputSchema: this.schemaConverter.convert(toolDef.inputSchema),
-        handler: this.createToolHandler(toolDef),
+        handler: this.#createToolHandler(toolDef),
         timeout: toolDef.timeout ?? 30000
       };
     }
@@ -53,7 +53,7 @@ export class DynamicToolProvider {
    * Create a tool handler that proxies to the client
    * Note: toolDef.name is the UNPREFIXED name (e.g., 'get_current_model')
    */
-  createToolHandler(toolDef) {
+  #createToolHandler(toolDef) {
     return async (args) => {
       try {
         // Use unprefixed name when communicating with client
@@ -76,7 +76,7 @@ export class DynamicToolProvider {
    */
   async requestClientExecution(toolName, args, timeout) {
     timeout = timeout ?? 30000;
-    const callId = this.generateCallId();
+    const callId = this.#generateCallId();
 
     // Create pending call that will be resolved when client responds
     const resultPromise = this.sessionManager.addPendingToolCall(
@@ -124,7 +124,7 @@ export class DynamicToolProvider {
   /**
    * Generate a unique call ID
    */
-  generateCallId() {
+  #generateCallId() {
     return `call_${Date.now()}_${Math.random().toString(36).substring(7)}`;
   }
 

@@ -61,7 +61,7 @@ export class BuiltInToolProvider {
   /**
    * Create the tool collection with all built-in tools
    */
-  createToolCollection() {
+  #createToolCollection() {
     return {
       name: 'builtin_core_tools',
       tools: {
@@ -91,7 +91,7 @@ export class BuiltInToolProvider {
    * Get the tool collection
    */
   getTools() {
-    return this.createToolCollection();
+    return this.#createToolCollection();
   }
 
   /**
@@ -100,7 +100,7 @@ export class BuiltInToolProvider {
    * @returns {Object} MCP server instance
    */
   getMcpServer() {
-    const toolCollection = this.createToolCollection();
+    const toolCollection = this.#createToolCollection();
     const toolsArr = [];
 
     for (const [toolName, toolDef] of Object.entries(toolCollection.tools)) {
@@ -161,7 +161,7 @@ export class BuiltInToolProvider {
    * Get list of built-in tool names
    */
   getToolNames() {
-    const toolCollection = this.createToolCollection();
+    const toolCollection = this.#createToolCollection();
     return Object.keys(toolCollection.tools);
   }
 }

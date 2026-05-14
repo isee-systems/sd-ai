@@ -43,7 +43,7 @@ export class SessionManager {
 
     // Start cleanup timer (disabled in worker processes — lifetime managed by main)
     if (!options.disableCleanup) {
-      this.startCleanupTimer();
+      this.#startCleanupTimer();
     }
 
     logger.log(`SessionManager initialized. Temp base: ${this.tempBasePath}`);
@@ -52,7 +52,7 @@ export class SessionManager {
   /**
    * Generate a unique session ID
    */
-  generateSessionId() {
+  #generateSessionId() {
     return `sess_${randomBytes(16).toString('hex')}`;
   }
 
@@ -65,7 +65,7 @@ export class SessionManager {
       throw new Error('Server at capacity. Please try again later.');
     }
 
-    const sessionId = this.generateSessionId();
+    const sessionId = this.#generateSessionId();
     const sessionTempDir = join(this.tempBasePath, sessionId);
 
     // Create session-specific temp folder
@@ -564,7 +564,7 @@ ${conversationText}`;
   /**
    * Start cleanup timer for stale sessions and orphaned temp dirs
    */
-  startCleanupTimer() {
+  #startCleanupTimer() {
     this.cleanupTimer = setInterval(() => {
       this.cleanupStaleSessions();
     }, this.cleanupInterval);
@@ -602,7 +602,7 @@ ${conversationText}`;
   /**
    * Clean up orphaned temp directories
    */
-  cleanupOrphanedTempDirs() {
+  #cleanupOrphanedTempDirs() {
     try {
       if (!existsSync(this.tempBasePath)) {
         return;
@@ -654,7 +654,7 @@ ${conversationText}`;
     }
 
     // Final cleanup of any remaining temp directories
-    this.cleanupOrphanedTempDirs();
+    this.#cleanupOrphanedTempDirs();
 
     logger.log('SessionManager shutdown complete');
   }
