@@ -70,7 +70,29 @@ RELATIONSHIP REQUIREMENTS FOR SUB-TYPED FLOWS:
 - When a flow's sub-type properties (additionalProperties) contain expressions that reference other variables, you MUST create relationships pointing FROM those variables TO the flow.
 - Treat sub-type property expressions exactly like normal equations: any variable name appearing in an additionalProperties value requires a relationship arrow from that variable to the flow.
 - These expressions must follow XMILE syntax and use underscores for spaces in variable names (e.g. 'service_time' not 'service time').
-- Failure to add these relationships will break the simulation's dependency graph.`
+
+CONVEYOR DESIGN RULES:
+
+When to use conveyor vs. stock:
+- Use a conveyor when entities must spend a minimum or fixed duration in a stage (pipeline delay, aging, disease duration). The conveyor transit time encodes the dwell time.
+- Use a plain stock when residence time is exponentially distributed (first-order delay) or when there is no minimum dwell requirement.
+
+Leakage vs. outflow — critical distinction:
+- 'conveyorLeakage' removes entities before they complete the full transit time (early exit: disease progression, dropout, death-in-stage).
+- 'discreteOutflow' represents entities that completed the full transit (graduation, recovery-after-full-duration).
+- NEVER split the conveyor outflow via auxiliary arithmetic (e.g. mild_outflow * fraction_progressing) to route into different next stages — that only applies the split at the moment of exit, not continuously during dwell.
+
+Wiring leakages:
+- A leakage flow must be typed as 'conveyorLeakage', NOT as variable or auxiliary — only a flow type is recognized as an inflow by the solver.
+- Every leakage flow must appear in the outflows list of its source conveyor AND in the inflows list of its destination stock/conveyor.
+
+Leakage rate formula:
+- leakage_rate = conveyor_stock * fractional_leakage_rate, where fractional_leakage_rate has units 1/time.
+
+Mass conservation check:
+- Sum of all population stocks at t=0 must equal sum at all t (unless the model has explicit external births/deaths).
+- Every leakage flow is typed 'conveyorLeakage' (not variable/auxiliary).
+- The conveyor's natural outflow (discreteOutflow) is wired to exactly one destination — do not split it.`
 
     static ARRAY_REQUIREMENTS_SECTION =
 `CRITICAL ARRAY REQUIREMENTS:
