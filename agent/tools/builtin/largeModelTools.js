@@ -390,7 +390,7 @@ After editing, the model is validated and processed through the quantitative eng
         const modelPath = join(sessionTempDir, 'model.sdjson');
 
         if (!existsSync(modelPath)) {
-          return handleError('Error: Model file not found. The model may not have exceeded the token limit yet.');
+          return handleError('Error: Model file not found. Call get_current_model to get it.');
         }
 
         const modelContent = readFileSync(modelPath, 'utf-8');
