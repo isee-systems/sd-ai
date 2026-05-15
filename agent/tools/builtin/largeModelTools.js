@@ -18,7 +18,7 @@ Available sections:
   * All four fields (type, name, size, elements) are required for each dimension
   * type="numeric": elements auto-generated as ['1','2','3'...]
   * type="labels": elements are user-defined meaningful names like ['North','South','East','West']
-- variables: array of variables with schema: {name, type (stock|flow|variable), equation, documentation, units, uniflow, inflows, outflows, dimensions, arrayEquations, crossLevelGhostOf, graphicalFunction}
+- variables: array of variables with schema: {name, type (stock|flow|variable), equation, documentation, units, uniflow, inflows, outflows, dimensions, arrayEquations, crossLevelGhostOf, graphicalFunction, subType?, additionalProperties?}
 - relationships: array of relationships with schema: {from, to, polarity (+|-|""), reasoning, polarityReasoning}
 - modules: module hierarchy with schema: {name, parentModule}. IMPORTANT: The modules array only defines the hierarchical structure (which modules exist and their parent-child relationships). It does NOT tell you which variables belong to a module - variable membership is determined by the variable name prefix (e.g., "Finance.revenue" belongs to the Finance module).
 
@@ -33,16 +33,27 @@ Array handling:
 - Each dimension requires all four fields: type, name, size, elements
 - Element-specific equations are in the "arrayEquations" field
 
+Sub-type handling:
+- Stock sub-types (set subType + additionalProperties): "queue" (waiting line), "oven" (batch processor), "conveyor" (pipeline delay)
+- Flow sub-types (set subType only, equation = ""): "discreteOutflow" (output from conveyor/oven), "conveyorLeakage" (leakage from conveyor), "queueOutflow" (output from queue), "queueOverflow" (overflow from full queue)
+- additionalProperties fields by subType:
+  * conveyor/oven: {processTime (required), capacity?, inflowLimit?, fillTime? (oven only), cleanTime? (oven only), sample?, arrest?}
+  * conveyorLeakage: {leakFraction? (units 1/time_unit when exponential, dimensionless otherwise), exponential?, leakZoneStart?, leakZoneEnd?, leakIntegers?, ignorePrevZones?, forceLeakFraction?}
+  * queue: {fifoEnabled?, oneAtATime?, splitBatches?, discrete?, roundRobin?, queueOutflowPriority?, purgeEq?, overflow?}
+  * inflow to conveyor (regular flow): {spreadFlow? ("none"|"even"|"destination"|"distribution"|"source"), distribEq? (required when spreadFlow="distribution")}
+
 Filtering:
 - variableNames filter matches base names (e.g., "cost" matches "Module_1.cost", "Module_2.cost", and "cost")
 - moduleName filter gets all variables from a specific module (by name prefix)
-- usedInEquation filter finds all variables whose equations reference a given variable (case-insensitive, matches XMILE format with underscores)`,
+- usedInEquation filter finds all variables whose equations reference a given variable (case-insensitive, matches XMILE format with underscores)
+- subType filter gets all variables with a specific discrete-entity sub-type (e.g., filter all queues or all conveyors)`,
     supportedModes: ['sfd', 'cld'],
     inputSchema: z.object({
       section: z.enum(['specs', 'variables', 'relationships', 'modules']).describe('Which section to read'),
       filter: z.object({
         variableNames: z.array(z.string()).optional().describe('Filter variables by base name (matches both qualified and unqualified names, e.g., "cost" matches "Module_1.cost", "Module_2.cost", and "cost")'),
         variableType: z.enum(['stock', 'flow', 'variable']).optional().describe('Filter variables by type'),
+        subType: z.enum(['queue', 'oven', 'conveyor', 'discreteOutflow', 'conveyorLeakage', 'queueOutflow', 'queueOverflow']).optional().describe('Filter variables by discrete-entity sub-type (e.g., find all conveyors or all queues)'),
         moduleName: z.string().optional().describe('Filter variables by module (e.g., "Module_Name" - variable names are module-qualified as Module_Name.variable_name)'),
         usedInEquation: z.string().optional().describe('Find variables whose equations reference this variable (case-insensitive). Searches in both equation and arrayEquations fields.'),
         relationshipFrom: z.string().optional().describe('Filter relationships by source variable'),
@@ -85,6 +96,9 @@ Filtering:
             }
             if (filter?.variableType) {
               variables = variables.filter(v => v.type === filter.variableType);
+            }
+            if (filter?.subType) {
+              variables = variables.filter(v => v.subType === filter.subType);
             }
             if (filter?.moduleName) {
               const normModule = norm(filter.moduleName);
@@ -182,11 +196,22 @@ You can edit:
   * type="labels": elements are user-defined meaningful names like ['North','South','East','West']
   * When updating arrayDimensions, provide the COMPLETE array with all dimensions (it replaces the entire array)
 - variables: Add, update, or remove specific variables.
-  * Variable Schema: {name, type (stock|flow|variable), equation?, documentation?, units?, uniflow?, inflows?, outflows?, dimensions?, arrayEquations?, crossLevelGhostOf?, graphicalFunction?}
+  * Variable Schema: {name, type (stock|flow|variable), equation?, documentation?, units?, uniflow?, inflows?, outflows?, dimensions?, arrayEquations?, crossLevelGhostOf?, graphicalFunction?, subType?, additionalProperties?}
+  * subType identifies discrete-entity processing elements (a refinement of type — top-level type remains "stock" or "flow"):
+    - Stock sub-types (require additionalProperties): "queue", "oven", "conveyor"
+    - Flow sub-types (set subType only; leave equation as ""): "discreteOutflow", "conveyorLeakage", "queueOutflow", "queueOverflow"
+  * additionalProperties holds sub-type-specific configuration (all values are equation strings unless noted):
+    - conveyor / oven: {processTime (required), capacity?, inflowLimit?, fillTime? (oven only), cleanTime? (oven only), sample?, arrest?}
+    - conveyorLeakage: {leakFraction? (units 1/time_unit when exponential, dimensionless otherwise), exponential? (boolean, default true — almost always use exponential; only false when explicitly requested), leakZoneStart?, leakZoneEnd?, leakIntegers? (boolean), ignorePrevZones? (boolean), forceLeakFraction? (boolean)}
+    - queue: {fifoEnabled? (boolean), oneAtATime? (boolean), splitBatches? (boolean), discrete? (boolean), roundRobin? (boolean), queueOutflowPriority?, purgeEq?, overflow? (boolean)}
+    - inflow to a conveyor (regular flow): {spreadFlow? ("none"|"even"|"destination"|"distribution"|"source"), distribEq? (required when spreadFlow="distribution")}
   * For ADD operation: Array of variable objects
     Example: [{name: "Population", type: "stock", equation: "1000"}, {name: "births", type: "flow", equation: "Population*0.1"}]
-  * For UPDATE operation: Array of variable objects, each with name field (required) and fields to update
+    Discrete example: [{name: "work queue", type: "stock", subType: "queue", additionalProperties: {fifoEnabled: true}}, {name: "work outflow", type: "flow", subType: "queueOutflow", equation: ""}]
+  * For UPDATE operation: Array of variable objects, each with name field (required) and fields to update.
+    To update additionalProperties, provide the complete additionalProperties object (it replaces the existing one).
     Example: [{name: "Population", equation: "2000"}, {name: "births", type: "flow", equation: "Population*0.1"}]
+    Discrete example: [{name: "work queue", additionalProperties: {fifoEnabled: true, overflow: true}}]
   * For REMOVE operation: Array of variable name strings
     Example: ["Population", "births", "deaths"]
 - relationships: Add, update, or remove relationships.
@@ -210,7 +235,7 @@ You can edit:
 VARIABLE RENAMING:
 - To rename a variable, use update operation with {name: "OldName", newName: "NewName"}
 - The tool will automatically update ALL equations that reference the old variable name
-- This includes equations in ALL variables across ALL modules
+- This includes equations in ALL variables across ALL modules, arrayEquations, and equation-valued additionalProperties fields (processTime, capacity, leakFraction, purgeEq, etc.)
 - References are updated case-insensitively using XMILE format (with underscores)
 
 CRITICAL MODULE RULES:
@@ -237,6 +262,26 @@ CRITICAL ARRAY RULES:
   * WRONG: SUM(Revenue[region])
   * CORRECT: SUM(Revenue[*])
   * CRITICAL: Every SUM equation MUST contain at least one asterisk (*)
+
+CRITICAL SUBTYPE RULES:
+- Use sub-types ONLY when the model already has discrete-entity semantics or the user explicitly requests them — they add significant complexity
+- Stock sub-types: set 'subType' AND 'additionalProperties'; 'equation' is still the initial value (like a regular stock)
+  * 'queue': additionalProperties: {fifoEnabled?, oneAtATime?, splitBatches?, discrete?, roundRobin?, queueOutflowPriority?, purgeEq?, overflow?}
+  * 'oven': additionalProperties: {processTime (required), capacity?, inflowLimit?, fillTime?, cleanTime?, sample?, arrest?}
+  * 'conveyor': additionalProperties: {processTime (required), capacity?, inflowLimit?, sample?, arrest?}
+- Flow sub-types: set 'subType' only; leave 'equation' as "" (automatically computed, do NOT write an equation)
+  * 'discreteOutflow': the output flow from a conveyor or oven (entities that completed full transit)
+  * 'conveyorLeakage': early-exit flow from a conveyor. additionalProperties: {leakFraction (required, units 1/time_unit when exponential; dimensionless otherwise), exponential? (default true — almost always use exponential; only set false when explicitly requested), leakZoneStart?, leakZoneEnd?, leakIntegers?, ignorePrevZones?, forceLeakFraction?}
+  * 'queueOutflow': the output flow from a queue
+  * 'queueOverflow': overflow from a full queue — requires overflow: true on the queue's additionalProperties
+- Regular flows entering a conveyor may set additionalProperties: {spreadFlow? ('none'|'even'|'destination'|'distribution'|'source'), distribEq? (required when spreadFlow='distribution')}
+- SETTINGS go in 'additionalProperties', NEVER embed them in equations
+- RELATIONSHIPS: every variable referenced in an additionalProperties expression REQUIRES a relationship arrow FROM that variable TO the element
+- CONVEYOR WIRING:
+  * Every conveyorLeakage flow MUST appear in the outflows of its source conveyor AND in the inflows of its destination
+  * NEVER split a conveyor outflow using auxiliary arithmetic — route directly to one destination
+  * Use conveyor (not plain stock) when entities must spend a minimum/fixed duration in a stage
+  * Use plain stock when residence time is exponentially distributed (first-order delay)
 
 After editing, the model is validated and processed through the quantitative engine pipeline before updating the client.`,
     supportedModes: ['sfd', 'cld'],
@@ -271,7 +316,9 @@ After editing, the model is validated and processed through the quantitative eng
           dimensions: z.array(z.string()).optional(),
           arrayEquations: z.array(z.any()).optional(),
           crossLevelGhostOf: z.string().optional(),
-          graphicalFunction: z.any().optional()
+          graphicalFunction: z.any().optional(),
+          subType: z.enum(['queue', 'oven', 'conveyor', 'discreteOutflow', 'conveyorLeakage', 'queueOutflow', 'queueOverflow']).optional(),
+          additionalProperties: z.object({}).loose().optional()
         })),
         // For variables update - array of variable objects with name (required), type optional
         z.array(z.object({
@@ -287,7 +334,9 @@ After editing, the model is validated and processed through the quantitative eng
           dimensions: z.array(z.string()).optional(),
           arrayEquations: z.array(z.any()).optional(),
           crossLevelGhostOf: z.string().optional(),
-          graphicalFunction: z.any().optional()
+          graphicalFunction: z.any().optional(),
+          subType: z.enum(['queue', 'oven', 'conveyor', 'discreteOutflow', 'conveyorLeakage', 'queueOutflow', 'queueOverflow']).optional(),
+          additionalProperties: z.object({}).loose().optional()
         })),
         // For variables remove - array of strings
         z.array(z.string()),
@@ -439,6 +488,14 @@ After editing, the model is validated and processed through the quantitative eng
                         for (const ae of variable.arrayEquations) {
                           if (ae.equation && varRegex.test(ae.equation)) {
                             ae.equation = ae.equation.replace(varRegex, newNameXMILE);
+                          }
+                        }
+                      }
+
+                      if (variable.additionalProperties && typeof variable.additionalProperties === 'object') {
+                        for (const [key, val] of Object.entries(variable.additionalProperties)) {
+                          if (typeof val === 'string' && varRegex.test(val)) {
+                            variable.additionalProperties[key] = val.replace(varRegex, newNameXMILE);
                           }
                         }
                       }

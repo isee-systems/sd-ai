@@ -209,6 +209,51 @@ describe('createReadModelSectionTool normalization', () => {
       expect(modules[0].name).toBe('My Module');
     });
   });
+
+  describe('subType filter', () => {
+    it('returns only variables matching the given subType', async () => {
+      const dir = makeTempDir({
+        ...BASE_MODEL,
+        variables: [
+          { name: 'work queue', type: 'stock', subType: 'queue', additionalProperties: { fifoEnabled: true } },
+          { name: 'pipeline', type: 'stock', subType: 'conveyor', additionalProperties: { processTime: '5' } },
+          { name: 'regular stock', type: 'stock', equation: '0' },
+        ],
+      });
+      const tool = makeReadTool(dir);
+      const { variables } = parseResult(
+        await tool.handler({ section: 'variables', filter: { subType: 'queue' } })
+      );
+      expect(variables).toHaveLength(1);
+      expect(variables[0].name).toBe('work_queue');
+      rmSync(dir, { recursive: true, force: true });
+    });
+
+    it('returns empty array when no variables match the subType', async () => {
+      const tool = makeReadTool(tempDir);
+      const { variables } = parseResult(
+        await tool.handler({ section: 'variables', filter: { subType: 'oven' } })
+      );
+      expect(variables).toHaveLength(0);
+    });
+
+    it('can be combined with moduleName filter', async () => {
+      const dir = makeTempDir({
+        ...BASE_MODEL,
+        variables: [
+          { name: 'Ops.work queue', type: 'stock', subType: 'queue', additionalProperties: {} },
+          { name: 'Finance.budget queue', type: 'stock', subType: 'queue', additionalProperties: {} },
+        ],
+      });
+      const tool = makeReadTool(dir);
+      const { variables } = parseResult(
+        await tool.handler({ section: 'variables', filter: { subType: 'queue', moduleName: 'Ops' } })
+      );
+      expect(variables).toHaveLength(1);
+      expect(variables[0].name).toBe('Ops.work_queue');
+      rmSync(dir, { recursive: true, force: true });
+    });
+  });
 });
 
 // ─── createEditModelSectionTool ───────────────────────────────────────────────
@@ -330,6 +375,47 @@ describe('createEditModelSectionTool normalization', () => {
       ]});
 
       expect(getModel().variables[0].name).toBe('birth fraction');
+    });
+
+    it('updates equation-valued additionalProperties fields on rename', async () => {
+      resetModel({
+        variables: [
+          { name: 'process time', type: 'variable', equation: '10' },
+          { name: 'pipeline', type: 'stock', subType: 'conveyor', additionalProperties: { processTime: 'process_time', capacity: '100' } },
+        ],
+        relationships: [],
+        modules: [],
+      });
+      const { sendToClient, getModel } = makeSendToClient();
+      const tool = makeEditTool(sendToClient);
+
+      await tool.handler({ section: 'variables', operation: 'update', data: [
+        { name: 'process_time', newName: 'transit_time' }
+      ]});
+
+      const conveyor = getModel().variables.find(v => v.name === 'pipeline');
+      expect(conveyor.additionalProperties.processTime).toBe('transit_time');
+    });
+
+    it('leaves boolean additionalProperties fields untouched on rename', async () => {
+      resetModel({
+        variables: [
+          { name: 'flag', type: 'variable', equation: '1' },
+          { name: 'work queue', type: 'stock', subType: 'queue', additionalProperties: { fifoEnabled: true, overflow: false } },
+        ],
+        relationships: [],
+        modules: [],
+      });
+      const { sendToClient, getModel } = makeSendToClient();
+      const tool = makeEditTool(sendToClient);
+
+      await tool.handler({ section: 'variables', operation: 'update', data: [
+        { name: 'flag', newName: 'signal' }
+      ]});
+
+      const queue = getModel().variables.find(v => v.name === 'work queue');
+      expect(queue.additionalProperties.fifoEnabled).toBe(true);
+      expect(queue.additionalProperties.overflow).toBe(false);
     });
   });
 
