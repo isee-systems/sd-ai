@@ -568,8 +568,6 @@ export class AgentOrchestrator {
           ));
         } else if (message.subtype === 'api_retry') {
           logger.log(`Anthropic SDK: API retry attempt ${message.attempt}/${message.max_retries} for session ${this.sessionId} (status: ${message.error_status}, delay: ${Math.round(message.retry_delay_ms / 1000)}s)`);
-        } else {
-          logger.warn(`Anthropic SDK Unhandled system message subtype: ${message.subtype}`, message);
         }
         break;
 
