@@ -258,11 +258,13 @@ export class SessionManager {
     try {
       mkdirSync(sessionTempDir, { recursive: true });
     } catch (err) {
+      logger.error(`[${sessionId}] Write Model to Disk... failed to create session temp directory '${sessionTempDir}':`, err);
       throw new Error(`Failed to create session temp directory '${sessionTempDir}': ${err.message}`);
     }
     try {
       writeFileSync(modelPath, JSON.stringify(model, null, 2));
     } catch (err) {
+      logger.error(`[${sessionId}] Failed to write model to '${modelPath}':`, err);
       throw new Error(`Failed to write model to '${modelPath}': ${err.message}`);
     }
     const message = `The model has been written to disk at: ${modelPath}. Other tools will load it automatically — you do not need to read this file. Use the read_model_section tool if you need to inspect specific sections.`;
@@ -279,11 +281,13 @@ export class SessionManager {
     try {
       mkdirSync(sessionTempDir, { recursive: true });
     } catch (err) {
+      logger.error(`[${sessionId}] Write Data to Disk... failed to create session temp directory '${sessionTempDir}':`, err);
       throw new Error(`Failed to create session temp directory '${sessionTempDir}': ${err.message}`);
     }
     try {
       writeFileSync(filePath, JSON.stringify(data, null, 2));
     } catch (err) {
+      logger.error(`[${sessionId}] Failed to write data to '${filePath}':`, err);
       throw new Error(`Failed to write data to '${filePath}': ${err.message}`);
     }
     const message = `The data has been written to disk at: ${filePath}. Use the Read filesystem tool to load it into context.`;
