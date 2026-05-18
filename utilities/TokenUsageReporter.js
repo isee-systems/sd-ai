@@ -14,6 +14,10 @@ export const ProviderDisplayNames = Object.freeze({
 });
 
 class TokenUsageReporter {
+  // Guards against reporting the same usage object twice (e.g. when a provider
+  // reuses the same object across multiple events for one API call).
+  #reported = new WeakSet();
+
   /**
    * @param {string|null} url - Optional URL to POST token usage to. If null, reporting is disabled.
    * @param {string|null} clientId - The clientId from the InitializeSessionMessage.
@@ -33,6 +37,11 @@ class TokenUsageReporter {
    */
   async report({ provider, model, usage }) {
     if (!usage) return;
+    if (this.#reported.has(usage)) {
+      debugger;
+      return;
+    }
+    this.#reported.add(usage);
 
     const isAnthropic = provider === Provider.ANTHROPIC;
     const isOpenAI = provider === Provider.OPENAI;
