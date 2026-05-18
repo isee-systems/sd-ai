@@ -458,14 +458,10 @@ export class LLMWrapper {
           oneAtATime: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.oneAtATime).optional(),
           splitBatches: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.splitBatches).optional(),
           discrete: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.discrete).optional(),
-          timeStamped: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.timeStamped).optional(),
           attribEq: z.string().describe(LLMWrapper.SCHEMA_STRINGS.attribEq).optional(),
-          timeStampEq: z.string().describe(LLMWrapper.SCHEMA_STRINGS.timeStampEq).optional(),
-          prioritizeAttrib: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.prioritizeAttrib).optional(),
           roundRobin: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.roundRobin).optional(),
           queueOutflowPriority: z.string().describe(LLMWrapper.SCHEMA_STRINGS.queueOutflowPriority).optional(),
           purgeEq: z.string().describe(LLMWrapper.SCHEMA_STRINGS.purgeEq).optional(),
-          attribFilter: z.string().describe(LLMWrapper.SCHEMA_STRINGS.attribFilter).optional(),
           overflow: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.overflow).optional()
         }).describe(LLMWrapper.SCHEMA_STRINGS.additionalProperties);
 
