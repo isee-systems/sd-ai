@@ -37,11 +37,8 @@ class TokenUsageReporter {
    */
   async report({ provider, model, usage }) {
     if (!usage) return;
-    if (this.#reported.has(usage)) {
-      debugger;
-      return;
-    }
-    this.#reported.add(usage);
+    const isDuplicate = this.#reported.has(usage);
+    if (!isDuplicate) this.#reported.add(usage);
 
     const isAnthropic = provider === Provider.ANTHROPIC;
     const isOpenAI = provider === Provider.OPENAI;
@@ -77,10 +74,12 @@ class TokenUsageReporter {
     const costs = this.#calculateCost(provider, model, tokens);
     const fmt = (n, cost) => cost != null ? `${n}($${cost.toFixed(6)})` : `${n}`;
 
+    const dupTag = isDuplicate ? ' [duplicate?]' : '';
     const clientTag = this.clientId ? ` client=${this.clientId}` : '';
     if (isAnthropic) {
       logger.log(
         `[usage:${provider}]` +
+        dupTag +
         clientTag +
         ` input=${fmt(tokens.inputTokens, costs?.inputTokens)}` +
         ` output=${fmt(tokens.outputTokens, costs?.outputTokens)}` +
@@ -92,6 +91,7 @@ class TokenUsageReporter {
     } else if (isOpenAI) {
       logger.log(
         `[usage:${provider}]` +
+        dupTag +
         clientTag +
         ` input=${fmt(tokens.inputTokens, costs?.inputTokens)}` +
         ` output=${fmt(tokens.outputTokens, costs?.outputTokens)}` +
@@ -102,6 +102,7 @@ class TokenUsageReporter {
     } else {
       logger.log(
         `[usage:${provider}]` +
+        dupTag +
         clientTag +
         ` input=${fmt(tokens.inputTokens, costs?.inputTokens)}` +
         ` output=${fmt(tokens.outputTokens, costs?.outputTokens)}` +
@@ -120,6 +121,7 @@ class TokenUsageReporter {
       tokens,
       cost: costs?.total ?? null,
       timestamp: new Date().toISOString(),
+      ...(isDuplicate && { potentialDuplicate: true }),
     };
 
     try {
