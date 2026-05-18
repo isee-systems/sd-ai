@@ -378,37 +378,16 @@ export class LLMWrapper {
       const TypeEnum = z.enum(["stock", "flow", "variable"]).describe(LLMWrapper.SCHEMA_STRINGS.type);
       const PolarityEnum = z.enum(["+", "-"]).describe(LLMWrapper.SCHEMA_STRINGS.polarity);
 
-      const Dimension = z.object({
-        type: z.enum(["labels", "numeric"]).describe(LLMWrapper.SCHEMA_STRINGS.dimensionType),
-        name: z.string().describe(LLMWrapper.SCHEMA_STRINGS.dimensionName),
-        size: z.number().describe(LLMWrapper.SCHEMA_STRINGS.dimensionSize),
-        elements: z.array(z.string()).describe(LLMWrapper.SCHEMA_STRINGS.dimensionElements)
-      }).describe(LLMWrapper.SCHEMA_STRINGS.dimension);
+      const Dimension = LLMWrapper.dimensionSchema();
 
 
-      const GFPoint = z.object({
-        x: z.number().describe(LLMWrapper.SCHEMA_STRINGS.gfPointX),
-        y: z.number().describe(LLMWrapper.SCHEMA_STRINGS.gfPointY)
-      }).describe(LLMWrapper.SCHEMA_STRINGS.gfPoint);
+      const GraphicalFunction = LLMWrapper.graphicalFunctionSchema().describe(LLMWrapper.SCHEMA_STRINGS.gfEquation);
 
-      const GraphicalFunction = z.object({
-        points: z.array(GFPoint)
-      }).describe(LLMWrapper.SCHEMA_STRINGS.gfEquation);
-
-      const Relationship = z.object({
-          from: z.string().describe(LLMWrapper.SCHEMA_STRINGS.from),
-          to: z.string().describe(LLMWrapper.SCHEMA_STRINGS.to),
-          polarity: PolarityEnum,
-          reasoning: z.string().describe(LLMWrapper.SCHEMA_STRINGS.reasoning),
-          polarityReasoning: z.string().describe(LLMWrapper.SCHEMA_STRINGS.polarityReasoning)
-      }).describe(LLMWrapper.SCHEMA_STRINGS.relationship);
+      const Relationship = z.object(LLMWrapper.relationshipSchemaBase()).describe(LLMWrapper.SCHEMA_STRINGS.relationship);
 
       const Relationships = z.array(Relationship).describe(LLMWrapper.SCHEMA_STRINGS.relationships);
 
-      const ArrayElementEquation = z.object({
-        equation: z.string().describe(LLMWrapper.SCHEMA_STRINGS.equation),
-        forElements: z.array(z.string()).describe(LLMWrapper.SCHEMA_STRINGS.arrayEquationForElements)
-      }).describe(LLMWrapper.SCHEMA_STRINGS.arrayElementEquation);
+      const ArrayElementEquation = LLMWrapper.arrayElementEquationSchema().describe(LLMWrapper.SCHEMA_STRINGS.arrayElementEquation);
 
       const variableObj = {
         name: z.string().describe(LLMWrapper.SCHEMA_STRINGS.name),
@@ -422,73 +401,25 @@ export class LLMWrapper {
         documentation: z.string().describe(LLMWrapper.SCHEMA_STRINGS.documentation),
         units: z.string().describe(LLMWrapper.SCHEMA_STRINGS.units)
       };
-      
+
       if (supportsArrays) {
         variableObj.dimensions = z.array(z.string()).describe(LLMWrapper.SCHEMA_STRINGS.variableDimensions);
         variableObj.arrayEquations = z.array(ArrayElementEquation).describe(LLMWrapper.SCHEMA_STRINGS.variableArrayEquation);
       }
 
       if (supportsSubTypes) {
-        const SubTypeEnum = z.enum([
-          "queue", "oven", "conveyor",
-          "discreteOutflow", "conveyorLeakage", "queueOutflow", "queueOverflow"
-        ]).describe(LLMWrapper.SCHEMA_STRINGS.subType);
-
-        const AdditionalProperties = z.object({
-          // CONVEYOR + OVEN
-          processTime: z.string().describe(LLMWrapper.SCHEMA_STRINGS.processTime).optional(),
-          capacity: z.string().describe(LLMWrapper.SCHEMA_STRINGS.capacity).optional(),
-          inflowLimit: z.string().describe(LLMWrapper.SCHEMA_STRINGS.inflowLimit).optional(),
-          fillTime: z.string().describe(LLMWrapper.SCHEMA_STRINGS.fillTime).optional(),
-          cleanTime: z.string().describe(LLMWrapper.SCHEMA_STRINGS.cleanTime).optional(),
-          leakFraction: z.string().describe(LLMWrapper.SCHEMA_STRINGS.leakFraction).optional(),
-          exponential: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.exponential).optional(),
-          leakZoneStart: z.string().describe(LLMWrapper.SCHEMA_STRINGS.leakZoneStart).optional(),
-          leakZoneEnd: z.string().describe(LLMWrapper.SCHEMA_STRINGS.leakZoneEnd).optional(),
-          leakIntegers: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.leakIntegers).optional(),
-          sample: z.string().describe(LLMWrapper.SCHEMA_STRINGS.sample).optional(),
-          arrest: z.string().describe(LLMWrapper.SCHEMA_STRINGS.arrest).optional(),
-          // CONVEYOR-only
-          spreadFlow: z.enum(["none", "even", "destination", "distribution", "source"]).describe(LLMWrapper.SCHEMA_STRINGS.spreadFlow).optional(),
-          distribEq: z.string().describe(LLMWrapper.SCHEMA_STRINGS.distribEq).optional(),
-          ignorePrevZones: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.ignorePrevZones).optional(),
-          forceLeakFraction: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.forceLeakFraction).optional(),
-          // QUEUE
-          fifoEnabled: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.fifoEnabled).optional(),
-          oneAtATime: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.oneAtATime).optional(),
-          splitBatches: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.splitBatches).optional(),
-          discrete: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.discrete).optional(),
-          roundRobin: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.roundRobin).optional(),
-          queueOutflowPriority: z.string().describe(LLMWrapper.SCHEMA_STRINGS.queueOutflowPriority).optional(),
-          purgeEq: z.string().describe(LLMWrapper.SCHEMA_STRINGS.purgeEq).optional(),
-          overflow: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.overflow).optional()
-        }).describe(LLMWrapper.SCHEMA_STRINGS.additionalProperties);
-
-        variableObj.subType = SubTypeEnum.optional();
-        variableObj.additionalProperties = AdditionalProperties.optional();
+        variableObj.subType = LLMWrapper.subTypeSchema().optional();
+        variableObj.additionalProperties = LLMWrapper.additionalPropertiesSchema().describe(LLMWrapper.SCHEMA_STRINGS.additionalProperties).optional();
       }
 
       const Variable = z.object(variableObj);
       const Variables = z.array(Variable).describe(LLMWrapper.SCHEMA_STRINGS.variables);
 
-      const simSpecsObj = {
-        startTime: z.number().describe(LLMWrapper.SCHEMA_STRINGS.startTime),
-        stopTime: z.number().describe(LLMWrapper.SCHEMA_STRINGS.stopTime),
-        dt: z.number().describe(LLMWrapper.SCHEMA_STRINGS.dt),
-        timeUnits: z.string().describe(LLMWrapper.SCHEMA_STRINGS.timeUnits),
-        integrationMethod: z.enum(["Euler", "RK4"]).describe(LLMWrapper.SCHEMA_STRINGS.integrationMethod)
-      };
-
-      if (supportsArrays) {
-        simSpecsObj.arrayDimensions = z.array(Dimension).describe(LLMWrapper.SCHEMA_STRINGS.arrayDimensions);
-      }
-      
+      const simSpecsObj = LLMWrapper.simSpecsSchemaBase();
+      if (!supportsArrays) delete simSpecsObj.arrayDimensions;
       const SimSpecs = z.object(simSpecsObj).describe(LLMWrapper.SCHEMA_STRINGS.simSpecs);
 
-      const Module = z.object({
-        name: z.string().describe(LLMWrapper.SCHEMA_STRINGS.moduleName),
-        parentModule: z.string().describe(LLMWrapper.SCHEMA_STRINGS.parentModule)
-      });
+      const Module = LLMWrapper.moduleSchema();
 
       const Model = z.object({
         variables: Variables,
@@ -849,6 +780,117 @@ export class LLMWrapper {
     }
 
     return claudeMessages;
+  }
+
+  static moduleSchema() {
+    return z.object({
+      name: z.string().describe(LLMWrapper.SCHEMA_STRINGS.moduleName),
+      parentModule: z.string().describe(LLMWrapper.SCHEMA_STRINGS.parentModule)
+    });
+  }
+
+  static relationshipSchemaBase() {
+    return {
+      from: z.string().describe(LLMWrapper.SCHEMA_STRINGS.from),
+      to: z.string().describe(LLMWrapper.SCHEMA_STRINGS.to),
+      polarity: z.enum(["+", "-"]).describe(LLMWrapper.SCHEMA_STRINGS.polarity),
+      reasoning: z.string().describe(LLMWrapper.SCHEMA_STRINGS.reasoning),
+      polarityReasoning: z.string().describe(LLMWrapper.SCHEMA_STRINGS.polarityReasoning)
+    };
+  }
+
+  static dimensionSchema() {
+    return z.object({
+      type: z.enum(["labels", "numeric"]).describe(LLMWrapper.SCHEMA_STRINGS.dimensionType),
+      name: z.string().describe(LLMWrapper.SCHEMA_STRINGS.dimensionName),
+      size: z.number().describe(LLMWrapper.SCHEMA_STRINGS.dimensionSize),
+      elements: z.array(z.string()).describe(LLMWrapper.SCHEMA_STRINGS.dimensionElements)
+    }).describe(LLMWrapper.SCHEMA_STRINGS.dimension);
+  }
+
+  static simSpecsSchemaBase() {
+    return {
+      startTime: z.number().describe(LLMWrapper.SCHEMA_STRINGS.startTime),
+      stopTime: z.number().describe(LLMWrapper.SCHEMA_STRINGS.stopTime),
+      dt: z.number().describe(LLMWrapper.SCHEMA_STRINGS.dt),
+      timeUnits: z.string().describe(LLMWrapper.SCHEMA_STRINGS.timeUnits),
+      integrationMethod: z.enum(["Euler", "RK4"]).describe(LLMWrapper.SCHEMA_STRINGS.integrationMethod),
+      arrayDimensions: z.array(LLMWrapper.dimensionSchema()).describe(LLMWrapper.SCHEMA_STRINGS.arrayDimensions)
+    };
+  }
+
+  static graphicalFunctionSchema() {
+    return z.object({
+      points: z.array(z.object({
+        x: z.number().describe(LLMWrapper.SCHEMA_STRINGS.gfPointX),
+        y: z.number().describe(LLMWrapper.SCHEMA_STRINGS.gfPointY)
+      }).describe(LLMWrapper.SCHEMA_STRINGS.gfPoint))
+    });
+  }
+
+  static arrayElementEquationSchema() {
+    return z.object({
+      equation: z.string().describe(LLMWrapper.SCHEMA_STRINGS.equation),
+      forElements: z.array(z.string()).describe(LLMWrapper.SCHEMA_STRINGS.arrayEquationForElements)
+    });
+  }
+
+  static subTypeSchema() {
+    return z.enum([
+      "queue", "oven", "conveyor",
+      "discreteOutflow", "conveyorLeakage", "queueOutflow", "queueOverflow"
+    ]).describe(LLMWrapper.SCHEMA_STRINGS.subType);
+  }
+
+  static additionalPropertiesSchema() {
+    return z.object({
+      // CONVEYOR + OVEN
+      processTime: z.string().describe(LLMWrapper.SCHEMA_STRINGS.processTime).optional(),
+      capacity: z.string().describe(LLMWrapper.SCHEMA_STRINGS.capacity).optional(),
+      inflowLimit: z.string().describe(LLMWrapper.SCHEMA_STRINGS.inflowLimit).optional(),
+      fillTime: z.string().describe(LLMWrapper.SCHEMA_STRINGS.fillTime).optional(),
+      cleanTime: z.string().describe(LLMWrapper.SCHEMA_STRINGS.cleanTime).optional(),
+      leakFraction: z.string().describe(LLMWrapper.SCHEMA_STRINGS.leakFraction).optional(),
+      exponential: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.exponential).optional(),
+      leakZoneStart: z.string().describe(LLMWrapper.SCHEMA_STRINGS.leakZoneStart).optional(),
+      leakZoneEnd: z.string().describe(LLMWrapper.SCHEMA_STRINGS.leakZoneEnd).optional(),
+      leakIntegers: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.leakIntegers).optional(),
+      sample: z.string().describe(LLMWrapper.SCHEMA_STRINGS.sample).optional(),
+      arrest: z.string().describe(LLMWrapper.SCHEMA_STRINGS.arrest).optional(),
+      // CONVEYOR-only
+      spreadFlow: z.enum(["none", "even", "destination", "distribution", "source"]).describe(LLMWrapper.SCHEMA_STRINGS.spreadFlow).optional(),
+      distribEq: z.string().describe(LLMWrapper.SCHEMA_STRINGS.distribEq).optional(),
+      ignorePrevZones: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.ignorePrevZones).optional(),
+      forceLeakFraction: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.forceLeakFraction).optional(),
+      // QUEUE
+      fifoEnabled: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.fifoEnabled).optional(),
+      oneAtATime: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.oneAtATime).optional(),
+      splitBatches: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.splitBatches).optional(),
+      discrete: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.discrete).optional(),
+      roundRobin: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.roundRobin).optional(),
+      queueOutflowPriority: z.string().describe(LLMWrapper.SCHEMA_STRINGS.queueOutflowPriority).optional(),
+      purgeEq: z.string().describe(LLMWrapper.SCHEMA_STRINGS.purgeEq).optional(),
+      overflow: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.overflow).optional()
+    });
+  }
+
+  static variableSchemaBase() {
+    return {
+      name: z.string().describe(LLMWrapper.SCHEMA_STRINGS.name),
+      type: z.enum(["stock", "flow", "variable"]).describe(LLMWrapper.SCHEMA_STRINGS.type),
+      equation: z.string().describe(LLMWrapper.SCHEMA_STRINGS.equation).optional(),
+      documentation: z.string().describe(LLMWrapper.SCHEMA_STRINGS.documentation).optional(),
+      units: z.string().describe(LLMWrapper.SCHEMA_STRINGS.units).optional(),
+      uniflow: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.uniflow).optional(),
+      inflows: z.array(z.string()).describe(LLMWrapper.SCHEMA_STRINGS.inflows).optional(),
+      outflows: z.array(z.string()).describe(LLMWrapper.SCHEMA_STRINGS.outflows).optional(),
+      dimensions: z.array(z.string()).describe(LLMWrapper.SCHEMA_STRINGS.variableDimensions).optional(),
+      arrayEquations: z.array(LLMWrapper.arrayElementEquationSchema()).describe(LLMWrapper.SCHEMA_STRINGS.variableArrayEquation).optional(),
+      crossLevelGhostOf: z.string().describe(LLMWrapper.SCHEMA_STRINGS.crossLevelGhostOf).optional(),
+      graphicalFunction: LLMWrapper.graphicalFunctionSchema().describe(LLMWrapper.SCHEMA_STRINGS.gfEquation).optional(),
+      subType: LLMWrapper.subTypeSchema().optional(),
+      additionalProperties: LLMWrapper.additionalPropertiesSchema().describe(LLMWrapper.SCHEMA_STRINGS.additionalProperties).optional()
+    };
   }
 
   static additionalParameters(defaultModel) {

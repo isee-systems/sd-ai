@@ -4,6 +4,11 @@ import { join } from 'path';
 import { createUpdateModelMessage, UpdateModelResponseSchema } from '../../utilities/MessageProtocol.js';
 import { generateRequestId, createSuccessResponse, createErrorResponse } from './toolHelpers.js';
 import config from '../../../config.js';
+import { LLMWrapper } from '../../../utilities/LLMWrapper.js';
+
+const variableBase = LLMWrapper.variableSchemaBase();
+const simSpecsBase = LLMWrapper.simSpecsSchemaBase();
+const relationshipBase = LLMWrapper.relationshipSchemaBase();
 
 /**
  * Read a specific section of the large model file
@@ -291,81 +296,27 @@ After editing, the model is validated and processed through the quantitative eng
       operation: z.enum(['update', 'add', 'remove']).describe('Operation to perform'),
       data: z.union([
         // For specs update - object with optional spec fields
-        z.object({
-          startTime: z.number().optional(),
-          stopTime: z.number().optional(),
-          dt: z.number().optional(),
-          timeUnits: z.string().optional(),
-          arrayDimensions: z.array(z.object({
-            type: z.enum(['numeric', 'labels']),
-            name: z.string(),
-            size: z.number().positive(),
-            elements: z.array(z.string())
-          })).optional()
-        }),
+        z.object(simSpecsBase).partial(),
         // For variables add - array of variables
+        z.array(z.object(variableBase)),
+        // For variables update - array of variable objects with name (required)
         z.array(z.object({
-          name: z.string(),
-          type: z.enum(['stock', 'flow', 'variable']),
-          equation: z.string().optional(),
-          documentation: z.string().optional(),
-          units: z.string().optional(),
-          uniflow: z.boolean().optional(),
-          inflows: z.array(z.string()).optional(),
-          outflows: z.array(z.string()).optional(),
-          dimensions: z.array(z.string()).optional(),
-          arrayEquations: z.array(z.any()).optional(),
-          crossLevelGhostOf: z.string().optional(),
-          graphicalFunction: z.any().optional(),
-          subType: z.enum(['queue', 'oven', 'conveyor', 'discreteOutflow', 'conveyorLeakage', 'queueOutflow', 'queueOverflow']).optional(),
-          additionalProperties: z.object({}).loose().optional()
-        })),
-        // For variables update - array of variable objects with name (required), type optional
-        z.array(z.object({
-          name: z.string(),
-          newName: z.string().optional(),
-          type: z.enum(['stock', 'flow', 'variable']).optional(),
-          equation: z.string().optional(),
-          documentation: z.string().optional(),
-          units: z.string().optional(),
-          uniflow: z.boolean().optional(),
-          inflows: z.array(z.string()).optional(),
-          outflows: z.array(z.string()).optional(),
-          dimensions: z.array(z.string()).optional(),
-          arrayEquations: z.array(z.any()).optional(),
-          crossLevelGhostOf: z.string().optional(),
-          graphicalFunction: z.any().optional(),
-          subType: z.enum(['queue', 'oven', 'conveyor', 'discreteOutflow', 'conveyorLeakage', 'queueOutflow', 'queueOverflow']).optional(),
-          additionalProperties: z.object({}).loose().optional()
-        })),
+          ...variableBase,
+          newName: z.string().describe(LLMWrapper.SCHEMA_STRINGS.name).optional()
+        }).partial().required({ name: true })),
         // For variables remove - array of strings
         z.array(z.string()),
         // For relationships add - array of relationships
-        z.array(z.object({
-          from: z.string(),
-          to: z.string(),
-          polarity: z.enum(['+', '-']).optional(),
-          reasoning: z.string().optional(),
-          polarityReasoning: z.string().optional()
-        })),
+        z.array(z.object(relationshipBase)),
         // For relationships update - single relationship object with from/to (required)
-        z.object({
-          from: z.string(),
-          to: z.string(),
-          polarity: z.enum(['+', '-']).optional(),
-          reasoning: z.string().optional(),
-          polarityReasoning: z.string().optional()
-        }),
+        z.object(relationshipBase).partial().required({ from: true, to: true }),
         // For relationships remove - array of {from, to} objects
         z.array(z.object({
           from: z.string(),
           to: z.string()
         })),
         // For modules add/update - array of modules
-        z.array(z.object({
-          name: z.string(),
-          parentModule: z.string().nullable()
-        }))
+        z.array(LLMWrapper.moduleSchema())
       ]).describe('The data for the operation. Format depends on section and operation - see description for details.')
     }),
     handler: async ({ section, operation, data }) => {
