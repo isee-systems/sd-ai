@@ -41,6 +41,7 @@ Array handling:
 Sub-type handling:
 - Stock sub-types (set subType + additionalProperties): "queue" (waiting line), "oven" (batch processor), "conveyor" (pipeline delay)
 - Flow sub-types (set subType only, equation = ""): "discreteOutflow" (output from conveyor/oven), "conveyorLeakage" (leakage from conveyor), "queueOutflow" (output from queue), "queueOverflow" (overflow from full queue)
+- Variable sub-types: "delayVariable" (plain variable whose equation uses a DELAY or SMTH builtin function)
 - additionalProperties fields by subType:
   * conveyor/oven: {processTime (required), capacity?, inflowLimit?, fillTime? (oven only), cleanTime? (oven only), sample?, arrest?}
   * conveyorLeakage: {leakFraction? (units 1/time_unit when exponential, dimensionless otherwise), exponential?, leakZoneStart?, leakZoneEnd?, leakIntegers?, ignorePrevZones?, forceLeakFraction?}
@@ -58,7 +59,7 @@ Filtering:
       filter: z.object({
         variableNames: z.array(z.string()).optional().describe('Filter variables by base name (matches both qualified and unqualified names, e.g., "cost" matches "Module_1.cost", "Module_2.cost", and "cost")'),
         variableType: z.enum(['stock', 'flow', 'variable']).optional().describe('Filter variables by type'),
-        subType: z.enum(['queue', 'oven', 'conveyor', 'discreteOutflow', 'conveyorLeakage', 'queueOutflow', 'queueOverflow']).optional().describe('Filter variables by discrete-entity sub-type (e.g., find all conveyors or all queues)'),
+        subType: z.enum(['queue', 'oven', 'conveyor', 'discreteOutflow', 'conveyorLeakage', 'queueOutflow', 'queueOverflow', 'delayVariable']).optional().describe('Filter variables by sub-type (e.g., find all conveyors, all queues, or all delay variables)'),
         moduleName: z.string().optional().describe('Filter variables by module (e.g., "Module_Name" - variable names are module-qualified as Module_Name.variable_name)'),
         usedInEquation: z.string().optional().describe('Find variables whose equations reference this variable (case-insensitive). Searches in both equation and arrayEquations fields.'),
         relationshipFrom: z.string().optional().describe('Filter relationships by source variable'),

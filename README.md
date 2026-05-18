@@ -152,7 +152,7 @@ Models can be organized into modules for better structure and encapsulation:
   - All equations in consuming module reference the ghost, not the original source
 
 ### Discrete-Entity Sub-Types in SD-JSON
-Variables can have a `subType` field that identifies them as discrete-event processing elements. Sub-types are a refinement of `type` — the top-level `type` field remains `"stock"` or `"flow"`.
+Variables can have a `subType` field that further classifies them. Sub-types are a refinement of `type` — the top-level `type` field remains `"stock"`, `"flow"`, or `"variable"`.
 
 **Stock sub-types** — also set `additionalProperties` with the relevant configuration:
 
@@ -170,6 +170,12 @@ Variables can have a `subType` field that identifies them as discrete-event proc
 | `"conveyorLeakage"` | The leakage flow from a conveyor. Set `additionalProperties` to configure leakage behavior. |
 | `"queueOutflow"` | The output flow from a queue. |
 | `"queueOverflow"` | The overflow flow emitted when a full queue cannot accept new items (requires `overflow: true` on the queue). |
+
+**Variable sub-types** — set `subType` on plain `"variable"` type entities:
+
+| `subType` | Description |
+|-----------|-------------|
+| `"delayVariable"` | A plain variable whose equation contains a `DELAY` or `SMTH` builtin function (e.g. `DELAY1`, `DELAY3`, `DELAY N`, `SMTH1`, `SMTH3`). Set this whenever any DELAY or SMTH variant appears in the equation. |
 
 **`additionalProperties`** fields for conveyor and oven stocks:
 
