@@ -182,7 +182,11 @@ export async function runAgent(prompt, currentModel, parameters) {
     baseMode,
     currentModel || { variables: [], relationships: [] },
     [],
-    {},
+    {
+      supportsArrays: false,
+      supportsModules: false,
+      supportsSubTypes: false
+    },
     'eval-client'
   );
 
@@ -232,7 +236,11 @@ export async function runAgent(prompt, currentModel, parameters) {
             product: 'sd-ai-evals',
             version: '1.0'
           });
-          const varNames = (model?.variables || []).map(v => v.name).filter(Boolean);
+          
+          const varNames = (model?.variables || [])
+            .map(v => v.name?.replace(/\s+/g, '_'))
+            .filter(Boolean);
+
           if (varNames.length > 0) {
             const sim = new PySDSimulator(xmileContent);
             const results = await sim.simulate(varNames);
