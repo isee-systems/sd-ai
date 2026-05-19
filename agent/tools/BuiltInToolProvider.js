@@ -18,7 +18,10 @@ import {
   createGetVariableDataTool,
   createVisualizationTool,
   createReadModelSectionTool,
-  createEditModelSectionTool,
+  createEditVariablesTool,
+  createEditRelationshipsTool,
+  createEditSpecsTool,
+  createEditModulesTool,
   createReadFileTool,
   createWriteFileTool,
   createEditFileTool
@@ -48,7 +51,7 @@ import {
  * - get_run_info
  * - get_variable_data
  * - read_model_section (for reading parts of large models)
- * - edit_model_section (for editing parts of large models)
+ * - edit_variables, edit_relationships, edit_specs, edit_modules (for editing parts of large models)
  */
 export class BuiltInToolProvider {
   constructor(sessionManager, sessionId, sendToClient) {
@@ -79,7 +82,10 @@ export class BuiltInToolProvider {
         get_variable_data: createGetVariableDataTool(this.sessionManager, this.sessionId, this.sendToClient),
         create_visualization: createVisualizationTool(this.sessionManager, this.sessionId, this.sendToClient, this.vizEngine),
         read_model_section: createReadModelSectionTool(this.sessionManager, this.sessionId),
-        edit_model_section: createEditModelSectionTool(this.sessionManager, this.sessionId, this.sendToClient),
+        edit_variables: createEditVariablesTool(this.sessionManager, this.sessionId, this.sendToClient),
+        edit_relationships: createEditRelationshipsTool(this.sessionManager, this.sessionId, this.sendToClient),
+        edit_specs: createEditSpecsTool(this.sessionManager, this.sessionId, this.sendToClient),
+        edit_modules: createEditModulesTool(this.sessionManager, this.sessionId, this.sendToClient),
         read_file: createReadFileTool()
         //write_file: createWriteFileTool(),
         //edit_file: createEditFileTool()

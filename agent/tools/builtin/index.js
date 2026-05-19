@@ -21,7 +21,10 @@ export {
 export { createVisualizationTool } from './createVisualization.js';
 export {
   createReadModelSectionTool,
-  createEditModelSectionTool
+  createEditVariablesTool,
+  createEditRelationshipsTool,
+  createEditSpecsTool,
+  createEditModulesTool
 } from './largeModelTools.js';
 export { createReadFileTool, createWriteFileTool, createEditFileTool } from './fileTools.js';
 

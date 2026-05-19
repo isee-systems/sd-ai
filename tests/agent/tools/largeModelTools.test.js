@@ -1,4 +1,9 @@
-import { createReadModelSectionTool, createEditModelSectionTool } from '../../../agent/tools/builtin/largeModelTools.js';
+import {
+  createReadModelSectionTool,
+  createEditVariablesTool,
+  createEditRelationshipsTool,
+  createEditModulesTool
+} from '../../../agent/tools/builtin/largeModelTools.js';
 import { mkdtempSync, writeFileSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
@@ -256,9 +261,9 @@ describe('createReadModelSectionTool normalization', () => {
   });
 });
 
-// ─── createEditModelSectionTool ───────────────────────────────────────────────
+// ─── per-section edit tools ─────────────────────────────────────────────────
 
-describe('createEditModelSectionTool normalization', () => {
+describe('per-section edit tools normalization', () => {
   let tempDir;
   let session;
 
@@ -281,7 +286,7 @@ describe('createEditModelSectionTool normalization', () => {
     return { sendToClient, getModel: () => capturedModel };
   }
 
-  function makeEditTool(sendToClient) {
+  function makeEditTools(sendToClient) {
     session = {
       mode: 'sfd',
       context: { supportsArrays: false, supportsModules: true, supportsSubTypes: true },
@@ -292,7 +297,11 @@ describe('createEditModelSectionTool normalization', () => {
       getSessionTempDir: () => tempDir,
       updateClientModel: () => {},
     };
-    return createEditModelSectionTool(sessionManager, SESSION_ID, sendToClient);
+    return {
+      variables: createEditVariablesTool(sessionManager, SESSION_ID, sendToClient),
+      relationships: createEditRelationshipsTool(sessionManager, SESSION_ID, sendToClient),
+      modules: createEditModulesTool(sessionManager, SESSION_ID, sendToClient),
+    };
   }
 
   function resetModel(model) {
@@ -306,9 +315,9 @@ describe('createEditModelSectionTool normalization', () => {
     it('normalizes underscore names to spaces', async () => {
       resetModel({ variables: [], relationships: [], modules: [] });
       const { sendToClient, getModel } = makeSendToClient();
-      const tool = makeEditTool(sendToClient);
+      const tools = makeEditTools(sendToClient);
 
-      await tool.handler({ section: 'variables', operation: 'add', data: [
+      await tools.variables.handler({ operation: 'add', data: [
         { name: 'birth_rate', type: 'variable', equation: '0.1' }
       ]});
 
@@ -318,9 +327,9 @@ describe('createEditModelSectionTool normalization', () => {
     it('normalizes module-qualified names', async () => {
       resetModel({ variables: [], relationships: [], modules: [] });
       const { sendToClient, getModel } = makeSendToClient();
-      const tool = makeEditTool(sendToClient);
+      const tools = makeEditTools(sendToClient);
 
-      await tool.handler({ section: 'variables', operation: 'add', data: [
+      await tools.variables.handler({ operation: 'add', data: [
         { name: 'Finance.net_revenue', type: 'variable', equation: '100' }
       ]});
 
@@ -332,9 +341,9 @@ describe('createEditModelSectionTool normalization', () => {
     it('finds variable by underscore name', async () => {
       resetModel({ variables: [{ name: 'birth rate', type: 'variable', equation: '0.1' }], relationships: [], modules: [] });
       const { sendToClient, getModel } = makeSendToClient();
-      const tool = makeEditTool(sendToClient);
+      const tools = makeEditTools(sendToClient);
 
-      await tool.handler({ section: 'variables', operation: 'update', data: [
+      await tools.variables.handler({ operation: 'update', data: [
         { name: 'birth_rate', equation: '0.2' }
       ]});
 
@@ -344,9 +353,9 @@ describe('createEditModelSectionTool normalization', () => {
     it('finds variable case-insensitively', async () => {
       resetModel({ variables: [{ name: 'birth rate', type: 'variable', equation: '0.1' }], relationships: [], modules: [] });
       const { sendToClient, getModel } = makeSendToClient();
-      const tool = makeEditTool(sendToClient);
+      const tools = makeEditTools(sendToClient);
 
-      await tool.handler({ section: 'variables', operation: 'update', data: [
+      await tools.variables.handler({ operation: 'update', data: [
         { name: 'Birth Rate', equation: '0.2' }
       ]});
 
@@ -356,9 +365,9 @@ describe('createEditModelSectionTool normalization', () => {
     it('finds variable with mixed case and underscores', async () => {
       resetModel({ variables: [{ name: 'birth rate', type: 'variable', equation: '0.1' }], relationships: [], modules: [] });
       const { sendToClient, getModel } = makeSendToClient();
-      const tool = makeEditTool(sendToClient);
+      const tools = makeEditTools(sendToClient);
 
-      await tool.handler({ section: 'variables', operation: 'update', data: [
+      await tools.variables.handler({ operation: 'update', data: [
         { name: 'BIRTH_RATE', equation: '0.2' }
       ]});
 
@@ -368,9 +377,9 @@ describe('createEditModelSectionTool normalization', () => {
     it('normalizes newName to spaces', async () => {
       resetModel({ variables: [{ name: 'birth rate', type: 'variable', equation: '0.1' }], relationships: [], modules: [] });
       const { sendToClient, getModel } = makeSendToClient();
-      const tool = makeEditTool(sendToClient);
+      const tools = makeEditTools(sendToClient);
 
-      await tool.handler({ section: 'variables', operation: 'update', data: [
+      await tools.variables.handler({ operation: 'update', data: [
         { name: 'birth_rate', newName: 'birth_fraction' }
       ]});
 
@@ -387,9 +396,9 @@ describe('createEditModelSectionTool normalization', () => {
         modules: [],
       });
       const { sendToClient, getModel } = makeSendToClient();
-      const tool = makeEditTool(sendToClient);
+      const tools = makeEditTools(sendToClient);
 
-      await tool.handler({ section: 'variables', operation: 'update', data: [
+      await tools.variables.handler({ operation: 'update', data: [
         { name: 'process_time', newName: 'transit_time' }
       ]});
 
@@ -407,9 +416,9 @@ describe('createEditModelSectionTool normalization', () => {
         modules: [],
       });
       const { sendToClient, getModel } = makeSendToClient();
-      const tool = makeEditTool(sendToClient);
+      const tools = makeEditTools(sendToClient);
 
-      await tool.handler({ section: 'variables', operation: 'update', data: [
+      await tools.variables.handler({ operation: 'update', data: [
         { name: 'flag', newName: 'signal' }
       ]});
 
@@ -423,9 +432,9 @@ describe('createEditModelSectionTool normalization', () => {
     it('removes variable found by underscore name', async () => {
       resetModel({ variables: [{ name: 'birth rate', type: 'variable', equation: '0.1' }], relationships: [], modules: [] });
       const { sendToClient, getModel } = makeSendToClient();
-      const tool = makeEditTool(sendToClient);
+      const tools = makeEditTools(sendToClient);
 
-      await tool.handler({ section: 'variables', operation: 'remove', data: ['birth_rate'] });
+      await tools.variables.handler({ operation: 'remove', data: [{name: 'birth_rate'}] });
 
       expect(getModel().variables).toHaveLength(0);
     });
@@ -433,9 +442,9 @@ describe('createEditModelSectionTool normalization', () => {
     it('removes variable case-insensitively', async () => {
       resetModel({ variables: [{ name: 'birth rate', type: 'variable', equation: '0.1' }], relationships: [], modules: [] });
       const { sendToClient, getModel } = makeSendToClient();
-      const tool = makeEditTool(sendToClient);
+      const tools = makeEditTools(sendToClient);
 
-      await tool.handler({ section: 'variables', operation: 'remove', data: ['BIRTH RATE'] });
+      await tools.variables.handler({ operation: 'remove', data: [{name: 'BIRTH RATE'}] });
 
       expect(getModel().variables).toHaveLength(0);
     });
@@ -443,9 +452,9 @@ describe('createEditModelSectionTool normalization', () => {
     it('removes variable with mixed case and underscores', async () => {
       resetModel({ variables: [{ name: 'birth rate', type: 'variable', equation: '0.1' }], relationships: [], modules: [] });
       const { sendToClient, getModel } = makeSendToClient();
-      const tool = makeEditTool(sendToClient);
+      const tools = makeEditTools(sendToClient);
 
-      await tool.handler({ section: 'variables', operation: 'remove', data: ['Birth_Rate'] });
+      await tools.variables.handler({ operation: 'remove', data: [{name: 'Birth_Rate'}] });
 
       expect(getModel().variables).toHaveLength(0);
     });
@@ -455,9 +464,9 @@ describe('createEditModelSectionTool normalization', () => {
     it('normalizes from and to to spaces', async () => {
       resetModel({ variables: [], relationships: [], modules: [] });
       const { sendToClient, getModel } = makeSendToClient();
-      const tool = makeEditTool(sendToClient);
+      const tools = makeEditTools(sendToClient);
 
-      await tool.handler({ section: 'relationships', operation: 'add', data: [
+      await tools.relationships.handler({ operation: 'add', data: [
         { from: 'birth_rate', to: 'Population', polarity: '+' }
       ]});
 
@@ -470,11 +479,11 @@ describe('createEditModelSectionTool normalization', () => {
     it('finds relationship by underscore from/to', async () => {
       resetModel({ variables: [], relationships: [{ from: 'birth rate', to: 'Population', polarity: '+' }], modules: [] });
       const { sendToClient, getModel } = makeSendToClient();
-      const tool = makeEditTool(sendToClient);
+      const tools = makeEditTools(sendToClient);
 
-      await tool.handler({ section: 'relationships', operation: 'update', data: {
+      await tools.relationships.handler({ operation: 'update', data: [{
         from: 'birth_rate', to: 'Population', polarity: '-'
-      }});
+      }]});
 
       expect(getModel().relationships[0].polarity).toBe('-');
     });
@@ -482,11 +491,11 @@ describe('createEditModelSectionTool normalization', () => {
     it('finds relationship case-insensitively', async () => {
       resetModel({ variables: [], relationships: [{ from: 'birth rate', to: 'Population', polarity: '+' }], modules: [] });
       const { sendToClient, getModel } = makeSendToClient();
-      const tool = makeEditTool(sendToClient);
+      const tools = makeEditTools(sendToClient);
 
-      await tool.handler({ section: 'relationships', operation: 'update', data: {
+      await tools.relationships.handler({ operation: 'update', data: [{
         from: 'BIRTH RATE', to: 'population', polarity: '-'
-      }});
+      }]});
 
       expect(getModel().relationships[0].polarity).toBe('-');
     });
@@ -494,11 +503,11 @@ describe('createEditModelSectionTool normalization', () => {
     it('finds relationship with mixed case and underscores', async () => {
       resetModel({ variables: [], relationships: [{ from: 'birth rate', to: 'Population', polarity: '+' }], modules: [] });
       const { sendToClient, getModel } = makeSendToClient();
-      const tool = makeEditTool(sendToClient);
+      const tools = makeEditTools(sendToClient);
 
-      await tool.handler({ section: 'relationships', operation: 'update', data: {
+      await tools.relationships.handler({ operation: 'update', data: [{
         from: 'Birth_Rate', to: 'POPULATION', polarity: '-'
-      }});
+      }]});
 
       expect(getModel().relationships[0].polarity).toBe('-');
     });
@@ -508,9 +517,9 @@ describe('createEditModelSectionTool normalization', () => {
     it('removes relationship found by underscore from/to', async () => {
       resetModel({ variables: [], relationships: [{ from: 'birth rate', to: 'Population', polarity: '+' }], modules: [] });
       const { sendToClient, getModel } = makeSendToClient();
-      const tool = makeEditTool(sendToClient);
+      const tools = makeEditTools(sendToClient);
 
-      await tool.handler({ section: 'relationships', operation: 'remove', data: [
+      await tools.relationships.handler({ operation: 'remove', data: [
         { from: 'birth_rate', to: 'Population' }
       ]});
 
@@ -520,9 +529,9 @@ describe('createEditModelSectionTool normalization', () => {
     it('removes relationship case-insensitively', async () => {
       resetModel({ variables: [], relationships: [{ from: 'birth rate', to: 'Population', polarity: '+' }], modules: [] });
       const { sendToClient, getModel } = makeSendToClient();
-      const tool = makeEditTool(sendToClient);
+      const tools = makeEditTools(sendToClient);
 
-      await tool.handler({ section: 'relationships', operation: 'remove', data: [
+      await tools.relationships.handler({ operation: 'remove', data: [
         { from: 'BIRTH RATE', to: 'POPULATION' }
       ]});
 
@@ -532,9 +541,9 @@ describe('createEditModelSectionTool normalization', () => {
     it('removes relationship with mixed case and underscores', async () => {
       resetModel({ variables: [], relationships: [{ from: 'birth rate', to: 'Population', polarity: '+' }], modules: [] });
       const { sendToClient, getModel } = makeSendToClient();
-      const tool = makeEditTool(sendToClient);
+      const tools = makeEditTools(sendToClient);
 
-      await tool.handler({ section: 'relationships', operation: 'remove', data: [
+      await tools.relationships.handler({ operation: 'remove', data: [
         { from: 'Birth_Rate', to: 'population' }
       ]});
 
@@ -546,9 +555,9 @@ describe('createEditModelSectionTool normalization', () => {
     it('normalizes module name underscores to spaces', async () => {
       resetModel({ variables: [], relationships: [], modules: [] });
       const { sendToClient, getModel } = makeSendToClient();
-      const tool = makeEditTool(sendToClient);
+      const tools = makeEditTools(sendToClient);
 
-      await tool.handler({ section: 'modules', operation: 'add', data: [
+      await tools.modules.handler({ operation: 'add', data: [
         { name: 'My_Module', parentModule: null }
       ]});
 
@@ -560,9 +569,9 @@ describe('createEditModelSectionTool normalization', () => {
     it('normalizes module names in replacement array', async () => {
       resetModel({ variables: [], relationships: [], modules: [{ name: 'Finance', parentModule: null }] });
       const { sendToClient, getModel } = makeSendToClient();
-      const tool = makeEditTool(sendToClient);
+      const tools = makeEditTools(sendToClient);
 
-      await tool.handler({ section: 'modules', operation: 'update', data: [
+      await tools.modules.handler({ operation: 'update', data: [
         { name: 'Finance_Sub', parentModule: 'Finance' }
       ]});
 
@@ -574,9 +583,9 @@ describe('createEditModelSectionTool normalization', () => {
     it('removes module found by underscore name', async () => {
       resetModel({ variables: [], relationships: [], modules: [{ name: 'My Module', parentModule: null }] });
       const { sendToClient, getModel } = makeSendToClient();
-      const tool = makeEditTool(sendToClient);
+      const tools = makeEditTools(sendToClient);
 
-      await tool.handler({ section: 'modules', operation: 'remove', data: ['My_Module'] });
+      await tools.modules.handler({ operation: 'remove', data: [{name: 'My_Module'}] });
 
       expect(getModel().modules).toHaveLength(0);
     });
@@ -584,9 +593,9 @@ describe('createEditModelSectionTool normalization', () => {
     it('removes module case-insensitively', async () => {
       resetModel({ variables: [], relationships: [], modules: [{ name: 'Finance', parentModule: null }] });
       const { sendToClient, getModel } = makeSendToClient();
-      const tool = makeEditTool(sendToClient);
+      const tools = makeEditTools(sendToClient);
 
-      await tool.handler({ section: 'modules', operation: 'remove', data: ['FINANCE'] });
+      await tools.modules.handler({ operation: 'remove', data: [{name: 'FINANCE'}] });
 
       expect(getModel().modules).toHaveLength(0);
     });
@@ -594,9 +603,9 @@ describe('createEditModelSectionTool normalization', () => {
     it('removes module with mixed case and underscores', async () => {
       resetModel({ variables: [], relationships: [], modules: [{ name: 'My Module', parentModule: null }] });
       const { sendToClient, getModel } = makeSendToClient();
-      const tool = makeEditTool(sendToClient);
+      const tools = makeEditTools(sendToClient);
 
-      await tool.handler({ section: 'modules', operation: 'remove', data: ['MY_MODULE'] });
+      await tools.modules.handler({ operation: 'remove', data: [{name: 'MY_MODULE'}] });
 
       expect(getModel().modules).toHaveLength(0);
     });

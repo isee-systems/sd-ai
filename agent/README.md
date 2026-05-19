@@ -722,7 +722,7 @@ Each built-in tool is a plain object returned by a factory function. The fields 
 | Field | Type | Description |
 |---|---|---|
 | `maxModelTokens` | `number` | If the current model's token count exceeds this value, the tool is excluded from the agent's tool list. Used for tools that receive the full model (e.g., `generate_quantitative_model`). |
-| `minModelTokens` | `number` | If the current model's token count is below this value, the tool is excluded. Used for tools that only make sense for large models (e.g., `read_model_section`, `edit_model_section`). |
+| `minModelTokens` | `number` | If the current model's token count is below this value, the tool is excluded. Used for tools that only make sense for large models (e.g., `read_model_section`, `edit_variables`). |
 | `nonSdkOnly` | `boolean` | If `true`, the tool is excluded from the Anthropic SDK (`sdk`) mode's MCP server and the Google ADK tool list. It is only available in `manual` loop mode. Use this for tools that duplicate functionality already provided natively by the SDK (e.g. file system tools). |
 
 Token counting runs on every conversation turn for all sessions. The token thresholds use `agentMaxTokensForEngines` from `config.js` (default: 100,000).
@@ -758,7 +758,10 @@ All core tools are registered server-side. Clients do not need to register them.
 
 ### Large Model Utilities
 - **read_model_section** — Read a section of a large model without loading it entirely
-- **edit_model_section** — Edit a section of a large model in place
+- **edit_variables** — Add, update, or remove variables in a large model in place
+- **edit_relationships** — Add, update, or remove relationships in a large model in place
+- **edit_specs** — Update simulation specs (startTime, stopTime, dt, timeUnits, arrayDimensions) in a large model in place
+- **edit_modules** — Add, update, or remove modules in a large model in place
 
 ### File Utilities
 - **read_file** — Read a file from the session temp directory (supports line range and search filtering)

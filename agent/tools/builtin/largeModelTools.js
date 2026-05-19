@@ -10,6 +10,10 @@ const variableBase = LLMWrapper.variableSchemaBase();
 const simSpecsBase = LLMWrapper.simSpecsSchemaBase();
 const relationshipBase = LLMWrapper.relationshipSchemaBase();
 
+// Variable names are stored with spaces; equations use underscores.
+const normName = n => typeof n === 'string' ? n.replace(/_/g, ' ') : n;
+const normSearch = s => typeof s === 'string' ? s.toLowerCase().replace(/[ _]/g, '_') : s;
+
 /**
  * Read a specific section of the large model file
  */
@@ -188,402 +192,421 @@ Filtering:
 }
 
 /**
- * Edit a specific section of the large model file
+ * Load the on-disk model for the session, applying a mutation, then push to client.
+ * Shared by all per-section edit tools.
+ *
+ * @param {Object} args
+ * @param {Object} args.sessionManager
+ * @param {string} args.sessionId
+ * @param {Function} args.sendToClient
+ * @param {string} args.section - For the response message
+ * @param {string} args.operation - For the response message
+ * @param {Function} args.mutate - (model) => string|null; return error message to abort
  */
-export function createEditModelSectionTool(sessionManager, sessionId, sendToClient) {
+async function applyEdit({ sessionManager, sessionId, sendToClient, section, operation, mutate }) {
+  const session = sessionManager.getSession(sessionId);
+  if (!session) {
+    throw new Error(`Session not found: ${sessionId}`);
+  }
+
+  const sessionTempDir = sessionManager.getSessionTempDir(sessionId);
+  const modelPath = join(sessionTempDir, 'model.sdjson');
+
+  if (!existsSync(modelPath)) {
+    return createErrorResponse('Error: Model file not found. Call get_current_model to get it.');
+  }
+
+  const modelContent = readFileSync(modelPath, 'utf-8');
+  const model = JSON.parse(modelContent);
+
+  const mutationError = mutate(model);
+  if (mutationError) {
+    return createErrorResponse(mutationError);
+  }
+
+  if (!model.variables || !Array.isArray(model.variables)) {
+    return createErrorResponse('Model validation failed: model.variables must be an array.');
+  }
+
+  if (!model.relationships || !Array.isArray(model.relationships)) {
+    return createErrorResponse('Model validation failed: model.relationships must be an array.');
+  }
+
+  const updateRequestId = generateRequestId('model');
+  await sendToClient(createUpdateModelMessage(sessionId, updateRequestId, model));
+
+  const updatePromise = new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      reject(new Error('Update model timeout: Client did not respond within 30 seconds'));
+    }, 30000);
+
+    if (!session.pendingModelRequests) {
+      session.pendingModelRequests = new Map();
+    }
+    session.pendingModelRequests.set(updateRequestId, { resolve, reject, timeout });
+  });
+
+  const clientResult = await updatePromise;
+  const parsed = UpdateModelResponseSchema.parse(clientResult);
+
+  const { issues } = sessionManager.updateClientModel(sessionId, parsed);
+
+  return createSuccessResponse({
+    message: `Successfully edited ${section} section (${operation} operation). The model has been validated, processed, and sent to the client.`,
+    ...(issues && { issues })
+  });
+}
+
+function specsMutator(data) {
+  return (model) => {
+    model.specs = model.specs || {};
+    if (data.startTime !== undefined) model.specs.startTime = data.startTime;
+    if (data.stopTime !== undefined) model.specs.stopTime = data.stopTime;
+    if (data.dt !== undefined) model.specs.dt = data.dt;
+    if (data.timeUnits !== undefined) model.specs.timeUnits = data.timeUnits;
+
+    if (data.arrayDimensions !== undefined) {
+      if (Array.isArray(data.arrayDimensions)) {
+        for (const dim of data.arrayDimensions) {
+          if (!dim.type || !dim.name || dim.size === undefined || !Array.isArray(dim.elements)) {
+            return `Error: Array dimension "${dim.name || 'unknown'}" is missing required fields. All dimensions must have: type ("numeric" or "labels"), name (singular, alphanumeric), size (positive integer), and elements (array of element names).`;
+          }
+          if (dim.type !== 'numeric' && dim.type !== 'labels') {
+            return `Error: Array dimension "${dim.name}" has invalid type "${dim.type}". Must be "numeric" or "labels".`;
+          }
+          if (typeof dim.size !== 'number' || dim.size <= 0) {
+            return `Error: Array dimension "${dim.name}" size must be a positive integer, got: ${dim.size}`;
+          }
+          if (dim.elements.length !== dim.size) {
+            return `Error: Array dimension "${dim.name}" has size=${dim.size} but elements array has ${dim.elements.length} items. They must match.`;
+          }
+        }
+      }
+      model.specs.arrayDimensions = data.arrayDimensions;
+    }
+    return null;
+  };
+}
+
+function variablesMutator(operation, data) {
+  return (model) => {
+    model.variables = model.variables || [];
+    if (operation === 'add') {
+      if (!Array.isArray(data)) {
+        return 'Error: For add operation, data must be an array of variable objects. Example: [{name: "var1", type: "stock", equation: "100"}]';
+      }
+      for (const v of data) { if (v.name) v.name = normName(v.name); }
+      const errors = [];
+      for (let i = 0; i < data.length; i++) {
+        const v = data[i];
+        const varLabel = data.length > 1 ? `Variable ${i + 1} (${v.name || 'unnamed'})` : `Variable "${v.name || 'unnamed'}"`;
+
+        if (!v.name || !v.type) {
+          errors.push(`${varLabel}: Missing required fields. Must have "name" and "type".`);
+        } else if (!['stock', 'flow', 'variable'].includes(v.type)) {
+          errors.push(`${varLabel}: Invalid type "${v.type}". Must be "stock", "flow", or "variable".`);
+        }
+      }
+
+      if (errors.length > 0) {
+        return `Error adding ${data.length} variable(s):\n\n${errors.join('\n')}\n\nProvide an array of variable objects: [{name: "var1", type: "stock", equation: "100"}, {name: "var2", type: "variable", equation: "20"}]`;
+      }
+
+      model.variables.push(...data);
+    } else if (operation === 'update') {
+      if (!Array.isArray(data)) {
+        return 'Error: For update operation, data must be an array of variable objects. Example: [{name: "Population", equation: "2000"}]';
+      }
+      for (const update of data) {
+        const varName = normName(update.name);
+        update.name = varName;
+        if (update.newName) update.newName = normName(update.newName);
+        if (!varName) {
+          return 'Error: Must specify "name" field to update a variable';
+        }
+        const index = model.variables.findIndex(v => normSearch(v.name) === normSearch(varName));
+        if (index >= 0) {
+          const oldVariable = model.variables[index];
+          const oldName = oldVariable.name;
+
+          const isRenamed = update.newName && update.newName !== oldName;
+
+          if (isRenamed) {
+            const newName = update.newName;
+            const oldNameXMILE = oldName.replace(/ /g, '_');
+            const newNameXMILE = newName.replace(/ /g, '_');
+
+            const varRegex = new RegExp(`\\b${oldNameXMILE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
+
+            for (const variable of model.variables) {
+              if (variable.equation && varRegex.test(variable.equation)) {
+                variable.equation = variable.equation.replace(varRegex, newNameXMILE);
+              }
+
+              if (variable.arrayEquations && Array.isArray(variable.arrayEquations)) {
+                for (const ae of variable.arrayEquations) {
+                  if (ae.equation && varRegex.test(ae.equation)) {
+                    ae.equation = ae.equation.replace(varRegex, newNameXMILE);
+                  }
+                }
+              }
+
+              if (variable.additionalProperties && typeof variable.additionalProperties === 'object') {
+                for (const [key, val] of Object.entries(variable.additionalProperties)) {
+                  if (typeof val === 'string' && varRegex.test(val)) {
+                    variable.additionalProperties[key] = val.replace(varRegex, newNameXMILE);
+                  }
+                }
+              }
+            }
+
+            update.name = newName;
+            delete update.newName;
+          }
+
+          model.variables[index] = { ...model.variables[index], ...update };
+        } else {
+          return `Error: Variable "${varName}" not found`;
+        }
+      }
+    } else if (operation === 'remove') {
+      if (!Array.isArray(data)) {
+        return 'Error: For remove operation, data must be an array of objects with name. Example: [{name: "var1"}, {name: "var2"}]';
+      }
+      const normalizedRemoveNames = data.map(item => normSearch(item?.name));
+      model.variables = model.variables.filter(v => !normalizedRemoveNames.includes(normSearch(v.name)));
+    }
+    return null;
+  };
+}
+
+function relationshipsMutator(operation, data) {
+  return (model) => {
+    model.relationships = model.relationships || [];
+    if (!Array.isArray(data)) {
+      return `Error: For ${operation} operation, data must be an array of relationship objects. Example: [{from: "var1", to: "var2", polarity: "+"}]`;
+    }
+    for (const r of data) {
+      r.from = normName(r.from);
+      r.to = normName(r.to);
+      if (!r.from || !r.to) {
+        return 'Error: Relationships must have "from" and "to" fields';
+      }
+    }
+
+    if (operation === 'add') {
+      for (const r of data) {
+        if (r.polarity !== undefined && !['+', '-'].includes(r.polarity)) {
+          return `Error: Relationship polarity must be "+" or "-", got "${r.polarity}"`;
+        }
+      }
+      model.relationships.push(...data);
+    } else if (operation === 'update') {
+      for (const update of data) {
+        const index = model.relationships.findIndex(r => normSearch(r.from) === normSearch(update.from) && normSearch(r.to) === normSearch(update.to));
+        if (index >= 0) {
+          model.relationships[index] = { ...model.relationships[index], ...update };
+        } else {
+          return `Error: Relationship from "${update.from}" to "${update.to}" not found`;
+        }
+      }
+    } else if (operation === 'remove') {
+      model.relationships = model.relationships.filter(r =>
+        !data.some(rem => normSearch(rem.from) === normSearch(r.from) && normSearch(rem.to) === normSearch(r.to))
+      );
+    }
+    return null;
+  };
+}
+
+function modulesMutator(operation, data) {
+  return (model) => {
+    model.modules = model.modules || [];
+    if (operation === 'update') {
+      if (!Array.isArray(data)) {
+        return 'Error: For update operation, data must be an array of module objects. Example: [{name: "Module1", parentModule: null}]';
+      }
+      for (const m of data) {
+        m.name = normName(m.name);
+        if (!m.name || m.parentModule === undefined) {
+          return 'Error: Modules must have "name" and "parentModule" fields';
+        }
+      }
+      model.modules = data;
+    } else if (operation === 'add') {
+      if (!Array.isArray(data)) {
+        return 'Error: For add operation, data must be an array of module objects. Example: [{name: "Module1", parentModule: null}]';
+      }
+      for (const m of data) {
+        m.name = normName(m.name);
+        if (!m.name || m.parentModule === undefined) {
+          return 'Error: Modules must have "name" and "parentModule" fields';
+        }
+      }
+      model.modules.push(...data);
+    } else if (operation === 'remove') {
+      if (!Array.isArray(data)) {
+        return 'Error: For remove operation, data must be an array of objects with name. Example: [{name: "Module1"}, {name: "Module2"}]';
+      }
+      const normalizedRemoveModules = data.map(item => normSearch(item?.name));
+      model.modules = model.modules.filter(m => !normalizedRemoveModules.includes(normSearch(m.name)));
+    }
+    return null;
+  };
+}
+
+/**
+ * Edit variables: add, update (including rename), or remove.
+ */
+export function createEditVariablesTool(sessionManager, sessionId, sendToClient) {
   return {
-    description: `Edit a specific section of the large model file. This allows you to modify parts of the model without loading the entire thing.
+    description: `Edit the variables section of the model. data is always an array of variable objects. Every object must include 'name'. Other fields are interpreted by operation:
 
-You can edit:
-- specs: Update simulation specifications (startTime, stopTime, dt, timeUnits, arrayDimensions).
-  * arrayDimensions schema: [{type: "numeric"|"labels", name: string (singular, alphanumeric), size: number (positive integer), elements: string[] (element names)}]
-  * CRITICAL: All four fields (type, name, size, elements) are REQUIRED for each dimension
-  * type="numeric": elements auto-generated as ['1','2','3'...] based on size
-  * type="labels": elements are user-defined meaningful names like ['North','South','East','West']
-  * When updating arrayDimensions, provide the COMPLETE array with all dimensions (it replaces the entire array)
-- variables: Add, update, or remove specific variables.
-  * Variable Schema: {name, type (stock|flow|variable), equation?, documentation?, units?, uniflow?, inflows?, outflows?, dimensions?, arrayEquations?, crossLevelGhostOf?, graphicalFunction?, subType?, additionalProperties?}
-  * subType identifies discrete-entity processing elements (a refinement of type — top-level type remains "stock" or "flow"):
-    - Stock sub-types (require additionalProperties): "queue", "oven", "conveyor"
-    - Flow sub-types (set subType only; leave equation as ""): "discreteOutflow", "conveyorLeakage", "queueOutflow", "queueOverflow"
-  * additionalProperties holds sub-type-specific configuration (all values are equation strings unless noted):
-    - conveyor / oven: {processTime (required), capacity?, inflowLimit?, fillTime? (oven only), cleanTime? (oven only), sample?, arrest?}
-    - conveyorLeakage: {leakFraction? (units 1/time_unit when exponential, dimensionless otherwise), exponential? (boolean, default true — almost always use exponential; only false when explicitly requested), leakZoneStart?, leakZoneEnd?, leakIntegers? (boolean), ignorePrevZones? (boolean), forceLeakFraction? (boolean)}
-    - queue: {fifoEnabled? (boolean), oneAtATime? (boolean), splitBatches? (boolean), discrete? (boolean), roundRobin? (boolean), queueOutflowPriority?, purgeEq?, overflow? (boolean)}
-    - inflow to a conveyor (regular flow): {spreadFlow? ("none"|"even"|"destination"|"distribution"|"source"), distribEq? (required when spreadFlow="distribution")}
-  * For ADD operation: Array of variable objects
-    Example: [{name: "Population", type: "stock", equation: "1000"}, {name: "births", type: "flow", equation: "Population*0.1"}]
-    Discrete example: [{name: "work queue", type: "stock", subType: "queue", additionalProperties: {fifoEnabled: true}}, {name: "work outflow", type: "flow", subType: "queueOutflow", equation: ""}]
-  * For UPDATE operation: Array of variable objects, each with name field (required) and fields to update.
-    To update additionalProperties, provide the complete additionalProperties object (it replaces the existing one).
-    Example: [{name: "Population", equation: "2000"}, {name: "births", type: "flow", equation: "Population*0.1"}]
-    Discrete example: [{name: "work queue", additionalProperties: {fifoEnabled: true, overflow: true}}]
-  * For REMOVE operation: Array of variable name strings
-    Example: ["Population", "births", "deaths"]
-- relationships: Add, update, or remove relationships.
-  * Relationship Schema: {from, to, polarity (+|-|""), reasoning?, polarityReasoning?}
-  * For ADD operation: Array of relationship objects
-    Example: [{from: "births", to: "Population", polarity: "+"}, {from: "deaths", to: "Population", polarity: "-"}]
-  * For UPDATE operation: Single relationship object with from and to fields (required to identify which relationship to update)
-    Example: {from: "births", to: "Population", polarity: "+", reasoning: "More births increase population"}
-  * For REMOVE operation: Array of {from, to} objects identifying relationships to remove
-    Example: [{from: "births", to: "Population"}, {from: "deaths", to: "Population"}]
-- modules: Add, update, or remove modules.
-  * Module Schema: {name, parentModule} where parentModule is null for root modules or a string module name for child modules
-  * For ADD operation: Array of module objects
-    Example: [{name: "Demographics", parentModule: null}, {name: "Births", parentModule: "Demographics"}]
-  * For UPDATE operation: Complete array of all module objects (replaces entire module hierarchy)
-    Example: [{name: "Demographics", parentModule: null}, {name: "Births", parentModule: "Demographics"}]
-  * For REMOVE operation: Array of module name strings
-    Example: ["Births", "Deaths"]
-  * IMPORTANT: Modules array only defines hierarchy, NOT contents. Variable membership is by name prefix.
-
-VARIABLE RENAMING:
-- To rename a variable, use update operation with {name: "OldName", newName: "NewName"}
-- The tool will automatically update ALL equations that reference the old variable name
-- This includes equations in ALL variables across ALL modules, arrayEquations, and equation-valued additionalProperties fields (processTime, capacity, leakFraction, purgeEq, etc.)
-- References are updated case-insensitively using XMILE format (with underscores)
-
-CRITICAL MODULE RULES:
-- Variable names use ONLY their immediate owning module as prefix: "ModuleName.variableName"
-- NEVER use full hierarchy path in variable names (WRONG: "Company.Sales.revenue", CORRECT: "Sales.revenue")
-- Variables are qualified ONLY by their direct parent module, never by ancestor modules
-- Cross-module references require ghost variables: use "crossLevelGhostOf" field pointing to source variable
-- Ghost variables have empty equation field (equation = "")
+- add: every object must also include 'type' (stock|flow|variable); other fields populate the new variable
+- update: 'name' locates the existing variable; the other fields you include replace those values. To rename, also pass 'newName' — the tool then rewrites ALL references to the old name across every equation, arrayEquations entry, and equation-valued additionalProperties field (processTime, capacity, leakFraction, purgeEq, etc.) in every variable across every module, matching case-insensitively in XMILE format (with underscores). To change additionalProperties, provide the COMPLETE replacement object.
+- remove: only 'name' is read; all other fields are ignored
 
 CRITICAL EQUATION RULES:
-- XMILE naming: Replace all spaces with underscores in variable references (e.g., "birth_rate" not "birth rate")
-- Every variable MUST have either 'equation' OR 'arrayEquations' (never both, never neither)
-- NEVER embed numerical constants directly in equations - create separate named variables for constants
-- Stock-flow constraint: A flow can NEVER appear in BOTH inflows AND outflows of the same stock
+- XMILE naming: replace spaces with underscores in variable references inside equations ("birth_rate" not "birth rate")
+- Every variable MUST have either 'equation' OR 'arrayEquations' (never both, never neither). For arrayed STOCKS, always use arrayEquations to give per-element initial values.
+- NEVER embed numerical constants directly in equations — create separate named variables for constants
+- Stock-flow constraint: a flow can NEVER appear in BOTH inflows AND outflows of the same stock
+- SUM function syntax: always use asterisk for the dimension being summed, e.g. SUM(Revenue[*]) — every SUM equation must contain at least one *
+
+CRITICAL MODULE RULES:
+- Variable names use ONLY the immediate owning module as a prefix: "ModuleName.variableName"
+- NEVER use the full hierarchy path in a variable name (WRONG: "Company.Sales.revenue", CORRECT: "Sales.revenue")
+- Cross-module references require ghost variables: set crossLevelGhostOf to the source variable name, leave equation empty
 
 CRITICAL ARRAY RULES:
-- Array dimensions MUST be defined in specs.arrayDimensions BEFORE being referenced by variables
-- Each dimension requires ALL FOUR fields: type ("numeric" or "labels"), name (singular, alphanumeric), size (positive integer), elements (array of element names)
-- For arrayed variables, set "dimensions" field to array of dimension names that reference specs.arrayDimensions
-- If all elements use SAME formula: provide 'equation' only
-- If elements have DIFFERENT formulas: provide 'arrayEquations' for ALL elements (omit 'equation')
-- For arrayed STOCKS: ALWAYS use 'arrayEquations' to specify initial values for each element
-- SUM function syntax: ALWAYS use asterisk (*) for dimension being summed, NEVER the dimension name
-  * WRONG: SUM(Revenue[region])
-  * CORRECT: SUM(Revenue[*])
-  * CRITICAL: Every SUM equation MUST contain at least one asterisk (*)
+- Array dimensions must be defined in specs.arrayDimensions BEFORE any variable references them (use edit_specs first)
+- For arrayed variables, set 'dimensions' to the list of dimension names that exist in specs.arrayDimensions
+- If all elements share one formula, provide 'equation' only; if elements differ, provide 'arrayEquations' for every element and leave 'equation' empty
 
-CRITICAL SUBTYPE RULES:
+CRITICAL SUBTYPE RULES (queue/oven/conveyor/leakage/discreteOutflow/queueOutflow/queueOverflow):
 - Use sub-types ONLY when the model already has discrete-entity semantics or the user explicitly requests them — they add significant complexity
-- Stock sub-types: set 'subType' AND 'additionalProperties'; 'equation' is still the initial value (like a regular stock)
-  * 'queue': additionalProperties: {fifoEnabled?, oneAtATime?, splitBatches?, discrete?, roundRobin?, queueOutflowPriority?, purgeEq?, overflow?}
-  * 'oven': additionalProperties: {processTime (required), capacity?, inflowLimit?, fillTime?, cleanTime?, sample?, arrest?}
-  * 'conveyor': additionalProperties: {processTime (required), capacity?, inflowLimit?, sample?, arrest?}
-- Flow sub-types: set 'subType' only; leave 'equation' as "" (automatically computed, do NOT write an equation)
-  * 'discreteOutflow': the output flow from a conveyor or oven (entities that completed full transit)
-  * 'conveyorLeakage': early-exit flow from a conveyor. additionalProperties: {leakFraction (required, units 1/time_unit when exponential; dimensionless otherwise), exponential? (default true — almost always use exponential; only set false when explicitly requested), leakZoneStart?, leakZoneEnd?, leakIntegers?, ignorePrevZones?, forceLeakFraction?}
-  * 'queueOutflow': the output flow from a queue
-  * 'queueOverflow': overflow from a full queue — requires overflow: true on the queue's additionalProperties
-- Regular flows entering a conveyor may set additionalProperties: {spreadFlow? ('none'|'even'|'destination'|'distribution'|'source'), distribEq? (required when spreadFlow='distribution')}
-- SETTINGS go in 'additionalProperties', NEVER embed them in equations
-- RELATIONSHIPS: every variable referenced in an additionalProperties expression REQUIRES a relationship arrow FROM that variable TO the element
-- CONVEYOR WIRING:
-  * Every conveyorLeakage flow MUST appear in the outflows of its source conveyor AND in the inflows of its destination
-  * NEVER split a conveyor outflow using auxiliary arithmetic — route directly to one destination
-  * Use conveyor (not plain stock) when entities must spend a minimum/fixed duration in a stage
-  * Use plain stock when residence time is exponentially distributed (first-order delay)
+- Stock sub-types: set subType AND additionalProperties; equation is still the initial value (like a regular stock)
+- Flow sub-types: set subType only and leave equation as "" — the flow is computed automatically, do NOT write an equation
+- All sub-type settings (processTime, capacity, leakFraction, etc.) go in additionalProperties, NEVER embedded in equations
+- Every variable referenced in an additionalProperties equation REQUIRES a relationship arrow FROM that variable TO the element
+- CONVEYOR WIRING: every conveyorLeakage flow MUST appear in the outflows of its source conveyor AND in the inflows of its destination. NEVER split a conveyor outflow with auxiliary arithmetic — route directly to one destination.
+- queueOverflow flows require overflow: true on the queue's additionalProperties
+- Use conveyor (not plain stock) when entities must spend a minimum/fixed duration in a stage; use a plain stock when residence time is exponentially distributed (first-order delay)
 
-After editing, the model is validated and processed through the quantitative engine pipeline before updating the client.`,
+After editing, the model is validated and sent to the client for processing before the session state is updated.`,
     supportedModes: ['sfd', 'cld'],
     minModelTokens: config.agentTargetedEditingMinimum,
     inputSchema: z.object({
-      section: z.enum(['specs', 'variables', 'relationships', 'modules']).describe('Which section to edit'),
-      operation: z.enum(['update', 'add', 'remove']).describe('Operation to perform'),
-      data: z.union([
-        // For specs update - object with optional spec fields
-        z.object(simSpecsBase).partial(),
-        // For variables add - array of variables
-        z.array(z.object(variableBase)),
-        // For variables update - array of variable objects with name (required)
-        z.array(z.object({
-          ...variableBase,
-          newName: z.string().describe(LLMWrapper.SCHEMA_STRINGS.name).optional()
-        }).partial().required({ name: true })),
-        // For variables remove - array of strings
-        z.array(z.string()),
-        // For relationships add - array of relationships
-        z.array(z.object(relationshipBase)),
-        // For relationships update - single relationship object with from/to (required)
-        z.object(relationshipBase).partial().required({ from: true, to: true }),
-        // For relationships remove - array of {from, to} objects
-        z.array(z.object({
-          from: z.string(),
-          to: z.string()
-        })),
-        // For modules add/update - array of modules
-        z.array(LLMWrapper.moduleSchema())
-      ]).describe('The data for the operation. Format depends on section and operation - see description for details.')
+      operation: z.enum(['add', 'update', 'remove']).describe('Operation to perform'),
+      data: z.array(z.object({
+        ...variableBase,
+        newName: z.string().describe(LLMWrapper.SCHEMA_STRINGS.name).optional()
+      }).partial().required({ name: true })).describe('Array of variable objects. Each requires name; for add also requires type; for update fields you include replace those values (pass newName to rename); for remove only name is read.')
     }),
-    handler: async ({ section, operation, data }) => {
-      // Centralized error handler
-      const handleError = (errorMessage, error = null) => {
-        return createErrorResponse(errorMessage, error);
-      };
-
-      // Variable names are stored with spaces; equations use underscores.
-      // Normalize any underscore-style names the AI sends back to space-style.
-      const normName = n => typeof n === 'string' ? n.replace(/_/g, ' ') : n;
-      // Case-insensitive, space=underscore normalizer for search comparisons only.
-      const normSearch = s => typeof s === 'string' ? s.toLowerCase().replace(/[ _]/g, '_') : s;
-
+    handler: async ({ operation, data }) => {
       try {
-        const session = sessionManager.getSession(sessionId);
-        if (!session) {
-          throw new Error(`Session not found: ${sessionId}`);
-        }
-
-        const sessionTempDir = sessionManager.getSessionTempDir(sessionId);
-        const modelPath = join(sessionTempDir, 'model.sdjson');
-
-        if (!existsSync(modelPath)) {
-          return handleError('Error: Model file not found. Call get_current_model to get it.');
-        }
-
-        const modelContent = readFileSync(modelPath, 'utf-8');
-        const model = JSON.parse(modelContent);
-
-        // Perform the edit operation
-        switch (section) {
-          case 'specs':
-            if (operation === 'update') {
-              model.specs = model.specs || {};
-              if (data.startTime !== undefined) model.specs.startTime = data.startTime;
-              if (data.stopTime !== undefined) model.specs.stopTime = data.stopTime;
-              if (data.dt !== undefined) model.specs.dt = data.dt;
-              if (data.timeUnits !== undefined) model.specs.timeUnits = data.timeUnits;
-
-              if (data.arrayDimensions !== undefined) {
-                if (Array.isArray(data.arrayDimensions)) {
-                  for (const dim of data.arrayDimensions) {
-                    if (!dim.type || !dim.name || dim.size === undefined || !Array.isArray(dim.elements)) {
-                      return handleError(`Error: Array dimension "${dim.name || 'unknown'}" is missing required fields. All dimensions must have: type ("numeric" or "labels"), name (singular, alphanumeric), size (positive integer), and elements (array of element names).`);
-                    }
-                    if (dim.type !== 'numeric' && dim.type !== 'labels') {
-                      return handleError(`Error: Array dimension "${dim.name}" has invalid type "${dim.type}". Must be "numeric" or "labels".`);
-                    }
-                    if (typeof dim.size !== 'number' || dim.size <= 0) {
-                      return handleError(`Error: Array dimension "${dim.name}" size must be a positive integer, got: ${dim.size}`);
-                    }
-                    if (dim.elements.length !== dim.size) {
-                      return handleError(`Error: Array dimension "${dim.name}" has size=${dim.size} but elements array has ${dim.elements.length} items. They must match.`);
-                    }
-                  }
-                }
-                model.specs.arrayDimensions = data.arrayDimensions;
-              }
-            }
-            break;
-
-          case 'variables':
-            model.variables = model.variables || [];
-            if (operation === 'add') {
-              // Data must be an array of variable objects
-              if (!Array.isArray(data)) {
-                return handleError('Error: For variables add operation, data must be an array of variable objects. Example: [{name: "var1", type: "stock", equation: "100"}]');
-              }
-              const varsToAdd = data;
-              for (const v of varsToAdd) { if (v.name) v.name = normName(v.name); }
-              const errors = [];
-              for (let i = 0; i < varsToAdd.length; i++) {
-                const v = varsToAdd[i];
-                const varLabel = varsToAdd.length > 1 ? `Variable ${i + 1} (${v.name || 'unnamed'})` : `Variable "${v.name || 'unnamed'}"`;
-
-                if (!v.name || !v.type) {
-                  errors.push(`${varLabel}: Missing required fields. Must have "name" and "type".`);
-                } else if (!['stock', 'flow', 'variable'].includes(v.type)) {
-                  errors.push(`${varLabel}: Invalid type "${v.type}". Must be "stock", "flow", or "variable".`);
-                }
-              }
-
-              if (errors.length > 0) {
-                return handleError(`Error adding ${varsToAdd.length} variable(s):\n\n${errors.join('\n')}\n\nProvide an array of variable objects: [{name: "var1", type: "stock", equation: "100"}, {name: "var2", type: "variable", equation: "20"}]`);
-              }
-
-              model.variables.push(...varsToAdd);
-            } else if (operation === 'update') {
-              if (!Array.isArray(data)) {
-                return handleError('Error: For variables update operation, data must be an array of variable objects. Example: [{name: "Population", equation: "2000"}]');
-              }
-              for (const update of data) {
-                const varName = normName(update.name);
-                update.name = varName;
-                if (update.newName) update.newName = normName(update.newName);
-                if (!varName) {
-                  return handleError('Error: Must specify "name" field to update a variable');
-                }
-                const index = model.variables.findIndex(v => normSearch(v.name) === normSearch(varName));
-                if (index >= 0) {
-                  const oldVariable = model.variables[index];
-                  const oldName = oldVariable.name;
-
-                  const isRenamed = update.newName && update.newName !== oldName;
-
-                  if (isRenamed) {
-                    const newName = update.newName;
-                    const oldNameXMILE = oldName.replace(/ /g, '_');
-                    const newNameXMILE = newName.replace(/ /g, '_');
-
-                    const varRegex = new RegExp(`\\b${oldNameXMILE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
-
-                    for (const variable of model.variables) {
-                      if (variable.equation && varRegex.test(variable.equation)) {
-                        variable.equation = variable.equation.replace(varRegex, newNameXMILE);
-                      }
-
-                      if (variable.arrayEquations && Array.isArray(variable.arrayEquations)) {
-                        for (const ae of variable.arrayEquations) {
-                          if (ae.equation && varRegex.test(ae.equation)) {
-                            ae.equation = ae.equation.replace(varRegex, newNameXMILE);
-                          }
-                        }
-                      }
-
-                      if (variable.additionalProperties && typeof variable.additionalProperties === 'object') {
-                        for (const [key, val] of Object.entries(variable.additionalProperties)) {
-                          if (typeof val === 'string' && varRegex.test(val)) {
-                            variable.additionalProperties[key] = val.replace(varRegex, newNameXMILE);
-                          }
-                        }
-                      }
-                    }
-
-                    update.name = newName;
-                    delete update.newName;
-                  }
-
-                  model.variables[index] = { ...model.variables[index], ...update };
-                } else {
-                  return handleError(`Error: Variable "${varName}" not found`);
-                }
-              }
-            } else if (operation === 'remove') {
-              if (!Array.isArray(data)) {
-                return handleError('Error: For variables remove operation, data must be an array of variable name strings. Example: ["var1", "var2"]');
-              }
-              const normalizedRemoveNames = data.map(n => normSearch(n));
-              model.variables = model.variables.filter(v => !normalizedRemoveNames.includes(normSearch(v.name)));
-            }
-            break;
-
-          case 'relationships':
-            model.relationships = model.relationships || [];
-            if (operation === 'add') {
-              if (!Array.isArray(data)) {
-                return handleError('Error: For relationships add operation, data must be an array of relationship objects. Example: [{from: "var1", to: "var2", polarity: "+"}]');
-              }
-              const relsToAdd = data;
-              for (const r of relsToAdd) {
-                r.from = normName(r.from);
-                r.to = normName(r.to);
-                if (!r.from || !r.to) {
-                  return handleError('Error: Relationships must have "from" and "to" fields');
-                }
-                if (r.polarity !== undefined && !['+', '-'].includes(r.polarity)) {
-                  return handleError(`Error: Relationship polarity must be "+" or "-", got "${r.polarity}"`);
-                }
-              }
-              model.relationships.push(...relsToAdd);
-            } else if (operation === 'update') {
-              data.from = normName(data.from);
-              data.to = normName(data.to);
-              if (!data.from || !data.to) {
-                return handleError('Error: Must specify "from" and "to" fields to update a relationship');
-              }
-              const index = model.relationships.findIndex(r => normSearch(r.from) === normSearch(data.from) && normSearch(r.to) === normSearch(data.to));
-              if (index >= 0) {
-                model.relationships[index] = { ...model.relationships[index], ...data };
-              } else {
-                return handleError(`Error: Relationship from "${data.from}" to "${data.to}" not found`);
-              }
-            } else if (operation === 'remove') {
-              if (!Array.isArray(data)) {
-                return handleError('Error: For relationships remove operation, data must be an array of {from, to} objects. Example: [{from: "var1", to: "var2"}]');
-              }
-              model.relationships = model.relationships.filter(r =>
-                !data.some(rem => normSearch(rem.from) === normSearch(r.from) && normSearch(rem.to) === normSearch(r.to))
-              );
-            }
-            break;
-
-          case 'modules':
-            model.modules = model.modules || [];
-            if (operation === 'update') {
-              if (!Array.isArray(data)) {
-                return handleError('Error: For modules update operation, data must be an array of module objects. Example: [{name: "Module1", parentModule: null}]');
-              }
-              for (const m of data) {
-                m.name = normName(m.name);
-                if (!m.name || m.parentModule === undefined) {
-                  return handleError('Error: Modules must have "name" and "parentModule" fields');
-                }
-              }
-              model.modules = data;
-            } else if (operation === 'add') {
-              if (!Array.isArray(data)) {
-                return handleError('Error: For modules add operation, data must be an array of module objects. Example: [{name: "Module1", parentModule: null}]');
-              }
-              for (const m of data) {
-                m.name = normName(m.name);
-                if (!m.name || m.parentModule === undefined) {
-                  return handleError('Error: Modules must have "name" and "parentModule" fields');
-                }
-              }
-              model.modules.push(...data);
-            } else if (operation === 'remove') {
-              if (!Array.isArray(data)) {
-                return handleError('Error: For modules remove operation, data must be an array of module name strings. Example: ["Module1", "Module2"]');
-              }
-              const normalizedRemoveModules = data.map(n => normSearch(n));
-              model.modules = model.modules.filter(m => !normalizedRemoveModules.includes(normSearch(m.name)));
-            }
-            break;
-        }
-
-        const mode = session.mode;
-
-        if (mode !== 'sfd') {
-          return handleError('Error: Model editing is only supported for quantitative (SFD) models');
-        }
-
-        if (!model.variables || !Array.isArray(model.variables)) {
-          return handleError('Model validation failed: model.variables must be an array.');
-        }
-
-        if (!model.relationships || !Array.isArray(model.relationships)) {
-          return handleError('Model validation failed: model.relationships must be an array.');
-        }
-
-        const updateRequestId = generateRequestId('model');
-        await sendToClient(createUpdateModelMessage(sessionId, updateRequestId, model));
-
-        const updatePromise = new Promise((resolve, reject) => {
-          const timeout = setTimeout(() => {
-            reject(new Error('Update model timeout: Client did not respond within 30 seconds'));
-          }, 30000);
-
-          if (!session.pendingModelRequests) {
-            session.pendingModelRequests = new Map();
-          }
-          session.pendingModelRequests.set(updateRequestId, { resolve, reject, timeout });
-        });
-
-        const clientResult = await updatePromise;
-        const parsed = UpdateModelResponseSchema.parse(clientResult);
-
-        const { issues } = sessionManager.updateClientModel(sessionId, parsed);
-
-        return createSuccessResponse({
-          message: `Successfully edited ${section} section (${operation} operation). The model has been validated, processed, and sent to the client.`,
-          ...(issues && { issues })
+        return await applyEdit({
+          sessionManager, sessionId, sendToClient,
+          section: 'variables', operation,
+          mutate: variablesMutator(operation, data)
         });
       } catch (error) {
-        return handleError(`Failed to edit model section: ${error.message}`, error);
+        return createErrorResponse(`Failed to edit variables: ${error.message}`, error);
+      }
+    }
+  };
+}
+
+/**
+ * Edit relationships: add, update, or remove.
+ */
+export function createEditRelationshipsTool(sessionManager, sessionId, sendToClient) {
+  return {
+    description: `Edit the relationships section of the model. A relationship is a causal arrow from one variable to another with a polarity (+ or -). data is always an array of relationship objects. Each object must include 'from' and 'to'. Other fields are interpreted by operation:
+
+- add: include polarity and (optionally) reasoning/polarityReasoning for each new relationship
+- update: 'from' and 'to' locate the existing relationship; other fields you include replace those values
+- remove: only 'from' and 'to' are read; other fields are ignored
+
+CRITICAL: Every variable referenced inside an additionalProperties equation on a discrete-entity element (e.g. processTime, capacity, leakFraction, purgeEq, queueOutflowPriority) REQUIRES a relationship arrow FROM that referenced variable TO the element.`,
+    supportedModes: ['sfd', 'cld'],
+    minModelTokens: config.agentTargetedEditingMinimum,
+    inputSchema: z.object({
+      operation: z.enum(['add', 'update', 'remove']).describe('Operation to perform'),
+      data: z.array(
+        z.object(relationshipBase).partial().required({ from: true, to: true })
+      ).describe('Array of relationship objects. Each requires from and to; for add also requires polarity; for update fields you include replace those values; for remove only from and to are read.')
+    }),
+    handler: async ({ operation, data }) => {
+      try {
+        return await applyEdit({
+          sessionManager, sessionId, sendToClient,
+          section: 'relationships', operation,
+          mutate: relationshipsMutator(operation, data)
+        });
+      } catch (error) {
+        return createErrorResponse(`Failed to edit relationships: ${error.message}`, error);
+      }
+    }
+  };
+}
+
+/**
+ * Edit simulation specs (startTime, stopTime, dt, timeUnits, arrayDimensions).
+ */
+export function createEditSpecsTool(sessionManager, sessionId, sendToClient) {
+  return {
+    description: `Update the simulation specs (startTime, stopTime, dt, timeUnits, arrayDimensions). Only fields you include in data are changed; omitted fields keep their current values.
+
+CRITICAL: When updating arrayDimensions, provide the COMPLETE array — it replaces the entire arrayDimensions list. Each dimension requires all four fields (type, name, size, elements) and elements.length MUST equal size. Define dimensions here BEFORE any variable references them via its 'dimensions' field.`,
+    supportedModes: ['sfd', 'cld'],
+    minModelTokens: config.agentTargetedEditingMinimum,
+    inputSchema: z.object({
+      data: z.object(simSpecsBase).partial().describe('Spec fields to update. Only included fields are changed.')
+    }),
+    handler: async ({ data }) => {
+      try {
+        return await applyEdit({
+          sessionManager, sessionId, sendToClient,
+          section: 'specs', operation: 'update',
+          mutate: specsMutator(data)
+        });
+      } catch (error) {
+        return createErrorResponse(`Failed to edit specs: ${error.message}`, error);
+      }
+    }
+  };
+}
+
+/**
+ * Edit modules: add, update (replace entire hierarchy), or remove.
+ */
+export function createEditModulesTool(sessionManager, sessionId, sendToClient) {
+  return {
+    description: `Edit the module hierarchy. data is always an array of module objects. Each object must include 'name'. Other fields are interpreted by operation:
+
+- add: include 'parentModule' (string parent name, or null for a root module)
+- update: data is the COMPLETE replacement array — every module you want kept must be present with its parentModule; modules omitted are dropped
+- remove: only 'name' is read; other fields are ignored
+
+IMPORTANT: The modules array only defines the hierarchical structure. It does NOT control which variables belong to a module — variable membership is determined by the variable name prefix ("Finance.revenue" belongs to Finance). To move a variable between modules, edit the variable's name via edit_variables (operation: update, newName: "NewModule.variableName").`,
+    supportedModes: ['sfd', 'cld'],
+    minModelTokens: config.agentTargetedEditingMinimum,
+    inputSchema: z.object({
+      operation: z.enum(['add', 'update', 'remove']).describe('Operation to perform'),
+      data: z.array(
+        LLMWrapper.moduleSchema().partial().required({ name: true })
+      ).describe('Array of module objects. Each requires name; for add/update also include parentModule; for remove only name is read.')
+    }),
+    handler: async ({ operation, data }) => {
+      try {
+        return await applyEdit({
+          sessionManager, sessionId, sendToClient,
+          section: 'modules', operation,
+          mutate: modulesMutator(operation, data)
+        });
+      } catch (error) {
+        return createErrorResponse(`Failed to edit modules: ${error.message}`, error);
       }
     }
   };
