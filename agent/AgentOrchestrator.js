@@ -1380,7 +1380,7 @@ export class AgentOrchestrator {
           // usageMetadata object reference (e.g. a streamed partial yield plus
           // the aggregated close() yield). No LLM-call id is exposed on the
           // event, so reference equality is the only available dedup key.
-          this.#logApiUsage(Provider.GOOGLE, event.usageMetadata, NULL, this.#adkReportedUsageMetadata.has(event.usageMetadata));
+          this.#logApiUsage(Provider.GOOGLE, event.usageMetadata, null, this.#adkReportedUsageMetadata.has(event.usageMetadata));
 
           if (event.usageMetadata && !this.#adkReportedUsageMetadata.has(event.usageMetadata)) {
             this.#adkReportedUsageMetadata.add(event.usageMetadata);
