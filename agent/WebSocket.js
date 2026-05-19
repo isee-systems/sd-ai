@@ -289,6 +289,12 @@ export class WebSocketHandler {
       // Guard: WS may have closed during bwrap retry delays (up to 9s).
       if (this.#ws.readyState !== 1) {
         this.#killWorker();
+        // If the session was already deleted by #onClose, a retry attempt may
+        // have re-created the temp dir via mkdirSync after deleteSession's
+        // rmSync removed it. Clean it up so it doesn't become orphaned.
+        if (!this.#sessionManager.getSession(this.#sessionId)) {
+          this.#sessionManager.cleanupSessionTempDir(tempDir);
+        }
         return;
       }
 

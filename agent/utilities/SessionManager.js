@@ -534,10 +534,22 @@ ${conversationText}`;
     const session = this.sessions.get(sessionId);
     if (session) {
       // Reject any pending tool calls
-      for (const [callId, pendingCall] of session.pendingToolCalls.entries()) {
+      for (const [, pendingCall] of session.pendingToolCalls.entries()) {
         pendingCall.reject(new Error('Session closed'));
       }
       session.pendingToolCalls.clear();
+
+      // Reject pending feedback/model requests created by builtin tools.
+      // Each entry owns a setTimeout handle that must be cleared so the
+      // session object becomes GC-eligible immediately.
+      for (const map of [session.pendingFeedbackRequests, session.pendingModelRequests]) {
+        if (!map) continue;
+        for (const [, pending] of map.entries()) {
+          clearTimeout(pending.timeout);
+          pending.reject(new Error('Session closed'));
+        }
+        map.clear();
+      }
 
       // Clean up session temp folder
       this.cleanupSessionTempDir(session.tempDir);
@@ -574,6 +586,7 @@ ${conversationText}`;
   #startCleanupTimer() {
     this.cleanupTimer = setInterval(() => {
       this.cleanupStaleSessions();
+      this.#cleanupOrphanedTempDirs();
     }, this.cleanupInterval);
   }
 

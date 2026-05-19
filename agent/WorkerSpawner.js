@@ -55,6 +55,10 @@ class IpcWorker extends EventEmitter {
     this.#socketPath = socketPath;
 
     server.on('connection', (socket) => {
+      // Defensive: only one connection is expected per worker, but if a second
+      // arrives (e.g. retry inside the sandbox), tear the old one down rather
+      // than orphan its FD and listeners.
+      if (this.#socket && !this.#socket.destroyed) this.#socket.destroy();
       this.#socket = socket;
       this.#socketConnected = true;
       this.emit('socket-connected');
@@ -81,6 +85,17 @@ class IpcWorker extends EventEmitter {
     });
 
     server.on('error', (err) => this.emit('error', err));
+  }
+
+  /**
+   * Tear down the server + socket file without going through attach().
+   * Use only when spawn() failed before attach() was called — once attached,
+   * proc.on('exit') owns the cleanup.
+   */
+  dispose() {
+    this.#socket?.destroy();
+    try { this.#server.close(); } catch { /* already closing */ }
+    try { unlinkSync(this.#socketPath); } catch { /* already gone */ }
   }
 
   /** Wire up the sandboxed process after the socket is already listening. */
@@ -307,18 +322,35 @@ export class WorkerSpawner {
           // Socket file is on disk before bwrap starts — no race condition.
           const worker = await IpcWorker.listen(socketPath);
 
-          const proc = spawn(bwrapBin, bwrapArgs, {
-            env: workerEnv,
-            stdio: ['inherit', 'inherit', 'inherit'],
-          });
+          let proc;
+          try {
+            proc = spawn(bwrapBin, bwrapArgs, {
+              env: workerEnv,
+              stdio: ['inherit', 'inherit', 'inherit'],
+            });
+          } catch (err) {
+            // spawn rarely throws synchronously (most failures emit 'error'),
+            // but bad options can. Tear down the listening server + socket file
+            // so we don't leak FDs across retries.
+            worker.dispose();
+            throw err;
+          }
           worker.attach(proc);
 
           // Wait for either a successful IPC connection or an early bwrap exit.
+          // Each handler removes its sibling so the loser doesn't stay attached
+          // for the worker's lifetime firing into an already-resolved promise.
           const earlyExit = await new Promise((resolve) => {
-            worker.once('socket-connected', () => resolve(null));
-            worker.once('exit', (code, signal) => {
+            const onConnected = () => {
+              worker.off('exit', onExit);
+              resolve(null);
+            };
+            const onExit = (code, signal) => {
+              worker.off('socket-connected', onConnected);
               if (!worker.socketConnected) resolve({ code, signal });
-            });
+            };
+            worker.once('socket-connected', onConnected);
+            worker.once('exit', onExit);
           });
 
           if (earlyExit === null) return worker; // socket connected — worker is up
