@@ -6,6 +6,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenAI } from '@google/genai';
 import { countTokens } from '@anthropic-ai/tokenizer';
 import logger from '../../utilities/logger.js';
+import TokenUsageReporter, { Provider } from '../../utilities/TokenUsageReporter.js';
 import config from '../../config.js';
 
 /**
@@ -321,7 +322,7 @@ export class SessionManager {
    * Summarize an array of messages using the LLM and return a single summary message object.
    * Private — only called by #summarizeContextIfNeeded and cleanupContext.
    */
-  async #summarizeMessages(messages) {
+  async #summarizeMessages(messages, sessionId) {
     try {
       const isGeminiFormat = messages.some(m => Array.isArray(m.parts));
 
@@ -359,6 +360,9 @@ Keep the summary brief but informative (2-4 paragraphs maximum).
 Conversation history:
 ${conversationText}`;
 
+      const clientId = this.getSession(sessionId)?.clientId ?? null;
+      const reporter = new TokenUsageReporter(config.tokenReporterURL, clientId);
+
       let summaryText;
       if (isGeminiFormat) {
         if (!this.gemini) {
@@ -368,6 +372,7 @@ ${conversationText}`;
           model: config.agentGeminiSummaryModel,
           contents: [{ role: 'user', parts: [{ text: summaryPrompt }] }]
         });
+        reporter.report({ provider: Provider.GOOGLE, model: config.agentGeminiSummaryModel, usage: response.usageMetadata }).catch(() => {});
         summaryText = response.text || response.candidates?.[0]?.content?.parts?.[0]?.text || '';
       } else {
         if (!this.anthropic) {
@@ -378,6 +383,7 @@ ${conversationText}`;
           max_tokens: 1024,
           messages: [{ role: 'user', content: summaryPrompt }]
         });
+        reporter.report({ provider: Provider.ANTHROPIC, model: config.agentAnthropicSummaryModel, usage: response.usage }).catch(() => {});
         summaryText = response.content[0].text;
       }
 
@@ -458,7 +464,7 @@ ${conversationText}`;
     }
     if (chunk.length > 0) chunks.push(chunk);
 
-    const summaries = await Promise.all(chunks.map(c => this.#summarizeMessages(c)));
+    const summaries = await Promise.all(chunks.map(c => this.#summarizeMessages(c, sessionId)));
     const replacement = [...summaries, ...tail];
     messages.splice(0, messages.length, ...replacement);
 
