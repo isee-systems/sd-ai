@@ -590,10 +590,13 @@ export class AgentOrchestrator {
     // tool_use, thinking), but each one carries the same underlying BetaMessage
     // usage. Dedupe by BetaMessage.id so we only report usage once per API call.
     const messageId = message.message?.id;
+
+    this.#logApiUsage(Provider.ANTHROPIC, message.message?.usage, null, this.#sdkReportedMessageIds.has(messageId));
+
     if (messageId && !this.#sdkReportedMessageIds.has(messageId)) {
       this.#sdkReportedMessageIds.add(messageId);
-      this.#logApiUsage(Provider.ANTHROPIC, message.message?.usage);
     }
+
     const content = message.message?.content;
     const rawTextParts = [];
 
@@ -1377,10 +1380,12 @@ export class AgentOrchestrator {
           // usageMetadata object reference (e.g. a streamed partial yield plus
           // the aggregated close() yield). No LLM-call id is exposed on the
           // event, so reference equality is the only available dedup key.
+          this.#logApiUsage(Provider.GOOGLE, event.usageMetadata, NULL, this.#adkReportedUsageMetadata.has(event.usageMetadata));
+
           if (event.usageMetadata && !this.#adkReportedUsageMetadata.has(event.usageMetadata)) {
             this.#adkReportedUsageMetadata.add(event.usageMetadata);
-            this.#logApiUsage(Provider.GOOGLE, event.usageMetadata);
           }
+
           if (this.stopRequested) break;
           await this.#handleAdkEvent(event);
           if (isFinalResponse(event)) turnCount++;
@@ -1657,12 +1662,12 @@ export class AgentOrchestrator {
     }
   }
 
-  #logApiUsage(provider, usage, model = null) {
+  #logApiUsage(provider, usage, model = null, potentialDuplicate = false) {
     if (!usage) return;
     const resolvedModel = model ?? (
       provider === Provider.ANTHROPIC ? config.agentAnthropicModel : config.agentGeminiModel
     );
-    this.tokenReporter.report({ provider, model: resolvedModel, usage }).catch(() => {});
+    this.tokenReporter.report({ provider, model: resolvedModel, usage, potentialDuplicate }).catch(() => {});
   }
 
 
