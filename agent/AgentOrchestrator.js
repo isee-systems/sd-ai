@@ -70,6 +70,8 @@ export class AgentOrchestrator {
   #geminiManualCacheKey = null;
   #geminiManualCacheExpiry = null;
   #pendingMessages = [];
+  #sdkReportedMessageIds = new Set();
+  #adkReportedUsageMetadata = new WeakSet();
 
   constructor(sessionManager, sessionId, sendToClient, agentConfig, provider = config.agentDefaultProvider) {
     this.sessionManager = sessionManager;
@@ -584,7 +586,14 @@ export class AgentOrchestrator {
    * Handle assistant messages (text from Claude)
    */
   async #handleAnthropicSDKAssistantMessage(message) {
-    this.#logApiUsage(Provider.ANTHROPIC, message.message?.usage);
+    // The Agent SDK emits a separate SDKAssistantMessage per content block (text,
+    // tool_use, thinking), but each one carries the same underlying BetaMessage
+    // usage. Dedupe by BetaMessage.id so we only report usage once per API call.
+    const messageId = message.message?.id;
+    if (messageId && !this.#sdkReportedMessageIds.has(messageId)) {
+      this.#sdkReportedMessageIds.add(messageId);
+      this.#logApiUsage(Provider.ANTHROPIC, message.message?.usage);
+    }
     const content = message.message?.content;
     const rawTextParts = [];
 
@@ -1364,7 +1373,14 @@ export class AgentOrchestrator {
           newMessage: currentMessage,
           abortSignal: this.abortController.signal
         })) {
-          if (event.usageMetadata) this.#logApiUsage(Provider.GOOGLE, event.usageMetadata);
+          // ADK can emit multiple events per LLM call that share the same
+          // usageMetadata object reference (e.g. a streamed partial yield plus
+          // the aggregated close() yield). No LLM-call id is exposed on the
+          // event, so reference equality is the only available dedup key.
+          if (event.usageMetadata && !this.#adkReportedUsageMetadata.has(event.usageMetadata)) {
+            this.#adkReportedUsageMetadata.add(event.usageMetadata);
+            this.#logApiUsage(Provider.GOOGLE, event.usageMetadata);
+          }
           if (this.stopRequested) break;
           await this.#handleAdkEvent(event);
           if (isFinalResponse(event)) turnCount++;

@@ -14,10 +14,6 @@ export const ProviderDisplayNames = Object.freeze({
 });
 
 class TokenUsageReporter {
-  // Guards against reporting the same usage object twice (e.g. when a provider
-  // reuses the same object across multiple events for one API call).
-  #reported = new WeakSet();
-
   /**
    * @param {string|null} url - Optional URL to POST token usage to. If null, reporting is disabled.
    * @param {string|null} clientId - The clientId from the InitializeSessionMessage.
@@ -37,8 +33,6 @@ class TokenUsageReporter {
    */
   async report({ provider, model, usage }) {
     if (!usage) return;
-    const isDuplicate = this.#reported.has(usage);
-    if (!isDuplicate) this.#reported.add(usage);
 
     const isAnthropic = provider === Provider.ANTHROPIC;
     const isOpenAI = provider === Provider.OPENAI;
@@ -74,12 +68,10 @@ class TokenUsageReporter {
     const costs = this.#calculateCost(provider, model, tokens);
     const fmt = (n, cost) => cost != null ? `${n}($${cost.toFixed(6)})` : `${n}`;
 
-    const dupTag = isDuplicate ? ' [duplicate?]' : '';
     const clientTag = this.clientId ? ` client=${this.clientId}` : '';
     if (isAnthropic) {
       logger.log(
         `[usage:${provider}]` +
-        dupTag +
         clientTag +
         ` input=${fmt(tokens.inputTokens, costs?.inputTokens)}` +
         ` output=${fmt(tokens.outputTokens, costs?.outputTokens)}` +
@@ -91,7 +83,6 @@ class TokenUsageReporter {
     } else if (isOpenAI) {
       logger.log(
         `[usage:${provider}]` +
-        dupTag +
         clientTag +
         ` input=${fmt(tokens.inputTokens, costs?.inputTokens)}` +
         ` output=${fmt(tokens.outputTokens, costs?.outputTokens)}` +
@@ -102,7 +93,6 @@ class TokenUsageReporter {
     } else {
       logger.log(
         `[usage:${provider}]` +
-        dupTag +
         clientTag +
         ` input=${fmt(tokens.inputTokens, costs?.inputTokens)}` +
         ` output=${fmt(tokens.outputTokens, costs?.outputTokens)}` +
@@ -121,7 +111,6 @@ class TokenUsageReporter {
       tokens,
       cost: costs?.total ?? null,
       timestamp: new Date().toISOString(),
-      ...(isDuplicate && { potentialDuplicate: true }),
     };
 
     try {
