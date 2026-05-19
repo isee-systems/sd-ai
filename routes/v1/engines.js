@@ -6,7 +6,7 @@ const quantitativeEngines = ['quantitative'];
 
 router.get("/", async (req, res) => {
     const path = "engines"
-    const dirs = fs.readdirSync(path).filter(f => fs.lstatSync(`${path}/${f}`).isDirectory());
+    const dirs = fs.readdirSync(path).filter(f => fs.lstatSync(`${path}/${f}`).isDirectory()).filter(f => !f.startsWith('test-'));
 
     const engines = [];
     for (const dir of dirs) {

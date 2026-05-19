@@ -64,6 +64,36 @@
             }
         }
     },
+        "merlin-anthropic-sfd": {
+            "engine": "test-agent-build",
+            "additionalParameters": {
+                "agentName": "merlin",
+                "agentMode": "sdk",
+                "provider": "anthropic",
+                "mode": "sfd"
+            },
+            "limits": {
+                "tokensPerMinute": 200000,
+                "baselineTokenUsage": 50000,
+                "requestsPerMinute": 3
+            }
+        },
+
+        "merlin-google-sfd": {
+            "engine": "test-agent-build",
+            "additionalParameters": {
+                "agentName": "merlin",
+                "agentMode": "sdk",
+                "provider": "google",
+                "mode": "sfd"
+            },
+            "limits": {
+                "tokensPerMinute": 200000,
+                "baselineTokenUsage": 50000,
+                "requestsPerMinute": 3
+            }
+        }
+    },
     "categories": {
         "quantitativeTranslation": true,
         "quantitativeCausalReasoning": true,
