@@ -70,8 +70,21 @@ export class AgentOrchestrator {
   #geminiManualCacheKey = null;
   #geminiManualCacheExpiry = null;
   #pendingMessages = [];
-  #sdkReportedMessageIds = new Set();
-  #adkReportedUsageMetadata = new WeakSet();
+  // ADK can emit multiple events per LLM call that share the same usageMetadata
+  // object reference (e.g. a streamed partial yield plus the aggregated close()
+  // yield). No LLM-call id is exposed on the event, so reference equality is the
+  // only available dedup key.
+  #geminiAdkReportedUsageMetadata = new WeakSet();
+  // Per-assistant usage accumulator for the anthropic SDK route. The SDKResultMessage
+  // carries the authoritative aggregate and supersedes this on normal completion;
+  // we only flush the accumulator as a fallback when a query aborts before its
+  // result message arrives.
+  #anthropicSdkAccumulatorUsage = {
+    input_tokens: 0,
+    output_tokens: 0,
+    cache_creation: { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: 0 },
+    cache_read_input_tokens: 0,
+  };
 
   constructor(sessionManager, sessionId, sendToClient, agentConfig, provider = config.agentDefaultProvider) {
     this.sessionManager = sessionManager;
@@ -82,7 +95,7 @@ export class AgentOrchestrator {
 
     // SDK-specific properties (for SDK mode)
     this.abortController = null;
-    this.sdkSessionId = null; // SDK session ID for conversation continuity
+    this.anthropicSdkSessionId = null; // SDK session ID for conversation continuity
     this.pendingToolCalls = new Map(); // Track tool_use_id -> tool_name mapping
 
     // Load configuration
@@ -98,8 +111,8 @@ export class AgentOrchestrator {
     });
 
     this.gemini = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-    this.adkSessionId = null;
-    this.adkSessionService = new InMemorySessionService();
+    this.geminiAdkSessionId = null;
+    this.geminiAdkSessionService = new InMemorySessionService();
 
     const clientId = sessionManager.getSession(sessionId)?.clientId ?? null;
     this.llm = new LLMWrapper({ clientId, underlyingModel: config.agentAnthropicSummaryModel });
@@ -133,13 +146,13 @@ export class AgentOrchestrator {
 
       switch (`${this.provider}-${loopStyle}`) {
         case 'anthropic-sdk':
-          await this.startConversationWithAnthropicSDK(userMessage, previousAgentContext);
+          await this.startConversationWithAnthropicSdk(userMessage, previousAgentContext);
           break;
         case 'anthropic-manual':
           await this.startConversationAnthropicManual(userMessage);
           break;
         case 'google-sdk':
-          await this.startConversationWithADK(userMessage, previousAgentContext);
+          await this.startConversationWithGeminiAdk(userMessage, previousAgentContext);
           break;
         case 'google-manual':
           await this.startConversationGeminiManual(userMessage);
@@ -221,7 +234,7 @@ export class AgentOrchestrator {
     ];
 
     // Convert tool servers to Anthropic tool format (with conditional filtering)
-    const tools = this.#convertToolsToAnthropicFormat(builtInTools, dynamicTools, modelTokenCount, mode);
+    const tools = this.#anthropicManualConvertTools(builtInTools, dynamicTools, modelTokenCount, mode);
 
     const maxIterations = this.configManager.getMaxIterations();
 
@@ -347,7 +360,7 @@ export class AgentOrchestrator {
   /**
    * Start conversation using Claude Agent SDK
    */
-  async startConversationWithAnthropicSDK(userMessage, previousAgentContext = null) {
+  async startConversationWithAnthropicSdk(userMessage, previousAgentContext = null) {
     const session = this.sessionManager.getSession(this.sessionId);
     const mode = session.mode;
 
@@ -410,7 +423,7 @@ export class AgentOrchestrator {
       ];
 
       // Prefix tool names in system prompt
-      systemPrompt = this.#anthropicSDKPrefixToolNamesInSystemPrompt(systemPrompt, builtInToolNames, clientToolNames);
+      systemPrompt = this.#anthropicSdkPrefixToolNamesInSystemPrompt(systemPrompt, builtInToolNames, clientToolNames);
 
       // Build query options with MCP servers
       const queryOptions = {
@@ -428,20 +441,20 @@ export class AgentOrchestrator {
       };
 
       // If we have an SDK session ID, resume the conversation
-      if (this.sdkSessionId) {
-        queryOptions.resume = this.sdkSessionId;
-        logger.log(`Anthropic SDK: Resuming SDK conversation with session_id: ${this.sdkSessionId}`);
+      if (this.anthropicSdkSessionId) {
+        queryOptions.resume = this.anthropicSdkSessionId;
+        logger.log(`Anthropic SDK: Resuming SDK conversation with session_id: ${this.anthropicSdkSessionId}`);
       } else {
         logger.log(`Anthropic SDK: Starting new SDK conversation`);
       }
 
       // Build prompt - inject prior agent's history as plain string prefix on agent switch
       let prompt = userMessage;
-      if (previousAgentContext?.length > 0 && !this.sdkSessionId) {
+      if (previousAgentContext?.length > 0 && !this.anthropicSdkSessionId) {
         const contextToReplay = previousAgentContext.slice(0, -1).map(toAnthropicMessage);
         if (contextToReplay.length > 0) {
           logger.debug(`[Agent switch → SDK] Replaying ${contextToReplay.length} messages from prior agent.`);
-          const contextText = await this.#buildPriorContextTextAnthropic(contextToReplay);
+          const contextText = await this.#anthropicSdkBuildPriorContextText(contextToReplay);
           prompt = `[Prior conversation context]\n${contextText}\n[End of prior context]\n\n${userMessage}`;
         }
       }
@@ -463,7 +476,7 @@ export class AgentOrchestrator {
         const next = this.#pendingMessages.shift();
         logger.log(`Anthropic SDK: processing queued message (remaining: ${this.#pendingMessages.length})`);
         this.maxTurnsReached = false;
-        const followUpIterator = query({ prompt: next, options: { ...queryOptions, resume: this.sdkSessionId } });
+        const followUpIterator = query({ prompt: next, options: { ...queryOptions, resume: this.anthropicSdkSessionId } });
         for await (const message of followUpIterator) {
           await this.#handleAnthropicSdkMessage(message);
         }
@@ -515,6 +528,9 @@ export class AgentOrchestrator {
         ));
       }
     } finally {
+      // Safety net: report any per-assistant usage that wasn't superseded by a
+      // result message (e.g. the query was aborted mid-stream).
+      this.#flushAnthropicSdkUsageAccumulator();
       this.abortController = null;
     }
   }
@@ -548,18 +564,18 @@ export class AgentOrchestrator {
   async #handleAnthropicSdkMessage(message) {
     switch (message.type) {
       case 'assistant':
-        await this.#handleAnthropicSDKAssistantMessage(message);
+        await this.#handleAnthropicSdkAssistantMessage(message);
         break;
 
       case 'result':
-        await this.#handleAnthropicSDKResultMessage(message);
+        await this.#handleAnthropicSdkResultMessage(message);
         break;
 
       case 'system':
         if (message.subtype === 'init') {
           if (message.session_id) {
-            this.sdkSessionId = message.session_id;
-            logger.log(`Anthropic SDK initialized for session ${this.sessionId}, SDK session_id: ${this.sdkSessionId}`);
+            this.anthropicSdkSessionId = message.session_id;
+            logger.log(`Anthropic SDK initialized for session ${this.sessionId}, SDK session_id: ${this.anthropicSdkSessionId}`);
           }
         } else if (message.subtype === 'error') {
           logger.error(`Anthropic SDK system error for session ${this.sessionId}:`, message.error || message);
@@ -574,7 +590,7 @@ export class AgentOrchestrator {
         break;
 
       case 'user':
-        await this.#handleAnthropicSDKUserMessage(message);
+        await this.#handleAnthropicSdkUserMessage(message);
         break;
 
       default:
@@ -584,17 +600,20 @@ export class AgentOrchestrator {
 
   /**
    * Handle assistant messages (text from Claude)
+   *
+   * Usage isn't reported here — the SDKResultMessage carries the authoritative
+   * aggregate (including the SDK's internal compaction calls). But on abort no
+   * result message arrives, so we also accumulate every per-assistant usage and
+   * flush it as a fallback in the surrounding try/finally.
    */
-  async #handleAnthropicSDKAssistantMessage(message) {
-    // The Agent SDK emits a separate SDKAssistantMessage per content block (text,
-    // tool_use, thinking), but each one carries the same underlying BetaMessage
-    // usage. Dedupe by BetaMessage.id so we only report usage once per API call.
-    const messageId = message.message?.id;
-
-    this.#logApiUsage(Provider.ANTHROPIC, message.message?.usage, null, this.#sdkReportedMessageIds.has(messageId));
-
-    if (messageId && !this.#sdkReportedMessageIds.has(messageId)) {
-      this.#sdkReportedMessageIds.add(messageId);
+  async #handleAnthropicSdkAssistantMessage(message) {
+    const usage = message.message?.usage;
+    if (usage) {
+      this.#anthropicSdkAccumulatorUsage.input_tokens += usage.input_tokens ?? 0;
+      this.#anthropicSdkAccumulatorUsage.output_tokens += usage.output_tokens ?? 0;
+      this.#anthropicSdkAccumulatorUsage.cache_creation.ephemeral_5m_input_tokens += usage.cache_creation?.ephemeral_5m_input_tokens ?? 0;
+      this.#anthropicSdkAccumulatorUsage.cache_creation.ephemeral_1h_input_tokens += usage.cache_creation?.ephemeral_1h_input_tokens ?? 0;
+      this.#anthropicSdkAccumulatorUsage.cache_read_input_tokens += usage.cache_read_input_tokens ?? 0;
     }
 
     const content = message.message?.content;
@@ -667,7 +686,7 @@ export class AgentOrchestrator {
   /**
    * Handle user messages (tool results being sent back to Claude)
    */
-  async #handleAnthropicSDKUserMessage(message) {
+  async #handleAnthropicSdkUserMessage(message) {
     const content = message.message?.content;
 
     if (content && Array.isArray(content)) {
@@ -700,9 +719,21 @@ export class AgentOrchestrator {
   }
 
   /**
-   * Handle result messages (conversation completion)
+   * Handle result messages (conversation completion).
+   *
+   * The result message carries the aggregate usage for the entire query (across
+   * every assistant turn AND the SDK's internal compaction calls), so this is
+   * the canonical point where we report usage for the SDK route. The
+   * per-assistant accumulator is reset because the result supersedes it.
    */
-  async #handleAnthropicSDKResultMessage(message) {
+  async #handleAnthropicSdkResultMessage(message) {
+    if (message.usage) {
+      this.#logApiUsage(Provider.ANTHROPIC, message.usage);
+      this.#resetAnthropicSdkUsageAccumulator();
+    } else {
+      this.#flushAnthropicSdkUsageAccumulator();
+    }
+
     if (message.subtype === 'success') {
       logger.log(`Anthropic SDK conversation completed successfully for session ${this.sessionId}`);
     } else if (message.subtype === 'error_max_turns') {
@@ -721,7 +752,7 @@ export class AgentOrchestrator {
    * Prefix tool names in system prompt for SDK mode
    * Scans the system prompt and adds mcp__ prefixes to tool names
    */
-  #anthropicSDKPrefixToolNamesInSystemPrompt(systemPrompt, builtInToolNames, clientToolNames) {
+  #anthropicSdkPrefixToolNamesInSystemPrompt(systemPrompt, builtInToolNames, clientToolNames) {
     let modifiedPrompt = systemPrompt;
 
     // Create mapping of unprefixed tool names to prefixed versions
@@ -933,7 +964,7 @@ export class AgentOrchestrator {
    * Build prior-history context text, summarizing if it exceeds the token budget.
    * Used when injecting prior agent context into an SDK session.
    */
-  async #buildPriorContextTextAnthropic(history) {
+  async #anthropicSdkBuildPriorContextText(history) {
     try {
       const conversationText = history.map((msg) => {
         if (msg.role === 'user') {
@@ -1008,7 +1039,7 @@ export class AgentOrchestrator {
   /**
    * Convert tool servers to Anthropic tool format
    */
-  #convertToolsToAnthropicFormat(builtInTools, dynamicTools, modelTokenCount = 0, mode = null) {
+  #anthropicManualConvertTools(builtInTools, dynamicTools, modelTokenCount = 0, mode = null) {
     const tools = [];
     const toolNames = new Set();
 
@@ -1108,7 +1139,7 @@ export class AgentOrchestrator {
       this.sessionManager.updateModelTokenCount(this.sessionId, modelTokenCount);
     }
 
-    const toolDeclarations = this.#convertToolsToGeminiFormat(builtInTools, dynamicTools, modelTokenCount, mode);
+    const toolDeclarations = this.#geminiManualConvertTools(builtInTools, dynamicTools, modelTokenCount, mode);
 
     // Build or reuse per-session Gemini context cache (system prompt + tools)
     let geminiConfig = await this.#getGeminiManualConfig(systemPrompt, toolDeclarations);
@@ -1273,7 +1304,7 @@ export class AgentOrchestrator {
 
   #adkHasPriorContext = false;
 
-  async startConversationWithADK(userMessage, previousAgentContext = null) {
+  async startConversationWithGeminiAdk(userMessage, previousAgentContext = null) {
     const session = this.sessionManager.getSession(this.sessionId);
     const mode = session.mode;
 
@@ -1340,19 +1371,19 @@ export class AgentOrchestrator {
       const runner = new Runner({
         appName: 'sd-ai',
         agent,
-        sessionService: this.adkSessionService
+        sessionService: this.geminiAdkSessionService
       });
 
-      if (!this.adkSessionId) {
-        this.adkSessionId = this.sessionId;
-        await this.adkSessionService.createSession({
+      if (!this.geminiAdkSessionId) {
+        this.geminiAdkSessionId = this.sessionId;
+        await this.geminiAdkSessionService.createSession({
           appName: 'sd-ai',
           userId: this.sessionId,
-          sessionId: this.adkSessionId
+          sessionId: this.geminiAdkSessionId
         });
-        logger.log(`Gemini ADK: session created: ${this.adkSessionId}`);
+        logger.log(`Gemini ADK: session created: ${this.geminiAdkSessionId}`);
       } else {
-        logger.log(`Gemini ADK: Resuming session: ${this.adkSessionId}`);
+        logger.log(`Gemini ADK: Resuming session: ${this.geminiAdkSessionId}`);
       }
 
       let prompt = userMessage;
@@ -1360,7 +1391,7 @@ export class AgentOrchestrator {
         const contextToReplay = previousAgentContext.slice(0, -1).map(toGeminiMessage);
         if (contextToReplay.length > 0) {
           logger.debug(`[Agent switch → ADK] Replaying ${contextToReplay.length} messages from prior agent.`);
-          const contextText = await this.#buildPriorContextTextGemini(contextToReplay);
+          const contextText = await this.#geminiAdkBuildPriorContextText(contextToReplay);
           prompt = `[Prior conversation context]\n${contextText}\n[End of prior context]\n\n${userMessage}`;
         }
         this.#adkHasPriorContext = true;
@@ -1372,22 +1403,17 @@ export class AgentOrchestrator {
       while (true) {
         for await (const event of runner.runAsync({
           userId: this.sessionId,
-          sessionId: this.adkSessionId,
+          sessionId: this.geminiAdkSessionId,
           newMessage: currentMessage,
           abortSignal: this.abortController.signal
         })) {
-          // ADK can emit multiple events per LLM call that share the same
-          // usageMetadata object reference (e.g. a streamed partial yield plus
-          // the aggregated close() yield). No LLM-call id is exposed on the
-          // event, so reference equality is the only available dedup key.
-          this.#logApiUsage(Provider.GOOGLE, event.usageMetadata, null, this.#adkReportedUsageMetadata.has(event.usageMetadata));
-
-          if (event.usageMetadata && !this.#adkReportedUsageMetadata.has(event.usageMetadata)) {
-            this.#adkReportedUsageMetadata.add(event.usageMetadata);
+          if (event.usageMetadata && !this.#geminiAdkReportedUsageMetadata.has(event.usageMetadata)) {
+            this.#geminiAdkReportedUsageMetadata.add(event.usageMetadata);
+            this.#logApiUsage(Provider.GOOGLE, event.usageMetadata);
           }
 
           if (this.stopRequested) break;
-          await this.#handleAdkEvent(event);
+          await this.#handleGeminiAdkEvent(event);
           if (isFinalResponse(event)) turnCount++;
           if (turnCount >= maxIterations) {
             logger.warn(`Gemini ADK: agent reached max iterations (${maxIterations})`);
@@ -1443,7 +1469,7 @@ export class AgentOrchestrator {
     }
   }
 
-  async #handleAdkEvent(event) {
+  async #handleGeminiAdkEvent(event) {
     if (event.errorCode) {
       throw new Error(event.errorMessage || `ADK error: ${event.errorCode}`);
     }
@@ -1512,7 +1538,7 @@ export class AgentOrchestrator {
     }
   }
 
-  #convertToolsToGeminiFormat(builtInTools, dynamicTools, modelTokenCount = 0, mode = null) {
+  #geminiManualConvertTools(builtInTools, dynamicTools, modelTokenCount = 0, mode = null) {
     const declarations = [];
     const toolNames = new Set();
 
@@ -1545,7 +1571,7 @@ export class AgentOrchestrator {
     return declarations;
   }
 
-  async #buildPriorContextTextGemini(history) {
+  async #geminiAdkBuildPriorContextText(history) {
     try {
       const conversationText = history.map((msg) => {
         const role = msg.role === 'user' ? 'User' : 'Assistant';
@@ -1662,6 +1688,35 @@ export class AgentOrchestrator {
     }
   }
 
+  #resetAnthropicSdkUsageAccumulator() {
+    this.#anthropicSdkAccumulatorUsage = {
+      input_tokens: 0,
+      output_tokens: 0,
+      cache_creation: { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: 0 },
+      cache_read_input_tokens: 0,
+    };
+  }
+
+  /**
+   * Report any per-assistant usage that hasn't been superseded by a result
+   * message. Used as the abort/error fallback so a stopped conversation still
+   * gets its tokens counted.
+   */
+  #flushAnthropicSdkUsageAccumulator() {
+    const u = this.#anthropicSdkAccumulatorUsage;
+    const hasUsage =
+      u.input_tokens > 0 ||
+      u.output_tokens > 0 ||
+      u.cache_creation.ephemeral_5m_input_tokens > 0 ||
+      u.cache_creation.ephemeral_1h_input_tokens > 0 ||
+      u.cache_read_input_tokens > 0;
+    if (hasUsage) {
+      logger.log(`Anthropic SDK: flushing accumulated per-assistant usage (no result message) for session ${this.sessionId}`);
+      this.#logApiUsage(Provider.ANTHROPIC, u);
+    }
+    this.#resetAnthropicSdkUsageAccumulator();
+  }
+
   #logApiUsage(provider, usage, model = null, potentialDuplicate = false) {
     if (!usage) return;
     const resolvedModel = model ?? (
@@ -1688,7 +1743,7 @@ export class AgentOrchestrator {
     this.dynamicToolProvider = null;
     this.anthropic = null;
     this.gemini = null;
-    this.adkSessionService = null;
+    this.geminiAdkSessionService = null;
     this.configManager = null;
   }
 }
