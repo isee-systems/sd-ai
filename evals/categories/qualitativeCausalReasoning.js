@@ -194,22 +194,23 @@ export const groups = {
             distribution, and public acceptance.
             
             Key variables that experts agree are essential: disease transmission, policy interventions, economic impact, 
-            public compliance, healthcare capacity, political pressure, mental health, public trust, vaccination rollout.`,
+            public compliance, healthcare capacity, political pressure, mental health impacts, vaccination rollout.`,
             [
                 {
-                    name: "Core pandemic dynamics",
-                    requiredVariables: ["disease transmission", "policy interventions"],
+                    name: "Pandemic intervention dynamics",
+                    requiredVariables: ["disease transmission", "political pressure", "policy interventions"],
                     requiredRelationships: [
-                        { from: "disease transmission", to: "policy interventions", polarity: "+" }
+                        { from: "disease transmission", to: "political pressure", polarity: "+" },
+                        { from: "political pressure", to: "policy interventions", polarity: "+" }
                     ]
                 },
                 {
                     name: "Economic and social trade-offs",
-                    requiredVariables: ["economic impact", "public compliance", "mental health"],
+                    requiredVariables: ["economic impact", "public compliance", "mental health impacts"],
                     requiredRelationships: [
                         { from: "policy interventions", to: "economic impact", polarity: "+" },
                         { from: "economic impact", to: "public compliance", polarity: "-" },
-                        { from: "policy interventions", to: "mental health", polarity: "-" }
+                        { from: "policy interventions", to: "mental health impacts", polarity: "+" }
                     ]
                 },
                 {
@@ -238,22 +239,22 @@ export const groups = {
             accommodation, and treatment access.
             
             Key variables that experts agree are essential: social isolation, economic stress, stigma, access to services, 
-            community support, substance abuse, workplace policies, family relationships, treatment outcomes, mental health.`,
+            community support, treatment outcomes, mental health problems.`,
             [
                 {
                     name: "Social isolation cycle",
-                    requiredVariables: ["social isolation", "mental health", "community support"],
+                    requiredVariables: ["social isolation", "mental health problems", "community support"],
                     requiredRelationships: [
-                        { from: "social isolation", to: "mental health", polarity: "+" },
-                        { from: "mental health", to: "social isolation", polarity: "+" },
-                        { from: "community support", to: "mental health", polarity: "-" }
+                        { from: "social isolation", to: "mental health problems", polarity: "+" },
+                        { from: "mental health problems", to: "social isolation", polarity: "+" },
+                        { from: "community support", to: "mental health problems", polarity: "-" }
                     ]
                 },
                 {
                     name: "Economic and employment factors",
-                    requiredVariables: ["economic stress", "workplace policies"],
+                    requiredVariables: ["economic stress", "mental health problems"],
                     requiredRelationships: [
-                        { from: "economic stress", to: "mental health", polarity: "+" }
+                        { from: "economic stress", to: "mental health problems", polarity: "+" }
                     ]
                 },
                 {

@@ -262,7 +262,7 @@ export const groups = {
             Disease progression involves distinct compartments of people moving through the infection cycle.
             
             Use these variable names: 
-            susceptible, exposed, infectious, recovered, infecting, incubating, recovering, contact rate`,
+            susceptible, exposed, infectious, recovered, infecting, incubating, recovering, contacts, vaccination`,
             [
                 {
                     name: "SEIR disease progression",
@@ -295,8 +295,8 @@ export const groups = {
             Recovery times vary - some patients recover quickly while others require long-term care.
             The system involves managing patient flows, workforce dynamics, and available bed resources.
             
-            Use these variable names: 
-            patients, available beds, healthcare workers, workload, burnout.`,
+            Use these variable names:
+            patients, available beds, healthcare workers, workload, burnout, staff turnover.`,
             [
                 {
                     name: "Hospital capacity management",
