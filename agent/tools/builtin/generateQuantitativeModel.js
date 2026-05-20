@@ -18,6 +18,9 @@ export function createGenerateQuantitativeModelTool(sessionManager, sessionId, s
       parameters: z.object({
         problemStatement: z.string().optional().describe('Description of dynamic issue to address'),
         backgroundKnowledge: z.string().optional().describe('Background information for LLM'),
+        allowArrays: z.boolean().optional().describe('Whether to use subscripted/array variables to represent multiple parallel entities (e.g., age groups, regions, sectors)'),
+        allowModules: z.boolean().optional().describe('Whether to organize the model into separate named modules'),
+        allowSubTypes: z.boolean().optional().describe('Whether to use sub-types that support discrete elements like conveyors, queues, and ovens'),
       }).optional()
     }),
     handler: async ({ prompt, difficulty, parameters }) => {
@@ -30,12 +33,14 @@ export function createGenerateQuantitativeModelTool(sessionManager, sessionId, s
         const underlyingModel = difficulty === 'normal' ? config.buildDefaultModel : config.agentToolHighEffortBuildDefaultModel;
         const currentModel = sessionManager.getClientModel(sessionId);
 
-        const sessionCapabilities = {
-          supportsArrays: session.supportsArrays,
-          supportsModules: session.supportsModules,
-          supportsSubTypes: session.supportsSubTypes
+        const mergedParameters = {
+          ...parameters,
+          supportsArrays: session.supportsArrays && (parameters?.allowArrays ?? true),
+          supportsModules: session.supportsModules && (parameters?.allowModules ?? true),
+          supportsSubTypes: session.supportsSubTypes && (parameters?.allowSubTypes ?? true),
+          underlyingModel,
+          clientId: session.clientId
         };
-        const mergedParameters = { ...sessionCapabilities, ...parameters, underlyingModel, clientId: session.clientId };
 
         const result = await callQuantitativeEngine(prompt, currentModel, mergedParameters);
 

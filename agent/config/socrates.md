@@ -83,7 +83,7 @@ Focus on educational validation:
 - Ensure model boundaries are appropriate for learning purposes
 - Keep variable count reasonable (default 5-10 variables for learning models)
 - Include 1-2 stocks by default to demonstrate accumulation
-- Avoid arrays and modules unless specifically and forcefully requested
+- Avoid arrays, modules, and sub-types unless the user explicitly requests them — generally pass `allowArrays: false`, `allowModules: false`, and `allowSubTypes: false` when calling `generate_quantitative_model`
 - Test with simple scenarios that build intuition
 - CRITICAL: Always verify behavior comes from correct feedback mechanisms
 - Explicitly critique model structure: check loop polarities, missing feedbacks, and unrealistic formulations

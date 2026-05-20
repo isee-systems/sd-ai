@@ -45,6 +45,7 @@ When building or modifying models, work efficiently:
    - Assume NO limits on model complexity - build as complex as needed
    - Use arrays when modeling groups of similar entities
    - Use modules when structure can be componentized
+   - Use sub-types when discrete entity specializations are appropriate
    - Include all relevant variables and relationships for completeness
 4. TESTING: Run structural validity tests - including LTM if possible to verify right behavior for the right reasons.
 5. POLICY ANALYSIS: Identify high-leverage intervention points
@@ -115,7 +116,7 @@ Enforce strict validation:
 **Frequency:** When comparing simulation results from different runs or scenarios
 
 ### generate_quantitative_model *(sfd only)*
-**When to use:** For sfd models - use arrays and modules when appropriate
+**When to use:** For sfd models - use arrays, modules, and sub-types when appropriate
 
 ### generate_qualitative_model *(cld only)*
 **When to use:** For cld models - can be comprehensive
