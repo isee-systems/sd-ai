@@ -29,9 +29,9 @@ const config = {
     "agentAnthropicSummaryModel": 'claude-haiku-4-5', // Model used for conversation history summarization MUST BE Anthropic models
     "agentGeminiModel": 'gemini-3.5-flash', // Model used for agent conversations MUST BE gemini models
     "agentGeminiSummaryModel": 'gemini-3.1-flash-lite-preview', // Model used for conversation history summarization MUST BE gemini models
-    "agentAnthropicEffort": "low",
-    "agentAnthropicThinking": { type: "disabled" },
-    "agentGeminiThinking": { thinkingLevel: ThinkingLevel.LOW },
+    "agentAnthropicEffort": "medium",
+    "agentAnthropicThinking": { type: "enabled", "budget_tokens": 10000 },
+    "agentGeminiThinking": { thinkingLevel: ThinkingLevel.MEDIUM },
     "agentToolHighEffortBuildDefaultModel": 'gemini-3.5-flash high', //LLMWrapper underlyingModel default for building model tools
     "agentToolHighEffortNonBuildDefaultModel": 'gemini-3.5-flash high', //LLMWrapper underlyingModel default for non-building model tools
 };
