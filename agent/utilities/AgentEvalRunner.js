@@ -305,15 +305,15 @@ export async function runAgent(prompt, currentModel, parameters) {
       }
 
       case 'feedback_request': {
-        let feedbackLoops;
+        let resolvedFeedbackContent;
         if (feedbackContent) {
-          feedbackLoops = feedbackContent.feedbackLoops || [];
+          resolvedFeedbackContent = feedbackContent;
         } else {
           const model = sessionManager.getClientModel(sessionId);
-          feedbackLoops = findFeedbackLoops(model?.relationships);
+          resolvedFeedbackContent = { feedbackLoops: findFeedbackLoops(model?.relationships) };
         }
         const frReqId = message.requestId;
-        const frPayload = { feedbackContent: { feedbackLoops }, runIds: message.runIds };
+        const frPayload = { feedbackContent: resolvedFeedbackContent, runIds: message.runIds };
         setImmediate(() => resolvePending(sessionManager.getSession(sessionId)?.pendingFeedbackRequests, frReqId, frPayload));
         break;
       }
