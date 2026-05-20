@@ -16,6 +16,7 @@ export class AgentConfigurationManager {
 
 ## CRITICAL: Text Generation
 - NEVER use emojis
+- NEVER use LaTeX
 
 ## ABSOLUTE RULE: NEVER mention, name, describe, or reference any specific feedback loop unless it was returned by get_feedback_information in the current session.** Do not infer loops from variable names, equations, or SD knowledge. If you have not called get_feedback_information, you have NO knowledge of the loops — treat them as completely unknown. Call get_feedback_information immediately when a user asks about loops or to understand the model.
 

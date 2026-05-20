@@ -14,8 +14,8 @@ const config = {
     /*
     * Defaults for the engines that use LLMWrapper and the agent tools that use those engines
     */
-    "buildDefaultModel": 'gemini-3-flash-preview low', //LLMWrapper underlyingModel default for building model tools
-    "nonBuildDefaultModel": 'gemini-3-flash-preview low', //LLMWrapper underlyingModel default for non-building model tools
+    "buildDefaultModel": 'gemini-3.5-flash low', //LLMWrapper underlyingModel default for building model tools
+    "nonBuildDefaultModel": 'gemini-3.5-flash low', //LLMWrapper underlyingModel default for non-building model tools
     
     /*
     * These settings control the operation of the agents
@@ -27,13 +27,13 @@ const config = {
     "agentDefaultProvider": 'anthropic', // Default LLM provider when client does not specify one ('anthropic' | 'google')
     "agentAnthropicModel": 'claude-sonnet-4-6', // Model used for agent conversations MUST BE Anthropic models
     "agentAnthropicSummaryModel": 'claude-haiku-4-5', // Model used for conversation history summarization MUST BE Anthropic models
-    "agentGeminiModel": 'gemini-3-flash-preview', // Model used for agent conversations MUST BE gemini models
+    "agentGeminiModel": 'gemini-3.5-flash', // Model used for agent conversations MUST BE gemini models
     "agentGeminiSummaryModel": 'gemini-3.1-flash-lite-preview', // Model used for conversation history summarization MUST BE gemini models
     "agentAnthropicEffort": "low",
     "agentAnthropicThinking": { type: "disabled" },
     "agentGeminiThinking": { thinkingLevel: ThinkingLevel.LOW },
-    "agentToolHighEffortBuildDefaultModel": 'gemini-3-flash-preview high', //LLMWrapper underlyingModel default for building model tools
-    "agentToolHighEffortNonBuildDefaultModel": 'gemini-3-flash-preview high', //LLMWrapper underlyingModel default for non-building model tools
+    "agentToolHighEffortBuildDefaultModel": 'gemini-3.5-flash high', //LLMWrapper underlyingModel default for building model tools
+    "agentToolHighEffortNonBuildDefaultModel": 'gemini-3.5-flash high', //LLMWrapper underlyingModel default for non-building model tools
 };
 
 export default config
