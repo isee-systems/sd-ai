@@ -2,6 +2,8 @@ import { SessionManager } from '../../agent/utilities/SessionManager.js';
 import { jest } from '@jest/globals';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
+import { randomBytes } from 'crypto';
 
 describe('SessionManager', () => {
   let sessionManager;
@@ -189,6 +191,188 @@ describe('SessionManager', () => {
     it('should return undefined for non-existent session', () => {
       const tempFolder = sessionManager.getSessionTempDir('non-existent');
       expect(tempFolder).toBeUndefined();
+    });
+  });
+
+  describe('setWorkerTeardown', () => {
+    it('initializes workerTeardown to null on new sessions', () => {
+      const sessionId = sessionManager.createSession(null);
+      // Bypass getSession() so we don't touch lastActivity in assertions
+      // that other tests might extend.
+      expect(sessionManager.sessions.get(sessionId).workerTeardown).toBeNull();
+    });
+
+    it('installs a teardown hook on the session', () => {
+      const sessionId = sessionManager.createSession(null);
+      const teardown = () => Promise.resolve();
+      sessionManager.setWorkerTeardown(sessionId, teardown);
+      expect(sessionManager.sessions.get(sessionId).workerTeardown).toBe(teardown);
+    });
+
+    it('is a no-op for an unknown session id', () => {
+      expect(() => sessionManager.setWorkerTeardown('nope', () => Promise.resolve())).not.toThrow();
+    });
+  });
+
+  describe('cleanupStaleSessions', () => {
+    // Drive cleanup manually with tight timeouts so we don't depend on the
+    // 5-minute interval timer. Isolate the temp base so other parallel test
+    // suites' SessionManager.shutdown() (which calls cleanupOrphanedTempDirs)
+    // can't reap our session dir as an "orphan".
+    let sm;
+    let tempBasePath;
+
+    beforeEach(() => {
+      tempBasePath = path.join(os.tmpdir(), `sm-cleanup-${randomBytes(8).toString('hex')}`);
+      sm = new SessionManager({
+        maxSessionAge: 50,
+        sessionTimeout: 50,
+        disableCleanup: true,
+        tempBasePath,
+      });
+    });
+
+    afterEach(() => {
+      sm.shutdown();
+      try { fs.rmSync(tempBasePath, { recursive: true, force: true }); } catch { /* already gone */ }
+    });
+
+    it('leaves fresh sessions alone', async () => {
+      const sessionId = sm.createSession(null);
+      sm.initializeSession(sessionId, 'cld', {}, [], {}, '');
+
+      await sm.cleanupStaleSessions();
+
+      expect(sm.sessions.has(sessionId)).toBe(true);
+    });
+
+    it('removes sessions that have exceeded the inactivity timeout', async () => {
+      const sessionId = sm.createSession(null);
+      sm.initializeSession(sessionId, 'cld', {}, [], {}, '');
+      const tempDir = sm.sessions.get(sessionId).tempDir;
+
+      await new Promise((r) => setTimeout(r, 80));
+      await sm.cleanupStaleSessions();
+
+      expect(sm.sessions.has(sessionId)).toBe(false);
+      expect(fs.existsSync(tempDir)).toBe(false);
+    });
+
+    it('awaits workerTeardown before deleting the session or its temp dir', async () => {
+      // This is the bug-fix invariant: when a worker is running, the host must
+      // keep the bind-mount source alive until the worker has actually exited.
+      const sessionId = sm.createSession(null);
+      sm.initializeSession(sessionId, 'cld', {}, [], {}, '');
+      const tempDir = sm.sessions.get(sessionId).tempDir;
+
+      let dirExistedWhenTeardownCalled = null;
+      let sessionStillRegisteredAtTeardown = null;
+      let releaseTeardown;
+      const teardownGate = new Promise((resolve) => { releaseTeardown = resolve; });
+
+      sm.setWorkerTeardown(sessionId, () => {
+        dirExistedWhenTeardownCalled = fs.existsSync(tempDir);
+        sessionStillRegisteredAtTeardown = sm.sessions.has(sessionId);
+        return teardownGate;
+      });
+
+      await new Promise((r) => setTimeout(r, 80));
+
+      const cleanupPromise = sm.cleanupStaleSessions();
+
+      // Let the cleanup loop reach the await on our teardown gate.
+      await new Promise((r) => setImmediate(r));
+
+      // Mid-teardown: dir + session must still be present, otherwise a live
+      // worker would observe its `/session` bind mount yanked.
+      expect(sm.sessions.has(sessionId)).toBe(true);
+      expect(fs.existsSync(tempDir)).toBe(true);
+
+      releaseTeardown();
+      await cleanupPromise;
+
+      expect(dirExistedWhenTeardownCalled).toBe(true);
+      expect(sessionStillRegisteredAtTeardown).toBe(true);
+      expect(sm.sessions.has(sessionId)).toBe(false);
+      expect(fs.existsSync(tempDir)).toBe(false);
+    });
+
+    it('still deletes the session if workerTeardown rejects', async () => {
+      const sessionId = sm.createSession(null);
+      sm.initializeSession(sessionId, 'cld', {}, [], {}, '');
+      const tempDir = sm.sessions.get(sessionId).tempDir;
+
+      sm.setWorkerTeardown(sessionId, () => Promise.reject(new Error('worker exit failed')));
+
+      await new Promise((r) => setTimeout(r, 80));
+      await sm.cleanupStaleSessions();
+
+      expect(sm.sessions.has(sessionId)).toBe(false);
+      expect(fs.existsSync(tempDir)).toBe(false);
+    });
+
+    it('closes the WebSocket if it is still open', async () => {
+      const ws = { readyState: 1, close: jest.fn() };
+      const sessionId = sm.createSession(ws);
+      sm.initializeSession(sessionId, 'cld', {}, [], {}, '');
+
+      await new Promise((r) => setTimeout(r, 80));
+      await sm.cleanupStaleSessions();
+
+      expect(ws.close).toHaveBeenCalledWith(1000, 'Session timeout');
+    });
+
+    it('does not call ws.close if the WebSocket is already closed', async () => {
+      const ws = { readyState: 3, close: jest.fn() };
+      const sessionId = sm.createSession(ws);
+      sm.initializeSession(sessionId, 'cld', {}, [], {}, '');
+
+      await new Promise((r) => setTimeout(r, 80));
+      await sm.cleanupStaleSessions();
+
+      expect(ws.close).not.toHaveBeenCalled();
+      // Session should still be removed.
+      expect(sm.sessions.has(sessionId)).toBe(false);
+    });
+
+    it('skips sessions removed concurrently while awaiting another teardown', async () => {
+      // If a session gets deleted out from under us (e.g. WS close handler
+      // fires while we are awaiting a slow teardown for a different session),
+      // cleanupStaleSessions must not call deleteSession on it again.
+      const sessionA = sm.createSession(null);
+      sm.initializeSession(sessionA, 'cld', {}, [], {}, '');
+      const sessionB = sm.createSession(null);
+      sm.initializeSession(sessionB, 'cld', {}, [], {}, '');
+      const tempA = sm.sessions.get(sessionA).tempDir;
+      const tempB = sm.sessions.get(sessionB).tempDir;
+
+      let releaseA;
+      const aGate = new Promise((resolve) => { releaseA = resolve; });
+      sm.setWorkerTeardown(sessionA, () => aGate);
+
+      const deleteSpy = jest.spyOn(sm, 'deleteSession');
+
+      await new Promise((r) => setTimeout(r, 80));
+      const cleanupPromise = sm.cleanupStaleSessions();
+
+      // Drop into the await on sessionA's teardown.
+      await new Promise((r) => setImmediate(r));
+
+      // Simulate a concurrent WS close removing session B.
+      sm.deleteSession(sessionB);
+      expect(fs.existsSync(tempB)).toBe(false);
+
+      releaseA();
+      await cleanupPromise;
+
+      // sessionB should have only been deleted once (the concurrent removal).
+      const bDeletes = deleteSpy.mock.calls.filter(([id]) => id === sessionB).length;
+      expect(bDeletes).toBe(1);
+      // sessionA still got cleaned up after its teardown resolved.
+      expect(sm.sessions.has(sessionA)).toBe(false);
+      expect(fs.existsSync(tempA)).toBe(false);
+
+      deleteSpy.mockRestore();
     });
   });
 });

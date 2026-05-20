@@ -26,9 +26,12 @@ export class SessionManager {
   constructor(options = {}) {
     this.sessions = new Map();
 
-    // Use configured temp directory or default to OS tmpdir
-    const baseTempDir = config.agentSessionTempDir || tmpdir();
-    this.tempBasePath = join(baseTempDir, 'sd-agent');
+    // Use explicit override (mainly for isolation in tests) > configured temp
+    // directory > OS tmpdir. The 'sd-agent' suffix is only applied to the
+    // defaulted path so callers passing tempBasePath get exactly what they ask
+    // for (no sibling SessionManagers reaping their dirs as "orphans").
+    this.tempBasePath = options.tempBasePath
+      || join(config.agentSessionTempDir || tmpdir(), 'sd-agent');
 
     // Configuration
     this.maxSessions = options.maxSessions || 1000;
@@ -98,7 +101,12 @@ export class SessionManager {
       pendingToolCalls: new Map(),
 
       // Agent conversation context (for Claude Agent SDK)
-      conversationContext: []
+      conversationContext: [],
+
+      // Async hook installed by WebSocketHandler so stale-session cleanup can
+      // wait for the worker to exit before rmSync removes the bwrap bind-mount
+      // source. Null when no worker is running for this session.
+      workerTeardown: null,
     };
 
     this.sessions.set(sessionId, session);
@@ -140,11 +148,24 @@ export class SessionManager {
       modelTokenCount: 0,
       pendingToolCalls: new Map(),
       conversationContext: [],
+      workerTeardown: null,
     };
 
     this.sessions.set(sessionId, session);
     logger.log(`Session registered: ${sessionId}`);
     return sessionId;
+  }
+
+  /**
+   * Install an async teardown hook the cleanup path will await before rmSync'ing
+   * the session temp dir. Used to keep the worker's bwrap `--bind` source alive
+   * until the worker process has actually exited.
+   */
+  setWorkerTeardown(sessionId, teardownFn) {
+    const session = this.sessions.get(sessionId);
+    if (session) {
+      session.workerTeardown = teardownFn;
+    }
   }
 
   /**
@@ -265,7 +286,13 @@ export class SessionManager {
     try {
       writeFileSync(modelPath, JSON.stringify(model, null, 2));
     } catch (err) {
-      logger.error(`[${sessionId}] Failed to write model to '${modelPath}':`, err);
+      // ENOENT here on a path whose parent we just mkdir'd usually means the
+      // host removed the bwrap bind-mount source out from under this worker
+      // (e.g. WebSocket closed and triggered cleanupSessionTempDir while we
+      // were mid-tool-call). Capture the directory state so the post-mortem
+      // confirms the race rather than guessing.
+      const dirExists = existsSync(sessionTempDir);
+      logger.error(`[${sessionId}] Failed to write model to '${modelPath}' (sessionTempDir exists=${dirExists}):`, err);
       throw new Error(`Failed to write model to '${modelPath}': ${err.message}`);
     }
     const message = `The model has been written to disk at: ${modelPath}. Other tools will load it automatically — you do not need to read this file. Use the read_model_section tool if you need to inspect specific sections.`;
@@ -587,37 +614,81 @@ ${conversationText}`;
   }
 
   /**
-   * Start cleanup timer for stale sessions and orphaned temp dirs
+   * Start cleanup timer for stale sessions and orphaned temp dirs.
+   * Both sweeps are awaited together so the next interval can't fire a second
+   * sweep on top of a slow one (worker teardowns can take up to ~4s each).
    */
   #startCleanupTimer() {
+    this.cleanupInProgress = false;
     this.cleanupTimer = setInterval(() => {
-      this.cleanupStaleSessions();
-      this.#cleanupOrphanedTempDirs();
+      if (this.cleanupInProgress) {
+        logger.log('SessionManager cleanup cycle still in progress, skipping this tick');
+        return;
+      }
+      this.cleanupInProgress = true;
+      Promise.resolve()
+        .then(() => this.cleanupStaleSessions())
+        .then(() => this.#cleanupOrphanedTempDirs())
+        .catch((err) => logger.error('Error during cleanup cycle:', err))
+        .finally(() => { this.cleanupInProgress = false; });
     }, this.cleanupInterval);
   }
 
   /**
-   * Clean up stale sessions
+   * Clean up stale sessions. Async because, when a worker is running, we must
+   * await its exit before deleteSession() rm's the bwrap `--bind` source — a
+   * write from inside the still-mounted sandbox after the source is gone fails
+   * with ENOENT (see SessionManager#writeModelToDisk error path).
    */
-  cleanupStaleSessions() {
+  async cleanupStaleSessions() {
     const now = Date.now();
-    let cleanedCount = 0;
 
+    // Snapshot first so deleteSession() calls (which mutate this.sessions)
+    // during async teardowns can't disturb iteration.
+    const candidates = [];
     for (const [sessionId, session] of this.sessions.entries()) {
       const age = now - session.createdAt;
       const inactivity = now - session.lastActivity;
-
       if (age > this.maxSessionAge || inactivity > this.sessionTimeout) {
-        logger.log(`Cleaning up stale session: ${sessionId} (age: ${Math.round(age/1000/60)}m, inactive: ${Math.round(inactivity/1000/60)}m)`);
-
-        // Close WebSocket if still open
-        if (session.ws && session.ws.readyState === 1) {
-          session.ws.close(1000, 'Session timeout');
-        }
-
-        this.deleteSession(sessionId);
-        cleanedCount++;
+        candidates.push({ sessionId, session, age, inactivity });
       }
+    }
+
+    let cleanedCount = 0;
+    for (const { sessionId, session, age, inactivity } of candidates) {
+      // A concurrent WS close may have already removed it while we were
+      // awaiting a previous teardown.
+      if (!this.sessions.has(sessionId)) continue;
+
+      const trigger = age > this.maxSessionAge ? 'max-age' : 'inactivity';
+      const hasWorker = typeof session.workerTeardown === 'function';
+      logger.log(
+        `Cleaning up stale session: ${sessionId} (trigger=${trigger}, age=${Math.round(age/1000/60)}m, ` +
+        `inactive=${Math.round(inactivity/1000/60)}m, hasWorker=${hasWorker}, ` +
+        `wsReadyState=${session.ws?.readyState ?? 'none'})`
+      );
+
+      // Close WebSocket if still open. This will also fire #onClose on the
+      // handler side, which is idempotent with the teardown we're about to do.
+      if (session.ws && session.ws.readyState === 1) {
+        try { session.ws.close(1000, 'Session timeout'); } catch { /* already closing */ }
+      }
+
+      // Wait for the worker to actually exit before we let deleteSession
+      // rmSync the temp dir. #killWorker is safe to call twice (the second
+      // call sees this.#worker === null and resolves immediately).
+      if (hasWorker) {
+        const teardownStart = Date.now();
+        try {
+          await session.workerTeardown();
+          logger.log(`[session:${sessionId}] Stale-cleanup worker teardown completed in ${Date.now() - teardownStart}ms`);
+        } catch (err) {
+          logger.error(`[session:${sessionId}] Worker teardown failed during stale cleanup (proceeding with delete anyway):`, err);
+        }
+      }
+
+      this.deleteSession(sessionId);
+      cleanedCount++;
     }
 
     if (cleanedCount > 0) {

@@ -155,11 +155,13 @@ export class WebSocketHandler {
         case 'stop_iteration':
           await this.#handleStopIteration(message);
           break;
-        case 'disconnect':
-          this.#killWorker();
-          this.#sessionManager.deleteSession(this.#sessionId);
+        case 'disconnect': {
+          const sessionId = this.#sessionId;
+          await this.#killWorker();
+          this.#sessionManager.deleteSession(sessionId);
           this.#ws.close(1000, 'Client requested disconnect');
           break;
+        }
         default:
           await this.#sendToClient(createErrorMessage(this.#sessionId, `Unknown message type: ${message.type}`, 'UNKNOWN_MESSAGE_TYPE'));
       }
@@ -301,6 +303,10 @@ export class WebSocketHandler {
       liveWorkers.add(this.#worker);
       this.#setupWorkerRelay(this.#worker);
 
+      // Let SessionManager's stale-cleanup path await worker exit before
+      // rmSync'ing the bwrap bind-mount source.
+      this.#sessionManager.setWorkerTeardown(this.#sessionId, () => this.#killWorker());
+
       const session = this.#sessionManager.getSession(this.#sessionId);
       if (!this.#worker.connected) {
         throw new Error('Worker process failed to start (sandbox may not be available)');
@@ -403,34 +409,62 @@ export class WebSocketHandler {
     }
   }
 
-  #onClose(code, reason) {
+  async #onClose(code, reason) {
     logger.log(`WebSocket closed: ${this.#sessionId} (code: ${code}, reason: ${reason})`);
     if (this.#sessionId) {
-      this.#killWorker();
-      this.#sessionManager.deleteSession(this.#sessionId);
+      const sessionId = this.#sessionId;
+      const startedAt = Date.now();
+      await this.#killWorker();
+      const elapsed = Date.now() - startedAt;
+      logger.log(`[session:${sessionId}] Worker shutdown completed in ${elapsed}ms; deleting session`);
+      this.#sessionManager.deleteSession(sessionId);
     }
   }
 
-  #onError(error) {
+  async #onError(error) {
     logger.error(`WebSocket error for session ${this.#sessionId}:`, error);
     if (this.#sessionId) {
-      this.#killWorker();
-      this.#sessionManager.deleteSession(this.#sessionId);
+      const sessionId = this.#sessionId;
+      await this.#killWorker();
+      this.#sessionManager.deleteSession(sessionId);
     }
   }
 
+  // Returns a promise that resolves once the worker process has actually exited
+  // (or after the SIGKILL fallback fires). Callers that destroy the session temp
+  // directory MUST await this — bwrap's `--bind` source vanishing under a live
+  // sandbox produces ENOENT on writes from inside the container.
   #killWorker() {
-    if (this.#worker) {
-      if (this.#worker.connected) {
-        try { this.#worker.send({ type: 'shutdown' }); } catch { /* already dead */ }
-      }
-      // Give it a moment to exit cleanly; force-kill if it doesn't
-      const w = this.#worker;
-      liveWorkers.delete(w);
-      const t = setTimeout(() => { try { killWorkerProcess(w, 'SIGKILL'); } catch { /* already dead */ } }, 2000);
-      this.#worker.once('exit', () => clearTimeout(t));
-      this.#worker = null;
+    if (!this.#worker) return Promise.resolve();
+    const w = this.#worker;
+    const sessionId = this.#sessionId;
+    this.#worker = null;
+    liveWorkers.delete(w);
+    if (w.connected) {
+      try { w.send({ type: 'shutdown' }); } catch { /* already dead */ }
     }
+    return new Promise((resolve) => {
+      let settled = false;
+      const settle = () => { if (!settled) { settled = true; resolve(); } };
+
+      const sigkillTimer = setTimeout(() => {
+        logger.warn(`[worker:${sessionId}] did not exit within 2s of shutdown — sending SIGKILL`);
+        try { killWorkerProcess(w, 'SIGKILL'); } catch { /* already dead */ }
+      }, 2000);
+
+      // Safety: if 'exit' was already emitted before we attached (or never
+      // fires), don't hang the session-cleanup path forever.
+      const fallbackTimer = setTimeout(() => {
+        logger.warn(`[worker:${sessionId}] exit event not received 4s after shutdown — proceeding with cleanup`);
+        settle();
+      }, 4000);
+
+      w.once('exit', () => {
+        clearTimeout(sigkillTimer);
+        clearTimeout(fallbackTimer);
+        settle();
+      });
+    });
   }
 
   /**
