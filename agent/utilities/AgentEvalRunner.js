@@ -274,15 +274,28 @@ export async function runAgent(prompt, currentModel, parameters) {
       }
 
       case 'get_variable_data': {
-        const { variableNames = [], runIds = [] } = message;
+        const { variableNames = [], runIds = [], detailed = false } = message;
+        const targetPoints = detailed ? 200 : 50;
         const result = {};
         for (const runId of runIds) {
           const runData = storedRuns.get(runId);
           if (runData) {
             result[runId] = {};
-            if (runData.time) result[runId].time = runData.time;
-            for (const varName of variableNames) {
-              if (runData[varName] !== undefined) result[runId][varName] = runData[varName];
+            const timeArr = runData.time;
+            if (timeArr && timeArr.length > targetPoints) {
+              const indices = Array.from({ length: targetPoints }, (_, i) =>
+                Math.round(i * (timeArr.length - 1) / (targetPoints - 1))
+              );
+              result[runId].time = indices.map(i => timeArr[i]);
+              for (const varName of variableNames) {
+                const arr = runData[varName];
+                if (arr !== undefined) result[runId][varName] = indices.map(i => arr[i]);
+              }
+            } else {
+              if (timeArr) result[runId].time = timeArr;
+              for (const varName of variableNames) {
+                if (runData[varName] !== undefined) result[runId][varName] = runData[varName];
+              }
             }
           }
         }
