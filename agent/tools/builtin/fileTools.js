@@ -10,7 +10,7 @@ import { createSuccessResponse, createErrorResponse } from './toolHelpers.js';
 
 export function createReadFileTool() {
   return {
-    description: `Read a file from disk and return its contents. Use this to load data files (e.g. variable data, model files) into context after a tool has written them to disk.
+    description: `Read a file from disk and return its contents. Use this to load data files (e.g. variable data) into context after a tool has written them to disk. NEVER use this to read model.sdjson — use the read_model_section tool to inspect the model.
 
 Filtering options to avoid reading more than needed:
 - startLine / endLine: read a specific line range (1-based, inclusive)
@@ -26,6 +26,9 @@ Filtering options to avoid reading more than needed:
     }),
     handler: async ({ filePath, startLine, endLine, search, maxLines }) => {
       try {
+        if (filePath.endsWith('model.sdjson')) {
+          return createErrorResponse('Reading model.sdjson with read_file is not allowed — use the read_model_section tool to inspect the model.');
+        }
         if (!existsSync(filePath)) {
           return createErrorResponse(`File not found: ${filePath}`);
         }
