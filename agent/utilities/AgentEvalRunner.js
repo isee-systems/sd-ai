@@ -183,8 +183,8 @@ export async function runAgent(prompt, currentModel, parameters) {
     currentModel || { variables: [], relationships: [] },
     [],
     {
-      supportsArrays: false,
-      supportsModules: false,
+      supportsArrays: true,
+      supportsModules: true,
       supportsSubTypes: false
     },
     'eval-client'
