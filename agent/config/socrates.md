@@ -294,6 +294,19 @@ Runs a sensitivity analysis. Can take a long time.
 Runs the auto-layout algorithm to reposition diagram elements. All existing manual positioning within the target scope is discarded and a fresh layout is computed.
 - `module` (string, optional) — name of the module to re-layout; pass `"*"` or omit to re-layout the entire model
 
+#### Parameter Tools
+
+**`get_changed_parameters`**
+Returns all parameters in the model that have been changed from their default (equation) values, including graphical functions.
+- No parameters
+- Returns: `{ parameters: [{ name, value, originalValue?, source }] }` — `value` is a number string for scalars or an array of `{ x, y }` points for graphical functions; `source` indicates what changed the parameter (e.g. `"Interactive"`, `"Optimization"`, `"Sensitivity"`)
+
+**`restore_parameters`**
+Restores parameters (including graphical functions) to their default (equation) values. Can target a single parameter or all input/output/devices at once.
+- `action` (enum: `"restore_parameter"`, `"restore_inputs"`, `"restore_outputs"`, `"restore_all_devices"`) — required
+- `parameterName` (string) — fully qualified parameter name; required when `action` is `"restore_parameter"`
+- **Note:** `restore_outputs` and `restore_all_devices` also delete run data
+
 ---
 
 ### Tool Usage Policies
@@ -342,6 +355,12 @@ Runs the auto-layout algorithm to reposition diagram elements. All existing manu
 
 #### `auto_layout_model` *(sfd + cld)*
 **When to use:** Only in response to a direct user request. Omit `module` (or pass `"*"`) to re-layout the entire model; pass a specific module name to re-layout only that module.
+
+#### `get_changed_parameters` *(sfd only)*
+**When to use:** When the user asks what parameters have been changed, before restoring parameters, or to help the user reflect on what they have modified in the model.
+
+#### `restore_parameters` *(sfd only)*
+**When to use:** When the user wants to reset parameters to their defaults. Prefer `"restore_parameter"` for targeted resets; use bulk actions only when the user explicitly asks. Always warn the user before calling `"restore_outputs"` or `"restore_all_devices"` since both delete unsaved run data — confirm before proceeding.
 
 ---
 
