@@ -255,11 +255,10 @@ export class AgentOrchestrator {
           const thinkingEnabled = config.agentAnthropicThinking?.type !== 'disabled';
           const response = await this.anthropic.messages.create({
             model: config.agentAnthropicModel,
-            max_tokens: 8192,
+            max_tokens: Math.max(8192, (config.agentAnthropicThinking?.budget_tokens || 0) + 2048),
             system: systemBlocks,
             messages: messages,
             thinking: config.agentAnthropicThinking,
-            ...(thinkingEnabled && { effort: config.agentAnthropicEffort }),
             tools: tools.length > 0 ? tools : undefined
           });
 
