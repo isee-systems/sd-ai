@@ -1,6 +1,6 @@
 import { randomBytes } from 'crypto';
 import { tmpdir } from 'os';
-import { join } from 'path';
+import { dirname, join } from 'path';
 import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'fs';
 import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenAI } from '@google/genai';
@@ -26,12 +26,18 @@ export class SessionManager {
   constructor(options = {}) {
     this.sessions = new Map();
 
-    // Use explicit override (mainly for isolation in tests) > configured temp
-    // directory > OS tmpdir. The 'sd-agent' suffix is only applied to the
-    // defaulted path so callers passing tempBasePath get exactly what they ask
-    // for (no sibling SessionManagers reaping their dirs as "orphans").
+    // Use explicit override (mainly for isolation in tests) > per-process
+    // subdirectory under the configured temp directory > OS tmpdir.
+    //
+    // The `pid-${process.pid}` segment is critical under PM2 cluster mode
+    // (or any multi-process deployment sharing AGENT_SESSION_TEMP_DIR):
+    // #cleanupOrphanedTempDirs reads `this.tempBasePath` and removes anything
+    // not in *its own* this.sessions map. Without per-pid namespacing each
+    // process would rm-rf its sibling processes' active session dirs on the
+    // 5-minute cleanup tick, breaking the bwrap bind mount under live workers
+    // (the root cause of the /session/*.json ENOENT errors).
     this.tempBasePath = options.tempBasePath
-      || join(config.agentSessionTempDir || tmpdir(), 'sd-agent');
+      || join(config.agentSessionTempDir || tmpdir(), 'sd-agent', `pid-${process.pid}`);
 
     // Configuration
     this.maxSessions = options.maxSessions || 1000;
@@ -45,12 +51,71 @@ export class SessionManager {
       mkdirSync(this.tempBasePath, { recursive: true });
     }
 
+    // Flag (but don't reap) pid-* siblings whose owning process is no longer
+    // alive — leftovers from PM2 restarts/crashes where the dying process
+    // couldn't run its own shutdown cleanup. We avoid auto-reaping because
+    // PID reuse plus a false-positive "dead" check could rm a live sibling's
+    // bind-mount source out from under its worker (the exact failure mode
+    // the per-pid layout exists to prevent). Operators can clear stale
+    // pid-* dirs manually when the log surfaces them.
+    if (!options.tempBasePath && !options.disableCleanup) {
+      this.#flagDeadProcessDirs();
+    }
+
     // Start cleanup timer (disabled in worker processes — lifetime managed by main)
     if (!options.disableCleanup) {
       this.#startCleanupTimer();
     }
 
     logger.log(`SessionManager initialized. Temp base: ${this.tempBasePath}`);
+  }
+
+  /**
+   * Scan the parent `sd-agent` directory for `pid-*` subdirs whose owning
+   * process is no longer alive and log them. Operators should remove these
+   * manually — we intentionally do NOT auto-reap because PID reuse plus an
+   * imperfect liveness check could rm a live sibling's bind-mount source.
+   */
+  #flagDeadProcessDirs() {
+    const parentDir = dirname(this.tempBasePath);
+    if (!existsSync(parentDir)) return;
+
+    let entries;
+    try {
+      entries = readdirSync(parentDir);
+    } catch (err) {
+      logger.warn(`Could not scan ${parentDir} for dead pid dirs: ${err.message}`);
+      return;
+    }
+
+    const stale = [];
+    for (const entry of entries) {
+      if (!entry.startsWith('pid-')) continue;
+      const pid = Number(entry.slice(4));
+      if (!Number.isInteger(pid) || pid <= 0) continue;
+      if (pid === process.pid) continue;
+
+      let alive = false;
+      try {
+        process.kill(pid, 0);
+        alive = true;
+      } catch (err) {
+        // EPERM = process exists but we lack permission; treat as alive.
+        // ESRCH = no such process — flag as stale.
+        if (err.code === 'EPERM') alive = true;
+      }
+
+      if (!alive) stale.push({ entry, pid });
+    }
+
+    if (stale.length > 0) {
+      const summary = stale.map(({ entry, pid }) => `${entry} (pid=${pid})`).join(', ');
+      logger.warn(
+        `Found ${stale.length} stale pid-* temp dir(s) under ${parentDir} ` +
+        `whose owning process is no longer alive: ${summary}. ` +
+        `Remove manually once confirmed stale.`
+      );
+    }
   }
 
   /**
