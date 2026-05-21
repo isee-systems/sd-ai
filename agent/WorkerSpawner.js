@@ -326,7 +326,12 @@ export class WorkerSpawner {
           try {
             proc = spawn(bwrapBin, bwrapArgs, {
               env: workerEnv,
-              stdio: ['inherit', 'inherit', 'inherit'],
+              // Pipe stderr (instead of inheriting) so we can prefix lines with
+              // the session id — concurrent workers' stderr would otherwise
+              // interleave under a single anonymous fd, making post-mortems
+              // (like the "IPC socket error: connect ENOENT /session/ipc-*.sock"
+              // failure seen under concurrent spawns) impossible to attribute.
+              stdio: ['inherit', 'inherit', 'pipe'],
             });
           } catch (err) {
             // spawn rarely throws synchronously (most failures emit 'error'),
@@ -334,6 +339,21 @@ export class WorkerSpawner {
             // so we don't leak FDs across retries.
             worker.dispose();
             throw err;
+          }
+          if (proc.stderr) {
+            let buf = '';
+            proc.stderr.on('data', (chunk) => {
+              buf += chunk.toString();
+              let nl;
+              while ((nl = buf.indexOf('\n')) !== -1) {
+                const line = buf.slice(0, nl);
+                buf = buf.slice(nl + 1);
+                if (line.length > 0) logger.error(`[bwrap:${sessionId}] ${line}`);
+              }
+            });
+            proc.stderr.on('end', () => {
+              if (buf.length > 0) logger.error(`[bwrap:${sessionId}] ${buf}`);
+            });
           }
           worker.attach(proc);
 

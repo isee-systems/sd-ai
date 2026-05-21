@@ -85,6 +85,12 @@ export class WebSocketHandler {
   #sessionManager;
   #sessionId = null;
   #worker = null;
+  // Promise for an in-flight WorkerSpawner.spawn(). #onClose/#onError/disconnect
+  // must await this before deleteSession runs rmSync on the session temp dir —
+  // otherwise the bwrap bind-mount source vanishes mid-spawn and the worker
+  // hits ENOENT on /session/ipc-*.sock (during connect) or /session/model.sdjson
+  // (during writes). Null when no spawn is in flight.
+  #workerSpawnPromise = null;
   // True on the first chat message after a select_agent — tells worker to bridge context
   #pendingAgentSwitch = false;
 
@@ -157,7 +163,7 @@ export class WebSocketHandler {
           break;
         case 'disconnect': {
           const sessionId = this.#sessionId;
-          await this.#killWorker();
+          await this.#waitForSpawnAndKill();
           this.#sessionManager.deleteSession(sessionId);
           this.#ws.close(1000, 'Client requested disconnect');
           break;
@@ -277,7 +283,11 @@ export class WebSocketHandler {
         } catch (err) {
           logger.warn(`[session:${this.#sessionId}] Could not retrieve context from old worker: ${err.message}`);
         }
-        this.#killWorker();
+        // Must await — both spawn (below) and any concurrent #onClose use the
+        // same tempDir. Spawning a new bwrap while the old worker is still
+        // alive shares the bind-mount source; letting #onClose race ahead would
+        // rmSync that source out from under either worker.
+        await this.#killWorker();
       }
 
       // Guard: the WS may have closed during the async context fetch above.
@@ -286,13 +296,30 @@ export class WebSocketHandler {
       if (this.#ws.readyState !== 1) return;
 
       const tempDir = this.#sessionManager.getSessionTempDir(this.#sessionId);
-      this.#worker = await WorkerSpawner.spawn(this.#sessionId, tempDir);
+      // Publish the in-flight spawn so #onClose/#onError/disconnect can await
+      // it before deleteSession runs rmSync on tempDir. Without this, a WS
+      // close arriving during bwrap retry delays (up to 9s) lets the cleanup
+      // path rm the bind-mount source mid-spawn — the worker then hits
+      // ENOENT on /session/ipc-*.sock the moment it tries to connect.
+      const spawnPromise = WorkerSpawner.spawn(this.#sessionId, tempDir);
+      this.#workerSpawnPromise = spawnPromise;
+      try {
+        this.#worker = await spawnPromise;
+      } finally {
+        if (this.#workerSpawnPromise === spawnPromise) {
+          this.#workerSpawnPromise = null;
+        }
+      }
 
       // Guard: WS may have closed during bwrap retry delays (up to 9s).
       if (this.#ws.readyState !== 1) {
-        this.#killWorker();
-        // If the session was already deleted by #onClose, a retry attempt may
-        // have re-created the temp dir via mkdirSync after deleteSession's
+        // Await — the worker process is alive and bind-mounted to tempDir.
+        // cleanupSessionTempDir below rmSync's that source synchronously, so
+        // the worker must be reaped first or it'll write into a vanished
+        // bind mount (root cause of the model.sdjson ENOENT).
+        await this.#killWorker();
+        // If the session was already deleted by #onClose, the spawn's
+        // mkdirSync may have re-created the temp dir after deleteSession's
         // rmSync removed it. Clean it up so it doesn't become orphaned.
         if (!this.#sessionManager.getSession(this.#sessionId)) {
           this.#sessionManager.cleanupSessionTempDir(tempDir);
@@ -414,7 +441,7 @@ export class WebSocketHandler {
     if (this.#sessionId) {
       const sessionId = this.#sessionId;
       const startedAt = Date.now();
-      await this.#killWorker();
+      await this.#waitForSpawnAndKill();
       const elapsed = Date.now() - startedAt;
       logger.log(`[session:${sessionId}] Worker shutdown completed in ${elapsed}ms; deleting session`);
       this.#sessionManager.deleteSession(sessionId);
@@ -425,9 +452,21 @@ export class WebSocketHandler {
     logger.error(`WebSocket error for session ${this.#sessionId}:`, error);
     if (this.#sessionId) {
       const sessionId = this.#sessionId;
-      await this.#killWorker();
+      await this.#waitForSpawnAndKill();
       this.#sessionManager.deleteSession(sessionId);
     }
+  }
+
+  // Cleanup-path helper: wait for any in-flight WorkerSpawner.spawn() to settle,
+  // then kill the resulting worker. Callers must use this (not bare #killWorker)
+  // anywhere they're about to deleteSession or rmSync the session temp dir —
+  // otherwise a WS close arriving mid-spawn lets the cleanup path race ahead of
+  // bwrap's --bind setup and the worker hits ENOENT on /session.
+  async #waitForSpawnAndKill() {
+    if (this.#workerSpawnPromise) {
+      try { await this.#workerSpawnPromise; } catch { /* spawn rejection is fine — nothing to kill */ }
+    }
+    await this.#killWorker();
   }
 
   // Returns a promise that resolves once the worker process has actually exited
