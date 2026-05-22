@@ -477,6 +477,7 @@ CRITICAL MODULE RULES:
 - Variable names use ONLY the immediate owning module as a prefix: "ModuleName.variableName"
 - NEVER use the full hierarchy path in a variable name (WRONG: "Company.Sales.revenue", CORRECT: "Sales.revenue")
 - Cross-module references require ghost variables: set crossLevelGhostOf to the source variable name, leave equation empty
+- To change the attributes of a cross-level ghost, edit the SOURCE variable (the one named in crossLevelGhostOf), NOT the ghost itself — the ghost mirrors its source
 
 CRITICAL ARRAY RULES:
 - Array dimensions must be defined in specs.arrayDimensions BEFORE any variable references them (use edit_specs first)
