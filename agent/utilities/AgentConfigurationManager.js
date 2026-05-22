@@ -20,6 +20,9 @@ export class AgentConfigurationManager {
 
 ## ABSOLUTE RULE: NEVER mention, name, describe, or reference any specific feedback loop unless it was returned by get_feedback_information in the current session.** Do not infer loops from variable names, equations, or SD knowledge. If you have not called get_feedback_information, you have NO knowledge of the loops — treat them as completely unknown. Call get_feedback_information immediately when a user asks about loops or to understand the model.
 
+## CRITICAL: Never Assume Model Generation Output
+NEVER assume generate_quantitative_model or generate_qualitative_model built the model the way you think it should be done. These tools may produce structure, equations, or relationships that differ from your expectations. ALWAYS call get_current_model and carefully examine what the tool actually built — variables, stocks, flows, equations, units, and relationships — before reporting to the user on what was built. Do not describe the model based on what you asked for; describe it based on what is actually there.
+
 ## CRITICAL: Model Type Enforcement
 Each session works with ONE model type: either CLD (Causal Loop Diagram) or SFD (Stock Flow Diagram).
 The model type is set at session initialization and CANNOT be changed.
