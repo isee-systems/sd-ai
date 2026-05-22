@@ -58,10 +58,6 @@ class AgentWorker {
 
   #orchestrator = null;
 
-  // Set on first chat after an agent switch so AgentOrchestrator can bridge context
-  // from the previous agent into the new session.
-  #pendingIsAgentSwitch = false;
-
   #conversationRunning = false;
 
   // IPC send function — overridden by #setupSocketIpc when using bwrap sandbox
@@ -126,7 +122,6 @@ class AgentWorker {
           for (const h of (msg.conversationHistory || [])) {
             this.#sessionManager.addToConversationHistory(SESSION_ID, h);
           }
-          this.#pendingIsAgentSwitch = msg.isAgentSwitch ?? false;
           break;
         }
 
@@ -148,10 +143,14 @@ class AgentWorker {
             this.#orchestrator.queueMessage(msg.message);
             break;
           }
-          const previousContext = this.#pendingIsAgentSwitch
-            ? this.#sessionManager.getConversationContext(SESSION_ID)
-            : null;
-          this.#pendingIsAgentSwitch = false;
+          // Pass the live session context whenever it has any history so SDK
+          // routes can inject prior turns on their first call. Covers both
+          // agent-switch handoffs and fresh sessions seeded with
+          // historicalMessages via initialize_session. SDK routes self-gate on
+          // their own session-id state, so re-passing on subsequent chats is a
+          // no-op for them.
+          const sessionCtx = this.#sessionManager.getConversationContext(SESSION_ID);
+          const previousContext = sessionCtx.length > 0 ? sessionCtx : null;
           this.#conversationRunning = true;
           this.#orchestrator.startConversation(msg.message, previousContext)
             .finally(() => { this.#conversationRunning = false; });

@@ -138,10 +138,16 @@ export class AgentOrchestrator {
 
       const isManual = loopStyle === 'manual';
       if (isManual && previousAgentContext?.length > 0) {
-        // previousAgentContext is a reference to the live context — pop the last message
-        // (always the prior agent's unanswered user message) before adding the new one
-        previousAgentContext.pop();
-        logger.debug(`[Agent switch → manual] Prior context now has ${previousAgentContext.length} messages after pop`);
+        // previousAgentContext is a reference to the live session context.
+        // If it ends with a user message (e.g. agent-switch handoff where the
+        // prior agent's turn was interrupted), pop it so the incoming
+        // userMessage replaces it instead of duplicating. Other trailing roles
+        // (assistant, etc.) are preserved.
+        const last = previousAgentContext[previousAgentContext.length - 1];
+        if (last?.role === 'user') {
+          previousAgentContext.pop();
+          logger.debug(`[Prior context → manual] Popped trailing user message; ${previousAgentContext.length} messages remain`);
+        }
       }
 
       switch (`${this.provider}-${loopStyle}`) {
@@ -407,6 +413,7 @@ export class AgentOrchestrator {
       const allBuiltInTools = this.builtInToolProvider.getTools();
       const builtInToolNames = this.builtInToolProvider.getToolNames()
         .filter(name => {
+          if (name === 'read_file') return false; // SDK provides native Read tool
           const toolDef = allBuiltInTools.tools[name];
           if (toolDef?.nonSdkOnly) return false;
           if (toolDef?.supportedModes && !toolDef.supportedModes.includes(mode)) return false;

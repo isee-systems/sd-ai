@@ -346,7 +346,6 @@ export class WebSocketHandler {
         context: session.context,
         clientId: session.clientId,
         conversationHistory,
-        isAgentSwitch: isSwitching,
         supportsArrays: session.supportsArrays,
         supportsModules: session.supportsModules,
         supportsSubTypes: session.supportsSubTypes,
@@ -383,8 +382,6 @@ export class WebSocketHandler {
         throw new Error('No agent selected. Send select_agent first.');
       }
       this.#worker.send({ type: 'chat', message: message.message });
-      // isAgentSwitch flag is carried in the worker's own pendingIsAgentSwitch state,
-      // set during initialize — no need to pass it again here.
       this.#pendingAgentSwitch = false;
     } catch (error) {
       logger.error(`Error in chat for session ${this.#sessionId}:`, error);

@@ -75,7 +75,6 @@ function sendInit(worker, extras = {}) {
     tools: [],
     context: {},
     conversationHistory: [],
-    isAgentSwitch: false,
     clientId: 'test-client',
     ...extras,
   });
@@ -294,7 +293,6 @@ describe('AgentWorker IPC — error handling', () => {
       tools: [],
       context: {},
       conversationHistory: [],
-      isAgentSwitch: false,
     });
 
     const errMsg = await waitForMessage(worker, (m) => m.type === 'worker_error');
@@ -334,52 +332,3 @@ describe('AgentWorker IPC — error handling', () => {
   }, 10000);
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-
-describe('AgentWorker IPC — isAgentSwitch flag', () => {
-  let worker;
-  let tempDir;
-
-  beforeEach(() => {
-    tempDir = makeTempDir();
-    worker = spawnWorker(tempDir);
-  });
-
-  afterEach(() => {
-    worker.kill('SIGKILL');
-    rmSync(tempDir, { recursive: true, force: true });
-  });
-
-  it('initializing with isAgentSwitch=true still loads history correctly', async () => {
-    const history = [
-      { role: 'user', content: 'Prior question' },
-      { role: 'assistant', content: 'Prior answer' },
-    ];
-
-    sendInit(worker, { conversationHistory: history, isAgentSwitch: true });
-
-    const requestId = 'switch-context-check';
-    worker.send({ type: 'get_context', requestId });
-    const resp = await waitForMessage(
-      worker,
-      (m) => m.type === 'context_response' && m.requestId === requestId
-    );
-
-    expect(resp.context).toEqual(history);
-  }, 10000);
-
-  it('initializing with isAgentSwitch=false loads history correctly', async () => {
-    const history = [{ role: 'user', content: 'Fresh session question' }];
-
-    sendInit(worker, { conversationHistory: history, isAgentSwitch: false });
-
-    const requestId = 'no-switch-context-check';
-    worker.send({ type: 'get_context', requestId });
-    const resp = await waitForMessage(
-      worker,
-      (m) => m.type === 'context_response' && m.requestId === requestId
-    );
-
-    expect(resp.context).toEqual(history);
-  }, 10000);
-});

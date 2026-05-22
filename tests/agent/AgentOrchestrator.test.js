@@ -441,3 +441,138 @@ describe('processGeminiManualResponse', () => {
     expect(orc.executeToolCallGeminiManual).toHaveBeenCalledWith({ name: 'bad_tool', input: {} });
   });
 });
+
+// ─── startConversation — prior-context dispatching ──────────────────────────
+
+const SDK_CONFIG = { path: path.join(__dirname, '../../agent/config/merlin.md') };
+
+function makeStubbedOrchestrator(sessionManager, sessionId, agentConfig = CONFIG, provider = 'anthropic') {
+  process.env.ANTHROPIC_API_KEY = 'dummy';
+  process.env.GEMINI_API_KEY = 'dummy';
+  const sendToClient = jest.fn().mockResolvedValue(undefined);
+  const orc = new AgentOrchestrator(sessionManager, sessionId, sendToClient, agentConfig, provider);
+  // #fetchCurrentModel invokes the get_current_model tool which awaits a
+  // 30-second client RPC. Strip the tool so it returns early in tests.
+  orc.builtInToolProvider.getTools = jest.fn().mockReturnValue({ tools: {} });
+  // Replace the four provider-specific entry points so startConversation's
+  // dispatcher logic runs but no real API calls happen.
+  orc.startConversationAnthropicManual = jest.fn().mockResolvedValue(undefined);
+  orc.startConversationWithAnthropicSdk = jest.fn().mockResolvedValue(undefined);
+  orc.startConversationGeminiManual = jest.fn().mockResolvedValue(undefined);
+  orc.startConversationWithGeminiAdk = jest.fn().mockResolvedValue(undefined);
+  return orc;
+}
+
+describe('startConversation — prior-context dispatching (manual)', () => {
+  let sessionManager;
+  let sessionId;
+  let orc;
+
+  beforeEach(() => {
+    sessionManager = new SessionManager();
+    sessionId = sessionManager.createSession(null);
+    sessionManager.initializeSession(sessionId, 'cld', {}, [], {}, 'test-client');
+    orc = makeStubbedOrchestrator(sessionManager, sessionId);
+  });
+
+  afterEach(() => {
+    orc.destroy();
+    sessionManager.shutdown();
+  });
+
+  it('pops a trailing user message from previousAgentContext before dispatching', async () => {
+    const prior = [
+      { role: 'user', content: 'a' },
+      { role: 'assistant', content: 'b' },
+      { role: 'user', content: 'unanswered' },
+    ];
+
+    await orc.startConversation('new question', prior);
+
+    expect(prior).toHaveLength(2);
+    expect(prior[prior.length - 1]).toEqual({ role: 'assistant', content: 'b' });
+    expect(orc.startConversationAnthropicManual).toHaveBeenCalledWith('new question');
+  });
+
+  it('preserves a trailing assistant message (initial history replay case)', async () => {
+    const prior = [
+      { role: 'user', content: 'historical question' },
+      { role: 'assistant', content: 'historical answer' },
+    ];
+
+    await orc.startConversation('follow-up', prior);
+
+    expect(prior).toHaveLength(2);
+    expect(prior[prior.length - 1]).toEqual({ role: 'assistant', content: 'historical answer' });
+    expect(orc.startConversationAnthropicManual).toHaveBeenCalledWith('follow-up');
+  });
+
+  it('does not crash and does not pop when previousAgentContext is null', async () => {
+    await expect(orc.startConversation('hi', null)).resolves.toBeUndefined();
+    expect(orc.startConversationAnthropicManual).toHaveBeenCalledWith('hi');
+  });
+
+  it('does not crash and does not pop when previousAgentContext is an empty array', async () => {
+    const prior = [];
+    await orc.startConversation('hi', prior);
+    expect(prior).toHaveLength(0);
+    expect(orc.startConversationAnthropicManual).toHaveBeenCalledWith('hi');
+  });
+
+  it('preserves a Gemini-format trailing model message untouched (cross-mode handoff)', async () => {
+    const prior = [
+      { role: 'user', parts: [{ text: 'q' }] },
+      { role: 'model', parts: [{ text: 'a' }] },
+    ];
+
+    await orc.startConversation('next', prior);
+
+    expect(prior).toHaveLength(2);
+    expect(prior[prior.length - 1]).toEqual({ role: 'model', parts: [{ text: 'a' }] });
+  });
+});
+
+describe('startConversation — prior-context dispatching (SDK)', () => {
+  let sessionManager;
+  let sessionId;
+  let orc;
+
+  beforeEach(() => {
+    sessionManager = new SessionManager();
+    sessionId = sessionManager.createSession(null);
+    sessionManager.initializeSession(sessionId, 'cld', {}, [], {}, 'test-client');
+    orc = makeStubbedOrchestrator(sessionManager, sessionId, SDK_CONFIG);
+  });
+
+  afterEach(() => {
+    orc.destroy();
+    sessionManager.shutdown();
+  });
+
+  it('does not pop trailing user in SDK mode — the SDK route handles slicing itself', async () => {
+    const prior = [
+      { role: 'user', content: 'a' },
+      { role: 'assistant', content: 'b' },
+      { role: 'user', content: 'still-trailing' },
+    ];
+
+    await orc.startConversation('new question', prior);
+
+    expect(prior).toHaveLength(3);
+    expect(prior[prior.length - 1]).toEqual({ role: 'user', content: 'still-trailing' });
+    expect(orc.startConversationWithAnthropicSdk).toHaveBeenCalledWith('new question', prior);
+  });
+
+  it('forwards previousAgentContext reference unchanged to the SDK dispatch', async () => {
+    const prior = [
+      { role: 'user', content: 'historical' },
+      { role: 'assistant', content: 'reply' },
+    ];
+
+    await orc.startConversation('next', prior);
+
+    const callArgs = orc.startConversationWithAnthropicSdk.mock.calls[0];
+    expect(callArgs[0]).toBe('next');
+    expect(callArgs[1]).toBe(prior);
+  });
+});
