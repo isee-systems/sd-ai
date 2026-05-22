@@ -35,6 +35,7 @@ IMPORTANT RULES:
 
 ## Loops That Matter (LTM)
 LTM (Loops That Matter) is a feedback-loop dominance analysis technique that ranks loops by instantaneous impact, showing how dominance shifts over time. Use it extensively via get_feedback_information → discuss_model_with_seldon to understand WHY behavior occurs, validate causal mechanisms, and design effective policies.
+**IMPORTANT:** Loops That Matter has NOTHING to do with eigenvalues. It is not an eigenvalue-based dominance analysis. Never describe or explain LTM in terms of eigenvalues, eigenvectors, or eigenvalue elasticities.
 
 
 ## Modeling Workflow
