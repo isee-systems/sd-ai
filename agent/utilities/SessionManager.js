@@ -1,7 +1,7 @@
 import { randomBytes } from 'crypto';
 import { tmpdir } from 'os';
 import { dirname, join } from 'path';
-import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'fs';
 import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenAI } from '@google/genai';
 import { countTokens } from '@anthropic-ai/tokenizer';
@@ -51,15 +51,13 @@ export class SessionManager {
       mkdirSync(this.tempBasePath, { recursive: true });
     }
 
-    // Flag (but don't reap) pid-* siblings whose owning process is no longer
-    // alive — leftovers from PM2 restarts/crashes where the dying process
-    // couldn't run its own shutdown cleanup. We avoid auto-reaping because
-    // PID reuse plus a false-positive "dead" check could rm a live sibling's
-    // bind-mount source out from under its worker (the exact failure mode
-    // the per-pid layout exists to prevent). Operators can clear stale
-    // pid-* dirs manually when the log surfaces them.
+    // Reap pid-* siblings whose owning process is no longer alive — leftovers
+    // from PM2 restarts/crashes where the dying process couldn't run its own
+    // shutdown cleanup. Guarded by an mtime check (see #cleanupDeadProcessDirs)
+    // so a brand-new sibling that's been assigned a reused PID can't get caught
+    // in a race before it's had a chance to populate its dir.
     if (!options.tempBasePath && !options.disableCleanup) {
-      this.#flagDeadProcessDirs();
+      this.#cleanupDeadProcessDirs();
     }
 
     // Start cleanup timer (disabled in worker processes — lifetime managed by main)
@@ -72,11 +70,15 @@ export class SessionManager {
 
   /**
    * Scan the parent `sd-agent` directory for `pid-*` subdirs whose owning
-   * process is no longer alive and log them. Operators should remove these
-   * manually — we intentionally do NOT auto-reap because PID reuse plus an
-   * imperfect liveness check could rm a live sibling's bind-mount source.
+   * process is no longer alive and reap them.
+   *
+   * Two-part safety check:
+   *  - process.kill(pid, 0) → ESRCH: no live process holds that PID right now.
+   *  - dir mtime older than one cleanup interval: if the kernel just reused
+   *    this PID for a brand-new sibling, the new dir's mtime would be very
+   *    recent — skipping fresh dirs eliminates the PID-reuse race window.
    */
-  #flagDeadProcessDirs() {
+  #cleanupDeadProcessDirs() {
     const parentDir = dirname(this.tempBasePath);
     if (!existsSync(parentDir)) return;
 
@@ -88,32 +90,57 @@ export class SessionManager {
       return;
     }
 
-    const stale = [];
+    const now = Date.now();
+    const reaped = [];
+    const skippedFresh = [];
     for (const entry of entries) {
       if (!entry.startsWith('pid-')) continue;
       const pid = Number(entry.slice(4));
       if (!Number.isInteger(pid) || pid <= 0) continue;
       if (pid === process.pid) continue;
 
-      let alive = false;
+      let alive = true;
       try {
         process.kill(pid, 0);
-        alive = true;
       } catch (err) {
-        // EPERM = process exists but we lack permission; treat as alive.
-        // ESRCH = no such process — flag as stale.
-        if (err.code === 'EPERM') alive = true;
+        // Only ESRCH ("no such process") definitively means dead. Everything
+        // else — EPERM on POSIX, EACCES on Windows, transient I/O errors —
+        // means we can't confirm it's gone, so treat as alive and skip.
+        // False-positive alive just leaves an orphan dir for the next sweep;
+        // a false-negative would rm a live sibling's bind-mount source.
+        if (err.code === 'ESRCH') alive = false;
+      }
+      if (alive) continue;
+
+      const fullPath = join(parentDir, entry);
+      let mtimeMs;
+      try {
+        mtimeMs = statSync(fullPath).mtimeMs;
+      } catch (err) {
+        logger.warn(`Could not stat ${fullPath}, skipping: ${err.message}`);
+        continue;
+      }
+      if (now - mtimeMs < this.cleanupInterval) {
+        skippedFresh.push({ entry, pid });
+        continue;
       }
 
-      if (!alive) stale.push({ entry, pid });
+      try {
+        rmSync(fullPath, { recursive: true, force: true });
+        reaped.push({ entry, pid });
+      } catch (err) {
+        logger.error(`Failed to reap dead pid dir ${fullPath}:`, err);
+      }
     }
 
-    if (stale.length > 0) {
-      const summary = stale.map(({ entry, pid }) => `${entry} (pid=${pid})`).join(', ');
-      logger.warn(
-        `Found ${stale.length} stale pid-* temp dir(s) under ${parentDir} ` +
-        `whose owning process is no longer alive: ${summary}. ` +
-        `Remove manually once confirmed stale.`
+    if (reaped.length > 0) {
+      const summary = reaped.map(({ entry, pid }) => `${entry} (pid=${pid})`).join(', ');
+      logger.log(`Reaped ${reaped.length} dead pid-* temp dir(s) under ${parentDir}: ${summary}`);
+    }
+    if (skippedFresh.length > 0) {
+      const summary = skippedFresh.map(({ entry, pid }) => `${entry} (pid=${pid})`).join(', ');
+      logger.log(
+        `Skipped ${skippedFresh.length} dead pid-* temp dir(s) too fresh to reap safely: ${summary}`
       );
     }
   }
@@ -694,6 +721,7 @@ ${conversationText}`;
       Promise.resolve()
         .then(() => this.cleanupStaleSessions())
         .then(() => this.#cleanupOrphanedTempDirs())
+        .then(() => this.#cleanupDeadProcessDirs())
         .catch((err) => logger.error('Error during cleanup cycle:', err))
         .finally(() => { this.cleanupInProgress = false; });
     }, this.cleanupInterval);

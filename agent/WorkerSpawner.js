@@ -308,6 +308,7 @@ export class WorkerSpawner {
             OPENAI_API_KEY: process.env.OPENAI_API_KEY,
             GEMINI_API_KEY: process.env.GEMINI_API_KEY,
             ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+            TOKEN_REPORTER_URL: process.env.TOKEN_REPORTER_URL,
             SESSION_ID: sessionId,
             SESSION_TEMP_DIR: WorkerSpawner.CONTAINER_SESSION_PATH,
             WORKER_IPC_SOCKET: `${WorkerSpawner.CONTAINER_SESSION_PATH}/${socketName}`,

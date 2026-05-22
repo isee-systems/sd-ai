@@ -22,6 +22,9 @@ class TokenUsageReporter {
     this.url = url;
     this.clientId = clientId;
     this.enabled = url !== null && url !== undefined && url !== '' && clientId !== null && clientId !== undefined && clientId !== '';
+    if (!this.enabled) {
+      logger.error(`TokenUsageReporter: not enabled (url=${this.url} clientId=${this.clientId})`);
+    }
   }
 
   /**
