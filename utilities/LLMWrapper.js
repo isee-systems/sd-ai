@@ -59,6 +59,7 @@ export class LLMWrapper {
   #openAIKey;
   #googleKey;
   #anthropicKey;
+  #clientKey = false;
   #temperatureOverride;
   #topP;
   #topK;
@@ -79,18 +80,27 @@ export class LLMWrapper {
         this.#openAIKey = process.env.OPENAI_API_KEY
     } else {
       this.#openAIKey = parameters.openAIKey;
+      if (parameters.openAIKey !== process.env.OPENAI_API_KEY) {
+        this.#clientKey = true;
+      }
     }
 
     if (!parameters.googleKey) {
         this.#googleKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
     } else {
       this.#googleKey = parameters.googleKey;
+      if (parameters.googleKey !== process.env.GEMINI_API_KEY && parameters.googleKey !== process.env.GOOGLE_API_KEY) {
+        this.#clientKey = true;
+      }
     }
 
     if (!parameters.anthropicKey) {
         this.#anthropicKey = process.env.ANTHROPIC_API_KEY
     } else {
       this.#anthropicKey = parameters.anthropicKey;
+      if (parameters.anthropicKey !== process.env.ANTHROPIC_API_KEY) {
+        this.#clientKey = true;
+      }
     }
 
     this.#temperatureOverride = parameters.temperature ?? parameters.temp ?? parameters.temperatureOverride;
@@ -608,7 +618,7 @@ export class LLMWrapper {
     }
 
     const completion = await this.#openAIAPI.chat.completions.create(completionParams);
-    this.#tokenReporter.report({ provider: Provider.OPENAI, model, usage: completion.usage });
+    this.#tokenReporter.report({ provider: Provider.OPENAI, model, usage: completion.usage, clientKey: this.#clientKey });
     const message = completion.choices[0].message;
     // Reasoning models (e.g. GLM-5) emit chain-of-thought in reasoning_content and
     // leave content null. Try to extract a valid JSON block from the reasoning text
@@ -657,7 +667,7 @@ export class LLMWrapper {
     }
 
     const result = await this.#geminiAPI.models.generateContent(requestConfig);
-    this.#tokenReporter.report({ provider: Provider.GOOGLE, model, usage: result.usageMetadata });
+    this.#tokenReporter.report({ provider: Provider.GOOGLE, model, usage: result.usageMetadata, clientKey: this.#clientKey });
 
     // Convert Gemini response to OpenAI format
     return {
@@ -699,7 +709,7 @@ export class LLMWrapper {
       completionParams,
       { headers }
     );
-    this.#tokenReporter.report({ provider: Provider.ANTHROPIC, model, usage: completion.usage });
+    this.#tokenReporter.report({ provider: Provider.ANTHROPIC, model, usage: completion.usage, clientKey: this.#clientKey });
 
     // With output_format, the response is always in content[0].text as JSON
     if (zodSchema) {

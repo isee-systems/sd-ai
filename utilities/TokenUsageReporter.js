@@ -21,10 +21,6 @@ class TokenUsageReporter {
   constructor(url = null, clientId = null) {
     this.url = url;
     this.clientId = clientId;
-    this.enabled = url !== null && url !== undefined && url !== '' && clientId !== null && clientId !== undefined && clientId !== '';
-    if (!this.enabled) {
-      logger.error(`TokenUsageReporter: not enabled (url=${this.url} clientId=${this.clientId})`);
-    }
   }
 
   /**
@@ -33,9 +29,9 @@ class TokenUsageReporter {
    * @param {string} params.provider - LLM provider: use Provider.ANTHROPIC | Provider.OPENAI | Provider.GOOGLE
    * @param {string} params.model - Specific model name, e.g. 'claude-sonnet-4-6' or 'gemini-3-flash-preview'
    * @param {Object} params.usage - Raw usage object from the LLM provider
-   * @param {boolean} params.potentialDuplicate - 'true' if we think this is likely a duplicate cost from either the claude sdk or the google adk
+   * @param {boolean} params.clientKey - True when the API key in use was supplied by the end user; false when it came from the server's .env.
    */
-  async report({ provider, model, usage, potentialDuplicate }) {
+  async report({ provider, model, usage, clientKey }) {
     if (!usage) return;
 
     const isAnthropic = provider === Provider.ANTHROPIC;
@@ -72,14 +68,14 @@ class TokenUsageReporter {
     const costs = this.#calculateCost(provider, model, tokens);
     const fmt = (n, cost) => cost != null ? `${n}($${cost.toFixed(6)})` : `${n}`;
     
-    const duplicateTag = potentialDuplicate ? ' [duplicate?]' : '';
     const clientTag = this.clientId ? ` client=${this.clientId}` : '';
+    const clientKeyTag = clientKey ? ' [clientKey]' : '';
 
     if (isAnthropic) {
       logger.log(
         `[usage:${provider}]` +
         clientTag +
-        duplicateTag + 
+        clientKeyTag +
         ` input=${fmt(tokens.inputTokens, costs?.inputTokens)}` +
         ` output=${fmt(tokens.outputTokens, costs?.outputTokens)}` +
         ` cache_write_5m=${fmt(tokens.cacheCreation5mInputTokens, costs?.cacheCreation5mInputTokens)}` +
@@ -91,7 +87,7 @@ class TokenUsageReporter {
       logger.log(
         `[usage:${provider}]` +
         clientTag +
-        duplicateTag +
+        clientKeyTag +
         ` input=${fmt(tokens.inputTokens, costs?.inputTokens)}` +
         ` output=${fmt(tokens.outputTokens, costs?.outputTokens)}` +
         ` cached=${fmt(tokens.cachedTokens, costs?.cachedTokens)}` +
@@ -102,7 +98,7 @@ class TokenUsageReporter {
       logger.log(
         `[usage:${provider}]` +
         clientTag +
-        duplicateTag +
+        clientKeyTag +
         ` input=${fmt(tokens.inputTokens, costs?.inputTokens)}` +
         ` output=${fmt(tokens.outputTokens, costs?.outputTokens)}` +
         ` cached=${fmt(tokens.cachedTokens, costs?.cachedTokens)}` +
@@ -111,8 +107,6 @@ class TokenUsageReporter {
       );
     }
 
-    if (!this.enabled) return;
-
     const reportData = {
       clientId: this.clientId,
       provider,
@@ -120,7 +114,7 @@ class TokenUsageReporter {
       tokens,
       cost: costs?.total ?? null,
       timestamp: new Date().toISOString(),
-      potentialDuplicate
+      clientKey
     };
 
     try {

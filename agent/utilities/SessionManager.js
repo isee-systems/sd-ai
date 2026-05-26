@@ -491,7 +491,7 @@ ${conversationText}`;
           model: config.agentGeminiSummaryModel,
           contents: [{ role: 'user', parts: [{ text: summaryPrompt }] }]
         });
-        reporter.report({ provider: Provider.GOOGLE, model: config.agentGeminiSummaryModel, usage: response.usageMetadata }).catch(() => {});
+        reporter.report({ provider: Provider.GOOGLE, model: config.agentGeminiSummaryModel, usage: response.usageMetadata, clientKey: false }).catch(() => {});
         summaryText = response.text || response.candidates?.[0]?.content?.parts?.[0]?.text || '';
       } else {
         if (!this.anthropic) {
@@ -502,7 +502,7 @@ ${conversationText}`;
           max_tokens: 1024,
           messages: [{ role: 'user', content: summaryPrompt }]
         });
-        reporter.report({ provider: Provider.ANTHROPIC, model: config.agentAnthropicSummaryModel, usage: response.usage }).catch(() => {});
+        reporter.report({ provider: Provider.ANTHROPIC, model: config.agentAnthropicSummaryModel, usage: response.usage, clientKey: false }).catch(() => {});
         summaryText = response.content[0].text;
       }
 

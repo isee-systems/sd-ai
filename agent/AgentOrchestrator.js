@@ -1728,12 +1728,12 @@ export class AgentOrchestrator {
     this.#resetAnthropicSdkUsageAccumulator();
   }
 
-  #logApiUsage(provider, usage, model = null, potentialDuplicate = false) {
+  #logApiUsage(provider, usage, model = null) {
     if (!usage) return;
     const resolvedModel = model ?? (
       provider === Provider.ANTHROPIC ? config.agentAnthropicModel : config.agentGeminiModel
     );
-    this.tokenReporter.report({ provider, model: resolvedModel, usage, potentialDuplicate }).catch(() => {});
+    this.tokenReporter.report({ provider, model: resolvedModel, usage, clientKey: false }).catch(() => {});
   }
 
 
