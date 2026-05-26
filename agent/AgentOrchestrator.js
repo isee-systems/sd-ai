@@ -142,9 +142,14 @@ export class AgentOrchestrator {
         // If it ends with a user message (e.g. agent-switch handoff where the
         // prior agent's turn was interrupted), pop it so the incoming
         // userMessage replaces it instead of duplicating. Other trailing roles
-        // (assistant, etc.) are preserved.
+        // (assistant, etc.) are preserved. A trailing user message carrying
+        // tool results must NOT be popped — doing so orphans the preceding
+        // assistant's tool_use blocks and the API rejects the next request.
         const last = previousAgentContext[previousAgentContext.length - 1];
-        if (last?.role === 'user') {
+        const isToolResult =
+          (Array.isArray(last?.content) && last.content.some(b => b?.type === 'tool_result')) ||
+          (Array.isArray(last?.parts) && last.parts.some(p => p?.functionResponse));
+        if (last?.role === 'user' && !isToolResult) {
           previousAgentContext.pop();
           logger.debug(`[Prior context → manual] Popped trailing user message; ${previousAgentContext.length} messages remain`);
         }
@@ -343,7 +348,7 @@ export class AgentOrchestrator {
       const reachedMax = !completedNaturally && iteration >= maxIterations;
       if (this.#pendingMessages.length === 0) {
         if (reachedMax) {
-          logger.warn(`Anthropic Manual: Agent conversation reached max iterations (${maxIterations})`);
+          logger.log(`Anthropic Manual: Agent conversation reached max iterations (${maxIterations})`);
           await this.sendToClient(createAgentCompleteMessage(
             this.sessionId,
             'awaiting_user',
@@ -354,7 +359,7 @@ export class AgentOrchestrator {
       }
 
       if (reachedMax) {
-        logger.warn(`Anthropic Manual: max iterations (${maxIterations}) hit; draining queued message with fresh budget`);
+        logger.log(`Anthropic Manual: max iterations (${maxIterations}) hit; draining queued message with fresh budget`);
       }
       const next = this.#pendingMessages.shift();
       logger.log(`Anthropic Manual: processing queued message (remaining: ${this.#pendingMessages.length})`);
@@ -1224,14 +1229,14 @@ export class AgentOrchestrator {
       const reachedMax = !completedNaturally && iteration >= maxIterations;
       if (this.#pendingMessages.length === 0) {
         if (reachedMax) {
-          logger.warn(`Gemini Manual: Agent conversation reached max iterations (${maxIterations})`);
+          logger.log(`Gemini Manual: Agent conversation reached max iterations (${maxIterations})`);
           await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'awaiting_user', `Reached maximum iterations (${maxIterations})`));
         }
         break;
       }
 
       if (reachedMax) {
-        logger.warn(`Gemini Manual: max iterations (${maxIterations}) hit; draining queued message with fresh budget`);
+        logger.log(`Gemini Manual: max iterations (${maxIterations}) hit; draining queued message with fresh budget`);
       }
       const next = this.#pendingMessages.shift();
       logger.log(`Gemini Manual: processing queued message (remaining: ${this.#pendingMessages.length})`);
