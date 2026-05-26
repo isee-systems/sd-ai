@@ -107,6 +107,8 @@ class TokenUsageReporter {
       );
     }
 
+    if (!this.url) return;
+
     const reportData = {
       clientId: this.clientId,
       provider,
