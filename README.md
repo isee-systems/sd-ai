@@ -188,6 +188,8 @@ Variables can have a `subType` field that further classifies them. Sub-types are
 | `cleanTime` | string (equation) | oven only | Clean-up time after emptying before accepting new items. |
 | `sample` | string (equation) | conveyor, oven | Re-samples transit/cook time when this expression is non-zero. |
 | `arrest` | string (equation) | conveyor, oven | Halts movement when this expression is non-zero. |
+| `oneAtATime` | boolean | If true, accepts only one batch per time step. |
+| `splitBatches` | boolean | If true, incoming batches can be split when entering. |
 
 **`additionalProperties`** fields for regular flows (inflows to a conveyor):
 
@@ -213,8 +215,6 @@ Variables can have a `subType` field that further classifies them. Sub-types are
 | Field | Type | Description |
 |-------|------|-------------|
 | `fifoEnabled` | boolean | If true, dispatches in FIFO order; if false (default), LIFO. |
-| `oneAtATime` | boolean | If true, accepts only one batch per time step. |
-| `splitBatches` | boolean | If true, incoming batches can be split when entering. |
 | `discrete` | boolean | If true, operates on integer quantities only (discrete mode). |
 | `roundRobin` | boolean | If true, competing outflows are served in round-robin order. |
 | `queueOutflowPriority` | string (equation) | Dispatch priority for the queue outflow. |
