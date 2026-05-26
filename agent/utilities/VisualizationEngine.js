@@ -477,6 +477,8 @@ for _run_id in list(data.keys()):
         return this.generateFeedbackDominanceScript(dataPath, outputPath, variables, options);
       case 'comparison':
         return this.generateComparisonScript(dataPath, outputPath, variables, options);
+      case 'confidence_interval':
+        return this.generateConfidenceIntervalScript(dataPath, outputPath, variables, options);
       default:
         throw new Error(`Unknown visualization type: ${type}`);
     }
@@ -726,6 +728,130 @@ for idx, (label, time_data, values) in enumerate(run_items):
 ax.set_xlabel('Time', fontsize=12)
 ax.set_ylabel('${options.seriesUnits?.[variable] ? `${variable} (${options.seriesUnits[variable]})` : variable}', fontsize=12)
 ax.set_title('${options.title || `Comparison: ${variable}`}', fontsize=14, fontweight='bold')
+ax.legend(loc='best')
+ax.grid(True, alpha=0.3)
+
+plt.tight_layout()
+plt.savefig('${outputPath}', format='svg', bbox_inches='tight')
+plt.close()
+print('Visualization saved')
+`.trim();
+  }
+
+  /**
+   * Generate confidence interval plot script.
+   *
+   * Expected data format: run-keyed { runId: { time: [...], var1: [...], ... } }.
+   * For each variable, the script computes the median and configured percentile bands
+   * across runs at each time point. Defaults: median + 50% (25–75) + 95% (2.5–97.5) bands.
+   */
+  generateConfidenceIntervalScript(dataPath, outputPath, variables, options) {
+    const intervals = (options.confidenceIntervals && options.confidenceIntervals.length > 0)
+      ? options.confidenceIntervals
+      : [50, 95];
+    const showMedian = options.showMedian !== false;
+
+    const su = options.seriesUnits || {};
+    const unitValues = variables.map(v => su[v]).filter(Boolean);
+    const sharedUnit = unitValues.length === variables.length && new Set(unitValues).size === 1 ? unitValues[0] : null;
+    const yAxisLabel = sharedUnit ? `Value (${sharedUnit})` : 'Value';
+
+    const variableLabels = variables.map(v => su[v] ? `${v.replaceAll('_', ' ')} (${su[v]})` : v.replaceAll('_', ' '));
+
+    return `
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import numpy as np
+import json
+import warnings
+warnings.filterwarnings('ignore')
+
+with open('${dataPath}', 'r') as f:
+    data = json.load(f)
+${this.#timeRangeFilterRunKeyed(options)}
+fig, ax = plt.subplots(figsize=(${(options.width || 800)/100}, ${(options.height || 600)/100}))
+
+variables = ${JSON.stringify(variables)}
+variable_labels = ${JSON.stringify(variableLabels)}
+intervals = ${JSON.stringify(intervals)}
+show_median = ${showMedian ? 'True' : 'False'}
+
+palette = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
+
+run_ids = list(data.keys())
+if len(run_ids) == 0:
+    raise SystemExit('No runs found')
+
+# Build reference time grid from the first run that has a usable 'time' array.
+ref_time = None
+for rid in run_ids:
+    t = data[rid].get('time')
+    if isinstance(t, list) and len(t) > 0:
+        ref_time = np.array(t, dtype=float)
+        break
+if ref_time is None or len(ref_time) == 0:
+    raise SystemExit('No usable time array found in any run.')
+
+# Draw widest band first (most transparent), narrower bands on top (more opaque)
+intervals_sorted = sorted(intervals, reverse=True)
+
+plotted_vars = []
+skipped_vars = []
+
+for var_idx, var in enumerate(variables):
+    color = palette[var_idx % len(palette)]
+    label = variable_labels[var_idx]
+
+    series = []
+    for rid in run_ids:
+        run = data[rid]
+        values = run.get(var)
+        run_time = run.get('time')
+        if values is None or run_time is None:
+            continue
+        if len(values) != len(run_time):
+            continue
+        v_arr = np.array(values, dtype=float)
+        t_arr = np.array(run_time, dtype=float)
+        # Interpolate this run's values onto the reference time grid so cross-run
+        # percentiles can be computed even when grids differ slightly.
+        if len(t_arr) == len(ref_time) and np.array_equal(t_arr, ref_time):
+            series.append(v_arr)
+        else:
+            series.append(np.interp(ref_time, t_arr, v_arr))
+    if not series:
+        skipped_vars.append(var)
+        continue
+    arr = np.array(series)
+    plotted_vars.append(var)
+
+    for band_idx, ci in enumerate(intervals_sorted):
+        lower_p = (100 - ci) / 2.0
+        upper_p = 100 - lower_p
+        lo = np.percentile(arr, lower_p, axis=0)
+        hi = np.percentile(arr, upper_p, axis=0)
+        if len(intervals_sorted) > 1:
+            alpha = 0.15 + 0.20 * (band_idx / (len(intervals_sorted) - 1))
+        else:
+            alpha = 0.25
+        band_label = f'{label} — {ci:g}% CI' if len(variables) > 1 else f'{ci:g}% CI'
+        ax.fill_between(ref_time, lo, hi, color=color, alpha=alpha, linewidth=0, label=band_label, zorder=2)
+
+    if show_median:
+        med = np.percentile(arr, 50, axis=0)
+        med_label = f'{label} — median' if len(variables) > 1 else 'Median'
+        ax.plot(ref_time, med, color=color, linewidth=2, label=med_label, zorder=5)
+
+if not plotted_vars:
+    raise SystemExit(
+        f"No usable data for variables {variables}. "
+        f"Checked {len(run_ids)} runs; none had matching time/values arrays for the requested variables."
+    )
+
+ax.set_xlabel('Time (${options.timeUnits || 'units'})', fontsize=12)
+ax.set_ylabel('${yAxisLabel}', fontsize=12)
+ax.set_title('${options.title || 'Confidence Intervals'}', fontsize=14, fontweight='bold')
 ax.legend(loc='best')
 ax.grid(True, alpha=0.3)
 

@@ -37,12 +37,13 @@ Visualization types:
 - phase_portrait: State-space plots (stock vs stock)
 - feedback_dominance: Stacked area chart of loop influence
 - comparison: Multi-run comparison charts
+- confidence_interval: Median + percentile bands across multiple runs
 
 Use useAICustom=true to have AI generate custom matplotlib code for complex visualizations.`,
     supportedModes: ['sfd'],
     inputSchema: z.object({
-      type: z.enum(['time_series', 'phase_portrait', 'feedback_dominance', 'comparison']).optional(),
-      filePath: z.string().describe('Path to the data file. Use the filePath returned by get_variable_data for time_series/phase_portrait/comparison; use the feedback.json path for feedback_dominance.'),
+      type: z.enum(['time_series', 'phase_portrait', 'feedback_dominance', 'comparison', 'confidence_interval']).optional(),
+      filePath: z.string().describe('Path to the data file. Use the filePath returned by get_variable_data for time_series/phase_portrait/comparison/confidence_interval; use the feedback.json path for feedback_dominance.'),
       variables: z.array(z.string()).optional().describe('Variables to include — defaults to all variables in the data file'),
       title: z.string().describe('Visualization title'),
       description: z.string().optional().describe('Description of what the visualization shows'),
@@ -64,6 +65,8 @@ Use useAICustom=true to have AI generate custom matplotlib code for complex visu
         width: z.number().optional().describe('Output width in pixels (default 800)'),
         height: z.number().optional().describe('Output height in pixels (default 600)'),
         includeFeedbackContext: z.boolean().optional().describe('When true, reads feedback.json and overlays dominant-loop periods as highlight bands on the chart. Useful for time_series plots where you want to show which feedback loop was driving behavior.'),
+        confidenceIntervals: z.array(z.number().min(0).max(100)).optional().describe('confidence_interval only: percentile bands to draw, each 0–100 (e.g. 50 draws the 25th–75th band, 95 draws the 2.5th–97.5th band). Default: [50, 95].'),
+        showMedian: z.boolean().optional().describe('confidence_interval only: draw the median line across runs. Default: true.'),
         customRequirements: z.string().optional().describe('Additional freeform requirements passed to the AI when useAICustom=true')
       })
     }),
@@ -106,6 +109,18 @@ Use useAICustom=true to have AI generate custom matplotlib code for complex visu
           }
 
           resolvedVariables = variables ?? loopsWithData.map(l => l.identifier);
+          extraOptions = {};
+        } else if (type === 'confidence_interval') {
+          data = rawData;
+          if (!isRunKeyedFormat(data)) {
+            return createErrorResponse('confidence_interval requires run-keyed data with multiple runs. Use a filePath from get_variable_data that includes more than one runId.');
+          }
+          const runKeys = Object.keys(data);
+          if (runKeys.length < 2) {
+            return createErrorResponse('confidence_interval needs at least 2 runs to compute percentile bands.');
+          }
+          const firstRun = data[runKeys[0]] || {};
+          resolvedVariables = variables ?? Object.keys(firstRun).filter(k => k !== 'time');
           extraOptions = {};
         } else {
           data = rawData;
