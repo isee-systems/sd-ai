@@ -19,7 +19,7 @@ class Engine {
     constructor() {
     }
 
-    static DEFAULT_MODEL = 'gpt-5-mini';
+    static DEFAULT_MODEL = LLMWrapper.BUILD_DEFAULT_MODEL;
 
     static description() {
         return `This engine improves conformance to user instructions about feedback complexity by prompting the LLM to 
@@ -116,10 +116,17 @@ focus on chains of relationships, rather then individual links.`
     }
 
     async generate(prompt, currentModel, parameters) {
+        const resolvedParameters = {
+            ...parameters,
+            apiKey: parameters.apiKey || process.env.OPENAI_API_KEY,
+            googleKey: parameters.googleKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY,
+            anthropicKey: parameters.anthropicKey || process.env.ANTHROPIC_API_KEY,
+        };
+
         const input = {
             prompt: prompt,
             currentModel: currentModel,
-            parameters: parameters,
+            parameters: resolvedParameters,
         };
 
         let tempDir;

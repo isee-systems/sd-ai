@@ -58,6 +58,11 @@ func NewClient(cfg Config) (chat.Client, string, error) {
 		if apiKey == "" {
 			apiKey = os.Getenv("GEMINI_API_KEY")
 		}
+
+		if apiKey == "" {
+			apiKey = os.Getenv("GOOGLE_API_KEY")
+		}
+
 		if apiKey == "" {
 			return nil, "", fmt.Errorf("Google API key required for model %s", model)
 		}
