@@ -14,6 +14,7 @@ import v1EvalsTestDetails from './routes/v1/evalsTestDetails.js'
 import v1Leaderboard from './routes/v1/leaderboard.js'
 
 import { createHealthRouter } from './routes/health.js';
+import versionRouter from './routes/version.js';
 
 import { SessionManager } from './agent/utilities/SessionManager.js'
 import { WebSocketHandler } from './agent/WebSocket.js'
@@ -32,6 +33,7 @@ if (app.get('env') === 'production') {
 const sessionManager = new SessionManager();
 
 app.use('/', createHealthRouter(sessionManager));
+app.use('/', versionRouter);
 
 
 const apiRouter = express.Router();
