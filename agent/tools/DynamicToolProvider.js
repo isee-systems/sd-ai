@@ -62,7 +62,7 @@ export class DynamicToolProvider {
         return await this.requestClientExecution(clientToolName, args, timeout);
 
       } catch (error) {
-        logger.error(`Error executing client tool ${toolDef.name}:`, error);
+        logger.log(`Error executing client tool ${toolDef.name}:`, error);
         return {
           content: [{ type: 'text', text: `Error: ${error.message}` }],
           isError: true
