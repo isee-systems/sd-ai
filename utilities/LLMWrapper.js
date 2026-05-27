@@ -167,7 +167,6 @@ export class LLMWrapper {
       {label: "Gemini 3.5-flash high", value: 'gemini-3.5-flash high'},
       {label: "Gemini 3.5-flash medium", value: 'gemini-3.5-flash medium'},
       {label: "Gemini 3.5-flash low", value: 'gemini-3.5-flash low'},
-      {label: "Gemini 3-flash-preview", value: 'gemini-3-flash-preview'},
       {label: "Gemini 2.5-flash", value: 'gemini-2.5-flash'},
       {label: "Gemini 2.5-pro", value: 'gemini-2.5-pro'},
       {label: "Claude Opus 4.7", value: 'claude-opus-4-7'},
