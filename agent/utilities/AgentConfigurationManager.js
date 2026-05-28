@@ -180,11 +180,11 @@ CLDs (Causal Loop Diagrams) are QUALITATIVE ONLY:
     return {
       metadata: {
         name: 'Unknown',
-        description: '',
+        description: 'Unknown agent',
         version: '1.0',
         max_iterations: 20,
-        agent_mode: 'anthropic-sdk',
-        supported_modes: []
+        agent_mode: 'sdk',
+        supported_modes: ['sfd','cld']
       },
       content: fileContent
     };
