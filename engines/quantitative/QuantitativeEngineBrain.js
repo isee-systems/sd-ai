@@ -610,188 +610,169 @@ NEVER identify feedback loops for the user in explanatory text. Let users discov
 
     }
 
-    #isFlowUsed(flow, response) {
-        return response.variables.findIndex((v)=> {
-            if (v.type === "stock") {
-                const inflowMatch = (v.inflows || []).findIndex((f) => {
-                    return projectUtils.sameVars(flow.name, f);
-                }) >= 0;
-                const outflowMatch = (v.outflows || []).findIndex((f) => {
-                    return projectUtils.sameVars(flow.name, f);
-                }) >= 0;
-                return inflowMatch || outflowMatch;
-            }
+    #filterInvalidRelationships(response, variablesByFoldedName) {
+        const origRelationships = response.relationships || [];
+        const seenPairs = new Set();
+        const validRelationships = [];
 
-            return false;
-        }) >= 0;
-    }
+        for (const relationship of origRelationships) {
+            const from = relationship.from.trim();
+            const to = relationship.to.trim();
+            const foldedFrom = projectUtils.caseFold(from);
+            const foldedTo = projectUtils.caseFold(to);
 
-    #responseHasVariable(response, variableName) {
-        return response.variables.findIndex((v) => {
-            return projectUtils.sameVars(v.name, variableName);
-        }) >= 0;
-    }
+            if (foldedFrom === foldedTo) continue;
 
-    #filterInvalidRelationships(response) {
-        let origRelationships = response.relationships || [];
+            const toVar = variablesByFoldedName.get(foldedTo);
+            if (!toVar || !variablesByFoldedName.has(foldedFrom)) continue;
 
-        let relationships = origRelationships.map(relationship => {
-            let ret = Object.assign({}, relationship);
-            ret.from = relationship.from.trim();
-            ret.to = relationship.to.trim();
-            ret.valid = !projectUtils.sameVars(ret.from, ret.to) &&
-                        this.#responseHasVariable(response, ret.from) &&
-                        this.#responseHasVariable(response, ret.to);
-            return ret;
-        });
+            if (toVar.crossLevelGhostOf && toVar.crossLevelGhostOf.length > 0) continue;
 
-        // Filter out any relationship whose .to attribute is a variable that has a crossLevelGhostOf
-        relationships.forEach(relationship => {
-            if (relationship.valid) {
-                const toVariable = response.variables.find(v => projectUtils.sameVars(v.name, relationship.to));
-                if (toVariable && toVariable.crossLevelGhostOf && toVariable.crossLevelGhostOf.length > 0) {
-                    relationship.valid = false;
-                }
-            }
-        });
+            if (from.includes('[') || to.includes('[')) continue;
 
-        // Filter out any relationships that reference array elements with bracket notation
-        relationships.forEach(relationship => {
-            if (relationship.valid) {
-                // If the to or from has a [ in the name mark it invalid (array element references)
-                if (relationship.from.includes('[') || relationship.to.includes('[')) {
-                    relationship.valid = false;
-                }
-            }
-        });
+            const pairKey = foldedFrom + '\x00' + foldedTo;
+            if (seenPairs.has(pairKey)) continue;
+            seenPairs.add(pairKey);
 
-        // Mark for removal any relationships which are duplicates, keep the first one we encounter
-        for (let i = 1, len = relationships.length; i < len; ++i) {
-            for (let j = 0; j < i; ++j) {
-                let relJ = relationships[j];
-                let relI = relationships[i];
-
-                // Who cares if it's an invalid link
-                if (!relI.valid || !relJ.valid)
-                    continue;
-
-                if (projectUtils.sameVars(relJ.from, relI.from) && projectUtils.sameVars(relJ.to, relI.to)) {
-                    relI.valid = false;
-                }
-            }
+            const cleaned = Object.assign({}, relationship);
+            cleaned.from = from;
+            cleaned.to = to;
+            validRelationships.push(cleaned);
         }
 
-        // Remove the invalid ones, then remove the valid field
-        relationships = relationships.filter((relationship) => {
-            return relationship.valid;
-        });
-
-        relationships.forEach((relationship) => {
-            delete relationship.valid;
-        });
-
-        response.relationships = relationships;
+        response.relationships = validRelationships;
     }
 
-
-    #cleanStockFlows(response) {
-        // Go through all variables -- for any stock with inflows/outflows remove dimensions from inflow/outflow names
-        // Also remove empty entries or references to non-existent variables
-        response.variables.forEach((v) => {
-            if (v.type === "stock") {
-                if (v.inflows && Array.isArray(v.inflows)) {
-                    v.inflows = v.inflows
-                        .map(flowName => flowName.replace(/\[.*?\]/g, '').trim())
-                        .filter(flowName => {
-                            // Remove empty strings
-                            if (!flowName || flowName.length === 0) {
-                                return false;
-                            }
-                            // Check if the variable exists
-                            return this.#responseHasVariable(response, flowName);
-                        });
-                }
-                if (v.outflows && Array.isArray(v.outflows)) {
-                    v.outflows = v.outflows
-                        .map(flowName => flowName.replace(/\[.*?\]/g, '').trim())
-                        .filter(flowName => {
-                            // Remove empty strings
-                            if (!flowName || flowName.length === 0) {
-                                return false;
-                            }
-                            // Check if the variable exists
-                            return this.#responseHasVariable(response, flowName);
-                        });
-                }
+    #cleanStockFlowsAndCollectUsage(stocks, variablesByFoldedName, usedFlowNames) {
+        const cleanList = (list) => {
+            const result = [];
+            for (const flowName of list) {
+                const cleaned = flowName.replace(/\[.*?\]/g, '').trim();
+                if (cleaned.length === 0) continue;
+                const folded = projectUtils.caseFold(cleaned);
+                if (!variablesByFoldedName.has(folded)) continue;
+                result.push(cleaned);
+                usedFlowNames.add(folded);
             }
-        });
+            return result;
+        };
+
+        for (const v of stocks) {
+            if (Array.isArray(v.inflows)) v.inflows = cleanList(v.inflows);
+            if (Array.isArray(v.outflows)) v.outflows = cleanList(v.outflows);
+        }
     }
 
-    #inferStockFlowsFromRelationships(response, relationships) {
-        // LLMs like gemini-3-flash-preview (before I made it so that all properties are required, but nullable)
-        // does not like to generate the inflow and outflow lists for stocks.
-        // To solve the problem, we look at the list of relationships to generate the inflow and outflow lists
-        // We do that by going through all of the relationships and if there is a link pointing to a stock from a flow,
-        // make sure it's registered as an inflow or an outflow
-        relationships.forEach((relationship) => {
-            const toVariable = response.variables.find(v => projectUtils.sameVars(v.name, relationship.to));
-            const fromVariable = response.variables.find(v => projectUtils.sameVars(v.name, relationship.from));
+    #inferStockFlowsFromRelationships(response, variablesByFoldedName, usedFlowNames) {
+        // LLMs like gemini-3-flash-preview don't reliably emit inflow/outflow lists for stocks,
+        // so derive them from flow→stock relationships (polarity decides in vs out).
+        const flowSetsByStock = new Map();
 
-            if (toVariable && toVariable.type === "stock" && fromVariable && fromVariable.type === "flow") {
-                // Initialize inflows and outflows arrays if they don't exist
-                if (!toVariable.inflows) {
-                    toVariable.inflows = [];
-                }
-                if (!toVariable.outflows) {
-                    toVariable.outflows = [];
-                }
+        const ensureSets = (stockVar) => {
+            let sets = flowSetsByStock.get(stockVar);
+            if (sets) return sets;
+            if (!stockVar.inflows) stockVar.inflows = [];
+            if (!stockVar.outflows) stockVar.outflows = [];
+            sets = {
+                inflows: new Set(stockVar.inflows.map(f => projectUtils.caseFold(f))),
+                outflows: new Set(stockVar.outflows.map(f => projectUtils.caseFold(f)))
+            };
+            flowSetsByStock.set(stockVar, sets);
+            return sets;
+        };
 
-                // If this variable is an inflow or an outflow already, don't re-add it
-                const isInInflows = toVariable.inflows.findIndex(f => projectUtils.sameVars(f, fromVariable.name)) >= 0;
-                const isInOutflows = toVariable.outflows.findIndex(f => projectUtils.sameVars(f, fromVariable.name)) >= 0;
-                if (isInInflows || isInOutflows) {
-                    return;
-                }
+        for (const relationship of response.relationships) {
+            const toVariable = variablesByFoldedName.get(projectUtils.caseFold(relationship.to));
+            if (!toVariable || toVariable.type !== 'stock') continue;
+            const fromVariable = variablesByFoldedName.get(projectUtils.caseFold(relationship.from));
+            if (!fromVariable || fromVariable.type !== 'flow') continue;
 
-                // Add flow to inflows or outflows based on polarity, if no polarity then we add it as an inflow
-                if (relationship.polarity === "-") {
-                    if (!isInOutflows) {
-                        toVariable.outflows.push(fromVariable.name);
-                    }
-                } else { // Positive polarity or unknown, it's an inflow
-                    if (!isInInflows) {
-                        toVariable.inflows.push(fromVariable.name);
-                    }
-                }
+            const sets = ensureSets(toVariable);
+            const foldedFromName = projectUtils.caseFold(fromVariable.name);
+            if (sets.inflows.has(foldedFromName) || sets.outflows.has(foldedFromName)) continue;
+
+            if (relationship.polarity === '-') {
+                toVariable.outflows.push(fromVariable.name);
+                sets.outflows.add(foldedFromName);
+            } else {
+                toVariable.inflows.push(fromVariable.name);
+                sets.inflows.add(foldedFromName);
             }
-        });
+            usedFlowNames.add(foldedFromName);
+        }
     }
 
-    #fixFlowTypesGraphicalFunctionsAndForElements(response) {
-        // This fixes generating flows that are not connected to stocks
-        // Fix graphical functions that use DT instead of TIME in their equations
-        response.variables.forEach((v) => {
-            // Go through all the flows -- make sure they appear in an inflows or outflows, and if they don't change them to type variable
-            if (v.type === "flow" && !this.#isFlowUsed(v, response)) {
-                v.type = "variable";
+    #fixVariablesAndConvertEquations(response, usedFlowNames, variableNameMap, namesToConvert) {
+        // Compile the XMILE replacement regex ONCE (skip entirely if nothing to convert).
+        let combinedRegex = null;
+        let replaceFn = null;
+        if (namesToConvert.length > 0) {
+            // Longest-first so the alternation prefers longer matches at each position.
+            namesToConvert.sort((a, b) => b.length - a.length);
+            const escaped = namesToConvert.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+            combinedRegex = new RegExp(
+                '(?<=[\\s\\(\\[,+\\-*/^=<>]|^)(' + escaped.join('|') + ')(?=[\\s\\)\\],+\\-*/^=<>]|$)',
+                'g'
+            );
+            replaceFn = (match) => variableNameMap.get(match) || match;
+        }
+
+        // Single pass per variable handles: orphan-flow demotion, DT→TIME, forElements
+        // normalization, and XMILE replacement across equation, arrayEquations, and
+        // additionalProperties.
+        for (const v of response.variables) {
+            if (v.type === 'flow' && !usedFlowNames.has(projectUtils.caseFold(v.name))) {
+                v.type = 'variable';
             } else if (v?.graphicalFunction?.points?.length > 0 && v.equation) {
-                // Check if equation is "DT" (case insensitive)
                 if (v.equation.trim().toLowerCase() === 'dt') {
                     v.equation = 'TIME';
                 }
             }
 
-            // Normalize forElements: if the LLM returned a comma-separated string, split it into an array
             if (Array.isArray(v.arrayEquations)) {
-                v.arrayEquations.forEach((eq) => {
+                for (const eq of v.arrayEquations) {
                     if (!Array.isArray(eq.forElements)) {
                         eq.forElements = typeof eq.forElements === 'string'
                             ? eq.forElements.split(',').map(s => s.trim())
                             : [];
                     }
-                });
+                }
             }
-        });
+
+            if (!combinedRegex) continue;
+
+            if (typeof v.equation === 'string' && v.equation) {
+                const original = v.equation;
+                v.equation = original.replace(combinedRegex, replaceFn);
+                if (original !== v.equation) {
+                    logger.debug(`[XMILE Conversion] Variable "${v.name}": "${original}" → "${v.equation}"`);
+                }
+            }
+
+            if (Array.isArray(v.arrayEquations)) {
+                for (const eq of v.arrayEquations) {
+                    if (typeof eq.equation === 'string' && eq.equation) {
+                        const original = eq.equation;
+                        eq.equation = original.replace(combinedRegex, replaceFn);
+                        if (original !== eq.equation) {
+                            logger.debug(`[XMILE Conversion] Variable "${v.name}"[${eq.forElements.join(',')}]: "${original}" → "${eq.equation}"`);
+                        }
+                    }
+                }
+            }
+
+            if (v.subType && v.additionalProperties && typeof v.additionalProperties === 'object') {
+                for (const key of Object.keys(v.additionalProperties)) {
+                    const val = v.additionalProperties[key];
+                    if (typeof val !== 'string') continue;
+                    const replaced = val.replace(combinedRegex, replaceFn);
+                    if (replaced !== val) {
+                        v.additionalProperties[key] = replaced;
+                        logger.debug(`[XMILE Conversion] Variable "${v.name}" additionalProperties.${key}: "${val}" → "${replaced}"`);
+                    }
+                }
+            }
+        }
     }
 
     async #parseExplanation(response) {
@@ -800,183 +781,97 @@ NEVER identify feedback loops for the user in explanatory text. Let users discov
         }
     }
 
-    #processAndCleanModules(response) {
-        // Ensure modules array matches actual module usage in variable names
-        // Extract all unique module names from variable names (ModuleName.variableName format)
-        const usedModules = new Set();
-        const moduleNameMapping = new Map(); // Map from normalized name to original name
+    #mergeModules(response, usedModules, moduleNameMapping) {
+        if (!response.modules) response.modules = [];
 
-        response.variables.forEach((v) => {
-            if (v.name && v.name.includes('.')) {
-                const parts = v.name.split('.');
-                // Get all module parts except the last one (which is the variable name)
-                for (let i = 0; i < parts.length - 1; i++) {
-                    const normalizedName = projectUtils.caseFold(parts[i]);
-                    usedModules.add(normalizedName);
-                    // Keep the first occurrence of this module name as the canonical form
-                    if (!moduleNameMapping.has(normalizedName)) {
-                        moduleNameMapping.set(normalizedName, parts[i]);
-                    }
+        // Single pass: build existing-modules lookup AND honor parentModule chains
+        // (a module referenced only as someone's parent is still in use).
+        const existingModulesMap = new Map();
+        for (const m of response.modules) {
+            if (m.name) {
+                const normalized = projectUtils.caseFold(m.name);
+                if (!existingModulesMap.has(normalized)) {
+                    existingModulesMap.set(normalized, m);
                 }
             }
-        });
-
-        // Initialize modules array if it doesn't exist
-        if (!response.modules) {
-            response.modules = [];
+            if (m.parentModule && m.parentModule.trim().length > 0) {
+                const normalizedParent = projectUtils.caseFold(m.parentModule);
+                usedModules.add(normalizedParent);
+                if (!moduleNameMapping.has(normalizedParent)) {
+                    moduleNameMapping.set(normalizedParent, m.parentModule);
+                }
+            }
         }
 
-        // Build a map of existing modules for quick lookup (using normalized names as keys)
-        // This ensures no duplicates after case folding
-        const existingModulesMap = new Map();
-        response.modules.forEach((m) => {
-            if (m.name) {
-                const normalizedName = projectUtils.caseFold(m.name);
-                // Only add if we haven't seen this normalized name before
-                // This prevents duplicate modules with same name after case folding
-                if (!existingModulesMap.has(normalizedName)) {
-                    existingModulesMap.set(normalizedName, m);
-                }
-            }
-        });
-
-        // Also mark modules as used if they are referenced as parentModule
-        // This ensures parent modules are preserved even if not directly in variable names
-        response.modules.forEach((m) => {
-            if (m.parentModule && m.parentModule.trim().length > 0) {
-                const normalizedParentName = projectUtils.caseFold(m.parentModule);
-                usedModules.add(normalizedParentName);
-                // Preserve the parent module name as seen in the parentModule reference
-                if (!moduleNameMapping.has(normalizedParentName)) {
-                    moduleNameMapping.set(normalizedParentName, m.parentModule);
-                }
-            }
-        });
-
-        // Create new modules array with only used modules
-        // This guarantees no duplicates after case folding since we use a Map with normalized names
         const newModules = [];
-        usedModules.forEach((normalizedModuleName) => {
-            if (existingModulesMap.has(normalizedModuleName)) {
-                // Keep existing module definition (preserves original capitalization and parentModule)
-                newModules.push(existingModulesMap.get(normalizedModuleName));
+        for (const normalized of usedModules) {
+            const existing = existingModulesMap.get(normalized);
+            if (existing) {
+                newModules.push(existing);
             } else {
-                // Create new module definition with empty parentModule (top-level)
-                // Use the canonical form from the first variable reference
                 newModules.push({
-                    name: moduleNameMapping.get(normalizedModuleName),
+                    name: moduleNameMapping.get(normalized),
                     parentModule: ""
                 });
             }
-        });
-
-        response.modules = newModules;
-    }
-
-    #convertEquationsToXMILEFormat(response) {
-        // CRITICAL: Ensure all variable names in equations use underscores instead of spaces
-        // This follows XMILE conventions where variable references must use underscores
-
-        // Build a mapping of all variable names (with spaces) to their XMILE equivalents (with underscores)
-        const variableNameMap = new Map();
-        response.variables.forEach((v) => {
-            if (v.name && v.name.includes(' ')) {
-                const xmileName = projectUtils.xmileName(v.name);
-                variableNameMap.set(v.name, xmileName);
-            }
-        });
-
-        // Process each variable's equation to replace variable names with XMILE format
-        response.variables.forEach((v) => {
-            // Process main equation field
-            if (v.equation && typeof v.equation === 'string') {
-                const originalEquation = v.equation;
-                v.equation = this.#replaceVariableNamesInEquation(v.equation, variableNameMap);
-                if (originalEquation !== v.equation) {
-                    logger.debug(`[XMILE Conversion] Variable "${v.name}": "${originalEquation}" → "${v.equation}"`);
-                }
-            }
-
-            // Process arrayEquations if present
-            if (v.arrayEquations && Array.isArray(v.arrayEquations)) {
-                v.arrayEquations.forEach((eq) => {
-                    if (eq.equation && typeof eq.equation === 'string') {
-                        const originalEquation = eq.equation;
-                        eq.equation = this.#replaceVariableNamesInEquation(eq.equation, variableNameMap);
-                        if (originalEquation !== eq.equation) {
-                            logger.debug(`[XMILE Conversion] Variable "${v.name}"[${eq.forElements.join(',')}]: "${originalEquation}" → "${eq.equation}"`);
-                        }
-                    }
-                });
-            }
-
-            // Process additionalProperties expressions for sub-typed variables
-            if (v.subType && v.additionalProperties && typeof v.additionalProperties === 'object') {
-                for (const [key, val] of Object.entries(v.additionalProperties)) {
-                    if (typeof val === 'string') {
-                        const original = val;
-                        v.additionalProperties[key] = this.#replaceVariableNamesInEquation(val, variableNameMap);
-                        if (original !== v.additionalProperties[key]) {
-                            logger.debug(`[XMILE Conversion] Variable "${v.name}" additionalProperties.${key}: "${original}" → "${v.additionalProperties[key]}"`);
-                        }
-                    }
-                }
-            }
-        });
-    }
-
-    #replaceVariableNamesInEquation(equation, variableNameMap) {
-        // Replace variable names that have spaces with their XMILE underscore equivalents
-        // We need to be careful to do whole-word matching to avoid replacing parts of other names
-
-        let result = equation;
-
-        // Sort variable names by length (longest first) to avoid partial replacements
-        const sortedNames = Array.from(variableNameMap.keys()).sort((a, b) => b.length - a.length);
-
-        for (const varName of sortedNames) {
-            const xmileName = variableNameMap.get(varName);
-
-            // Create a regex that matches the variable name as a whole word
-            // This ensures we don't replace parts of other variable names
-            // We need to escape special regex characters in the variable name
-            const escapedVarName = varName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-            // Match the variable name with word boundaries or specific delimiters
-            // Word boundaries work for alphanumeric, but we also need to handle operators, parentheses, brackets, commas
-            const regex = new RegExp(
-                '(?<=[\\s\\(\\[,+\\-*/^=<>]|^)' + escapedVarName + '(?=[\\s\\)\\],+\\-*/^=<>]|$)',
-                'g'
-            );
-
-            result = result.replace(regex, xmileName);
         }
 
-        return result;
+        response.modules = newModules;
     }
 
     async processResponse(originalResponse) {
         originalResponse.variables = originalResponse.variables || [];
 
-        // Filter and clean relationships
-        this.#filterInvalidRelationships(originalResponse);
+        // Pass 1: ONE walk over variables that builds every lookup structure the
+        // downstream helpers need — fold-name map, XMILE rename table, module
+        // usage, and a stocks-only list to avoid filtering again in pass 2.
+        const variablesByFoldedName = new Map();
+        const variableNameMap = new Map();   // raw name → xmile name (spaces → underscores)
+        const namesToConvert = [];           // raw names needing XMILE conversion
+        const usedModules = new Set();       // fold(moduleName) for any module referenced by a variable
+        const moduleNameMapping = new Map(); // fold(moduleName) → canonical capitalization
+        const stocks = [];
 
-        // Clean stock inflows/outflows
-        this.#cleanStockFlows(originalResponse);
+        for (const v of originalResponse.variables) {
+            if (!v.name) continue;
 
-        // Infer stock flows from relationships
-        this.#inferStockFlowsFromRelationships(originalResponse, originalResponse.relationships);
+            variablesByFoldedName.set(projectUtils.caseFold(v.name), v);
 
-        // Fix flow types and graphical function equations
-        this.#fixFlowTypesGraphicalFunctionsAndForElements(originalResponse);
+            if (v.type === 'stock') stocks.push(v);
 
-        // Convert all equations to XMILE format (spaces to underscores in variable names)
-        this.#convertEquationsToXMILEFormat(originalResponse);
+            if (v.name.includes(' ')) {
+                variableNameMap.set(v.name, projectUtils.xmileName(v.name));
+                namesToConvert.push(v.name);
+            }
 
-        // Sync specs.modules array with actual variable usage
-        this.#processAndCleanModules(originalResponse);
+            if (v.name.includes('.')) {
+                const parts = v.name.split('.');
+                for (let i = 0; i < parts.length - 1; i++) {
+                    const normalized = projectUtils.caseFold(parts[i]);
+                    usedModules.add(normalized);
+                    if (!moduleNameMapping.has(normalized)) {
+                        moduleNameMapping.set(normalized, parts[i]);
+                    }
+                }
+            }
+        }
 
-        // Parse explanation markdown
+        this.#filterInvalidRelationships(originalResponse, variablesByFoldedName);
+
+        // Pass 2: walk stocks only — clean inflow/outflow refs and seed the
+        // used-flow set. #inferStockFlowsFromRelationships then adds any
+        // additional flows it derives from relationships.
+        const usedFlowNames = new Set();
+        this.#cleanStockFlowsAndCollectUsage(stocks, variablesByFoldedName, usedFlowNames);
+        this.#inferStockFlowsFromRelationships(originalResponse, variablesByFoldedName, usedFlowNames);
+
+        // Pass 3: combined per-variable mutation pass — flow-type fixup,
+        // DT→TIME, forElements normalization, and XMILE rewriting.
+        this.#fixVariablesAndConvertEquations(originalResponse, usedFlowNames, variableNameMap, namesToConvert);
+
+        // No variable loop needed — module usage was already collected in pass 1.
+        this.#mergeModules(originalResponse, usedModules, moduleNameMapping);
+
         await this.#parseExplanation(originalResponse);
 
         return originalResponse;
