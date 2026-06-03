@@ -44,23 +44,23 @@ const config = {
     "agentToolModels": {
         anthropic: {
             build:    { normal: 'gemini-3.5-flash low', hard: 'gemini-3.5-flash high' },
-            nonBuild: { normal: 'claude-sonnet-4-6', hard: 'claude-opus-4-8' }
+            nonBuild: { normal: 'gemini-3.5-flash low', hard: 'gemini-3.5-flash high' }
         },
         google: {
             build:    { normal: 'gemini-3.5-flash low', hard: 'gemini-3.5-flash high' },
             nonBuild: { normal: 'gemini-3.5-flash low', hard: 'gemini-3.5-flash high' }
         },
         qwen: {
-            build:    { normal: 'qwen/qwen3.6-flash', hard: 'qwen/qwen3.7-max' },
-            nonBuild: { normal: 'qwen/qwen3.6-flash', hard: 'qwen/qwen3.7-max' }
+            build:    { normal: 'gemini-3.5-flash low', hard: 'gemini-3.5-flash high' },
+            nonBuild: { normal: 'gemini-3.5-flash low', hard: 'gemini-3.5-flash high' }
         },
         deepseek: {
-            build:    { normal: 'deepseek/deepseek-v4-flash', hard: 'deepseek/deepseek-v4-pro' },
-            nonBuild: { normal: 'deepseek/deepseek-v4-flash', hard: 'deepseek/deepseek-v4-pro' }
+            build:    { normal: 'gemini-3.5-flash low', hard: 'gemini-3.5-flash high' },
+            nonBuild: { normal: 'gemini-3.5-flash low', hard: 'gemini-3.5-flash high' }
         },
         moonshotai: {
-            build:    { normal: 'moonshotai/kimi-k2.6', hard: 'moonshotai/kimi-k2.6' },
-            nonBuild: { normal: 'moonshotai/kimi-k2.6', hard: 'moonshotai/kimi-k2.6' }
+            build:    { normal: 'gemini-3.5-flash low', hard: 'gemini-3.5-flash high' },
+            nonBuild: { normal: 'gemini-3.5-flash low', hard: 'gemini-3.5-flash high' }
         }
     }
 };
