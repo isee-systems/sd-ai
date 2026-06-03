@@ -607,7 +607,7 @@ function buildAuxiliary(aux, model, currentModule = '') {
         }
 
         // Handle graphical functions
-        if (aux.graphicalFunction && aux.graphicalFunction.points) {
+        if (aux.graphicalFunction && aux.graphicalFunction.points && aux.graphicalFunction.points.length > 1) {
             lines.push(...buildGraphicalFunction(aux.graphicalFunction, equation));
         } else if (equation) {
             // Regular equation

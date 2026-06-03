@@ -1,0 +1,253 @@
+import { z } from 'zod';
+import { readFileSync, existsSync } from 'fs';
+import { join } from 'path';
+import {
+  createGetCurrentModelMessage,
+  createUpdateModelMessage,
+  createRunModelMessage,
+  createGetRunInfoMessage,
+  createGetVariableDataMessage,
+  GetCurrentModelResponseSchema,
+  UpdateModelResponseSchema,
+  RunModelResponseSchema,
+  GetRunInfoResponseSchema
+} from '../../utilities/MessageProtocol.js';
+import { generateRequestId, createSuccessResponse, createErrorResponse } from './toolHelpers.js';
+import logger from '../../../utilities/logger.js';
+
+/**
+ * Get the current model from the client
+ */
+export function createGetCurrentModelTool(sessionManager, sessionId, sendToClient) {
+  return {
+    description: 'Get the current model from the client. Returns the model data that is currently loaded in the client.',
+    supportedModes: ['sfd', 'cld'],
+    inputSchema: z.object({}),
+    handler: async () => {
+      try {
+        const session = sessionManager.getSession(sessionId);
+        if (!session) {
+          throw new Error(`Session not found: ${sessionId}`);
+        }
+
+        const requestId = generateRequestId('model');
+
+        // Send request to client for current model
+        await sendToClient(createGetCurrentModelMessage(sessionId, requestId));
+
+        // Create pending request that will be resolved when client responds
+        const resultPromise = new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            reject(new Error('Get current model timeout: Client did not respond within 30 seconds'));
+          }, 30000);
+
+          if (!session.pendingModelRequests) {
+            session.pendingModelRequests = new Map();
+          }
+          session.pendingModelRequests.set(requestId, { resolve, reject, timeout });
+        });
+
+        const modelData = await resultPromise;
+        const parsed = GetCurrentModelResponseSchema.parse(modelData);
+
+        const { modelPath, message, issues } = sessionManager.updateClientModel(sessionId, parsed);
+
+        return createSuccessResponse({ message, modelPath, ...(issues && { issues }) });
+      } catch (error) {
+        return createErrorResponse(`Failed to get current model: ${error.message}`, error);
+      }
+    }
+  };
+}
+
+/**
+ * Update the model in the client
+ */
+export function createUpdateModelTool(sessionManager, sessionId, sendToClient) {
+  return {
+    description: 'Send the current model file to the client. Reads the model from the session file on disk — edit that file first, then call this tool to push the changes to the client.',
+    supportedModes: ['sfd', 'cld'],
+    inputSchema: z.object({}),
+    handler: async () => {
+      try {
+        const session = sessionManager.getSession(sessionId);
+        if (!session) {
+          throw new Error(`Session not found: ${sessionId}`);
+        }
+
+        const sessionTempDir = sessionManager.getSessionTempDir(sessionId);
+        const modelPath = join(sessionTempDir, 'model.sdjson');
+
+        if (!existsSync(modelPath)) {
+          throw new Error('No model file found for this session. Call get_current_model first.');
+        }
+
+        const modelData = JSON.parse(readFileSync(modelPath, 'utf-8'));
+
+        const requestId = generateRequestId('model');
+
+        // Send update request to client
+        await sendToClient(createUpdateModelMessage(sessionId, requestId, modelData));
+
+        // Create pending request that will be resolved when client responds
+        const resultPromise = new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            reject(new Error('Update model timeout: Client did not respond within 30 seconds'));
+          }, 30000);
+
+          if (!session.pendingModelRequests) {
+            session.pendingModelRequests = new Map();
+          }
+          session.pendingModelRequests.set(requestId, { resolve, reject, timeout });
+        });
+
+        const result = await resultPromise;
+        const parsed = UpdateModelResponseSchema.parse(result);
+
+        const { message, issues } = sessionManager.updateClientModel(sessionId, parsed);
+
+        return createSuccessResponse({ success: true, message, modelPath, ...(issues && { issues }) });
+      } catch (error) {
+        return createErrorResponse(`Failed to update model: ${error.message}`, error);
+      }
+    }
+  };
+}
+
+/**
+ * Run the model simulation in the client
+ */
+export function createRunModelTool(sessionManager, sessionId, sendToClient) {
+  return {
+    description: 'Run the model simulation in the client. Returns a runId for the completed run.',
+    supportedModes: ['sfd', 'cld'],
+    inputSchema: z.object({}),
+    handler: async () => {
+      try {
+        const session = sessionManager.getSession(sessionId);
+        if (!session) {
+          throw new Error(`Session not found: ${sessionId}`);
+        }
+
+        const requestId = generateRequestId('run');
+
+        // Send run request to client
+        await sendToClient(createRunModelMessage(sessionId, requestId));
+
+        // Create pending request that will be resolved when client responds
+        const resultPromise = new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            reject(new Error('Run model timeout: Client did not respond within 60 seconds'));
+          }, 60000); // Longer timeout for model runs
+
+          if (!session.pendingModelRequests) {
+            session.pendingModelRequests = new Map();
+          }
+          session.pendingModelRequests.set(requestId, { resolve, reject, timeout });
+        });
+
+        const result = await resultPromise;
+        const parsed = RunModelResponseSchema.parse(result);
+
+        return createSuccessResponse({ success: true, ...parsed });
+      } catch (error) {
+        return createErrorResponse(`Failed to run model: ${error.message}`, error);
+      }
+    }
+  };
+}
+
+/**
+ * Get information about all simulation runs
+ */
+export function createGetRunInfoTool(sessionManager, sessionId, sendToClient) {
+  return {
+    description: 'Get information about all simulation runs. Returns a list of run objects, where each run object contains an id, name, and optional metadata.',
+    supportedModes: ['sfd'],
+    inputSchema: z.object({}),
+    handler: async () => {
+      try {
+        const session = sessionManager.getSession(sessionId);
+        if (!session) {
+          throw new Error(`Session not found: ${sessionId}`);
+        }
+
+        const requestId = generateRequestId('runinfo');
+
+        // Send request to client for run info
+        await sendToClient(createGetRunInfoMessage(sessionId, requestId));
+
+        // Create pending request that will be resolved when client responds
+        const resultPromise = new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            reject(new Error('Get run info timeout: Client did not respond within 30 seconds'));
+          }, 30000);
+
+          if (!session.pendingModelRequests) {
+            session.pendingModelRequests = new Map();
+          }
+          session.pendingModelRequests.set(requestId, { resolve, reject, timeout });
+        });
+
+        const runInfo = await resultPromise;
+        const parsed = GetRunInfoResponseSchema.parse({ runs: runInfo.runs || [] });
+
+        return createSuccessResponse({
+          runs: parsed.runs,
+          count: parsed.runs.length
+        });
+      } catch (error) {
+        return createErrorResponse(`Failed to get run info: ${error.message}`, error);
+      }
+    }
+  };
+}
+
+/**
+ * Get data for specific variables from specific runs
+ */
+export function createGetVariableDataTool(sessionManager, sessionId, sendToClient) {
+  return {
+    description: 'Get data for specific variables from specific runs. Writes the time-series data to a file on disk and returns the file path. Use the Read filesystem tool to load the data into context. NOTE: This operation can be slow for large datasets - consider requesting only essential variables and runs.',
+    supportedModes: ['sfd'],
+    inputSchema: z.object({
+      variableNames: z.array(z.string()).describe('List of variable names to get data for'),
+      runIds: z.array(z.string()).describe('List of run IDs to get variable data from'),
+      detailed: z.boolean().optional().describe('Whether to return detailed data suitable for plotting (default: false). When true, returns more data points for visualization purposes.')
+    }),
+    handler: async ({ variableNames, runIds, detailed }) => {
+      try {
+        const session = sessionManager.getSession(sessionId);
+        if (!session) {
+          throw new Error(`Session not found: ${sessionId}`);
+        }
+
+        const requestId = generateRequestId('vardata');
+
+        // Send request to client for variable data
+        await sendToClient(createGetVariableDataMessage(sessionId, requestId, variableNames, runIds, detailed));
+
+        // Create pending request that will be resolved when client responds
+        const resultPromise = new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            reject(new Error('Get variable data timeout: Client did not respond within 30 seconds'));
+          }, 30000);
+
+          if (!session.pendingModelRequests) {
+            session.pendingModelRequests = new Map();
+          }
+          session.pendingModelRequests.set(requestId, { resolve, reject, timeout });
+        });
+
+        const variableData = await resultPromise;
+
+        const filename = `variable_data_${Date.now()}.json`;
+        const { filePath, message } = sessionManager.writeDataToDisk(sessionId, filename, variableData);
+
+        return createSuccessResponse({ message, filePath });
+      } catch (error) {
+        return createErrorResponse(`Failed to get variable data: ${error.message}`, error);
+      }
+    }
+  };
+}

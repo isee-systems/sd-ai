@@ -18,7 +18,7 @@ To build the causal-chains engine:
 ./install.sh
 ```
 
-This will compile the Go code and place the `causal-chains` binary in `engines/causal-chains/`.
+This will compile the Go code and place the `causal-chains` binary where engine.js will look for it.
 
 The build process is also automatically triggered by `npm install` via the postinstall hook.
 

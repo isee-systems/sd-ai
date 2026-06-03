@@ -21,6 +21,12 @@ Works by sending an LLM the user's request along with a set of systems thinking 
 
     additionalParameters()  {
         return [{
+            name: "clientId",
+            type: "string",
+            required: false,
+            uiElement: "hidden",
+            description: "A unique identifier for the end user of this session"
+        },{
             name: "googleKey",
             type: "string",
             required: false,
@@ -59,6 +65,12 @@ Works by sending an LLM the user's request along with a set of systems thinking 
             required: false,
             uiElement: "hidden",
             description: "Whether or not your client can handle models with modules"
+        },{
+            name: "supportsSubTypes",
+            type: "boolean",
+            required: false,
+            uiElement: "hidden",
+            description: "Whether or not your client can handle models with queues, conveyors or ovens"
         }];
     }
 

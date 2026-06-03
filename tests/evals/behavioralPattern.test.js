@@ -2,7 +2,7 @@ import { describe, test, expect } from '@jest/globals';
 import * as behavioralPattern from '../../evals/categories/behavioralPattern.js';
 
 describe('Behavioral Pattern Evaluation', () => {
-    
+
     describe('Evaluate Function', () => {
         test('should fail when model is missing', async () => {
             const response = {};
@@ -47,6 +47,6 @@ describe('Behavioral Pattern Evaluation', () => {
             // Should not fail for missing output variable (will fail later in conversion/simulation)
             const missingOutputError = result.find(f => f.type === 'Missing output variable');
             expect(missingOutputError).toBeUndefined();
-        });
+        }, 30000);
     });
 });

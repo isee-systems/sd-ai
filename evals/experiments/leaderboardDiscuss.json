@@ -62,6 +62,36 @@
             }
         }
     },
+        "merlin-anthropic-discuss": {
+            "engine": "test-agent-discuss",
+            "additionalParameters": {
+                "agentName": "merlin",
+                "agentMode": "sdk",
+                "provider": "anthropic",
+                "mode": "sfd-discuss"
+            },
+            "limits": {
+                "tokensPerMinute": 200000,
+                "baselineTokenUsage": 50000,
+                "requestsPerMinute": 3
+            }
+        },
+
+        "merlin-google-discuss": {
+            "engine": "test-agent-discuss",
+            "additionalParameters": {
+                "agentName": "merlin",
+                "agentMode": "sdk",
+                "provider": "google",
+                "mode": "sfd-discuss"
+            },
+            "limits": {
+                "tokensPerMinute": 200000,
+                "baselineTokenUsage": 50000,
+                "requestsPerMinute": 3
+            }
+        }
+    },
     "categories": {
         "feedbackExplanation": true,
         "modelBuildingSteps": true,

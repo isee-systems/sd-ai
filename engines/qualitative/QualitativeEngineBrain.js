@@ -199,9 +199,9 @@ You will conduct a multistep process:
             responseFormat = undefined;
         }
 
-        let messages = [{ 
-            role: systemRole, 
-            content: systemPrompt 
+        let messages = [{
+            role: systemRole,
+            content: systemPrompt
         }];
 
         if (this.#data.backgroundKnowledge) {
@@ -217,6 +217,7 @@ You will conduct a multistep process:
             });
         }
 
+        // Check if lastModel has actual content (relationships)
         if (lastModel && lastModel.relationships && lastModel.relationships.length > 0) {
             messages.push({ role: "assistant", content: JSON.stringify(lastModel.relationships, null, 2) });
 
@@ -239,6 +240,14 @@ You will conduct a multistep process:
     }
 
     async generateDiagram(userPrompt, lastModel) {
+        // Ensure lastModel is always defined as an empty model structure if undefined or null
+        if (!lastModel || typeof lastModel !== 'object') {
+            lastModel = { relationships: [] };
+        } else {
+            // Ensure required array exists
+            lastModel.relationships = lastModel.relationships || [];
+        }
+
         const llmParams = this.setupLLMParameters(userPrompt, lastModel);
 
         //get what it thinks the relationships are with this information

@@ -1,18 +1,26 @@
 import OpenAI from "openai";
 import { GoogleGenAI } from "@google/genai";
 import Anthropic from "@anthropic-ai/sdk";
+import { OpenRouter } from "@openrouter/sdk";
 import { z } from "zod";
 import { zodResponseFormat } from "openai/helpers/zod";
-import { ZodToStructuredOutputConverter } from "./ZodToStructuredOutputConverter.js";
 import { extractJsonFromContent } from "./jsonUtils.js";
+import TokenUsageReporter, { Provider } from "./TokenUsageReporter.js";
+import config from "../config.js";
 
 export const ModelType = Object.freeze({
   GEMINI:   Symbol("Gemini"),
   OPEN_AI:  Symbol("OpenAI"),
   LLAMA: Symbol("Llama"),
   DEEPSEEK: Symbol("Deepseek"),
-  CLAUDE: Symbol("Claude")
+  CLAUDE: Symbol("Claude"),
+  OPEN_ROUTER: Symbol("OpenRouter")
 });
+
+// OpenRouter model slugs are namespaced as `<provider>/<model>` — the slash is the
+// reliable signal that a model should be routed via the OpenRouter SDK rather than
+// matching `qwen`/`deepseek`/`kimi` substrings (which previously meant local-LMStudio).
+const OPEN_ROUTER_SLUG_REGEX = /\//;
 
 
 export class ModelCapabilities {
@@ -26,11 +34,12 @@ export class ModelCapabilities {
   constructor(modelName) {
       this.name = modelName;
       const lowerModelName = modelName.toLowerCase();
+      const isOpenRouter = OPEN_ROUTER_SLUG_REGEX.test(lowerModelName);
 
       this.hasStructuredOutput = lowerModelName !== 'o1-mini';
       this.hasSystemMode = lowerModelName !== 'o1-mini';
       this.hasTemperature = !lowerModelName.startsWith('o') && !lowerModelName.startsWith('gpt-5');
-      if (lowerModelName.includes('gemini') || lowerModelName.includes('llama') || lowerModelName.includes('claude') || lowerModelName.includes('deepseek')) {
+      if (isOpenRouter || lowerModelName.includes('gemini') || lowerModelName.includes('llama') || lowerModelName.includes('claude') || lowerModelName.includes('deepseek')) {
           this.systemModeUser = 'system';
       } else {
           this.systemModeUser = 'developer';
@@ -39,7 +48,12 @@ export class ModelCapabilities {
 
   get kind() {
       const lowerModelName = this.name.toLowerCase();
-      if (lowerModelName.includes('gemini')) {
+      // OpenRouter slugs are namespaced (e.g. 'qwen/qwen3.7-max') — check this BEFORE
+      // the substring routes below, since those would otherwise claim 'qwen', 'kimi',
+      // and 'deepseek' for the local LMStudio path.
+      if (OPEN_ROUTER_SLUG_REGEX.test(lowerModelName)) {
+          return ModelType.OPEN_ROUTER;
+      } else if (lowerModelName.includes('gemini')) {
           return ModelType.GEMINI;
       } else if (lowerModelName.includes('llama') || lowerModelName.includes('glm') || lowerModelName.includes('kimi') || lowerModelName.includes('qwen') || lowerModelName.includes('mistral')) {
           return ModelType.LLAMA;
@@ -58,6 +72,8 @@ export class LLMWrapper {
   #openAIKey;
   #googleKey;
   #anthropicKey;
+  #openRouterKey;
+  #clientKey = false;
   #temperatureOverride;
   #topP;
   #topK;
@@ -69,27 +85,46 @@ export class LLMWrapper {
   #openAIAPI = null;
   #geminiAPI = null;
   #anthropicAPI = null;
-  #zodToStructuredOutputConverter = new ZodToStructuredOutputConverter();
+  #openRouterAPI = null;
+  #tokenReporter = null;
 
   model = new ModelCapabilities(LLMWrapper.BUILD_DEFAULT_MODEL);
 
-  constructor(parameters) {
+  constructor(parameters = {}) {
     if (!parameters.openAIKey) {
         this.#openAIKey = process.env.OPENAI_API_KEY
     } else {
       this.#openAIKey = parameters.openAIKey;
+      if (parameters.openAIKey !== process.env.OPENAI_API_KEY) {
+        this.#clientKey = true;
+      }
     }
 
     if (!parameters.googleKey) {
-        this.#googleKey = process.env.GOOGLE_API_KEY
+        this.#googleKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
     } else {
       this.#googleKey = parameters.googleKey;
+      if (parameters.googleKey !== process.env.GEMINI_API_KEY && parameters.googleKey !== process.env.GOOGLE_API_KEY) {
+        this.#clientKey = true;
+      }
     }
 
     if (!parameters.anthropicKey) {
         this.#anthropicKey = process.env.ANTHROPIC_API_KEY
     } else {
       this.#anthropicKey = parameters.anthropicKey;
+      if (parameters.anthropicKey !== process.env.ANTHROPIC_API_KEY) {
+        this.#clientKey = true;
+      }
+    }
+
+    if (!parameters.openRouterKey) {
+        this.#openRouterKey = process.env.OPEN_ROUTER_API_KEY
+    } else {
+      this.#openRouterKey = parameters.openRouterKey;
+      if (parameters.openRouterKey !== process.env.OPEN_ROUTER_API_KEY) {
+        this.#clientKey = true;
+      }
     }
 
     this.#temperatureOverride = parameters.temperature ?? parameters.temp ?? parameters.temperatureOverride;
@@ -108,6 +143,8 @@ export class LLMWrapper {
 
     if (parameters.jsonObjectMode === true)
       this.#jsonObjectMode = true;
+
+    this.#tokenReporter = new TokenUsageReporter(config.tokenReporterURL, parameters.clientId ?? null);
 
     switch (this.model.kind) {
         case ModelType.GEMINI:
@@ -135,6 +172,15 @@ export class LLMWrapper {
                 apiKey: this.#anthropicKey,
             });
             break;
+        case ModelType.OPEN_ROUTER:
+            if (!this.#openRouterKey) {
+              throw new Error("To access this service you need to send an OpenRouter key");
+            }
+
+            this.#openRouterAPI = new OpenRouter({
+                apiKey: this.#openRouterKey,
+            });
+            break;
         case ModelType.DEEPSEEK:
         case ModelType.LLAMA:
             this.#openAIAPI = new OpenAI({
@@ -147,39 +193,29 @@ export class LLMWrapper {
   }
 
   static MODELS = [
-      {label: "GPT-5.4", value: 'gpt-5.4 medium'},
-      {label: "GPT-5.3", value: 'gpt-5.3 medium'},
-      {label: "GPT-5.2", value: 'gpt-5.2 medium'},
-      {label: "GPT-5.1", value: 'gpt-5.1 medium'},
-      {label: "GPT-5", value: 'gpt-5'},
-      {label: "GPT-5-mini", value: 'gpt-5-mini'},
-      {label: "GPT-5-nano", value: 'gpt-5-nano'},
-      {label: "GPT-4.1", value: 'gpt-4.1'},
-      {label: "GPT-4.1-mini", value: 'gpt-4.1-mini'},
-      {label: "GPT-4.1-nano", value: 'gpt-4.1-nano'},
-      {label: "GPT-4o", value: 'gpt-4o'},
-      {label: "GPT-4o-mini", value: 'gpt-4o-mini'},
+      {label: "GPT-5 latest", value: 'gpt-5'},
+      {label: "GPT-5-mini latest", value: 'gpt-5-mini'},
       {label: "Gemini 3.1-pro-preview", value: 'gemini-3.1-pro-preview'},
-      {label: "Gemini 3-flash-preview", value: 'gemini-3-flash-preview'},
-      {label: "Gemini 3-flash-preview high", value: 'gemini-3-flash-preview high'},
-      {label: "Gemini 3-flash-preview medium", value: 'gemini-3-flash-preview medium'},
-      {label: "Gemini 3-flash-preview low", value: 'gemini-3-flash-preview low'},
-      {label: "Gemini 3-flash-preview minimal", value: 'gemini-3-flash-preview minimal'},
+      {label: "Gemini 3.5-flash", value: 'gemini-3.5-flash'},
+      {label: "Gemini 3.5-flash high", value: 'gemini-3.5-flash high'},
+      {label: "Gemini 3.5-flash medium", value: 'gemini-3.5-flash medium'},
+      {label: "Gemini 3.5-flash low", value: 'gemini-3.5-flash low'},
       {label: "Gemini 2.5-flash", value: 'gemini-2.5-flash'},
-      {label: "Gemini 2.5-flash-lite", value: 'gemini-2.5-flash-lite'},
       {label: "Gemini 2.5-pro", value: 'gemini-2.5-pro'},
-      {label: "Claude Opus 4.6", value: 'claude-opus-4-6'},
+      {label: "Claude Opus 4.8", value: 'claude-opus-4-8'},
+      {label: "Claude Opus 4.7", value: 'claude-opus-4-7'},
       {label: "Claude Sonnet 4.6", value: 'claude-sonnet-4-6'},
-      {label: "Claude Haiku 4.5", value: 'claude-haiku-4-5'},
-      {label: "Claude Opus 4.5", value: 'claude-opus-4-5'},
       {label: "Claude Sonnet 4.5", value: 'claude-sonnet-4-5'},
-      {label: "o1", value: 'o1'},
-      {label: "o3", value: 'o3'},
-      {label: "o4-mini", value: 'o4-mini'}
+      {label: "Claude Haiku 4.5", value: 'claude-haiku-4-5'},
+      {label: "Qwen3.7 Max", value: 'qwen/qwen3.7-max'},
+      {label: "Qwen3.6 Flash", value: 'qwen/qwen3.6-flash'},
+      {label: "Deepseek v4 Pro", value: 'deepseek/deepseek-v4-pro'},
+      {label: "Deepseek v4 Flash", value: 'deepseek/deepseek-v4-flash'},
+      {label: "Kimi K2.6", value: 'moonshotai/kimi-k2.6'},
   ];
 
-  static BUILD_DEFAULT_MODEL = 'gemini-3-flash-preview low'; //'claude-opus-4-6';
-  static NON_BUILD_DEFAULT_MODEL = 'gemini-3-flash-preview low'; //'claude-opus-4-6';
+  static BUILD_DEFAULT_MODEL = config.buildDefaultModel;
+  static NON_BUILD_DEFAULT_MODEL = config.nonBuildDefaultModel;
   static EVAL_MODEL = process.env.EVAL_MODEL ?? 'gemini-2.5-flash';
   
   static SCHEMA_STRINGS = {
@@ -221,7 +257,8 @@ export class LLMWrapper {
     "stopTime": "The time at which this model stops calculating.  It is measured in the units of \"timeUnits\".",
     "dt": "The time step for the model, how often is it calculated.  The most common dt is 0.25. It is measured in the units of \"timeUnits\".",
     "timeUnits": "The unit of time for this model.  This should match with the equations that you generate.",
-
+    "integrationMethod": "The method used to solve this model.  Euler (Default), RK4, is an optional method for systems with oscillations.",
+    
     "loopIdentifier": "The globally unique identifer for this feedback loop.  You will take this value from the feedback loop identifier given to you.",
     "loopName": "A short, but unique name, for the process this feedback loop represents.  This name must be distinct for each loop you give a name to. This name should not refer directly to the polarity of the loop.  Don't use the words: growth, decline, stablizing, dampening, balancing, reinforcing, positive or negative in the name.",
     "loopDescription": "A description of what the process this feedback loop represents.  This description should discusses the purpose of this feedback loop. It should not be longer then 3 paragraphs",
@@ -241,12 +278,41 @@ export class LLMWrapper {
     "arrayDimensions": "The complete list of all array dimension definitions used anywhere in this model. Each dimension must be fully defined here in the simulation specs before it can be referenced by variables in their 'dimensions' field. All dimensions must have all four required fields: type, name, size, and elements.",
     "variableDimensions": "An ordered list of dimension names that define the subscript structure for this arrayed variable. The order matters: each element in the forElements arrays must correspond positionally to the dimensions listed here (first element matches first dimension, second element matches second dimension, etc.). If empty or omitted, this is a scalar (non-arrayed) variable.",
     "arrayElementEquation": "Specifies the equation for a specific subset of array elements in an arrayed variable. The 'equation' field contains the XMILE equation, and the 'forElements' field specifies which array elements this equation applies to (ordered to match the variable's dimensions list).",
-    "arrayEquationForElements": "A comma-separated string of array element names that identifies which specific array element(s) use this equation. Each element name corresponds positionally to the dimensions in the variable's 'dimensions' field (first element name matches first dimension, second matches second, etc.). For single-dimension arrays, this has one element name. For multi-dimensional arrays, this has multiple element names separated by commas in the same order as the dimensions. Example: 'North,Q1' or 'South,Q2'.",
+    "arrayEquationForElements": "An array of element names that identifies which specific array element(s) use this equation. Each element name corresponds positionally to the dimensions in the variable's 'dimensions' field (first element name matches first dimension, second matches second, etc.). For single-dimension arrays, this has one element name. For multi-dimensional arrays, this has multiple element names in the same order as the dimensions. Example: ['North','Q1'] or ['South','Q2'].",
     "variableArrayEquation": "CRITICAL: Used for arrayed variables when elements need different equations OR for arrayed stocks to specify initial values. Every variable MUST have either this array non-empty OR the 'equation' field non-empty - never both non-empty, never both empty. For arrayed variables: if elements have DIFFERENT formulas, you MUST populate this array with equation objects and leave 'equation' empty (empty string). This is a list of equation objects, where each object specifies an equation and the array elements it applies to (via the forElements field). You MUST provide equations that cover EVERY valid combination of array elements across all dimensions. For arrayed STOCKS, you MUST use this field to provide initial values for each stock element.",
 
     "moduleName": "The name of a module. Must follow variable naming rules: contains only alphanumeric characters and underscores, no spaces or special characters. Should never be module-qualified (do not include parent module names with dots). This is a simple identifier for the module itself.",
     "parentModule": "The name of the module that contains this module. If this module is at the top level (not nested within another module), this should be an empty string. If nested, this should be the simple name (not module-qualified) of the parent module.",
-    "modules": "A list of module definitions that exist within this model. Each module represents a logical grouping or subsystem within the model hierarchy. Modules can contain variables and can be nested within other modules to create hierarchical model structures."
+    "modules": "A list of module definitions that exist within this model. Each module represents a logical grouping or subsystem within the model hierarchy. Modules can contain variables and can be nested within other modules to create hierarchical model structures.",
+
+    "subType": "The sub-type of this stock, flow, or variable. Stock sub-types (also set additionalProperties): 'queue' (a waiting line that holds items until they can be processed), 'oven' (a batch processor where items are held for a fixed cook time then released together), 'conveyor' (a pipeline delay where items travel a fixed transit time before exiting). Flow sub-types — automatically managed flows you name but do NOT write equations for: 'discreteOutflow' (output from a conveyor or oven), 'conveyorLeakage' (leakage from a conveyor — set additionalProperties to configure leakage behavior), 'queueOutflow' (output from a queue), 'queueOverflow' (overflow when a queue is full). Variable sub-types: 'delayVariable' (a plain variable whose equation contains a DELAY or SMTH builtin function — set this whenever the variable equation uses DELAY1, DELAY3, DELAY N, SMTH1, SMTH3, or any other DELAY/SMTH variant). Omit this field for all other stocks, flows, and variables.",
+
+    "additionalProperties": "Sub-type-specific configuration for queue, oven, conveyor, conveyorLeakage, and any regular flow that uses spreadFlow. Include this object when subType is 'queue', 'oven', 'conveyor', or 'conveyorLeakage', or when the variable is a regular flow that sets spreadFlow. Omit entirely for all other variable types.",
+
+    "processTime": "CONVEYOR/OVEN: Equation string for the transit time (conveyor) or cook time (oven) — how long items spend inside. Required for conveyor and oven sub-types.",
+    "capacity": "CONVEYOR/OVEN: Equation string for the maximum number of items the element can hold. Leave empty for unlimited capacity.",
+    "inflowLimit": "CONVEYOR/OVEN: Equation string for the maximum inflow rate per time step. Leave empty for no inflow limit.",
+    "fillTime": "OVEN only: Equation string for the time required to fill the element before it begins processing. Leave empty to use the default.",
+    "cleanTime": "OVEN only: Equation string for the clean-up time after the element empties before it can accept new items. Leave empty if no clean time is needed.",
+    "leakFraction": "CONVEYOR LEAKAGE: Equation string for the leak fraction. When exponential (default), this is a rate in units of 1/time_unit (e.g. 0.1 means 10% per time unit). When not exponential, this is a dimensionless fraction of contents that leaks per time step. Leave empty for no leakage.",
+    "exponential": "CONVEYOR LEAKAGE: If true (STRONG default — almost always use exponential), leakage is exponential (a constant fraction of remaining contents leaks each step, leak fraction in 1/time_unit). If false, leakage is linear (a fixed absolute amount, leak fraction is dimensionless). Only set false when the user explicitly requests linear leakage.",
+    "leakZoneStart": "CONVEYOR LEAKAGE: Equation string for the starting position (as a percentage 0–100) along the conveyor where leakage begins. Leave empty to apply leakage across the entire length.",
+    "leakZoneEnd": "CONVEYOR LEAKAGE: Equation string for the ending position (as a percentage 0–100) along the conveyor where leakage ends. Leave empty to apply leakage across the entire length.",
+    "leakIntegers": "CONVEYOR LEAKAGE: If true, leakage amounts are rounded to whole integers.",
+    "sample": "CONVEYOR/OVEN: Equation string — re-samples the transit or cook time when this expression evaluates to non-zero.",
+    "arrest": "CONVEYOR/OVEN: Equation string — halts movement through the conveyor or oven when this expression evaluates to non-zero.",
+    "spreadFlow": "Controls how inflows are distributed when they enter a CONVEYOR. 'none' (default): all inflow enters at the front. 'even': spread evenly across all positions. 'destination': spread proportional to existing content volume at each position. 'distribution': spread according to a user-defined distribution table (requires distribEq). 'source': spread based on the source's material profile.",
+    "distribEq": "Required when spreadFlow is 'distribution': Equation string specifying the distribution table. Leave empty when spreadFlow is not 'distribution'.",
+    "ignorePrevZones": "CONVEYOR LEAKAGE: If true, each leak zone operates independently without accounting for losses from earlier zones in the same conveyor.",
+    "forceLeakFraction": "CONVEYOR LEAKAGE: If true, the same leak fraction is applied regardless of how long items have been in transit.",
+    "fifoEnabled": "QUEUE only: If true, the queue dispatches items in FIFO (first-in, first-out) order. If false (default), items are dispatched in LIFO (last-in, first-out) order.",
+    "oneAtATime": "CONVEYOR/OVEN only: If true, the stock accepts only one batch of items per time step. REQUIRES a Queue to be upstream.",
+    "splitBatches": "CONVEYOR/OVEN only: If true, incoming batches may be split when entering the stock (partial batches are allowed). REQUIRES a Queue to be upstream.",
+    "discrete": "QUEUE only: If true, the queue operates in discrete mode (integer item quantities only). If false (default), the queue operates continuously.",
+    "roundRobin": "QUEUE only: If true, the queue uses round-robin selection when dispatching items to competing outflows.",
+    "queueOutflowPriority": "QUEUE only: Equation string setting the dispatch priority for the queue outflow. Leave empty to use the default priority.",
+    "purgeEq": "QUEUE only: Equation string specifying a maximum age (in time units) — items older than this value are automatically removed from the queue.",
+    "overflow": "QUEUE only: If true, an automatic queue overflow flow is created to handle items that cannot enter because the queue is full."
   };
 
   generateSeldonResponseSchema() {
@@ -355,78 +421,52 @@ export class LLMWrapper {
       return Relationships;
   }
 
-  generateQuantitativeSDJSONResponseSchema(mentorMode, supportsArrays) {
+  generateQuantitativeSDJSONResponseSchema(mentorMode, supportsArrays, supportsSubTypes) {
       const TypeEnum = z.enum(["stock", "flow", "variable"]).describe(LLMWrapper.SCHEMA_STRINGS.type);
       const PolarityEnum = z.enum(["+", "-"]).describe(LLMWrapper.SCHEMA_STRINGS.polarity);
 
-      const Dimension = z.object({
-        type: z.enum(["labels", "numeric"]).describe(LLMWrapper.SCHEMA_STRINGS.dimensionType),
-        name: z.string().describe(LLMWrapper.SCHEMA_STRINGS.dimensionName),
-        size: z.number().describe(LLMWrapper.SCHEMA_STRINGS.dimensionSize),
-        elements: z.array(z.string()).describe(LLMWrapper.SCHEMA_STRINGS.dimensionElements)
-      }).describe(LLMWrapper.SCHEMA_STRINGS.dimension);
+      const Dimension = LLMWrapper.dimensionSchema();
 
 
-      const GFPoint = z.object({
-        x: z.number().describe(LLMWrapper.SCHEMA_STRINGS.gfPointX),
-        y: z.number().describe(LLMWrapper.SCHEMA_STRINGS.gfPointY)
-      }).describe(LLMWrapper.SCHEMA_STRINGS.gfPoint);
+      const GraphicalFunction = LLMWrapper.graphicalFunctionSchema().describe(LLMWrapper.SCHEMA_STRINGS.gfEquation);
 
-      const Relationship = z.object({
-          from: z.string().describe(LLMWrapper.SCHEMA_STRINGS.from),
-          to: z.string().describe(LLMWrapper.SCHEMA_STRINGS.to),
-          polarity: PolarityEnum,
-          reasoning: z.string().describe(LLMWrapper.SCHEMA_STRINGS.reasoning),
-          polarityReasoning: z.string().describe(LLMWrapper.SCHEMA_STRINGS.polarityReasoning)
-      }).describe(LLMWrapper.SCHEMA_STRINGS.relationship);
+      const Relationship = z.object(LLMWrapper.relationshipSchemaBase()).describe(LLMWrapper.SCHEMA_STRINGS.relationship);
 
       const Relationships = z.array(Relationship).describe(LLMWrapper.SCHEMA_STRINGS.relationships);
 
-      // Flattened: forElements is a comma-separated string instead of array of strings
-      // This reduces nesting depth from 6 to 5 levels for array support
-      const ArrayElementEquation = z.object({
-        equation: z.string().describe(LLMWrapper.SCHEMA_STRINGS.equation),
-        forElements: z.string().describe(LLMWrapper.SCHEMA_STRINGS.arrayEquationForElements)
-      }).describe(LLMWrapper.SCHEMA_STRINGS.arrayElementEquation);
+      const ArrayElementEquation = LLMWrapper.arrayElementEquationSchema().describe(LLMWrapper.SCHEMA_STRINGS.arrayElementEquation);
 
       const variableObj = {
         name: z.string().describe(LLMWrapper.SCHEMA_STRINGS.name),
         equation: z.string().describe(LLMWrapper.SCHEMA_STRINGS.equation),
         inflows: z.array(z.string()).describe(LLMWrapper.SCHEMA_STRINGS.inflows),
         outflows: z.array(z.string()).describe(LLMWrapper.SCHEMA_STRINGS.outflows),
-        graphicalFunction: z.array(GFPoint).describe(LLMWrapper.SCHEMA_STRINGS.gfEquation),
+        graphicalFunction: GraphicalFunction,
         type: TypeEnum,
         uniflow: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.uniflow),
         crossLevelGhostOf: z.string().describe(LLMWrapper.SCHEMA_STRINGS.crossLevelGhostOf),
         documentation: z.string().describe(LLMWrapper.SCHEMA_STRINGS.documentation),
         units: z.string().describe(LLMWrapper.SCHEMA_STRINGS.units)
       };
-      
+
       if (supportsArrays) {
         variableObj.dimensions = z.array(z.string()).describe(LLMWrapper.SCHEMA_STRINGS.variableDimensions);
         variableObj.arrayEquations = z.array(ArrayElementEquation).describe(LLMWrapper.SCHEMA_STRINGS.variableArrayEquation);
       }
 
+      if (supportsSubTypes) {
+        variableObj.subType = LLMWrapper.subTypeSchema().optional();
+        variableObj.additionalProperties = LLMWrapper.additionalPropertiesSchema().describe(LLMWrapper.SCHEMA_STRINGS.additionalProperties).optional();
+      }
+
       const Variable = z.object(variableObj);
       const Variables = z.array(Variable).describe(LLMWrapper.SCHEMA_STRINGS.variables);
 
-      const simSpecsObj = {
-        startTime: z.number().describe(LLMWrapper.SCHEMA_STRINGS.startTime),
-        stopTime: z.number().describe(LLMWrapper.SCHEMA_STRINGS.stopTime),
-        dt: z.number().describe(LLMWrapper.SCHEMA_STRINGS.dt),
-        timeUnits: z.string().describe(LLMWrapper.SCHEMA_STRINGS.timeUnits)
-      };
-
-      if (supportsArrays) {
-        simSpecsObj.arrayDimensions = z.array(Dimension).describe(LLMWrapper.SCHEMA_STRINGS.arrayDimensions);
-      }
-      
+      const simSpecsObj = LLMWrapper.simSpecsSchemaBase();
+      if (!supportsArrays) delete simSpecsObj.arrayDimensions;
       const SimSpecs = z.object(simSpecsObj).describe(LLMWrapper.SCHEMA_STRINGS.simSpecs);
 
-      const Module = z.object({
-        name: z.string().describe(LLMWrapper.SCHEMA_STRINGS.moduleName),
-        parentModule: z.string().describe(LLMWrapper.SCHEMA_STRINGS.parentModule)
-      });
+      const Module = LLMWrapper.moduleSchema();
 
       const Model = z.object({
         variables: Variables,
@@ -566,9 +606,105 @@ export class LLMWrapper {
       return await this.#createGeminiChatCompletion(normalizedMessages, model, effectiveSchema, temperature, reasoningEffort);
     } else if (this.model.kind === ModelType.CLAUDE) {
       return await this.#createClaudeChatCompletion(normalizedMessages, model, effectiveSchema, temperature);
+    } else if (this.model.kind === ModelType.OPEN_ROUTER) {
+      return await this.#createOpenRouterChatCompletion(normalizedMessages, model, effectiveSchema, temperature);
     }
 
     return await this.#createOpenAIChatCompletion(normalizedMessages, model, effectiveSchema, temperature, reasoningEffort);
+  }
+
+  async #createOpenRouterChatCompletion(messages, model, zodSchema = null, temperature = null) {
+    const chatRequest = {
+      model,
+      messages: messages.map((m) => ({
+        role: m.role === 'developer' ? 'system' : m.role,
+        content: m.content ?? ''
+      }))
+    };
+
+    if (zodSchema) {
+      chatRequest.responseFormat = {
+        type: 'json_schema',
+        jsonSchema: {
+          name: 'sdai_schema',
+          schema: zodSchema.toJSONSchema(),
+          strict: true
+        }
+      };
+    } else if (this.#jsonObjectMode) {
+      chatRequest.responseFormat = { type: 'json_object' };
+    }
+
+    if (temperature !== null && temperature !== undefined) {
+      chatRequest.temperature = temperature;
+    }
+    if (this.#topP !== null && this.#topP !== undefined) {
+      chatRequest.topP = this.#topP;
+    }
+    if (this.#seed !== null && this.#seed !== undefined) {
+      chatRequest.seed = this.#seed;
+    }
+    if (this.#maxTokens !== null && this.#maxTokens !== undefined) {
+      chatRequest.maxCompletionTokens = this.#maxTokens;
+    }
+
+    // Alibaba (Qwen's upstream via OpenRouter) downgrades json_schema to
+    // json_object and then rejects with "'messages' must contain the word
+    // 'json'" if no message mentions it. Append a minimal note when needed.
+    if (chatRequest.responseFormat) {
+      const mentionsJson = chatRequest.messages.some(m =>
+        typeof m.content === 'string' && /json/i.test(m.content)
+      );
+      if (!mentionsJson) {
+        const sys = chatRequest.messages.find(m => m.role === 'system');
+        const note = '\n\nRespond with valid JSON.';
+        if (sys) {
+          sys.content = (sys.content ?? '') + note;
+        } else {
+          chatRequest.messages.unshift({ role: 'system', content: note.trim() });
+        }
+      }
+    }
+
+    let completion;
+    try {
+      completion = await this.#openRouterAPI.chat.send({ chatRequest });
+    } catch (error) {
+      console.error('[LLMWrapper OpenRouter] Request failed for model:', model);
+      try {
+        console.error('[LLMWrapper OpenRouter] chatRequest:', JSON.stringify(chatRequest, null, 2));
+      } catch {
+        console.error('[LLMWrapper OpenRouter] chatRequest (non-serializable)');
+      }
+      console.error('[LLMWrapper OpenRouter] error.message:', error?.message);
+      console.error('[LLMWrapper OpenRouter] error.statusCode:', error?.statusCode);
+      console.error('[LLMWrapper OpenRouter] error.body:', error?.body);
+      if (error?.error) {
+        try {
+          console.error('[LLMWrapper OpenRouter] error.error:', JSON.stringify(error.error, null, 2));
+        } catch {
+          console.error('[LLMWrapper OpenRouter] error.error (non-serializable):', error.error);
+        }
+      }
+      if (error?.rawResponse) {
+        try {
+          const rawText = await error.rawResponse.clone().text();
+          console.error('[LLMWrapper OpenRouter] rawResponse body:', rawText);
+        } catch (readErr) {
+          console.error('[LLMWrapper OpenRouter] rawResponse read failed:', readErr?.message);
+        }
+      }
+      throw error;
+    }
+    this.#tokenReporter.report({ provider: Provider.OPENROUTER, model, usage: completion.usage, clientKey: this.#clientKey });
+
+    const message = completion.choices?.[0]?.message ?? {};
+    const content = typeof message.content === 'string'
+      ? message.content
+      : Array.isArray(message.content)
+        ? message.content.filter(b => b && (b.type === 'text' || typeof b.text === 'string')).map(b => b.text ?? '').join('')
+        : '';
+    return { ...message, content };
   }
 
   async #createOpenAIChatCompletion(messages, model, zodSchema = null, temperature = null, reasoningEffort = null) {
@@ -615,6 +751,7 @@ export class LLMWrapper {
     }
 
     const completion = await this.#openAIAPI.chat.completions.create(completionParams);
+    this.#tokenReporter.report({ provider: Provider.OPENAI, model, usage: completion.usage, clientKey: this.#clientKey });
     const message = completion.choices[0].message;
     // Reasoning models (e.g. GLM-5) emit chain-of-thought in reasoning_content and
     // leave content null. Try to extract a valid JSON block from the reasoning text
@@ -654,12 +791,8 @@ export class LLMWrapper {
     }
 
     if (zodSchema) {
-      this.#zodToStructuredOutputConverter.setOptions({
-        emitOptionalProperties: false
-      });
-
       config.responseMimeType = "application/json";
-      config.responseJsonSchema = this.#zodToStructuredOutputConverter.convert(zodSchema);
+      config.responseJsonSchema = zodSchema.toJSONSchema();
     }
 
     if (Object.keys(config).length > 0) {
@@ -667,6 +800,7 @@ export class LLMWrapper {
     }
 
     const result = await this.#geminiAPI.models.generateContent(requestConfig);
+    this.#tokenReporter.report({ provider: Provider.GOOGLE, model, usage: result.usageMetadata, clientKey: this.#clientKey });
 
     // Convert Gemini response to OpenAI format
     return {
@@ -695,7 +829,7 @@ export class LLMWrapper {
     if (zodSchema) {
       completionParams.output_format = {
         type: "json_schema",
-        schema: this.#zodToStructuredOutputConverter.convert(zodSchema)
+        schema: zodSchema.toJSONSchema()
       };
     }
 
@@ -708,6 +842,7 @@ export class LLMWrapper {
       completionParams,
       { headers }
     );
+    this.#tokenReporter.report({ provider: Provider.ANTHROPIC, model, usage: completion.usage, clientKey: this.#clientKey });
 
     // With output_format, the response is always in content[0].text as JSON
     if (zodSchema) {
@@ -790,8 +925,126 @@ export class LLMWrapper {
     return claudeMessages;
   }
 
+  static moduleSchema() {
+    return z.object({
+      name: z.string().describe(LLMWrapper.SCHEMA_STRINGS.moduleName),
+      parentModule: z.string().describe(LLMWrapper.SCHEMA_STRINGS.parentModule)
+    });
+  }
+
+  static relationshipSchemaBase() {
+    return {
+      from: z.string().describe(LLMWrapper.SCHEMA_STRINGS.from),
+      to: z.string().describe(LLMWrapper.SCHEMA_STRINGS.to),
+      polarity: z.enum(["+", "-"]).describe(LLMWrapper.SCHEMA_STRINGS.polarity),
+      reasoning: z.string().describe(LLMWrapper.SCHEMA_STRINGS.reasoning),
+      polarityReasoning: z.string().describe(LLMWrapper.SCHEMA_STRINGS.polarityReasoning)
+    };
+  }
+
+  static dimensionSchema() {
+    return z.object({
+      type: z.enum(["labels", "numeric"]).describe(LLMWrapper.SCHEMA_STRINGS.dimensionType),
+      name: z.string().describe(LLMWrapper.SCHEMA_STRINGS.dimensionName),
+      size: z.number().describe(LLMWrapper.SCHEMA_STRINGS.dimensionSize),
+      elements: z.array(z.string()).describe(LLMWrapper.SCHEMA_STRINGS.dimensionElements)
+    }).describe(LLMWrapper.SCHEMA_STRINGS.dimension);
+  }
+
+  static simSpecsSchemaBase() {
+    return {
+      startTime: z.number().describe(LLMWrapper.SCHEMA_STRINGS.startTime),
+      stopTime: z.number().describe(LLMWrapper.SCHEMA_STRINGS.stopTime),
+      dt: z.number().describe(LLMWrapper.SCHEMA_STRINGS.dt),
+      timeUnits: z.string().describe(LLMWrapper.SCHEMA_STRINGS.timeUnits),
+      integrationMethod: z.enum(["Euler", "RK4"]).describe(LLMWrapper.SCHEMA_STRINGS.integrationMethod),
+      arrayDimensions: z.array(LLMWrapper.dimensionSchema()).describe(LLMWrapper.SCHEMA_STRINGS.arrayDimensions)
+    };
+  }
+
+  static graphicalFunctionSchema() {
+    return z.object({
+      points: z.array(z.object({
+        x: z.number().describe(LLMWrapper.SCHEMA_STRINGS.gfPointX),
+        y: z.number().describe(LLMWrapper.SCHEMA_STRINGS.gfPointY)
+      }).describe(LLMWrapper.SCHEMA_STRINGS.gfPoint))
+    });
+  }
+
+  static arrayElementEquationSchema() {
+    return z.object({
+      equation: z.string().describe(LLMWrapper.SCHEMA_STRINGS.equation),
+      forElements: z.array(z.string()).describe(LLMWrapper.SCHEMA_STRINGS.arrayEquationForElements)
+    });
+  }
+
+  static subTypeSchema() {
+    return z.enum([
+      "queue", "oven", "conveyor",
+      "discreteOutflow", "conveyorLeakage", "queueOutflow", "queueOverflow",
+      "delayVariable"
+    ]).describe(LLMWrapper.SCHEMA_STRINGS.subType);
+  }
+
+  static additionalPropertiesSchema() {
+    return z.object({
+      // CONVEYOR + OVEN
+      processTime: z.string().describe(LLMWrapper.SCHEMA_STRINGS.processTime).optional(),
+      capacity: z.string().describe(LLMWrapper.SCHEMA_STRINGS.capacity).optional(),
+      inflowLimit: z.string().describe(LLMWrapper.SCHEMA_STRINGS.inflowLimit).optional(),
+      fillTime: z.string().describe(LLMWrapper.SCHEMA_STRINGS.fillTime).optional(),
+      cleanTime: z.string().describe(LLMWrapper.SCHEMA_STRINGS.cleanTime).optional(),
+      leakFraction: z.string().describe(LLMWrapper.SCHEMA_STRINGS.leakFraction).optional(),
+      exponential: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.exponential).optional(),
+      leakZoneStart: z.string().describe(LLMWrapper.SCHEMA_STRINGS.leakZoneStart).optional(),
+      leakZoneEnd: z.string().describe(LLMWrapper.SCHEMA_STRINGS.leakZoneEnd).optional(),
+      leakIntegers: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.leakIntegers).optional(),
+      sample: z.string().describe(LLMWrapper.SCHEMA_STRINGS.sample).optional(),
+      arrest: z.string().describe(LLMWrapper.SCHEMA_STRINGS.arrest).optional(),
+      // CONVEYOR-only
+      spreadFlow: z.enum(["none", "even", "destination", "distribution", "source"]).describe(LLMWrapper.SCHEMA_STRINGS.spreadFlow).optional(),
+      distribEq: z.string().describe(LLMWrapper.SCHEMA_STRINGS.distribEq).optional(),
+      ignorePrevZones: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.ignorePrevZones).optional(),
+      forceLeakFraction: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.forceLeakFraction).optional(),
+      // QUEUE
+      fifoEnabled: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.fifoEnabled).optional(),
+      oneAtATime: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.oneAtATime).optional(),
+      splitBatches: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.splitBatches).optional(),
+      discrete: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.discrete).optional(),
+      roundRobin: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.roundRobin).optional(),
+      queueOutflowPriority: z.string().describe(LLMWrapper.SCHEMA_STRINGS.queueOutflowPriority).optional(),
+      purgeEq: z.string().describe(LLMWrapper.SCHEMA_STRINGS.purgeEq).optional(),
+      overflow: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.overflow).optional()
+    });
+  }
+
+  static variableSchemaBase() {
+    return {
+      name: z.string().describe(LLMWrapper.SCHEMA_STRINGS.name),
+      type: z.enum(["stock", "flow", "variable"]).describe(LLMWrapper.SCHEMA_STRINGS.type),
+      equation: z.string().describe(LLMWrapper.SCHEMA_STRINGS.equation).optional(),
+      documentation: z.string().describe(LLMWrapper.SCHEMA_STRINGS.documentation).optional(),
+      units: z.string().describe(LLMWrapper.SCHEMA_STRINGS.units).optional(),
+      uniflow: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.uniflow).optional(),
+      inflows: z.array(z.string()).describe(LLMWrapper.SCHEMA_STRINGS.inflows).optional(),
+      outflows: z.array(z.string()).describe(LLMWrapper.SCHEMA_STRINGS.outflows).optional(),
+      dimensions: z.array(z.string()).describe(LLMWrapper.SCHEMA_STRINGS.variableDimensions).optional(),
+      arrayEquations: z.array(LLMWrapper.arrayElementEquationSchema()).describe(LLMWrapper.SCHEMA_STRINGS.variableArrayEquation).optional(),
+      crossLevelGhostOf: z.string().describe(LLMWrapper.SCHEMA_STRINGS.crossLevelGhostOf).optional(),
+      graphicalFunction: LLMWrapper.graphicalFunctionSchema().describe(LLMWrapper.SCHEMA_STRINGS.gfEquation).optional(),
+      subType: LLMWrapper.subTypeSchema().optional(),
+      additionalProperties: LLMWrapper.additionalPropertiesSchema().describe(LLMWrapper.SCHEMA_STRINGS.additionalProperties).optional()
+    };
+  }
+
   static additionalParameters(defaultModel) {
     return [{
+            name: "clientId",
+            type: "string",
+            required: false,
+            uiElement: "hidden",
+            description: "A unique identifier for the end user of this session"
+        },{
             name: "openAIKey",
             type: "string",
             required: false,
@@ -815,6 +1068,14 @@ export class LLMWrapper {
             saveForUser: "global",
             label: "Anthropic API Key",
             description: "Leave blank for the default, or your Anthropic API key - sk-ant-XXXXXX"
+        },{
+            name: "openRouterKey",
+            type: "string",
+            required: false,
+            uiElement: "password",
+            saveForUser: "global",
+            label: "OpenRouter API Key",
+            description: "Leave blank for the default, or your OpenRouter API key - sk-or-XXXXXX"
         },{
             name: "underlyingModel",
             type: "string",

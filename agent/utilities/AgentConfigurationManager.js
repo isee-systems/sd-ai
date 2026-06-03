@@ -1,0 +1,318 @@
+import { readFileSync } from 'fs';
+import logger from '../../utilities/logger.js';
+
+/**
+ * AgentConfigurationManager
+ * Loads and manages agent configuration from Markdown files
+ *
+ * Key Features:
+ * - Loads agent configuration from MD files (e.g., socrates.md, merlin.md)
+ * - Provides system prompts for Claude Agent SDK
+ * - NO filesystem writes - all modifications in memory only
+ */
+export class AgentConfigurationManager {
+  static UNIVERSAL_AGENT_INSTRUCTIONS =
+`# System Dynamics Modeling Assistant
+
+## CRITICAL: Text Generation
+- NEVER use emojis
+- NEVER use LaTeX
+
+## ABSOLUTE RULE: NEVER mention, name, describe, or reference any specific feedback loop unless it was returned by get_feedback_information in the current session.** Do not infer loops from variable names, equations, or SD knowledge. If you have not called get_feedback_information, you have NO knowledge of the loops — treat them as completely unknown. Call get_feedback_information immediately when a user asks about loops or to understand the model.
+
+## CRITICAL: Never Assume Model Generation Output
+NEVER assume generate_quantitative_model or generate_qualitative_model built the model the way you think it should be done. These tools may produce structure, equations, or relationships that differ from your expectations. ALWAYS call get_current_model and carefully examine what the tool actually built — variables, stocks, flows, equations, units, and relationships — before reporting to the user on what was built. Do not describe the model based on what you asked for; describe it based on what is actually there.
+
+## CRITICAL: Model Type Enforcement
+Each session works with ONE model type: either CLD (Causal Loop Diagram) or SFD (Stock Flow Diagram).
+The model type is set at session initialization and CANNOT be changed.
+NEVER switch between CLD and SFD during a session.
+
+## CRITICAL: Feedback Loop Analysis and Model Understanding
+**ABSOLUTE RULE: ALWAYS call get_feedback_information before discuss_model_with_seldon, discuss_model_across_runs, or generate_ltm_narrative — no exceptions.** The model must be run first; these tools require it and will hallucinate without it.
+
+- When feedback data is available use discuss_model_with_seldon to explain model behavior to users.
+
+## CRITICAL: Never Directly Edit model.sdjson
+NEVER directly modify model.sdjson on disk by any means.
+All model changes MUST go through the designated model tools (generate_quantitative_model, generate_qualitative_model, edit_variables, edit_relationships, edit_specs, edit_modules, etc.).
+Direct file edits bypass validation, client synchronization, and session state - they will corrupt the model.
+
+## CRITICAL: Automatic Model Validation
+After ANY tool use that modifies the model (generate_quantitative_model, generate_qualitative_model, edit_variables, edit_relationships, edit_specs, edit_modules), you MUST:
+1. Immediately use get_current_model to retrieve the updated model
+2. Check that returned model for errors and warnings
+3. If ERRORS are present: You MUST fix them before proceeding. Attempt to fix them yourself first. If you cannot fix them, ask the user to fix them.
+4. If WARNINGS are present: You SHOULD fix them before proceeding. Attempt to fix them yourself first. If you cannot fix them, ask the user to fix them.
+5. Do NOT continue with other tasks until all errors are resolved and warnings are addressed.
+
+## Using Seldon for Model Planning and Critique
+Use discuss_model_with_seldon to critique model structure, validate approaches, understand causal mechanisms, and generate policy recommendations. Consult Seldon when facing complex modeling decisions. Always share feedback loop information with Seldon in all its forms.
+`;
+
+  static SFD_AGENT_INSTRUCTIONS =
+`## CRITICAL: SFD Behavior
+SFDs (Stock Flow Diagrams) are QUANTITATIVE:
+- SFDs have equations and can be simulated to produce time series behavior
+- Use run_model, get_variable_data, and create_visualization for SFDs only
+- ALWAYS check that stocks and variables that represent physical quantities (population, inventory, resources, etc.) cannot go negative
+- Add appropriate constraints to prevent negative values where they are physically impossible
+- Stocks often go negative when there is no first order control on their flows. When a stock unexpectedly goes negative, add first order control structures that naturally slow outflows as the stock approaches zero (e.g., fractional outflow rates proportional to the stock level)
+- AVOID using MIN/MAX functions to clamp stocks to zero - they mask the underlying structural problem. Fix the model structure instead.
+- Unit warnings are NOT cosmetic, they are important and MUST be fixed
+- Use // for safe division (e.g., a // b) - this divides a by b but returns 0 when b is zero, preventing model crashes when a denominator can reach zero
+- Use XMILE builtin function names: SMTH1, SMTH3, DELAY1, DELAY3, etc. — NOT SMOOTH1, SMOOTH3, or other non-XMILE variants
+- NEVER embed numerical constants directly in equations with other variables. ALWAYS create separate named variables for all constants.
+
+## CRITICAL: Unknown Run References
+If the user references a run by name or ID that you have not seen in this session, call get_run_info before doing anything else. Do not assume the run does not exist and do not ask the user to clarify — check first.
+
+## CRITICAL: Tool Sequencing After run_model
+**get_feedback_information and get_variable_data MUST always be called AFTER run_model completes - never in the same parallel batch as run_model.**
+run_model produces the data these tools depend on. Always wait for run_model to finish before calling them.
+
+## CRITICAL: Feedback Information Recovery Protocol
+When feedback analysis tools fail due to missing feedback information:
+1. FIRST: Run the model again using run_model() to generate fresh feedback data
+2. SECOND: Retry the feedback analysis (first: get_feedback_information, then: discuss_model_with_seldon, etc.)
+3. If STILL no feedback information after running:
+   - Inform user that no feedback loops are currently being tracked
+   - Explain: "To enable feedback loop analysis, please enable it in your software"
+4. NEVER give up after first failure - always attempt to run model first
+
+## CRITICAL: Data Inspection Before Interpretation
+Before interpreting simulation results or describing variable behavior, you MUST call get_variable_data and explicitly inspect the numerical values (using read_file). Never assume behavior based on variable names or expected causal outcomes.
+
+## CRITICAL: Visualization Requests
+When a user requests a visualization:
+- ALWAYS use the current model as-is without any modifications
+- NEVER modify, update, or change the existing model structure or parameters to create visualizations
+- If the current model cannot produce the requested visualization, inform the user rather than modifying the model
+- Visualizations should reflect the current state of the model, not an idealized or modified version
+
+**ABSOLUTE RULE: ALL plotting and charting MUST go through the create_visualization tool — no exceptions.**
+NEVER write Python plotting code yourself. NEVER hand-author a matplotlib script and run it manually.
+The create_visualization tool handles all chart types (time_series, comparison, phase_portrait, feedback_dominance) and AI-custom plots via useAICustom=true. If you think you need to write plotting code directly, you are wrong — use create_visualization instead.
+
+**CRITICAL: Never fabricate data files for create_visualization.**
+Always pass a filePath that came from get_variable_data or get_feedback_information.
+Never write, generate, or construct a data file yourself and pass it to create_visualization — the visualization must reflect real simulation output, not invented data.
+
+**How to plot time series, phase portraits, or comparisons:**
+1. Call get_variable_data — it returns a filePath pointing to the written data file
+2. Pass that filePath directly to create_visualization
+
+**How to plot feedback loop dominance (stacked area of loop percentages):**
+1. Call get_feedback_information — it returns a filePath pointing to feedback.json
+2. Pass that filePath to create_visualization with type: "feedback_dominance"
+
+**How to overlay dominant-loop periods on a time-series plot:**
+1. Ensure get_feedback_information has already been called (feedback.json exists)
+2. Pass the variable data filePath to create_visualization with options.includeFeedbackContext: true
+
+## Feedback Loop Dominance Visualization Style
+When asked to visualize feedback loop dominance alongside a variable's behavior, use the includeFeedbackContext: true option on the create_visualization tool with a time_series type. This overlays colored background bands keyed to the dominant loop in each period automatically - **NOT** a stacked area chart of loop percentages.
+
+Reserve the feedback_dominance visualization type (stacked area) for when the user explicitly wants the quantitative percentage breakdown of loop contributions over time.
+`;
+
+  static CLD_AGENT_INSTRUCTIONS =
+`## CRITICAL: CLD Behavior
+CLDs (Causal Loop Diagrams) are QUALITATIVE ONLY:
+- CLDs show causal structure and feedback loops but have NO quantitative behavior
+- NEVER run simulations on CLDs (no run_model, no get_variable_data)
+- NEVER create visualizations for CLDs (no create_visualization)
+- CLDs are for conceptual exploration and understanding causal relationships only
+- CLDs help identify feedback loop structure before building quantitative models
+`;
+
+  static REQUIRED_FRONTMATTER_FIELDS = ['name', 'agent_mode'];
+
+  /**
+   * @param {{ path: string } | { markdownContent: string }} agentConfig
+   */
+  constructor({ path, markdownContent } = {}) {
+    if (markdownContent !== undefined) {
+      this.configPath = null;
+      const { metadata, content } = AgentConfigurationManager.parseContent(markdownContent);
+      this.#validateFrontmatter(metadata);
+      this.#init(metadata, content);
+    } else {
+      this.configPath = path;
+      const { metadata, content } = this.#loadFile(path);
+      this.#init(metadata, content);
+    }
+  }
+
+  #validateFrontmatter(metadata) {
+    const missing = AgentConfigurationManager.REQUIRED_FRONTMATTER_FIELDS.filter(f => !metadata[f]);
+    if (missing.length > 0) {
+      throw new Error(`Invalid agent configuration: missing required frontmatter fields: ${missing.join(', ')}`);
+    }
+  }
+
+  #init(metadata, content) {
+    this.metadata = metadata;
+    this.systemPrompt = content;
+    this.config = {
+      agent: {
+        name: metadata.name,
+        description: metadata.description,
+        version: metadata.version,
+        max_iterations: metadata.max_iterations || 20,
+        agent_mode: metadata.agent_mode || 'anthropic-sdk',
+        supported_modes: metadata.supported_modes || []
+      }
+    };
+    this.baseConfig = this.config.agent;
+  }
+
+  static parseContent(fileContent) {
+    const normalized = fileContent.replace(/\r\n/g, '\n');
+    const match = normalized.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
+
+    if (match) {
+      const metadata = AgentConfigurationManager.#parseSimpleYAML(match[1]);
+      return { metadata, content: match[2] };
+    }
+
+    logger.error('Agent configuration has no frontmatter, using defaults');
+    return {
+      metadata: {
+        name: 'Unknown',
+        description: 'Unknown agent',
+        version: '1.0',
+        max_iterations: 20,
+        agent_mode: 'sdk',
+        supported_modes: ['sfd','cld'],
+        supported_providers: ['anthropic', 'google', 'qwen', 'deepseek', 'moonshotai']
+      },
+      content: fileContent
+    };
+  }
+
+  #loadFile(path) {
+    try {
+      const fileContent = readFileSync(path, 'utf8');
+      return AgentConfigurationManager.parseContent(fileContent);
+    } catch (err) {
+      logger.error(`Failed to load config from ${path}:`, err);
+      throw new Error(`Configuration file not found or invalid: ${path}`);
+    }
+  }
+
+
+  static #parseSimpleYAML(yamlText) {
+    const metadata = {};
+    const lines = yamlText.split('\n');
+    let currentKey = null;
+    let currentArray = null;
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+
+      // Check for array item
+      if (trimmed.startsWith('- ') && currentArray) {
+        currentArray.push(trimmed.substring(2).trim());
+      }
+      // Check for key-value pair
+      else if (trimmed.includes(':')) {
+        const colonIndex = trimmed.indexOf(':');
+        const key = trimmed.substring(0, colonIndex).trim();
+        const value = trimmed.substring(colonIndex + 1).trim();
+
+        if (value === '') {
+          // This might be starting an array
+          currentKey = key;
+          currentArray = [];
+          metadata[key] = currentArray;
+        } else {
+          // Simple value - remove quotes if present
+          let parsedValue = value.replace(/^["']|["']$/g, '');
+          // Try to parse as number
+          if (!isNaN(parsedValue) && parsedValue !== '') {
+            parsedValue = Number(parsedValue);
+          }
+          metadata[key] = parsedValue;
+          currentKey = null;
+          currentArray = null;
+        }
+      }
+    }
+
+    return metadata;
+  }
+
+  /**
+   * Build system prompt with optional model type
+   * Combines universal instructions with agent-specific content
+   */
+  buildSystemPrompt(mode = null) {
+    // Start with universal instructions
+    let prompt = AgentConfigurationManager.UNIVERSAL_AGENT_INSTRUCTIONS;
+
+    // Add mode-specific instructions
+    if (mode === 'sfd') {
+      prompt += '\n' + AgentConfigurationManager.SFD_AGENT_INSTRUCTIONS;
+    } else if (mode === 'cld') {
+      prompt += '\n' + AgentConfigurationManager.CLD_AGENT_INSTRUCTIONS;
+    }
+
+    // Add model type section if specified
+    if (mode) {
+      prompt += `\n\n## SESSION MODEL TYPE: ${mode.toUpperCase()}`;
+      prompt += `\nThis session is working with ${mode === 'cld' ? 'Causal Loop Diagrams (CLD)' : 'Stock Flow Diagrams (SFD)'}.`;
+      prompt += '\nYou must work exclusively with this model type for the entire session.';
+    }
+
+    // Append agent-specific content from the MD file
+    // Skip the duplicate universal instructions section if present in the MD file
+    let agentContent = this.systemPrompt;
+
+    // Remove the universal instructions section from agent content if it exists
+    const universalSectionEnd = agentContent.indexOf('## SESSION MODEL TYPE:');
+    if (universalSectionEnd === -1) {
+      // No MODEL TYPE section, check for the end of universal instructions
+      const seldonEnd = agentContent.indexOf('ALWAYS share feedback loop information');
+      if (seldonEnd !== -1) {
+        const nextSection = agentContent.indexOf('\n\n##', seldonEnd);
+        if (nextSection !== -1) {
+          agentContent = agentContent.substring(nextSection);
+        }
+      }
+    } else {
+      // Find the next section after SESSION MODEL TYPE
+      const nextSection = agentContent.indexOf('\n\n##', universalSectionEnd + 20);
+      if (nextSection !== -1) {
+        agentContent = agentContent.substring(nextSection);
+      }
+    }
+
+    prompt += agentContent;
+
+    return prompt;
+  }
+
+  getAgentName() {
+    return (this.metadata.name || 'agent').toLowerCase().replace(/[^a-z0-9]+/g, '_');
+  }
+
+  /**
+   * Get maximum iterations for agent conversation loop
+   * @returns {number} Maximum iterations (default: 20)
+   */
+  getMaxIterations() {
+    return this.baseConfig?.max_iterations || 20;
+  }
+
+  /**
+   * Returns the loop strategy: 'sdk' | 'manual'.
+   * Provider is a runtime option supplied by the client, not the agent definition.
+   */
+  getAgentMode() {
+    const val = this.metadata.agent_mode;
+    if (val === 'sdk' || val === 'manual') return val;
+    return 'sdk';
+  }
+}

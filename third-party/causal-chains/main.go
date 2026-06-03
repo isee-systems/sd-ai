@@ -71,7 +71,7 @@ func main() {
 		input.Parameters.ApiKey = os.Getenv("OPENAI_API_KEY")
 	}
 	if input.Parameters.GoogleKey == "" {
-		input.Parameters.GoogleKey = os.Getenv("GOOGLE_API_KEY")
+		input.Parameters.GoogleKey = os.Getenv("GEMINI_API_KEY")
 	}
 	if input.Parameters.AnthropicKey == "" {
 		input.Parameters.AnthropicKey = os.Getenv("ANTHROPIC_API_KEY")

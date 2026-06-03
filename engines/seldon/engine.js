@@ -22,6 +22,12 @@ class Engine {
 
     additionalParameters()  {
          return [{
+            name: "clientId",
+            type: "string",
+            required: false,
+            uiElement: "hidden",
+            description: "A unique identifier for the end user of this session"
+        },{
             name: "googleKey",
             type: "string",
             required: false,
@@ -72,14 +78,12 @@ class Engine {
             let brain = new SeldonBrain(parameters);
             const response = await brain.converse(prompt, currentModel);
             return {
-                output: {
-                    textContent: response
-                }
+                output: response
             };
         } catch(err) {
             logger.error(err);
-            return { 
-                err: err.toString() 
+            return {
+                err: err.toString()
             };
         }
     }

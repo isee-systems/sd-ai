@@ -1,0 +1,72 @@
+import { z } from 'zod';
+import { createUpdateModelMessage, UpdateModelResponseSchema } from '../../utilities/MessageProtocol.js';
+import { callQualitativeEngine } from '../../utilities/EngineWrapper.js';
+import { generateRequestId, createSuccessResponse, createErrorResponse, selectEngineModel } from './toolHelpers.js';
+import config from '../../../config.js';
+
+/**
+ * Generate a Causal Loop Diagram (CLD) showing feedback loops and causal relationships
+ */
+export function createGenerateQualitativeModelTool(sessionManager, sessionId, sendToClient, provider) {
+  return {
+    description: 'Generate a Causal Loop Diagram (CLD) showing feedback loops and causal relationships. Use this for conceptual models focusing on system structure. Automatically pushes the generated model to the client.',
+    supportedModes: ['cld'],
+    maxModelTokens: config.agentMaxTokensForEngines,
+    inputSchema: z.object({
+      prompt: z.string().describe('Description of the model to generate'),
+      difficulty: z.enum(["normal", "hard"]).describe("The expected difficulty of this task"),
+      parameters: z.object({
+        problemStatement: z.string().optional().describe('Description of dynamic issue to address'),
+        backgroundKnowledge: z.string().optional().describe('Background information for LLM')
+      }).optional()
+    }),
+    handler: async ({ prompt, difficulty, parameters }) => {
+      try {
+        const session = sessionManager.getSession(sessionId);
+        if (!session) {
+          throw new Error(`Session not found: ${sessionId}`);
+        }
+
+        const underlyingModel = selectEngineModel(provider, difficulty, 'build');
+        const currentModel = sessionManager.getClientModel(sessionId);
+        const result = await callQualitativeEngine(prompt, currentModel, { ...parameters, underlyingModel, clientId: session.clientId });
+
+        if (!result.success) {
+          return createErrorResponse(result.error);
+        }
+
+        // Automatically push the generated model to the client
+
+        const requestId = generateRequestId('model');
+        await sendToClient(createUpdateModelMessage(sessionId, requestId, result.model));
+
+        // Wait for client confirmation
+        const updatePromise = new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            reject(new Error('Update model timeout: Client did not respond within 30 seconds'));
+          }, 30000);
+
+          if (!session.pendingModelRequests) {
+            session.pendingModelRequests = new Map();
+          }
+          session.pendingModelRequests.set(requestId, { resolve, reject, timeout });
+        });
+
+        const clientResult = await updatePromise;
+        const parsed = UpdateModelResponseSchema.parse(clientResult);
+
+        const { modelPath, message, issues } = sessionManager.updateClientModel(sessionId, parsed);
+
+        return createSuccessResponse({
+          message: `Model generated and pushed to client. ${message}`,
+          modelPath,
+          supportingInfo: result.supportingInfo,
+          pushedToClient: true,
+          ...(issues && { issues })
+        });
+      } catch (error) {
+        return createErrorResponse(error.message);
+      }
+    }
+  };
+}

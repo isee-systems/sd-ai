@@ -708,6 +708,413 @@ describe('QuantitativeEngineBrain', () => {
       // Should remain unchanged
       expect(birthRate.equation).toBe('population * 0.05');
     });
+
+    it('should initialize variables array when missing', async () => {
+      const originalResponse = {
+        relationships: []
+      };
+
+      const result = await quantitativeEngine.processResponse(originalResponse);
+
+      expect(result.variables).toBeDefined();
+      expect(Array.isArray(result.variables)).toBe(true);
+      expect(result.variables).toHaveLength(0);
+    });
+
+    it('should filter out relationships whose target is a cross-level ghost variable', async () => {
+      const originalResponse = {
+        variables: [
+          { name: 'Hares.Hares', type: 'stock', equation: '5000', inflows: [], outflows: [] },
+          { name: 'Lynx.Lynx', type: 'stock', equation: '100', inflows: [], outflows: [] },
+          { name: 'Hares.Lynx', type: 'variable', equation: '', crossLevelGhostOf: 'Lynx.Lynx' }
+        ],
+        relationships: [
+          {
+            from: 'Hares.Hares',
+            to: 'Hares.Lynx',
+            polarity: '+',
+            reasoning: 'Should be filtered because target is a ghost',
+            polarityReasoning: 'Ghost target'
+          },
+          {
+            from: 'Hares.Hares',
+            to: 'Lynx.Lynx',
+            polarity: '+',
+            reasoning: 'Valid relationship targeting source',
+            polarityReasoning: 'Real target'
+          }
+        ]
+      };
+
+      const result = await quantitativeEngine.processResponse(originalResponse);
+
+      expect(result.relationships).toHaveLength(1);
+      expect(result.relationships[0].to).toBe('Lynx.Lynx');
+    });
+
+    it('should filter out relationships that reference array elements with bracket notation', async () => {
+      const originalResponse = {
+        variables: [
+          { name: 'Revenue', type: 'variable', equation: '0' },
+          { name: 'Total', type: 'variable', equation: '0' }
+        ],
+        relationships: [
+          {
+            from: 'Revenue[Pizza]',
+            to: 'Total',
+            polarity: '+',
+            reasoning: 'Bracket in from',
+            polarityReasoning: 'Should be filtered'
+          },
+          {
+            from: 'Revenue',
+            to: 'Total[NYC]',
+            polarity: '+',
+            reasoning: 'Bracket in to',
+            polarityReasoning: 'Should be filtered'
+          },
+          {
+            from: 'Revenue',
+            to: 'Total',
+            polarity: '+',
+            reasoning: 'Valid',
+            polarityReasoning: 'OK'
+          }
+        ]
+      };
+
+      const result = await quantitativeEngine.processResponse(originalResponse);
+
+      expect(result.relationships).toHaveLength(1);
+      expect(result.relationships[0].from).toBe('Revenue');
+      expect(result.relationships[0].to).toBe('Total');
+    });
+
+    it('should strip array bracket notation from stock inflow/outflow names', async () => {
+      const originalResponse = {
+        variables: [
+          {
+            name: 'Population',
+            type: 'stock',
+            equation: '1000',
+            inflows: ['birth rate[Region]'],
+            outflows: ['death rate[Region, Age]']
+          },
+          { name: 'birth rate', type: 'flow', equation: '50' },
+          { name: 'death rate', type: 'flow', equation: '10' }
+        ],
+        relationships: []
+      };
+
+      const result = await quantitativeEngine.processResponse(originalResponse);
+
+      const population = result.variables.find(v => v.name === 'Population');
+      expect(population.inflows).toEqual(['birth rate']);
+      expect(population.outflows).toEqual(['death rate']);
+    });
+
+    it('should remove empty and nonexistent inflow/outflow names from stocks', async () => {
+      const originalResponse = {
+        variables: [
+          {
+            name: 'Population',
+            type: 'stock',
+            equation: '1000',
+            inflows: ['birth rate', '', '   ', 'ghost flow'],
+            outflows: ['death rate', '[Region]']
+          },
+          { name: 'birth rate', type: 'flow', equation: '50' },
+          { name: 'death rate', type: 'flow', equation: '10' }
+        ],
+        relationships: []
+      };
+
+      const result = await quantitativeEngine.processResponse(originalResponse);
+
+      const population = result.variables.find(v => v.name === 'Population');
+      expect(population.inflows).toEqual(['birth rate']);
+      expect(population.outflows).toEqual(['death rate']);
+    });
+
+    it('should infer inflow on stock from positive-polarity flow→stock relationship', async () => {
+      const originalResponse = {
+        variables: [
+          { name: 'Population', type: 'stock', equation: '1000' },
+          { name: 'births', type: 'flow', equation: '50' }
+        ],
+        relationships: [
+          { from: 'births', to: 'Population', polarity: '+' }
+        ]
+      };
+
+      const result = await quantitativeEngine.processResponse(originalResponse);
+
+      const population = result.variables.find(v => v.name === 'Population');
+      expect(population.inflows).toContain('births');
+      expect(population.outflows || []).not.toContain('births');
+      // The flow stays a flow because it is now used
+      const births = result.variables.find(v => v.name === 'births');
+      expect(births.type).toBe('flow');
+    });
+
+    it('should infer outflow on stock from negative-polarity flow→stock relationship', async () => {
+      const originalResponse = {
+        variables: [
+          { name: 'Population', type: 'stock', equation: '1000' },
+          { name: 'deaths', type: 'flow', equation: '10' }
+        ],
+        relationships: [
+          { from: 'deaths', to: 'Population', polarity: '-' }
+        ]
+      };
+
+      const result = await quantitativeEngine.processResponse(originalResponse);
+
+      const population = result.variables.find(v => v.name === 'Population');
+      expect(population.outflows).toContain('deaths');
+      expect(population.inflows || []).not.toContain('deaths');
+    });
+
+    it('should default to inflow when polarity is missing or unknown on inferred flow→stock', async () => {
+      const originalResponse = {
+        variables: [
+          { name: 'Population', type: 'stock', equation: '1000' },
+          { name: 'births', type: 'flow', equation: '50' }
+        ],
+        relationships: [
+          { from: 'births', to: 'Population' }
+        ]
+      };
+
+      const result = await quantitativeEngine.processResponse(originalResponse);
+
+      const population = result.variables.find(v => v.name === 'Population');
+      expect(population.inflows).toContain('births');
+    });
+
+    it('should not duplicate an inferred flow already present in inflows or outflows', async () => {
+      const originalResponse = {
+        variables: [
+          {
+            name: 'Population',
+            type: 'stock',
+            equation: '1000',
+            inflows: ['births'],
+            outflows: ['deaths']
+          },
+          { name: 'births', type: 'flow', equation: '50' },
+          { name: 'deaths', type: 'flow', equation: '10' }
+        ],
+        relationships: [
+          { from: 'births', to: 'Population', polarity: '+' },
+          { from: 'deaths', to: 'Population', polarity: '-' }
+        ]
+      };
+
+      const result = await quantitativeEngine.processResponse(originalResponse);
+
+      const population = result.variables.find(v => v.name === 'Population');
+      expect(population.inflows.filter(f => f === 'births')).toHaveLength(1);
+      expect(population.outflows.filter(f => f === 'deaths')).toHaveLength(1);
+    });
+
+    it('should not infer inflows/outflows for non-flow→stock relationships', async () => {
+      const originalResponse = {
+        variables: [
+          { name: 'Population', type: 'stock', equation: '1000' },
+          { name: 'temperature', type: 'variable', equation: '20' }
+        ],
+        relationships: [
+          { from: 'temperature', to: 'Population', polarity: '+' }
+        ]
+      };
+
+      const result = await quantitativeEngine.processResponse(originalResponse);
+
+      const population = result.variables.find(v => v.name === 'Population');
+      // Inflows/outflows should not be populated from a variable→stock relationship
+      expect(population.inflows || []).not.toContain('temperature');
+      expect(population.outflows || []).not.toContain('temperature');
+    });
+
+    it('should rewrite DT to TIME in equations of graphical functions', async () => {
+      const originalResponse = {
+        variables: [
+          {
+            name: 'demand curve',
+            type: 'variable',
+            equation: 'DT',
+            graphicalFunction: {
+              points: [{ x: 0, y: 0 }, { x: 1, y: 1 }]
+            }
+          },
+          {
+            name: 'shock curve',
+            type: 'variable',
+            equation: 'dt',
+            graphicalFunction: {
+              points: [{ x: 0, y: 0 }, { x: 1, y: 1 }]
+            }
+          },
+          {
+            name: 'noop',
+            type: 'variable',
+            equation: 'DT',
+            graphicalFunction: { points: [] }
+          },
+          {
+            name: 'plain',
+            type: 'variable',
+            equation: 'DT'
+          }
+        ],
+        relationships: []
+      };
+
+      const result = await quantitativeEngine.processResponse(originalResponse);
+
+      expect(result.variables.find(v => v.name === 'demand curve').equation).toBe('TIME');
+      expect(result.variables.find(v => v.name === 'shock curve').equation).toBe('TIME');
+      // No graphical function points → DT is not rewritten
+      expect(result.variables.find(v => v.name === 'noop').equation).toBe('DT');
+      expect(result.variables.find(v => v.name === 'plain').equation).toBe('DT');
+    });
+
+    it('should normalize comma-separated forElements strings into arrays', async () => {
+      const originalResponse = {
+        variables: [
+          {
+            name: 'sales',
+            type: 'variable',
+            dimensions: ['Product', 'Location'],
+            arrayEquations: [
+              { forElements: 'Pizza, BGO', equation: '100' },
+              { forElements: ['Kebab', 'NYC'], equation: '200' },
+              { forElements: 42, equation: '300' }
+            ]
+          }
+        ],
+        relationships: []
+      };
+
+      const result = await quantitativeEngine.processResponse(originalResponse);
+
+      const sales = result.variables.find(v => v.name === 'sales');
+      expect(sales.arrayEquations[0].forElements).toEqual(['Pizza', 'BGO']);
+      expect(sales.arrayEquations[1].forElements).toEqual(['Kebab', 'NYC']);
+      // Non-string, non-array forElements becomes []
+      expect(sales.arrayEquations[2].forElements).toEqual([]);
+    });
+
+    it('should convert variable names with spaces inside additionalProperties for sub-typed variables', async () => {
+      const originalResponse = {
+        variables: [
+          {
+            name: 'queue stock',
+            type: 'stock',
+            subType: 'queue',
+            equation: '0',
+            inflows: [],
+            outflows: [],
+            additionalProperties: {
+              fifoEnabled: true,
+              purgeEq: 'service time * arrival rate',
+              overflow: 'max capacity - service time'
+            }
+          },
+          { name: 'service time', type: 'variable', equation: '5' },
+          { name: 'arrival rate', type: 'variable', equation: '2' },
+          { name: 'max capacity', type: 'variable', equation: '100' }
+        ],
+        relationships: []
+      };
+
+      const result = await quantitativeEngine.processResponse(originalResponse);
+
+      const queueStock = result.variables.find(v => v.name === 'queue stock');
+      expect(queueStock.additionalProperties.purgeEq).toBe('service_time * arrival_rate');
+      expect(queueStock.additionalProperties.overflow).toBe('max_capacity - service_time');
+      // Non-string property is left untouched
+      expect(queueStock.additionalProperties.fifoEnabled).toBe(true);
+    });
+
+    it('should not touch additionalProperties when variable has no subType', async () => {
+      const originalResponse = {
+        variables: [
+          {
+            name: 'plain stock',
+            type: 'stock',
+            equation: '0',
+            inflows: [],
+            outflows: [],
+            additionalProperties: {
+              note: 'service time'
+            }
+          },
+          { name: 'service time', type: 'variable', equation: '5' }
+        ],
+        relationships: []
+      };
+
+      const result = await quantitativeEngine.processResponse(originalResponse);
+
+      const plainStock = result.variables.find(v => v.name === 'plain stock');
+      // No subType → additionalProperties is left as-is
+      expect(plainStock.additionalProperties.note).toBe('service time');
+    });
+
+    it('should preserve a module referenced only as a parentModule', async () => {
+      const originalResponse = {
+        variables: [
+          { name: 'Child.variable', type: 'variable', equation: '10' }
+        ],
+        modules: [
+          { name: 'Grandparent', parentModule: '' },
+          { name: 'Parent', parentModule: 'Grandparent' },
+          { name: 'Child', parentModule: 'Parent' }
+        ],
+        relationships: []
+      };
+
+      const result = await quantitativeEngine.processResponse(originalResponse);
+
+      // All three modules survive because the parentModule chain references each
+      const names = result.modules.map(m => m.name).sort();
+      expect(names).toEqual(['Child', 'Grandparent', 'Parent']);
+
+      const child = result.modules.find(m => m.name === 'Child');
+      const parent = result.modules.find(m => m.name === 'Parent');
+      const grandparent = result.modules.find(m => m.name === 'Grandparent');
+      expect(child.parentModule).toBe('Parent');
+      expect(parent.parentModule).toBe('Grandparent');
+      expect(grandparent.parentModule).toBe('');
+    });
+
+    it('should parse explanation markdown into HTML', async () => {
+      const originalResponse = {
+        variables: [],
+        relationships: [],
+        explanation: '# Title\n\nThis is **bold** and *italic*.'
+      };
+
+      const result = await quantitativeEngine.processResponse(originalResponse);
+
+      expect(result.explanation).toContain('<h1');
+      expect(result.explanation).toContain('Title');
+      expect(result.explanation).toContain('<strong>bold</strong>');
+      expect(result.explanation).toContain('<em>italic</em>');
+    });
+
+    it('should not crash when explanation is absent', async () => {
+      const originalResponse = {
+        variables: [],
+        relationships: []
+      };
+
+      const result = await quantitativeEngine.processResponse(originalResponse);
+
+      expect(result.explanation).toBeUndefined();
+    });
   });
 
   describe('setupLLMParameters', () => {

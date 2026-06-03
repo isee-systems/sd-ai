@@ -125,6 +125,36 @@
             }
         }
     },
+        "merlin-anthropic-cld": {
+            "engine": "test-agent-build",
+            "additionalParameters": {
+                "agentName": "merlin",
+                "agentMode": "sdk",
+                "provider": "anthropic",
+                "mode": "cld"
+            },
+            "limits": {
+                "tokensPerMinute": 200000,
+                "baselineTokenUsage": 50000,
+                "requestsPerMinute": 3
+            }
+        },
+
+        "merlin-google-cld": {
+            "engine": "test-agent-build",
+            "additionalParameters": {
+                "agentName": "merlin",
+                "agentMode": "sdk",
+                "provider": "google",
+                "mode": "cld"
+            },
+            "limits": {
+                "tokensPerMinute": 200000,
+                "baselineTokenUsage": 50000,
+                "requestsPerMinute": 3
+            }
+        }
+    },
     "categories": {
         "qualitativeTranslation": true,
         "conformance": true,
