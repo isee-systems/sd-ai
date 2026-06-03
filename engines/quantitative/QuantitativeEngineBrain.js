@@ -113,7 +113,7 @@ When constructing models with arrayed variables, you MUST follow these rules:
    - If elements differ: provide element-specific equations in the 'arrayEquations' array (NOT 'equation')
    - For arrayed STOCKS: you MUST provide initial values for each element using 'arrayEquations'
    - NEVER leave the 'equation' or 'arrayEquations' fields empty for any variable
-7. Array element references in 'forElements' are comma-separated dimension element names (e.g., "North,Q1")
+7. Array element references in 'forElements' are arrays of dimension element names, ordered to match the variable's dimensions (e.g., ["North", "Q1"])
 8. SUM function syntax - CRITICAL:
    - ALWAYS use asterisk (*) to represent the dimension being summed - NEVER use the dimension name
    - MANDATORY: Every SUM equation MUST contain at least one asterisk (*) - without it, the SUM is invalid
@@ -229,12 +229,12 @@ Here is a complete example of a properly structured array model with two dimensi
             "type": "variable",
             "dimensions": ["Product", "Location"],
             "arrayEquations": [
-                { "forElements": "Pizza,BGO", "equation": "1000" },
-                { "forElements": "Pizza,NYC", "equation": "2000" },
-                { "forElements": "Kebab,BGO", "equation": "2000" },
-                { "forElements": "Kebab,NYC", "equation": "800" },
-                { "forElements": "Sandwich,BGO", "equation": "1500" },
-                { "forElements": "Sandwich,NYC", "equation": "1500" }
+                { "forElements": ["Pizza", "BGO"], "equation": "1000" },
+                { "forElements": ["Pizza", "NYC"], "equation": "2000" },
+                { "forElements": ["Kebab", "BGO"], "equation": "2000" },
+                { "forElements": ["Kebab", "NYC"], "equation": "800" },
+                { "forElements": ["Sandwich", "BGO"], "equation": "1500" },
+                { "forElements": ["Sandwich", "NYC"], "equation": "1500" }
             ],
             "units": "Product/Month"
         },
@@ -767,7 +767,7 @@ NEVER identify feedback loops for the user in explanatory text. Let users discov
         });
     }
 
-    #fixFlowTypesAndGraphicalFunctions(response) {
+    #fixFlowTypesGraphicalFunctionsAndForElements(response) {
         // This fixes generating flows that are not connected to stocks
         // Fix graphical functions that use DT instead of TIME in their equations
         response.variables.forEach((v) => {
@@ -779,6 +779,17 @@ NEVER identify feedback loops for the user in explanatory text. Let users discov
                 if (v.equation.trim().toLowerCase() === 'dt') {
                     v.equation = 'TIME';
                 }
+            }
+
+            // Normalize forElements: if the LLM returned a comma-separated string, split it into an array
+            if (Array.isArray(v.arrayEquations)) {
+                v.arrayEquations.forEach((eq) => {
+                    if (!Array.isArray(eq.forElements)) {
+                        eq.forElements = typeof eq.forElements === 'string'
+                            ? eq.forElements.split(',').map(s => s.trim())
+                            : [];
+                    }
+                });
             }
         });
     }
@@ -893,8 +904,7 @@ NEVER identify feedback loops for the user in explanatory text. Let users discov
                         const originalEquation = eq.equation;
                         eq.equation = this.#replaceVariableNamesInEquation(eq.equation, variableNameMap);
                         if (originalEquation !== eq.equation) {
-                            const elementsStr = Array.isArray(eq.forElements) ? eq.forElements.join(',') : eq.forElements;
-                            logger.debug(`[XMILE Conversion] Variable "${v.name}"[${elementsStr}]: "${originalEquation}" → "${eq.equation}"`);
+                            logger.debug(`[XMILE Conversion] Variable "${v.name}"[${eq.forElements.join(',')}]: "${originalEquation}" → "${eq.equation}"`);
                         }
                     }
                 });
@@ -958,7 +968,7 @@ NEVER identify feedback loops for the user in explanatory text. Let users discov
         this.#inferStockFlowsFromRelationships(originalResponse, originalResponse.relationships);
 
         // Fix flow types and graphical function equations
-        this.#fixFlowTypesAndGraphicalFunctions(originalResponse);
+        this.#fixFlowTypesGraphicalFunctionsAndForElements(originalResponse);
 
         // Convert all equations to XMILE format (spaces to underscores in variable names)
         this.#convertEquationsToXMILEFormat(originalResponse);
