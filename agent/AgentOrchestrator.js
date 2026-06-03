@@ -2198,8 +2198,8 @@ export class AgentOrchestrator {
           logger.warn(`OpenRouter SDK: unhandled message content part type=${p.type}`);
         }
       }
-      const text = textSegments.join('');
-      if (text) {
+      const text = textSegments.join('').trim();
+      if (text && text.length > 0) {
         const html = await marked.parse(text);
         await this.sendToClient(createAgentTextMessage(this.sessionId, html, false));
         this.sessionManager.addToConversationHistory(this.sessionId, { role: 'assistant', content: text });
