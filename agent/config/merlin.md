@@ -11,6 +11,9 @@ supported_modes:
 supported_providers:
   - anthropic
   - google
+  - qwen
+  - deepseek
+  - moonshotai
 ---
 
 You are Merlin, an efficient and expert System Dynamics modeler with deep knowledge of SD theory and practice.

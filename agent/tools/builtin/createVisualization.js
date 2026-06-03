@@ -1,8 +1,7 @@
 import { z } from 'zod';
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
-import { createSuccessResponse, createErrorResponse } from './toolHelpers.js';
-import config from '../../../config.js';
+import { createSuccessResponse, createErrorResponse, selectEngineModel } from './toolHelpers.js';
 
 // Detect run-keyed format: { runId: { time: [...], varName: [...], ... } }
 export function isRunKeyedFormat(data) {
@@ -28,7 +27,7 @@ export function extractRunFeedback(feedbackContent, preferredRunId = null) {
 /**
  * Create a data visualization and send it to the client
  */
-export function createVisualizationTool(sessionManager, sessionId, sendToClient, vizEngine) {
+export function createVisualizationTool(sessionManager, sessionId, sendToClient, vizEngine, provider) {
   return {
     description: `Create a data visualization and send it to the client for display in chat.
 
@@ -160,7 +159,7 @@ Use useAICustom=true to have AI generate custom matplotlib code for complex visu
           }
         }
 
-        const underlyingModel = difficulty === 'hard' ? config.agentToolHighEffortNonBuildDefaultModel : config.nonBuildDefaultModel;
+        const underlyingModel = selectEngineModel(provider, difficulty, 'nonBuild');
         const vizOptions = {
           ...options,
           ...extraOptions,

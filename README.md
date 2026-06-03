@@ -278,6 +278,8 @@ See [agent/README.md](agent/README.md) for the full WebSocket protocol, all mess
 ```
 OPENAI_API_KEY="sk-asdjkshd" # if you're doing work with engines that use the LLMWrapper class in utils.js (quantitative, qualitative, seldon, etc.)
 GEMINI_API_KEY="asdjkshd" # if you're doing work with engines using Gemini models (causal-chains, seldon, quantitative, qualitative)
+ANTHROPIC_API_KEY="sk-ant-asdjkshd" # if you're using Claude models for engines or the agent
+OPEN_ROUTER_API_KEY="sk-or-asdjkshd" # if you're using OpenRouter-routed models (Qwen, Deepseek, Kimi) for engines or the agent
 AUTHENTICATION_KEY="my_secret_key" # only needed for securing publically accessible deployments. Requires client pass an Authentication header matching this value. e.g. `curl -H "Authentication: my_super_secret_value_in_env_file"` to the engine generate request only
 REPORTER_URL="https://your-metrics-server.com/api/metrics" # optional URL to POST engine usage metrics to. If not set, metrics reporting is disabled.
 TOKEN_REPORTER_URL="https://your-metrics-server.com/api/token-usage" # optional URL to POST agent LLM token usage and cost to. If not set, token reporting is disabled.
@@ -346,7 +348,7 @@ The Python subprocess spawned for visualizations inherits the same bwrap namespa
 
 ### What bwrap does NOT restrict
 
-- **Network access** — the agent worker must reach the Anthropic API. The agent can make arbitrary outbound HTTP requests if prompted to do so. Restrict this at the network/firewall level if needed.
+- **Network access** — the agent worker must reach the upstream LLM APIs (Anthropic, Google, and/or OpenRouter depending on the configured providers). The agent can make arbitrary outbound HTTP requests if prompted to do so. Restrict this at the network/firewall level if needed.
 
 ## Metrics Reporting
 SD-AI includes optional metrics reporting via the `GenerateMetricsReporter` class. When enabled, it automatically tracks and reports usage data for every engine generation request.
@@ -380,7 +382,7 @@ The reporter sends metrics asynchronously and will not block or affect the engin
 
 ## Token Usage Reporting
 
-The agent uses `TokenUsageReporter` to track token usage and cost for every LLM call made using this service. This is separate from the engine metrics above — it covers the agent's internal Anthropic, Gemini, and OpenAI calls rather than top-level HTTP engine requests.
+The agent uses `TokenUsageReporter` to track token usage and cost for every LLM call made using this service. This is separate from the engine metrics above — it covers the agent's internal Anthropic, Gemini, OpenAI, and OpenRouter calls rather than top-level HTTP engine requests.
 
 ### Configuration
 
@@ -395,12 +397,13 @@ Reporting is only active when **both** `TOKEN_REPORTER_URL` is set **and** the c
 
 Regardless of whether remote reporting is enabled, every LLM call logs a line to the server console:
 ```
-[usage:anthropic] input=1234($0.003702) output=256($0.003840) cache_write_5m=0($0.000000) cache_write_1h=0($0.000000) cache_read=512($0.000461) total=$0.008003
-[usage:gemini]    input=800($0.000160) output=120($0.000072) cached=200($0.000010) thoughts=40($0.000024) total=$0.000266
-[usage:openai]    input=600($0.000300) output=150($0.000225) cached=100($0.000025) reasoning=0 total=$0.000550
+[usage:anthropic]  input=1234($0.003702) output=256($0.003840) cache_write_5m=0($0.000000) cache_write_1h=0($0.000000) cache_read=512($0.000461) total=$0.008003
+[usage:gemini]     input=800($0.000160) output=120($0.000072) cached=200($0.000010) thoughts=40($0.000024) total=$0.000266
+[usage:openai]     input=600($0.000300) output=150($0.000225) cached=100($0.000025) reasoning=0 total=$0.000550
+[usage:openrouter] input=820 output=140 cached=0 cache_write=0 total=$0.001425
 ```
 
-Per-token costs are shown in parentheses when pricing data is available for the model. If pricing is unknown the token counts are shown without a cost.
+Per-token costs are shown in parentheses when pricing data is available for the model. If pricing is unknown the token counts are shown without a cost. The `openrouter` line omits per-component dollar amounts because OpenRouter returns the authoritative total `cost` on the response itself — we don't recompute per-token breakdowns locally.
 
 ### Reported Payload
 
@@ -430,8 +433,9 @@ The `tokens` shape varies by provider:
 | `anthropic` | `inputTokens`, `outputTokens`, `cacheCreation5mInputTokens`, `cacheCreation1hInputTokens`, `cacheReadInputTokens` |
 | `gemini` | `inputTokens`, `outputTokens`, `cachedTokens`, `thoughtsTokens` |
 | `openai` | `inputTokens`, `outputTokens`, `cachedTokens`, `reasoningTokens` |
+| `openrouter` | `inputTokens`, `outputTokens`, `cachedTokens`, `cacheWriteTokens`, `providerCost` |
 
-`cost` is the total dollar cost of the call, or `null` if pricing data is unavailable for the model.
+`cost` is the total dollar cost of the call, or `null` if pricing data is unavailable for the model. For `openrouter`, `cost` is taken directly from the provider's authoritative `usage.cost` (no local pricing table is consulted), and `providerCost` in the token block carries that same value for transparency.
 
 The reporter fires asynchronously and never blocks or fails the agent response if the reporting endpoint is unavailable.
 

@@ -3,13 +3,12 @@ import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { createFeedbackRequestMessage } from '../../utilities/MessageProtocol.js';
 import { callSeldonILEEngine } from '../../utilities/EngineWrapper.js';
-import { generateRequestId, createSuccessResponse, createErrorResponse, loadBehaviorContent } from './toolHelpers.js';
-import config from '../../../config.js';
+import { generateRequestId, createSuccessResponse, createErrorResponse, loadBehaviorContent, selectEngineModel } from './toolHelpers.js';
 
 /**
  * Have a user-friendly discussion about the model without jargon, with ability to compare runs
  */
-export function createDiscussModelAcrossRunsTool(sessionManager, sessionId, sendToClient) {
+export function createDiscussModelAcrossRunsTool(sessionManager, sessionId, sendToClient, provider) {
   return {
     description: 'Have a user-friendly discussion about the model without jargon, with the ability to compare and explain differences between simulation runs. Use this to understand what causes behavioral differences across runs - analyzing how different scenarios or parameter changes produce different outcomes by examining the underlying feedback loop dynamics.',
     supportedModes: ['sfd'],
@@ -35,7 +34,7 @@ export function createDiscussModelAcrossRunsTool(sessionManager, sessionId, send
           return createErrorResponse('No model available in session');
         }
 
-        const underlyingModel = difficulty === 'normal' ? config.nonBuildDefaultModel : config.agentToolHighEffortNonBuildDefaultModel;
+        const underlyingModel = selectEngineModel(provider, difficulty, 'nonBuild');
         const baseParameters = { ...parameters, clientId: session.clientId, underlyingModel };
         const sessionTempDir = sessionManager.getSessionTempDir(sessionId);
         const feedbackPath = join(sessionTempDir, 'feedback.json');

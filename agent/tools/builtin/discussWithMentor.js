@@ -3,13 +3,12 @@ import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { createFeedbackRequestMessage } from '../../utilities/MessageProtocol.js';
 import { callSeldonMentorEngine } from '../../utilities/EngineWrapper.js';
-import { generateRequestId, createSuccessResponse, createErrorResponse, loadBehaviorContent } from './toolHelpers.js';
-import config from '../../../config.js';
+import { generateRequestId, createSuccessResponse, createErrorResponse, loadBehaviorContent, selectEngineModel } from './toolHelpers.js';
 
 /**
  * Ask thoughtful questions to the user to guide their learning
  */
-export function createDiscussWithMentorTool(sessionManager, sessionId, sendToClient) {
+export function createDiscussWithMentorTool(sessionManager, sessionId, sendToClient, provider) {
   return {
     description: 'Ask thoughtful questions to the user to guide their learning and help them think through System Dynamics concepts. Use this to engage users in Socratic dialogue about their model.',
     supportedModes: ['sfd', 'cld'],
@@ -34,7 +33,7 @@ export function createDiscussWithMentorTool(sessionManager, sessionId, sendToCli
           return createErrorResponse('No model available in session');
         }
 
-        const underlyingModel = difficulty === 'normal' ? config.nonBuildDefaultModel : config.agentToolHighEffortNonBuildDefaultModel;
+        const underlyingModel = selectEngineModel(provider, difficulty, 'nonBuild');
         const baseParameters = { ...parameters, clientId: session.clientId, underlyingModel };
         const sessionTempDir = sessionManager.getSessionTempDir(sessionId);
         const feedbackPath = join(sessionTempDir, 'feedback.json');

@@ -3,13 +3,12 @@ import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { createFeedbackRequestMessage } from '../../utilities/MessageProtocol.js';
 import { callSeldonEngine } from '../../utilities/EngineWrapper.js';
-import { generateRequestId, createSuccessResponse, createErrorResponse, loadBehaviorContent } from './toolHelpers.js';
-import config from '../../../config.js';
+import { generateRequestId, createSuccessResponse, createErrorResponse, loadBehaviorContent, selectEngineModel } from './toolHelpers.js';
 
 /**
  * Have an expert-level discussion about the model using System Dynamics terminology
  */
-export function createDiscussModelWithSeldonTool(sessionManager, sessionId, sendToClient) {
+export function createDiscussModelWithSeldonTool(sessionManager, sessionId, sendToClient, provider) {
   return {
     description: 'Have an expert-level discussion about the model using System Dynamics terminology. Use this for technical analysis and SD theory discussions.',
     supportedModes: ['sfd', 'cld'],
@@ -34,7 +33,7 @@ export function createDiscussModelWithSeldonTool(sessionManager, sessionId, send
           return createErrorResponse('No model available in session');
         }
 
-        const underlyingModel = difficulty === 'normal' ? config.nonBuildDefaultModel : config.agentToolHighEffortNonBuildDefaultModel;
+        const underlyingModel = selectEngineModel(provider, difficulty, 'nonBuild');
         const baseParameters = { ...parameters, clientId: session.clientId, underlyingModel };
         const sessionTempDir = sessionManager.getSessionTempDir(sessionId);
         const feedbackPath = join(sessionTempDir, 'feedback.json');

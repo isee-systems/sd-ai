@@ -2,10 +2,17 @@ import Anthropic from '@anthropic-ai/sdk';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import { GoogleGenAI } from '@google/genai';
 import { LlmAgent, Runner, InMemorySessionService, isFinalResponse } from '@google/adk';
+import { OpenRouter } from '@openrouter/sdk';
+import { callModel, stepCountIs, tool as orTool } from '@openrouter/agent';
 import { setMaxListeners } from 'events';
 import { encode } from 'gpt-tokenizer';
 import { marked } from 'marked';
 import { countTokens } from '@anthropic-ai/tokenizer';
+
+// External provider ids that name the upstream LLM brand but resolve to the same
+// OpenRouter-routed code paths. The OpenRouter gateway is an implementation detail —
+// users pick the brand they want and the orchestrator routes through the OR SDK.
+const OPENROUTER_PROVIDERS = new Set(['qwen', 'deepseek', 'moonshotai']);
 import { AgentConfigurationManager } from './utilities/AgentConfigurationManager.js';
 import { BuiltInToolProvider } from './tools/BuiltInToolProvider.js';
 import { DynamicToolProvider } from './tools/DynamicToolProvider.js';
@@ -75,6 +82,16 @@ export class AgentOrchestrator {
   // yield). No LLM-call id is exposed on the event, so reference equality is the
   // only available dedup key.
   #geminiAdkReportedUsageMetadata = new WeakSet();
+  // Latest usage seen from a `response.completed` event on the OpenRouter SDK
+  // stream. The SDK delivers cumulative usage per response, so the *last* one
+  // we see is the authoritative total. Reported once when the loop completes
+  // (or aborts) — never per-event, which would double-count.
+  #openRouterSdkPendingUsage = null;
+  // Latest usage seen from a the OpenRouter manual pathway. This pathway delivers 
+  // cumulative usage per response, so the *last* one
+  // we see is the authoritative total. Reported once when the loop completes
+  // (or aborts) — never per-event, which would double-count.
+  #openRouterManualPendingUsage = null;
   // Per-assistant usage accumulator for the anthropic SDK route. The SDKResultMessage
   // carries the authoritative aggregate and supersedes this on normal completion;
   // we only flush the accumulator as a fallback when a query aborts before its
@@ -102,7 +119,7 @@ export class AgentOrchestrator {
     this.configManager = new AgentConfigurationManager(agentConfig);
 
     // Create tool providers
-    this.builtInToolProvider = new BuiltInToolProvider(sessionManager, sessionId, sendToClient);
+    this.builtInToolProvider = new BuiltInToolProvider(sessionManager, sessionId, sendToClient, this.provider);
     this.dynamicToolProvider = new DynamicToolProvider(sessionManager, sessionId, sendToClient);
 
     // Initialize Anthropic client (for non-SDK mode)
@@ -113,6 +130,9 @@ export class AgentOrchestrator {
     this.gemini = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
     this.geminiAdkSessionId = null;
     this.geminiAdkSessionService = new InMemorySessionService();
+
+    this.openRouterClient = new OpenRouter({ apiKey: process.env.OPEN_ROUTER_API_KEY });
+    this.openRouterConversationState = null;
 
     const clientId = sessionManager.getSession(sessionId)?.clientId ?? null;
     this.llm = new LLMWrapper({ clientId, underlyingModel: config.agentAnthropicSummaryModel });
@@ -155,6 +175,10 @@ export class AgentOrchestrator {
         }
       }
 
+      // OpenRouter-routed brands (qwen/deepseek/moonshotai) all dispatch through the
+      // shared OpenRouter-SDK/manual methods — the brand selects the model slug, the
+      // gateway is the same. Brand-specific cases keep the dispatch table explicit.
+      const isOpenRouterBrand = OPENROUTER_PROVIDERS.has(this.provider);
       switch (`${this.provider}-${loopStyle}`) {
         case 'anthropic-sdk':
           await this.startConversationWithAnthropicSdk(userMessage, previousAgentContext);
@@ -169,6 +193,14 @@ export class AgentOrchestrator {
           await this.startConversationGeminiManual(userMessage);
           break;
         default:
+          if (isOpenRouterBrand && loopStyle === 'sdk') {
+            await this.startConversationOpenRouterSDK(userMessage, previousAgentContext);
+            break;
+          }
+          if (isOpenRouterBrand && loopStyle === 'manual') {
+            await this.startConversationOpenRouterManual(userMessage);
+            break;
+          }
           throw new Error(`Unknown combination: provider=${this.provider}, loop=${loopStyle}`);
       }
 
@@ -465,7 +497,7 @@ export class AgentOrchestrator {
         const contextToReplay = previousAgentContext.slice(0, -1).map(toAnthropicMessage);
         if (contextToReplay.length > 0) {
           logger.debug(`[Agent switch → SDK] Replaying ${contextToReplay.length} messages from prior agent.`);
-          const contextText = await this.#anthropicSdkBuildPriorContextText(contextToReplay);
+          const contextText = await this.#buildPriorContextTextHelper(contextToReplay);
           prompt = `[Prior conversation context]\n${contextText}\n[End of prior context]\n\n${userMessage}`;
         }
       }
@@ -901,7 +933,7 @@ export class AgentOrchestrator {
         }
 
         // Execute tool
-        const toolResult = await this.anthropicManualExecuteToolCall(block, builtInTools, dynamicTools);
+        const toolResult = await this.executeToolCallHelper(block, builtInTools, dynamicTools);
 
         // Check if stop was requested during tool execution
         if (this.stopRequested) {
@@ -972,25 +1004,49 @@ export class AgentOrchestrator {
   }
 
   /**
-   * Build prior-history context text, summarizing if it exceeds the token budget.
-   * Used when injecting prior agent context into an SDK session.
+   * Build prior-history context text on an agent switch. If the conversation
+   * fits within `config.agentMaxContextTokens`, returns it verbatim; otherwise
+   * summarizes via the **destination** provider (the one we just switched TO).
+   *
+   * Accepts history in either Anthropic format ({role, content}) or Gemini
+   * format ({role, parts}); each summarizer extracts text from both shapes via
+   * the shared normalizer below.
    */
-  async #anthropicSdkBuildPriorContextText(history) {
-    try {
-      const conversationText = history.map((msg) => {
-        if (msg.role === 'user') {
-          return `User: ${typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)}`;
-        } else if (msg.role === 'assistant') {
-          if (Array.isArray(msg.content)) {
-            const textContent = msg.content.filter(b => b.type === 'text').map(b => b.text).join('\n');
-            return textContent ? `Assistant: ${textContent}` : '';
-          }
-          return `Assistant: ${msg.content}`;
-        }
-        return '';
-      }).filter(line => line).join('\n\n');
+  async #buildPriorContextTextHelper(history) {
+    const conversationText = this.#normalizeHistoryToText(history);
+    const tokenCount = countTokens(conversationText);
+    if (tokenCount <= config.agentMaxContextTokens) {
+      logger.log(`Prior agent context (${history.length} messages, ~${tokenCount} tokens) under limit — injecting verbatim`);
+      return conversationText;
+    }
+    if (OPENROUTER_PROVIDERS.has(this.provider)) {
+      return this.#summarizePriorContextWithOpenRouter(conversationText, history.length);
+    }
+    if (this.provider === 'google') {
+      return this.#summarizePriorContextWithGemini(conversationText, history.length);
+    }
+    // Default: anthropic.
+    return this.#summarizePriorContextWithAnthropic(conversationText, history.length);
+  }
 
-      logger.log(`Anthropic: Summarizing prior agent context (${history.length} messages) before injection`);
+  #normalizeHistoryToText(history) {
+    return history.map((msg) => {
+      const role = (msg.role === 'assistant' || msg.role === 'model') ? 'Assistant' : 'User';
+      let text = '';
+      if (typeof msg.content === 'string') {
+        text = msg.content;
+      } else if (Array.isArray(msg.content)) {
+        text = msg.content.filter(b => b.type === 'text').map(b => b.text || '').join('\n');
+      } else if (Array.isArray(msg.parts)) {
+        text = msg.parts.filter(p => p.text).map(p => p.text).join('\n');
+      }
+      return text ? `${role}: ${text}` : '';
+    }).filter(line => line).join('\n\n');
+  }
+
+  async #summarizePriorContextWithAnthropic(conversationText, messageCount) {
+    try {
+      logger.log(`Anthropic: Summarizing prior agent context (${messageCount} messages) before injection`);
       const response = await this.anthropic.messages.create({
         model: config.agentAnthropicSummaryModel,
         max_tokens: 1024,
@@ -1006,10 +1062,65 @@ export class AgentOrchestrator {
     }
   }
 
+  async #summarizePriorContextWithGemini(conversationText, messageCount) {
+    try {
+      logger.log(`Gemini: Summarizing prior agent context (${messageCount} messages) before injection`);
+      const response = await this.gemini.models.generateContent({
+        model: config.agentGeminiSummaryModel,
+        contents: [{
+          role: 'user',
+          parts: [{ text: `Summarize this conversation history concisely (2-4 paragraphs):\n\n${conversationText}` }]
+        }]
+      });
+      if (response.usageMetadata) {
+        this.#logApiUsage(Provider.GOOGLE, response.usageMetadata, config.agentGeminiSummaryModel);
+      }
+      return response.text || response.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    } catch (error) {
+      logger.error('Gemini: Error summarizing prior context:', error);
+      return '[Prior conversation condensed due to size]';
+    }
+  }
+
+  async #summarizePriorContextWithOpenRouter(conversationText, messageCount) {
+    // Pick the per-brand summary model. Falls back to the agent's primary model
+    // for any unforeseen brand so summarization at least proceeds.
+    const summaryModelMap = {
+      qwen: config.agentQwenSummaryModel,
+      deepseek: config.agentDeepseekSummaryModel,
+      moonshotai: config.agentMoonshotaiSummaryModel,
+    };
+    const model = summaryModelMap[this.provider] || this.#resolveOpenRouterModel();
+    try {
+      logger.log(`OpenRouter (${this.provider}): Summarizing prior agent context (${messageCount} messages) before injection`);
+      const completion = await this.openRouterClient.chat.send({
+        chatRequest: {
+          model,
+          messages: [
+            { role: 'user', content: `Summarize this conversation history concisely (2-4 paragraphs):\n\n${conversationText}` }
+          ],
+          maxCompletionTokens: 1024,
+        }
+      });
+      if (completion.usage) {
+        this.#logApiUsage(Provider.OPENROUTER, completion.usage, model);
+      }
+      const message = completion.choices?.[0]?.message;
+      if (typeof message?.content === 'string') return message.content;
+      if (Array.isArray(message?.content)) {
+        return message.content.filter(b => typeof b?.text === 'string').map(b => b.text).join('');
+      }
+      return '';
+    } catch (error) {
+      logger.error(`OpenRouter (${this.provider}): Error summarizing prior context: ${this.#describeOpenRouterError(error)}`);
+      return '[Prior conversation condensed due to size]';
+    }
+  }
+
   /**
    * Execute a tool call (built-in or client tool)
    */
-  async anthropicManualExecuteToolCall(toolUse, builtInTools, _dynamicTools) {
+  async executeToolCallHelper(toolUse, builtInTools, _dynamicTools) {
     try {
       // Check if it's a built-in tool
       if (builtInTools.tools[toolUse.name]) {
@@ -1280,7 +1391,7 @@ export class AgentOrchestrator {
       const callId = `fc_${Date.now()}_${Math.random().toString(36).substr(2, 7)}`;
       const isBuiltIn = this.#isBuiltInTool(name, builtInTools);
 
-      await this.#sendSlowToolMessageGemini(name, args);
+      await this.#sendSlowToolMessageHelper(name, args);
       await this.sendToClient(createToolCallNotificationMessage(this.sessionId, callId, name, args, isBuiltIn));
 
       const toolResult = await this.executeToolCallGeminiManual({ name, input: args });
@@ -1361,7 +1472,7 @@ export class AgentOrchestrator {
           const key = `${tool.name}::${JSON.stringify(args)}`;
           pendingCallIds.set(key, callId);
           const isBuiltIn = builtInAdkTools.some(t => t.name === tool.name);
-          await this.#sendSlowToolMessageGemini(tool.name, args);
+          await this.#sendSlowToolMessageHelper(tool.name, args);
           await this.sendToClient(createToolCallNotificationMessage(
             this.sessionId, callId, tool.name, args, isBuiltIn
           ));
@@ -1402,7 +1513,7 @@ export class AgentOrchestrator {
         const contextToReplay = previousAgentContext.slice(0, -1).map(toGeminiMessage);
         if (contextToReplay.length > 0) {
           logger.debug(`[Agent switch → ADK] Replaying ${contextToReplay.length} messages from prior agent.`);
-          const contextText = await this.#geminiAdkBuildPriorContextText(contextToReplay);
+          const contextText = await this.#buildPriorContextTextHelper(contextToReplay);
           prompt = `[Prior conversation context]\n${contextText}\n[End of prior context]\n\n${userMessage}`;
         }
         this.#adkHasPriorContext = true;
@@ -1508,7 +1619,7 @@ export class AgentOrchestrator {
 
   // ─── Shared Gemini helpers ──────────────────────────────────────────────────
 
-  async #sendSlowToolMessageGemini(toolName, args) {
+  async #sendSlowToolMessageHelper(toolName, args) {
     if (toolName === 'create_visualization') {
       const vizType = args?.useAICustom ? 'AI-generated custom' : (args?.type || 'standard');
       await this.sendToClient(createAgentTextMessage(this.sessionId, `Creating ${vizType} visualization: "${args?.title || 'visualization'}"... This may take a moment.`, false));
@@ -1582,33 +1693,6 @@ export class AgentOrchestrator {
     return declarations;
   }
 
-  async #geminiAdkBuildPriorContextText(history) {
-    try {
-      const conversationText = history.map((msg) => {
-        const role = msg.role === 'user' ? 'User' : 'Assistant';
-        if (!Array.isArray(msg.parts)) return '';
-        const text = msg.parts.filter(p => p.text).map(p => p.text).join('\n');
-        return text ? `${role}: ${text}` : '';
-      }).filter(line => line).join('\n\n');
-
-      logger.log(`Gemini: Summarizing prior agent context (${history.length} messages) before injection`);
-      const response = await this.gemini.models.generateContent({
-        model: config.agentGeminiSummaryModel,
-        contents: [{
-          role: 'user',
-          parts: [{ text: `Summarize this conversation history concisely (2-4 paragraphs):\n\n${conversationText}` }]
-        }]
-      });
-      if (response.usageMetadata) {
-        this.#logApiUsage(Provider.GOOGLE, response.usageMetadata, config.agentGeminiSummaryModel);
-      }
-      return response.text || response.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    } catch (error) {
-      logger.error('Gemini: Error summarizing prior context:', error);
-      return '[Prior conversation condensed due to size]';
-    }
-  }
-
   async #getGeminiManualConfig(systemPrompt, toolDeclarations) {
     // Build a cache key from the stable inputs — recreate if they change (e.g. tool set changes on model resize)
     const cacheKey = systemPrompt + JSON.stringify(toolDeclarations.map(t => t.name));
@@ -1669,6 +1753,641 @@ export class AgentOrchestrator {
       }
       return cfg;
     }
+  }
+
+  // ─── OpenRouter pathways ────────────────────────────────────────────────────
+
+  /**
+   * Surface the actual upstream-provider reason from an OpenRouter SDK error.
+   * The SDK's default `.message` is just "Provider returned error" — the
+   * actionable detail lives in `.error` (the upstream OR error block) and
+   * `.body` (raw JSON), and the routed provider is on `.openrouterMetadata`.
+   */
+  #describeOpenRouterError(error) {
+    if (!error) return 'unknown error';
+    const parts = [error.message || error.toString()];
+    const openrouterErr = error.error;
+    if (openrouterErr) {
+      if (typeof openrouterErr.code === 'number') parts.push(`code=${openrouterErr.code}`);
+      if (openrouterErr.metadata) {
+        try {
+          parts.push(`metadata=${JSON.stringify(openrouterErr.metadata)}`);
+        } catch { /* circular / unserializable — skip */ }
+      }
+    }
+    if (error.openrouterMetadata) {
+      try {
+        parts.push(`routing=${JSON.stringify(error.openrouterMetadata)}`);
+      } catch { /* skip */ }
+    }
+    if (error.body && typeof error.body === 'string') {
+      // Body often contains the upstream provider's verbatim error — keep the
+      // first ~1KB so logs stay readable but the cause is recoverable.
+      const truncated = error.body.length > 1024 ? error.body.slice(0, 1024) + '…' : error.body;
+      parts.push(`body=${truncated}`);
+    }
+    return parts.join(' | ');
+  }
+
+  /**
+   * Resolve the model slug to use for the current brand provider. The brand
+   * (qwen/deepseek/moonshotai) is set on construction; the slug comes from the
+   * matching per-brand config key (agentQwenModel / agentDeepseekModel / ...).
+   */
+  #resolveOpenRouterModel() {
+    const map = {
+      qwen: config.agentQwenModel,
+      deepseek: config.agentDeepseekModel,
+      moonshotai: config.agentMoonshotaiModel,
+    };
+    const model = map[this.provider];
+    if (!model) throw new Error(`No agent<Brand>Model configured for provider "${this.provider}"`);
+    return model;
+  }
+
+  /**
+   * Start conversation using @openrouter/agent (the OpenRouter Agent SDK).
+   * Used for any provider in OPENROUTER_PROVIDERS (qwen / deepseek / moonshotai).
+   * The brand selects the model slug; the gateway is shared.
+   */
+  async startConversationOpenRouterSDK(userMessage, previousAgentContext = null) {
+    const session = this.sessionManager.getSession(this.sessionId);
+    const mode = session.mode;
+    const model = this.#resolveOpenRouterModel();
+
+    this.sessionManager.addToConversationHistory(this.sessionId, {
+      role: 'user',
+      content: userMessage
+    });
+
+    const systemPrompt = this.configManager.buildSystemPrompt(mode);
+    const currentModel = session?.clientModel;
+    let modelTokenCount = 0;
+    if (currentModel) {
+      const modelJson = JSON.stringify(currentModel, null, 2);
+      modelTokenCount = encode(modelJson).length;
+      this.sessionManager.updateModelTokenCount(this.sessionId, modelTokenCount);
+    }
+
+    this.abortController = new AbortController();
+    setMaxListeners(0, this.abortController.signal);
+    const maxIterations = this.configManager.getMaxIterations();
+
+    try {
+      const orTools = this.#buildOpenRouterTools(mode, modelTokenCount);
+
+      let userPromptText = userMessage;
+      if (previousAgentContext?.length > 0) {
+        const contextToReplay = previousAgentContext.slice(0, -1).map(toAnthropicMessage);
+        if (contextToReplay.length > 0) {
+          logger.debug(`[Agent switch → OpenRouter SDK] Replaying ${contextToReplay.length} messages from prior agent.`);
+          const contextText = await this.#buildPriorContextTextHelper(contextToReplay);
+          userPromptText = `[Prior conversation context]\n${contextText}\n[End of prior context]\n\n${userMessage}`;
+        }
+      }
+
+      // Pass the system prompt as an inline 'system'-role message in the input
+      // array rather than via `instructions`. OpenRouter forwards the Responses
+      // API `instructions` field to upstream providers as a `developer`-role
+      // message — which Alibaba (the Qwen upstream) rejects with
+      // "developer is not one of ['system', 'assistant', 'user', 'tool', 'function']".
+      // An explicit 'system'-role item is passed through verbatim.
+      const baseRequest = {
+        model,
+        tools: orTools,
+        stopWhen: stepCountIs(maxIterations),
+      };
+
+      let input = [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPromptText }
+      ];
+
+      while (true) {
+        if (this.stopRequested) break;
+
+        // Drive everything off the SDK's event broadcaster so we see items
+        // from every turn — including the INITIAL response (whose output never
+        // reaches onTurnEnd) and any text the model emits alongside tool
+        // calls. `response.output_item.done` fires once per completed item
+        // across all turns; `tool.call_output` carries the executed tool's
+        // result; `response.completed` carries each response's usage so we
+        // can report it immediately rather than waiting for getResponse() to
+        // resolve (which an abort skips); `getToolCallsStream()` gives us
+        // parsed-argument tool calls for live notifications before execution.
+        const result = callModel(this.openRouterClient, {
+          ...baseRequest,
+          input
+        });
+
+        const notifiedToolCallIds = new Set();
+        const completedToolCallIds = new Set();
+        // FunctionCallOutputItem has no `name` field, so we look up the tool's
+        // display name from the parsed call we saw on the notification side.
+        const toolCallNames = new Map();
+        const builtInToolMap = this.builtInToolProvider.getTools().tools;
+        const sdkFsTools = ['Read', 'Edit', 'Write', 'Glob', 'Grep'];
+
+        const notifyStreamTask = (async () => {
+          try {
+            for await (const toolCall of result.getToolCallsStream()) {
+              if (this.stopRequested) break;
+              if (!toolCall?.id || !toolCall?.name) continue;
+              if (notifiedToolCallIds.has(toolCall.id)) continue;
+              notifiedToolCallIds.add(toolCall.id);
+              toolCallNames.set(toolCall.id, toolCall.name);
+              const isBuiltIn = !!builtInToolMap[toolCall.name] || sdkFsTools.includes(toolCall.name);
+              const args = (toolCall.arguments && typeof toolCall.arguments === 'object') ? toolCall.arguments : {};
+              await this.#sendSlowToolMessageHelper(toolCall.name, args);
+              await this.sendToClient(createToolCallNotificationMessage(
+                this.sessionId, toolCall.id, toolCall.name, args, isBuiltIn
+              ));
+            }
+          } catch (err) {
+            if (!this.stopRequested) {
+              logger.warn(`OpenRouter SDK: tool-call notification stream error: ${err?.message ?? err}`);
+            }
+          }
+        })();
+
+        const eventStreamTask = (async () => {
+          const seenItemIds = new Set();
+          try {
+            for await (const event of result.getFullResponsesStream()) {
+              // Cumulative usage — overwrite each time so the last value
+              // wins. Captured BEFORE the stop check so an in-flight event
+              // carrying usage isn't dropped when the user hits stop: we
+              // still want to flush the latest tally in the finally block.
+              // Reporting happens once when the loop closes or aborts, never
+              // per-event (that would double-count).
+              if (event?.type === 'response.completed' && event.response?.usage) {
+                this.#openRouterSdkPendingUsage = event.response.usage;
+                continue;
+              }
+
+              if (this.stopRequested) break;
+
+              // Tool execution completed — emit the completion message.
+              if (event?.type === 'tool.call_output') {
+                const out = event.output;
+                if (!out?.callId || completedToolCallIds.has(out.callId)) continue;
+                completedToolCallIds.add(out.callId);
+                const text = typeof out.output === 'string'
+                  ? out.output
+                  : Array.isArray(out.output)
+                    ? out.output.filter(o => o.type === 'input_text').map(o => o.text || '').join('\n')
+                    : String(out.output ?? '');
+                const isError = out.status === 'incomplete';
+                const displayName = toolCallNames.get(out.callId) || 'tool';
+                const responseType = this.#getResponseType(displayName);
+                logger.log(`OpenRouter SDK: tool call completed: ${displayName}`);
+                await this.sendToClient(createToolCallCompletedMessage(
+                  this.sessionId, out.callId, displayName,
+                  [{ type: 'text', text }], isError, responseType
+                ));
+                continue;
+              }
+
+              // A complete output item from any turn (initial or follow-up):
+              // message text, reasoning, function_call, function_call_output.
+              if (event?.type === 'response.output_item.done' && event.item) {
+                const item = event.item;
+                // Cache the tool name keyed by callId BEFORE dedup — the
+                // matching tool.call_output later in this same stream looks it
+                // up to label the completion message. function_call always
+                // arrives here before its corresponding tool.call_output.
+                if (item.type === 'function_call' && item.callId && item.name) {
+                  toolCallNames.set(item.callId, item.name);
+                }
+                // Dedup by item id when the SDK supplies one — output_item.done
+                // can fire more than once for a logical item across reissues.
+                if (item.id) {
+                  if (seenItemIds.has(item.id)) continue;
+                  seenItemIds.add(item.id);
+                }
+                await this.#handleOpenRouterItem(item, notifiedToolCallIds, completedToolCallIds);
+                continue;
+              }
+            }
+          } catch (err) {
+            if (!this.stopRequested) {
+              logger.warn(`OpenRouter SDK: event stream error: ${err?.message ?? err}`);
+            }
+          }
+        })();
+
+        try {
+          await result.getResponse();
+        } catch (e) {
+          // If a stop was requested mid-flight, getResponse may reject before
+          // resolving. The latest cumulative usage captured from
+          // response.completed gets flushed in the finally block.
+          if (this.stopRequested) {
+            logger.debug(`OpenRouter SDK: getResponse() aborted after stop: ${e?.message ?? e}`);
+            await Promise.allSettled([notifyStreamTask, eventStreamTask]);
+            break;
+          }
+          await Promise.allSettled([notifyStreamTask, eventStreamTask]);
+          throw e;
+        }
+
+        // Drain the side-streams so every item has been forwarded to the
+        // client before we close this iteration.
+        await Promise.allSettled([notifyStreamTask, eventStreamTask]);
+
+        // Report the cumulative usage captured from response.completed once
+        // per iteration of the outer queued-message loop.
+        if (this.#openRouterSdkPendingUsage) {
+          this.#logApiUsage(Provider.OPENROUTER, this.#openRouterSdkPendingUsage, model);
+          this.#openRouterSdkPendingUsage = null;
+        }
+
+        if (this.stopRequested) break;
+
+        if (this.#pendingMessages.length === 0) break;
+        const next = this.#pendingMessages.shift();
+        logger.log(`OpenRouter SDK: processing queued message (remaining: ${this.#pendingMessages.length})`);
+        // Re-seed input for the next queued turn — system stays, user becomes
+        // the queued text.
+        input = [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: next }
+        ];
+      }
+
+      if (this.stopRequested) {
+        this.stopRequested = false;
+        await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'awaiting_user', 'Agent stopped by user request'));
+      } else {
+        logger.log(`OpenRouter SDK: conversation completed successfully for session ${this.sessionId}`);
+        await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'success', 'Task completed successfully'));
+      }
+    } catch (error) {
+      if (error.name === 'AbortError' || this.stopRequested) {
+        this.stopRequested = false;
+        logger.log(`OpenRouter SDK: agent stopped for session ${this.sessionId}`);
+        await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'awaiting_user', 'Agent stopped by user request'));
+      } else {
+        const detail = this.#describeOpenRouterError(error);
+        logger.error(`OpenRouter SDK: in conversation loop: ${detail}`);
+        await this.sendToClient(createErrorMessage(this.sessionId, `Agent error: ${detail}`, 'AGENT_ERROR'));
+        await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'awaiting_user', `Agent error: ${detail}`));
+      }
+    } finally {
+      // On abort / error paths the in-loop flush above is skipped; report
+      // the latest cumulative usage captured before the break.
+      if (this.#openRouterSdkPendingUsage) {
+        this.#logApiUsage(Provider.OPENROUTER, this.#openRouterSdkPendingUsage, model);
+        this.#openRouterSdkPendingUsage = null;
+      }
+      this.abortController = null;
+    }
+  }
+
+  /**
+   * Hand-rolled tool loop on top of OpenRouter's chat completions API — the
+   * counterpart to startConversationAnthropicManual for any OpenRouter brand.
+   */
+  async startConversationOpenRouterManual(userMessage) {
+    let llmUsed = null;
+    try {
+      const session = this.sessionManager.getSession(this.sessionId);
+      const model = this.#resolveOpenRouterModel();
+      llmUsed = model;
+
+      this.sessionManager.addToConversationHistory(this.sessionId, {
+        role: 'user',
+        content: userMessage
+      });
+
+      const mode = session.mode;
+      const systemPrompt = this.configManager.buildSystemPrompt(mode);
+      const builtInTools = this.builtInToolProvider.getTools();
+      const dynamicTools = this.dynamicToolProvider.getTools();
+
+      await this.sessionManager.cleanupContext(this.sessionId, config.agentMaxContextTokens);
+
+      const messages = this.sessionManager.getConversationContext(this.sessionId);
+      // Normalize Anthropic/Gemini formats to plain {role, content} for the chat API.
+      for (let i = 0; i < messages.length; i++) {
+        const m = toAnthropicMessage(messages[i]);
+        const role = m.role === 'assistant' ? 'assistant' : m.role === 'system' ? 'system' : 'user';
+        const content = typeof m.content === 'string'
+          ? m.content
+          : Array.isArray(m.content)
+            ? m.content.filter(b => b.type === 'text').map(b => b.text || '').join('\n')
+            : '';
+        messages[i] = { role, content };
+      }
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (!messages[i].content || (typeof messages[i].content === 'string' && messages[i].content.trim() === '')) messages.splice(i, 1);
+      }
+
+      const currentModel = session?.clientModel;
+      let modelTokenCount = 0;
+      if (currentModel) {
+        const modelJson = JSON.stringify(currentModel, null, 2);
+        modelTokenCount = countTokens(modelJson);
+        this.sessionManager.updateModelTokenCount(this.sessionId, modelTokenCount);
+      }
+
+      const chatTools = this.#openRouterManualConvertTools(builtInTools, dynamicTools, modelTokenCount, mode);
+      const maxIterations = this.configManager.getMaxIterations();
+
+      while (true) {
+        let continueLoop = true;
+        let completedNaturally = false;
+        let iteration = 0;
+
+        while (continueLoop && iteration < maxIterations && !this.stopRequested) {
+          iteration++;
+          await this.sessionManager.cleanupContext(this.sessionId, config.agentMaxContextTokens);
+
+          try {
+            const completion = await this.openRouterClient.chat.send({
+              chatRequest: {
+                model,
+                messages: [{ role: 'system', content: systemPrompt }, ...messages],
+                tools: chatTools.length > 0 ? chatTools : undefined,
+              }
+            });
+
+            if (completion?.usage)
+              this.#openRouterManualPendingUsage = completion.usage;
+
+            if (this.stopRequested) break;
+
+            continueLoop = await this.#processOpenRouterManualResponse(completion, messages, builtInTools, dynamicTools);
+            if (!continueLoop && !this.stopRequested) completedNaturally = true;
+
+            if (this.stopRequested) break;
+          } catch (error) {
+            const detail = this.#describeOpenRouterError(error);
+            logger.error(`OpenRouter Manual: error in agent conversation loop: ${detail}`);
+            await this.sendToClient(createErrorMessage(this.sessionId, `Agent error: ${detail}`, 'AGENT_ERROR'));
+            await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'awaiting_user', 'Agent stopped due to error'));
+            continueLoop = false;
+            completedNaturally = true;
+          }
+        }
+
+        if (this.stopRequested) {
+          logger.log(`OpenRouter Manual: agent stopped by user request for session ${this.sessionId}`);
+          this.stopRequested = false;
+          await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'awaiting_user', 'Agent stopped by user request'));
+          break;
+        }
+        const reachedMax = !completedNaturally && iteration >= maxIterations;
+        if (this.#pendingMessages.length === 0) {
+          if (reachedMax) {
+            logger.log(`OpenRouter Manual: agent conversation reached max iterations (${maxIterations})`);
+            await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'awaiting_user', `Reached maximum iterations (${maxIterations})`));
+          }
+          break;
+        }
+        if (reachedMax) logger.log(`OpenRouter Manual: max iterations (${maxIterations}) hit; draining queued message with fresh budget`);
+        const next = this.#pendingMessages.shift();
+        logger.log(`OpenRouter Manual: processing queued message (remaining: ${this.#pendingMessages.length})`);
+        this.sessionManager.addToConversationHistory(this.sessionId, { role: 'user', content: next });
+        messages.push({ role: 'user', content: next });
+      }
+    } catch (error) {
+      // Catches setup-time failures (resolveModel, cleanupContext, tool conversion,
+      // etc.) and anything else outside the per-iteration try. Without this they'd
+      // bubble to startConversation's generic handler that only logs `error.message`
+      // and we'd lose the upstream provider's actual rejection reason.
+      const detail = this.#describeOpenRouterError(error);
+      logger.error(`OpenRouter Manual: in conversation setup: ${detail}`);
+      await this.sendToClient(createErrorMessage(this.sessionId, `Agent error: ${detail}`, 'AGENT_ERROR'));
+      await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'awaiting_user', `Agent error: ${detail}`));
+    } finally {
+      if (this.#openRouterManualPendingUsage && llmUsed)
+        this.#logApiUsage(Provider.OPENROUTER, this.#openRouterManualPendingUsage, llmUsed);
+    }
+  }
+
+  /**
+   * Translate an item from @openrouter/agent's `getNewMessagesStream` into client
+   * websocket messages — assistant text, tool-call notifications, and tool results.
+   */
+  async #handleOpenRouterItem(item, notifiedToolCallIds, completedToolCallIds) {
+    if (!item || !item.type) {
+      logger.warn(`OpenRouter SDK: dropping malformed item: ${JSON.stringify(item)?.slice(0, 500)}`);
+      return;
+    }
+
+    if (item.type === 'message') {
+      if (item.role !== 'assistant') {
+        logger.debug(`OpenRouter SDK: skipping non-assistant message (role=${item.role})`);
+        return;
+      }
+      const parts = Array.isArray(item.content) ? item.content : [];
+      // Pull text from every text-bearing part type the Responses API may emit:
+      // output_text (normal), refusal (safety stop), text (fallback shape some
+      // upstreams use). Anything else gets logged so we can extend later.
+      const textSegments = [];
+      for (const p of parts) {
+        if (!p || typeof p !== 'object') continue;
+        if (p.type === 'output_text' && typeof p.text === 'string') {
+          textSegments.push(p.text);
+        } else if (p.type === 'refusal' && typeof p.refusal === 'string') {
+          textSegments.push(p.refusal);
+        } else if (p.type === 'text' && typeof p.text === 'string') {
+          textSegments.push(p.text);
+        } else {
+          logger.warn(`OpenRouter SDK: unhandled message content part type=${p.type}`);
+        }
+      }
+      const text = textSegments.join('');
+      if (text) {
+        const html = await marked.parse(text);
+        await this.sendToClient(createAgentTextMessage(this.sessionId, html, false));
+        this.sessionManager.addToConversationHistory(this.sessionId, { role: 'assistant', content: text });
+      }
+      return;
+    }
+
+    if (item.type === 'function_call' && item.name) {
+      // Notifications normally fire live via getToolCallsStream(); the
+      // dedup set tells us whether we already sent one. Fall back to
+      // sending here only for items the live stream missed (defensive).
+      if (notifiedToolCallIds?.has(item.callId)) {
+        return;
+      }
+      const isBuiltIn = !!this.builtInToolProvider.getTools().tools[item.name] || ['Read', 'Edit', 'Write', 'Glob', 'Grep'].includes(item.name);
+      let parsedInput = {};
+      try { parsedInput = item.arguments ? JSON.parse(item.arguments) : {}; } catch { /* leave empty */ }
+      await this.#sendSlowToolMessageHelper(item.name, parsedInput);
+      await this.sendToClient(createToolCallNotificationMessage(this.sessionId, item.callId, item.name, parsedInput, isBuiltIn));
+      notifiedToolCallIds?.add(item.callId);
+      return;
+    }
+
+    if (item.type === 'function_call_output' && item.callId) {
+      // Completions normally fire live via the tool.call_output event stream;
+      // skip if already dispatched. This branch remains as a defensive fallback
+      // for environments where the side-stream didn't surface the event.
+      if (completedToolCallIds?.has(item.callId)) {
+        return;
+      }
+      const output = typeof item.output === 'string'
+        ? item.output
+        : Array.isArray(item.output)
+          ? item.output.filter(o => o.type === 'input_text').map(o => o.text || '').join('\n')
+          : String(item.output ?? '');
+      const isError = item.status === 'incomplete';
+      const displayName = item.name || 'tool';
+      logger.log(`OpenRouter SDK: tool call completed: ${displayName}`);
+      const responseType = this.#getResponseType(displayName);
+      await this.sendToClient(createToolCallCompletedMessage(
+        this.sessionId, item.callId, displayName, [{ type: 'text', text: output }], isError, responseType
+      ));
+      completedToolCallIds?.add(item.callId);
+      return;
+    }
+
+    if (item.type === 'reasoning') {
+      return; //we don't want the chain of thought stuff
+    }
+
+    logger.warn(`OpenRouter SDK: unhandled item type=${item.type} — keys=${Object.keys(item).join(',')}`);
+  }
+
+  /**
+   * Wrap built-in and dynamic tools in @openrouter/agent's `tool()` factory so
+   * the agent loop auto-executes them.
+   */
+  #buildOpenRouterTools(mode, modelTokenCount) {
+    const builtInTools = this.builtInToolProvider.getTools();
+    const dynamicTools = this.dynamicToolProvider.getTools();
+    const tools = [];
+    const seen = new Set();
+
+    for (const [toolName, toolDef] of Object.entries(builtInTools.tools)) {
+      if (seen.has(toolName)) continue;
+      if (mode && toolDef.supportedModes && !toolDef.supportedModes.includes(mode)) continue;
+      if (toolDef.maxModelTokens && modelTokenCount > toolDef.maxModelTokens) continue;
+      if (toolDef.minModelTokens && modelTokenCount < toolDef.minModelTokens) continue;
+      seen.add(toolName);
+
+      tools.push(orTool({
+        name: toolName,
+        description: toolDef.description,
+        inputSchema: toolDef.inputSchema,
+        execute: async (input) => {
+          const result = await toolDef.handler(input);
+          return Array.isArray(result?.content)
+            ? result.content.filter(b => b.type === 'text').map(b => b.text).join('\n')
+            : typeof result === 'string' ? result : JSON.stringify(result);
+        }
+      }));
+    }
+
+    if (dynamicTools?.tools) {
+      for (const [toolName, toolDef] of Object.entries(dynamicTools.tools)) {
+        if (seen.has(toolName)) continue;
+        seen.add(toolName);
+        tools.push(orTool({
+          name: toolName,
+          description: toolDef.description,
+          inputSchema: toolDef.inputSchema,
+          execute: async (input) => {
+            const unprefixedName = toolName.replace(/^client_/, '');
+            const result = await this.dynamicToolProvider.requestClientExecution(unprefixedName, input);
+            return typeof result === 'string' ? result : JSON.stringify(result);
+          }
+        }));
+      }
+    }
+
+    return tools;
+  }
+
+  #openRouterManualConvertTools(builtInTools, dynamicTools, modelTokenCount, mode) {
+    const tools = [];
+    const seen = new Set();
+    for (const [toolName, toolDef] of Object.entries(builtInTools.tools)) {
+      if (seen.has(toolName)) continue;
+      if (mode && toolDef.supportedModes && !toolDef.supportedModes.includes(mode)) continue;
+      if (toolDef.maxModelTokens && modelTokenCount > toolDef.maxModelTokens) continue;
+      if (toolDef.minModelTokens && modelTokenCount < toolDef.minModelTokens) continue;
+      seen.add(toolName);
+      tools.push({
+        type: 'function',
+        function: {
+          name: toolName,
+          description: toolDef.description,
+          parameters: toolDef.inputSchema.toJSONSchema()
+        }
+      });
+    }
+    if (dynamicTools?.tools) {
+      for (const [toolName, toolDef] of Object.entries(dynamicTools.tools)) {
+        if (seen.has(toolName)) continue;
+        seen.add(toolName);
+        tools.push({
+          type: 'function',
+          function: {
+            name: toolName,
+            description: toolDef.description,
+            parameters: toolDef.inputSchema.toJSONSchema()
+          }
+        });
+      }
+    }
+    return tools;
+  }
+
+  async #processOpenRouterManualResponse(completion, messages, builtInTools, dynamicTools) {
+    const message = completion.choices?.[0]?.message ?? {};
+    const hasText = typeof message.content === 'string' && message.content.trim() !== '';
+    const toolCalls = Array.isArray(message.toolCalls) ? message.toolCalls : [];
+
+    if (hasText) {
+      const html = await marked.parse(message.content);
+      await this.sendToClient(createAgentTextMessage(this.sessionId, html, false));
+      this.sessionManager.addToConversationHistory(this.sessionId, { role: 'assistant', content: message.content });
+      messages.push({ role: 'assistant', content: message.content });
+    }
+
+    if (toolCalls.length === 0) {
+      await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'success', 'Task completed successfully'));
+      return false;
+    }
+
+    messages.push({
+      role: 'assistant',
+      content: message.content ?? '',
+      toolCalls: toolCalls.map(tc => ({ id: tc.id, type: 'function', function: { name: tc.function?.name, arguments: tc.function?.arguments } }))
+    });
+
+    for (const tc of toolCalls) {
+      if (this.stopRequested) return false;
+
+      const name = tc.function?.name;
+      let args = {};
+      try { args = tc.function?.arguments ? JSON.parse(tc.function.arguments) : {}; } catch { /* leave empty */ }
+      const isBuiltIn = this.#isBuiltInTool(name, builtInTools);
+      await this.#sendSlowToolMessageHelper(name, args);
+      await this.sendToClient(createToolCallNotificationMessage(this.sessionId, tc.id, name, args, isBuiltIn));
+
+      const toolResult = await this.executeToolCallHelper({ name, input: args }, builtInTools, dynamicTools);
+      if (this.stopRequested) return false;
+
+      const resultText = Array.isArray(toolResult.content)
+        ? toolResult.content.filter(b => b.type === 'text').map(b => b.text).join('\n')
+        : typeof toolResult.content === 'string' ? toolResult.content : JSON.stringify(toolResult.content);
+
+      logger.log(`OpenRouter Manual: tool call completed: ${name}`);
+      const responseType = this.#getResponseType(name);
+      await this.sendToClient(createToolCallCompletedMessage(
+        this.sessionId, tc.id, name, toolResult.content, toolResult.isError, responseType
+      ));
+
+      messages.push({ role: 'tool', toolCallId: tc.id, content: resultText });
+    }
+
+    return true;
   }
 
   /**

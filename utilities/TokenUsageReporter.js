@@ -5,12 +5,21 @@ export const Provider = Object.freeze({
   ANTHROPIC: 'anthropic',
   OPENAI: 'openai',
   GOOGLE: 'google',
+  OPENROUTER: 'openrouter',
 });
 
+// Maps both internal usage-reporter Provider enum values (anthropic/openai/google/openrouter)
+// AND external orchestrator brand IDs (qwen/deepseek/moonshotai) to human-readable
+// display names. The brand IDs are not in the Provider enum — they identify the
+// upstream LLM family the user picked — but the UI needs friendly names for them too.
 export const ProviderDisplayNames = Object.freeze({
   [Provider.ANTHROPIC]: 'Claude',
   [Provider.GOOGLE]: 'Gemini',
   [Provider.OPENAI]: 'OpenAI',
+  [Provider.OPENROUTER]: 'OpenRouter',
+  qwen: 'Qwen',
+  deepseek: 'Deepseek',
+  moonshotai: 'Kimi',
 });
 
 class TokenUsageReporter {
@@ -37,6 +46,7 @@ class TokenUsageReporter {
     const isAnthropic = provider === Provider.ANTHROPIC;
     const isOpenAI = provider === Provider.OPENAI;
     const isGemini = provider === Provider.GOOGLE;
+    const isOpenRouter = provider === Provider.OPENROUTER;
 
     let tokens;
     if (isAnthropic) {
@@ -60,6 +70,20 @@ class TokenUsageReporter {
         outputTokens: usage.candidatesTokenCount ?? 0,
         cachedTokens: usage.cachedContentTokenCount ?? 0,
         thoughtsTokens: usage.thoughtsTokenCount ?? 0,
+      };
+    } else if (isOpenRouter) {
+      // @openrouter/sdk normalizes provider responses to camelCase. The chat
+      // completions API uses promptTokens/completionTokens + promptTokensDetails;
+      // the responses API used by @openrouter/agent uses inputTokens/outputTokens +
+      // inputTokensDetails. Accept whichever shape was passed in.
+      // `cost` is the authoritative billed USD from OpenRouter — we trust it.
+      const inputDetails = usage.promptTokensDetails ?? usage.inputTokensDetails;
+      tokens = {
+        inputTokens: usage.promptTokens ?? usage.inputTokens ?? 0,
+        outputTokens: usage.completionTokens ?? usage.outputTokens ?? 0,
+        cachedTokens: inputDetails?.cachedTokens ?? 0,
+        cacheWriteTokens: inputDetails?.cacheWriteTokens ?? 0,
+        providerCost: typeof usage.cost === 'number' ? usage.cost : null,
       };
     } else {
       throw new Error('Unknown provider: "' + provider + '"');
@@ -92,6 +116,19 @@ class TokenUsageReporter {
         ` output=${fmt(tokens.outputTokens, costs?.outputTokens)}` +
         ` cached=${fmt(tokens.cachedTokens, costs?.cachedTokens)}` +
         ` reasoning=${tokens.reasoningTokens}` +
+        (costs ? ` total=$${costs.total.toFixed(6)}` : '')
+      );
+    } else if (isOpenRouter) {
+      // OpenRouter returns an authoritative usage.cost, so we don't compute per-component
+      // costs locally — just log raw token counts plus the provider-reported total.
+      logger.log(
+        `[usage:${provider}]` +
+        clientTag +
+        clientKeyTag +
+        ` input=${tokens.inputTokens}` +
+        ` output=${tokens.outputTokens}` +
+        ` cached=${tokens.cachedTokens}` +
+        ` cache_write=${tokens.cacheWriteTokens}` +
         (costs ? ` total=$${costs.total.toFixed(6)}` : '')
       );
     } else {
@@ -141,6 +178,12 @@ class TokenUsageReporter {
    * @returns {{ total: number, [key: string]: number }|null}
    */
   #calculateCost(provider, model, tokens) {
+    // OpenRouter publishes the authoritative billed USD on the response itself,
+    // so we skip the local pricing table entirely and trust that value.
+    if (provider === Provider.OPENROUTER) {
+      return typeof tokens.providerCost === 'number' ? { total: tokens.providerCost } : null;
+    }
+
     const pricing = getPricing(provider, model, tokens.inputTokens);
     if (!pricing) return null;
 

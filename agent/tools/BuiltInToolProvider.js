@@ -54,10 +54,11 @@ import {
  * - edit_variables, edit_relationships, edit_specs, edit_modules (for editing parts of large models)
  */
 export class BuiltInToolProvider {
-  constructor(sessionManager, sessionId, sendToClient) {
+  constructor(sessionManager, sessionId, sendToClient, provider) {
     this.sessionManager = sessionManager;
     this.sessionId = sessionId;
     this.sendToClient = sendToClient;
+    this.provider = provider;
     this.vizEngine = new VisualizationEngine(sessionManager, sessionId);
   }
 
@@ -68,19 +69,19 @@ export class BuiltInToolProvider {
     return {
       name: 'builtin_core_tools',
       tools: {
-        generate_quantitative_model: createGenerateQuantitativeModelTool(this.sessionManager, this.sessionId, this.sendToClient),
-        generate_qualitative_model: createGenerateQualitativeModelTool(this.sessionManager, this.sessionId, this.sendToClient),
-        discuss_model_with_seldon: createDiscussModelWithSeldonTool(this.sessionManager, this.sessionId, this.sendToClient),
-        discuss_model_across_runs: createDiscussModelAcrossRunsTool(this.sessionManager, this.sessionId, this.sendToClient),
-        generate_ltm_narrative: createGenerateLtmNarrativeTool(this.sessionManager, this.sessionId, this.sendToClient),
-        discuss_with_mentor: createDiscussWithMentorTool(this.sessionManager, this.sessionId, this.sendToClient),
+        generate_quantitative_model: createGenerateQuantitativeModelTool(this.sessionManager, this.sessionId, this.sendToClient, this.provider),
+        generate_qualitative_model: createGenerateQualitativeModelTool(this.sessionManager, this.sessionId, this.sendToClient, this.provider),
+        discuss_model_with_seldon: createDiscussModelWithSeldonTool(this.sessionManager, this.sessionId, this.sendToClient, this.provider),
+        discuss_model_across_runs: createDiscussModelAcrossRunsTool(this.sessionManager, this.sessionId, this.sendToClient, this.provider),
+        generate_ltm_narrative: createGenerateLtmNarrativeTool(this.sessionManager, this.sessionId, this.sendToClient, this.provider),
+        discuss_with_mentor: createDiscussWithMentorTool(this.sessionManager, this.sessionId, this.sendToClient, this.provider),
         get_feedback_information: createGetFeedbackInformationTool(this.sessionManager, this.sessionId, this.sendToClient),
         get_current_model: createGetCurrentModelTool(this.sessionManager, this.sessionId, this.sendToClient),
         update_model: createUpdateModelTool(this.sessionManager, this.sessionId, this.sendToClient),
         run_model: createRunModelTool(this.sessionManager, this.sessionId, this.sendToClient),
         get_run_info: createGetRunInfoTool(this.sessionManager, this.sessionId, this.sendToClient),
         get_variable_data: createGetVariableDataTool(this.sessionManager, this.sessionId, this.sendToClient),
-        create_visualization: createVisualizationTool(this.sessionManager, this.sessionId, this.sendToClient, this.vizEngine),
+        create_visualization: createVisualizationTool(this.sessionManager, this.sessionId, this.sendToClient, this.vizEngine, this.provider),
         read_model_section: createReadModelSectionTool(this.sessionManager, this.sessionId),
         edit_variables: createEditVariablesTool(this.sessionManager, this.sessionId, this.sendToClient),
         edit_relationships: createEditRelationshipsTool(this.sessionManager, this.sessionId, this.sendToClient),

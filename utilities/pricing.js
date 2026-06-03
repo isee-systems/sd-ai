@@ -128,6 +128,11 @@ export const openai = {
   },
 };
 
+// NOTE: No `openrouter` pricing table here. OpenRouter responses include an
+// authoritative `usage.cost` field that is the source of truth for billed USD;
+// TokenUsageReporter trusts that value directly for Provider.OPENROUTER and
+// never calls getPricing() for it.
+
 // ─── Lookup helper ───────────────────────────────────────────────────────────
 
 /**

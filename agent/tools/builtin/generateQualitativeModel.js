@@ -1,13 +1,13 @@
 import { z } from 'zod';
 import { createUpdateModelMessage, UpdateModelResponseSchema } from '../../utilities/MessageProtocol.js';
 import { callQualitativeEngine } from '../../utilities/EngineWrapper.js';
-import { generateRequestId, createSuccessResponse, createErrorResponse } from './toolHelpers.js';
+import { generateRequestId, createSuccessResponse, createErrorResponse, selectEngineModel } from './toolHelpers.js';
 import config from '../../../config.js';
 
 /**
  * Generate a Causal Loop Diagram (CLD) showing feedback loops and causal relationships
  */
-export function createGenerateQualitativeModelTool(sessionManager, sessionId, sendToClient) {
+export function createGenerateQualitativeModelTool(sessionManager, sessionId, sendToClient, provider) {
   return {
     description: 'Generate a Causal Loop Diagram (CLD) showing feedback loops and causal relationships. Use this for conceptual models focusing on system structure. Automatically pushes the generated model to the client.',
     supportedModes: ['cld'],
@@ -27,7 +27,7 @@ export function createGenerateQualitativeModelTool(sessionManager, sessionId, se
           throw new Error(`Session not found: ${sessionId}`);
         }
 
-        const underlyingModel = difficulty === 'normal' ? config.buildDefaultModel : config.agentToolHighEffortBuildDefaultModel;
+        const underlyingModel = selectEngineModel(provider, difficulty, 'build');
         const currentModel = sessionManager.getClientModel(sessionId);
         const result = await callQualitativeEngine(prompt, currentModel, { ...parameters, underlyingModel, clientId: session.clientId });
 

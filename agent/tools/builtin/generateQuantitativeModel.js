@@ -1,13 +1,13 @@
 import { z } from 'zod';
 import { createUpdateModelMessage, UpdateModelResponseSchema } from '../../utilities/MessageProtocol.js';
 import { callQuantitativeEngine } from '../../utilities/EngineWrapper.js';
-import { generateRequestId, createSuccessResponse, createErrorResponse } from './toolHelpers.js';
+import { generateRequestId, createSuccessResponse, createErrorResponse, selectEngineModel } from './toolHelpers.js';
 import config from '../../../config.js';
 
 /**
  * Generate a Stock Flow Diagram (SFD) model with equations and quantitative structure
  */
-export function createGenerateQuantitativeModelTool(sessionManager, sessionId, sendToClient) {
+export function createGenerateQuantitativeModelTool(sessionManager, sessionId, sendToClient, provider) {
   return {
     description: 'Generate a Stock Flow Diagram (SFD) model with equations and quantitative structure. Use this for building computational models that can be simulated. Automatically pushes the generated model to the client.',
     supportedModes: ['sfd'],
@@ -30,7 +30,7 @@ export function createGenerateQuantitativeModelTool(sessionManager, sessionId, s
           throw new Error(`Session not found: ${sessionId}`);
         }
 
-        const underlyingModel = difficulty === 'normal' ? config.buildDefaultModel : config.agentToolHighEffortBuildDefaultModel;
+        const underlyingModel = selectEngineModel(provider, difficulty, 'build');
         const currentModel = sessionManager.getClientModel(sessionId);
 
         const mergedParameters = {

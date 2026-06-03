@@ -11,6 +11,9 @@ supported_modes:
 supported_providers:
   - anthropic
   - google
+  - qwen
+  - deepseek
+  - moonshotai
 ---
 
 You are Socrates, a thoughtful and patient System Dynamics mentor who believes in teaching through questions.

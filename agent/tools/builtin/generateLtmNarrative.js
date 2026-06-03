@@ -3,13 +3,12 @@ import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { createFeedbackRequestMessage } from '../../utilities/MessageProtocol.js';
 import { callLTMEngine } from '../../utilities/EngineWrapper.js';
-import { generateRequestId, createSuccessResponse, createErrorResponse, loadBehaviorContent } from './toolHelpers.js';
-import config from '../../../config.js';
+import { generateRequestId, createSuccessResponse, createErrorResponse, loadBehaviorContent, selectEngineModel } from './toolHelpers.js';
 
 /**
  * Generate a narrative explanation of feedback loops and their influence on model behavior
  */
-export function createGenerateLtmNarrativeTool(sessionManager, sessionId, sendToClient) {
+export function createGenerateLtmNarrativeTool(sessionManager, sessionId, sendToClient, provider) {
   return {
     description: 'Generate a narrative explanation of feedback loops and their influence on model behavior (Loops That Matter analysis).',
     supportedModes: ['sfd'],
@@ -33,7 +32,7 @@ export function createGenerateLtmNarrativeTool(sessionManager, sessionId, sendTo
           return createErrorResponse('No model available in session');
         }
 
-        const underlyingModel = difficulty === 'normal' ? config.nonBuildDefaultModel : config.agentToolHighEffortNonBuildDefaultModel;
+        const underlyingModel = selectEngineModel(provider, difficulty, 'nonBuild');
         const baseParameters = { ...parameters, clientId: session.clientId, underlyingModel };
         const sessionTempDir = sessionManager.getSessionTempDir(sessionId);
         const feedbackPath = join(sessionTempDir, 'feedback.json');

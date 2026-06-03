@@ -4,7 +4,7 @@ AI-powered agent for building and modifying System Dynamics models via WebSocket
 
 ## Overview
 
-This WebSocket server provides an AI agent (powered by Claude) that helps users build, modify, and analyze System Dynamics models. The agent uses built-in SD-AI engine tools and communicates with the client for model state, simulation runs, feedback loop data, and variable time-series.
+This WebSocket server provides an AI agent (powered by Claude, Gemini, or OpenRouter-routed brands like Qwen / Deepseek / Kimi) that helps users build, modify, and analyze System Dynamics models. The agent uses built-in SD-AI engine tools and communicates with the client for model state, simulation runs, feedback loop data, and variable time-series.
 
 **Key Features:**
 - Stateless server architecture (all user data lives client-side)
@@ -203,7 +203,7 @@ Chooses which agent personality and LLM provider to use. Either `agentId` or `ag
 {
   "type": "select_agent",
   "sessionId": "sess_abc123",
-  "agentConfig": "---\nname: \"My Agent\"\nagent_mode: sdk\nsupported_modes:\n  - sfd\nsupported_providers:\n  - anthropic\n  - google\n---\n\n## Instructions\nYou are a custom agent...",
+  "agentConfig": "---\nname: \"My Agent\"\nagent_mode: sdk\nsupported_modes:\n  - sfd\nsupported_providers:\n  - anthropic\n  - google\n  - qwen\n  - deepseek\n  - moonshotai\n---\n\n## Instructions\nYou are a custom agent...",
   "provider": "anthropic"
 }
 ```
@@ -213,7 +213,7 @@ The `agentConfig` string must be a Markdown document with valid YAML frontmatter
 **Fields:**
 - `agentId` — ID of a built-in agent (e.g., `"socrates"`, `"merlin"`). Available agent IDs are returned in `session_ready`. Required if `agentConfig` is not provided.
 - `agentConfig` — Full agent configuration as a Markdown string. Required if `agentId` is not provided. Server returns `AGENT_SELECTION_ERROR` if the frontmatter is missing or invalid.
-- `provider` — LLM provider: `"anthropic"` or `"google"`. Defaults to `agentDefaultProvider` in `config.js`. Ignored when the agent's `supportedProviders` has exactly one entry.
+- `provider` — LLM provider: one of `"anthropic"`, `"google"`, `"qwen"`, `"deepseek"`, or `"moonshotai"`. The first two reach their vendor APIs directly; the latter three name the upstream LLM brand and are routed internally through the OpenRouter gateway. Defaults to `agentDefaultProvider` in `config.js`. Ignored when the agent's `supportedProviders` has exactly one entry.
 
 #### 3. Chat Message
 
@@ -325,7 +325,10 @@ Sent after successful initialization. Lists available agents.
       "supportedModes": ["sfd", "cld"],
       "supportedProviders": [
         {"id": "anthropic", "name": "Claude"},
-        {"id": "google", "name": "Gemini"}
+        {"id": "google", "name": "Gemini"},
+        {"id": "qwen", "name": "Qwen"},
+        {"id": "deepseek", "name": "Deepseek"},
+        {"id": "moonshotai", "name": "Kimi"}
       ],
       "description": "System Dynamics mentor who uses Socratic questioning..."
     },
@@ -335,7 +338,10 @@ Sent after successful initialization. Lists available agents.
       "supportedModes": ["sfd", "cld"],
       "supportedProviders": [
         {"id": "anthropic", "name": "Claude"},
-        {"id": "google", "name": "Gemini"}
+        {"id": "google", "name": "Gemini"},
+        {"id": "qwen", "name": "Qwen"},
+        {"id": "deepseek", "name": "Deepseek"},
+        {"id": "moonshotai", "name": "Kimi"}
       ],
       "description": "..."
     }
@@ -360,7 +366,10 @@ Confirms the selected agent is ready.
   "agentName": "Socrates",
   "supportedProviders": [
     {"id": "anthropic", "name": "Claude (Anthropic)"},
-    {"id": "google", "name": "Gemini (Google)"}
+    {"id": "google", "name": "Gemini (Google)"},
+    {"id": "qwen", "name": "Qwen (OpenRouter)"},
+    {"id": "deepseek", "name": "Deepseek (OpenRouter)"},
+    {"id": "moonshotai", "name": "Kimi (OpenRouter)"}
   ],
   "currentProvider": "anthropic",
   "timestamp": "2025-01-15T10:30:00.200Z"
@@ -370,7 +379,7 @@ Confirms the selected agent is ready.
 - `agentId` — `"custom"` when a custom `agentConfig` was used; otherwise the built-in agent ID.
 - `agentName` — Display name from the agent's frontmatter.
 - `supportedProviders` — Providers this agent accepts, in `{id, name}` form. Same format as the `supportedProviders` array in `session_ready`. Use this to populate a provider selector after agent selection — especially important for custom agents where the supported providers are only known after the server parses the config.
-- `currentProvider` — The provider ID that was actually selected for this session (e.g. `"anthropic"` or `"google"`). Resolved from the `provider` field of the `select_agent` message, falling back to `agentDefaultProvider` in config, or forced to the single entry when `supportedProviders` has exactly one item.
+- `currentProvider` — The provider ID that was actually selected for this session (e.g. `"anthropic"`, `"google"`, `"qwen"`, `"deepseek"`, or `"moonshotai"`). Resolved from the `provider` field of the `select_agent` message, falling back to `agentDefaultProvider` in config, or forced to the single entry when `supportedProviders` has exactly one item. The OpenRouter-routed brands (`qwen`/`deepseek`/`moonshotai`) all share the same internal code paths but pick different model slugs via `agentQwenModel` / `agentDeepseekModel` / `agentMoonshotaiModel` in `config.js`.
 
 #### 4. Agent Text
 
@@ -790,17 +799,22 @@ agent_mode: manual          # Loop strategy: 'sdk' (managed framework) or 'manua
 supported_modes:
   - sfd
   - cld
-supported_providers:        # LLM provider IDs this agent accepts (Provider enum values); omit to allow all
-  - anthropic
-  - google
+supported_providers:        # LLM provider IDs this agent accepts; omit to allow all
+  - anthropic               # Claude (direct Anthropic API)
+  - google                  # Gemini (direct Google API)
+  - qwen                    # Qwen (via OpenRouter)
+  - deepseek                # Deepseek (via OpenRouter)
+  - moonshotai              # Kimi (via OpenRouter)
 ---
 ```
 
 **`agent_mode`** controls the loop strategy — it does _not_ select the LLM provider:
-- `sdk` — uses a managed agent framework (Anthropic Agent SDK or Google ADK) that handles iteration and tool calling internally
+- `sdk` — uses a managed agent framework (Anthropic Agent SDK, Google ADK, or OpenRouter Agent SDK) that handles iteration and tool calling internally
 - `manual` — uses an explicit `while` loop that calls the provider API directly
 
 **`supported_providers`** lists which LLM providers are valid for this agent. The client selects the actual provider at runtime via the `provider` field in `select_agent`. If the list has exactly one entry, that provider is always used. If the field is absent, all providers are allowed.
+
+Provider IDs name the actual LLM brand the user is choosing. `anthropic` and `google` reach their vendor APIs directly. `qwen`, `deepseek`, and `moonshotai` are upstream LLM brands routed internally through the OpenRouter gateway — the orchestrator shares one code path for all three and resolves the model slug from the matching `agent<Brand>Model` config key.
 
 The Markdown body below the frontmatter is the agent's full system prompt/instructions.
 
@@ -851,7 +865,8 @@ ws.on('message', (data) => {
 
     case 'session_ready':
       const agentId = message.defaults?.sfd || message.availableAgents[0]?.id;
-      // Optionally specify a provider; omit to use the server default (anthropic)
+      // Optionally specify a provider; omit to use the server default (anthropic).
+      // Other supported values: 'google', 'qwen', 'deepseek', 'moonshotai'.
       ws.send(JSON.stringify({ type: 'select_agent', sessionId, agentId, provider: 'anthropic' }));
       break;
 

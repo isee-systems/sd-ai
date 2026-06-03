@@ -184,7 +184,8 @@ CLDs (Causal Loop Diagrams) are QUALITATIVE ONLY:
         version: '1.0',
         max_iterations: 20,
         agent_mode: 'sdk',
-        supported_modes: ['sfd','cld']
+        supported_modes: ['sfd','cld'],
+        supported_providers: ['anthropic', 'google', 'qwen', 'deepseek', 'moonshotai']
       },
       content: fileContent
     };

@@ -5,6 +5,19 @@ import { tool as sdkTool } from '@anthropic-ai/claude-agent-sdk';
 import { readdirSync, readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import logger from '../../../utilities/logger.js';
+import config from '../../../config.js';
+
+/**
+ * Pick the underlyingModel for an engine call based on the agent provider,
+ * difficulty, and engine kind ('build' for quantitative/qualitative,
+ * 'nonBuild' for seldon/ltm/mentor). Falls back to google if the provider
+ * is unrecognized so a misconfigured provider doesn't break the call.
+ */
+export function selectEngineModel(provider, difficulty, kind) {
+  const providerMap = config.agentToolModels?.[provider] ?? config.agentToolModels?.google;
+  const lane = providerMap?.[kind] ?? providerMap?.nonBuild;
+  return lane?.[difficulty] ?? lane?.normal;
+}
 
 /**
  * Wrapper for the SDK tool() function for use with Claude Agent SDK

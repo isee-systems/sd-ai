@@ -16,7 +16,7 @@ function makeOrchestrator(sessionManager, sessionId) {
   const sendToClient = jest.fn().mockResolvedValue(undefined);
   const orc = new AgentOrchestrator(sessionManager, sessionId, sendToClient, CONFIG);
   // Stub both execute methods so no real API calls happen
-  orc.anthropicManualExecuteToolCall = jest.fn().mockResolvedValue({
+  orc.executeToolCallHelper = jest.fn().mockResolvedValue({
     content: 'tool output',
     isError: false,
   });
@@ -196,13 +196,13 @@ describe('processAgentResponseAnthropicManual', () => {
 
     expect(continueLoop).toBe(false);
     expect(messages).toHaveLength(1); // unchanged
-    expect(orc.anthropicManualExecuteToolCall).not.toHaveBeenCalled();
+    expect(orc.executeToolCallHelper).not.toHaveBeenCalled();
   });
 
   // ── stop requested during tool execution ─────────────────────────────────
 
   it('leaves messages untouched when stop is requested mid-tool-execution', async () => {
-    orc.anthropicManualExecuteToolCall = jest.fn().mockImplementation(async () => {
+    orc.executeToolCallHelper = jest.fn().mockImplementation(async () => {
       orc.stopRequested = true;
       return { content: 'result', isError: false };
     });
@@ -225,7 +225,7 @@ describe('processAgentResponseAnthropicManual', () => {
   // ── tool errors are included, not dropped ─────────────────────────────────
 
   it('records tool errors in the tool_result block', async () => {
-    orc.anthropicManualExecuteToolCall = jest.fn().mockResolvedValue({
+    orc.executeToolCallHelper = jest.fn().mockResolvedValue({
       content: 'Something went wrong',
       isError: true,
     });

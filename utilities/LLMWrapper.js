@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { GoogleGenAI } from "@google/genai";
 import Anthropic from "@anthropic-ai/sdk";
+import { OpenRouter } from "@openrouter/sdk";
 import { z } from "zod";
 import { zodResponseFormat } from "openai/helpers/zod";
 import { extractJsonFromContent } from "./jsonUtils.js";
@@ -12,8 +13,14 @@ export const ModelType = Object.freeze({
   OPEN_AI:  Symbol("OpenAI"),
   LLAMA: Symbol("Llama"),
   DEEPSEEK: Symbol("Deepseek"),
-  CLAUDE: Symbol("Claude")
+  CLAUDE: Symbol("Claude"),
+  OPEN_ROUTER: Symbol("OpenRouter")
 });
+
+// OpenRouter model slugs are namespaced as `<provider>/<model>` — the slash is the
+// reliable signal that a model should be routed via the OpenRouter SDK rather than
+// matching `qwen`/`deepseek`/`kimi` substrings (which previously meant local-LMStudio).
+const OPEN_ROUTER_SLUG_REGEX = /\//;
 
 
 export class ModelCapabilities {
@@ -27,11 +34,12 @@ export class ModelCapabilities {
   constructor(modelName) {
       this.name = modelName;
       const lowerModelName = modelName.toLowerCase();
+      const isOpenRouter = OPEN_ROUTER_SLUG_REGEX.test(lowerModelName);
 
       this.hasStructuredOutput = lowerModelName !== 'o1-mini';
       this.hasSystemMode = lowerModelName !== 'o1-mini';
       this.hasTemperature = !lowerModelName.startsWith('o') && !lowerModelName.startsWith('gpt-5');
-      if (lowerModelName.includes('gemini') || lowerModelName.includes('llama') || lowerModelName.includes('claude') || lowerModelName.includes('deepseek')) {
+      if (isOpenRouter || lowerModelName.includes('gemini') || lowerModelName.includes('llama') || lowerModelName.includes('claude') || lowerModelName.includes('deepseek')) {
           this.systemModeUser = 'system';
       } else {
           this.systemModeUser = 'developer';
@@ -40,7 +48,12 @@ export class ModelCapabilities {
 
   get kind() {
       const lowerModelName = this.name.toLowerCase();
-      if (lowerModelName.includes('gemini')) {
+      // OpenRouter slugs are namespaced (e.g. 'qwen/qwen3.7-max') — check this BEFORE
+      // the substring routes below, since those would otherwise claim 'qwen', 'kimi',
+      // and 'deepseek' for the local LMStudio path.
+      if (OPEN_ROUTER_SLUG_REGEX.test(lowerModelName)) {
+          return ModelType.OPEN_ROUTER;
+      } else if (lowerModelName.includes('gemini')) {
           return ModelType.GEMINI;
       } else if (lowerModelName.includes('llama') || lowerModelName.includes('glm') || lowerModelName.includes('kimi') || lowerModelName.includes('qwen') || lowerModelName.includes('mistral')) {
           return ModelType.LLAMA;
@@ -59,6 +72,7 @@ export class LLMWrapper {
   #openAIKey;
   #googleKey;
   #anthropicKey;
+  #openRouterKey;
   #clientKey = false;
   #temperatureOverride;
   #topP;
@@ -71,6 +85,7 @@ export class LLMWrapper {
   #openAIAPI = null;
   #geminiAPI = null;
   #anthropicAPI = null;
+  #openRouterAPI = null;
   #tokenReporter = null;
 
   model = new ModelCapabilities(LLMWrapper.BUILD_DEFAULT_MODEL);
@@ -99,6 +114,15 @@ export class LLMWrapper {
     } else {
       this.#anthropicKey = parameters.anthropicKey;
       if (parameters.anthropicKey !== process.env.ANTHROPIC_API_KEY) {
+        this.#clientKey = true;
+      }
+    }
+
+    if (!parameters.openRouterKey) {
+        this.#openRouterKey = process.env.OPEN_ROUTER_API_KEY
+    } else {
+      this.#openRouterKey = parameters.openRouterKey;
+      if (parameters.openRouterKey !== process.env.OPEN_ROUTER_API_KEY) {
         this.#clientKey = true;
       }
     }
@@ -148,6 +172,15 @@ export class LLMWrapper {
                 apiKey: this.#anthropicKey,
             });
             break;
+        case ModelType.OPEN_ROUTER:
+            if (!this.#openRouterKey) {
+              throw new Error("To access this service you need to send an OpenRouter key");
+            }
+
+            this.#openRouterAPI = new OpenRouter({
+                apiKey: this.#openRouterKey,
+            });
+            break;
         case ModelType.DEEPSEEK:
         case ModelType.LLAMA:
             this.#openAIAPI = new OpenAI({
@@ -174,6 +207,11 @@ export class LLMWrapper {
       {label: "Claude Sonnet 4.6", value: 'claude-sonnet-4-6'},
       {label: "Claude Sonnet 4.5", value: 'claude-sonnet-4-5'},
       {label: "Claude Haiku 4.5", value: 'claude-haiku-4-5'},
+      {label: "Qwen3.7 Max", value: 'qwen/qwen3.7-max'},
+      {label: "Qwen3.6 Flash", value: 'qwen/qwen3.6-flash'},
+      {label: "Deepseek v4 Pro", value: 'deepseek/deepseek-v4-pro'},
+      {label: "Deepseek v4 Flash", value: 'deepseek/deepseek-v4-flash'},
+      {label: "Kimi K2.6", value: 'moonshotai/kimi-k2.6'},
   ];
 
   static BUILD_DEFAULT_MODEL = config.buildDefaultModel;
@@ -568,9 +606,105 @@ export class LLMWrapper {
       return await this.#createGeminiChatCompletion(normalizedMessages, model, effectiveSchema, temperature, reasoningEffort);
     } else if (this.model.kind === ModelType.CLAUDE) {
       return await this.#createClaudeChatCompletion(normalizedMessages, model, effectiveSchema, temperature);
+    } else if (this.model.kind === ModelType.OPEN_ROUTER) {
+      return await this.#createOpenRouterChatCompletion(normalizedMessages, model, effectiveSchema, temperature);
     }
 
     return await this.#createOpenAIChatCompletion(normalizedMessages, model, effectiveSchema, temperature, reasoningEffort);
+  }
+
+  async #createOpenRouterChatCompletion(messages, model, zodSchema = null, temperature = null) {
+    const chatRequest = {
+      model,
+      messages: messages.map((m) => ({
+        role: m.role === 'developer' ? 'system' : m.role,
+        content: m.content ?? ''
+      }))
+    };
+
+    if (zodSchema) {
+      chatRequest.responseFormat = {
+        type: 'json_schema',
+        jsonSchema: {
+          name: 'sdai_schema',
+          schema: zodSchema.toJSONSchema(),
+          strict: true
+        }
+      };
+    } else if (this.#jsonObjectMode) {
+      chatRequest.responseFormat = { type: 'json_object' };
+    }
+
+    if (temperature !== null && temperature !== undefined) {
+      chatRequest.temperature = temperature;
+    }
+    if (this.#topP !== null && this.#topP !== undefined) {
+      chatRequest.topP = this.#topP;
+    }
+    if (this.#seed !== null && this.#seed !== undefined) {
+      chatRequest.seed = this.#seed;
+    }
+    if (this.#maxTokens !== null && this.#maxTokens !== undefined) {
+      chatRequest.maxCompletionTokens = this.#maxTokens;
+    }
+
+    // Alibaba (Qwen's upstream via OpenRouter) downgrades json_schema to
+    // json_object and then rejects with "'messages' must contain the word
+    // 'json'" if no message mentions it. Append a minimal note when needed.
+    if (chatRequest.responseFormat) {
+      const mentionsJson = chatRequest.messages.some(m =>
+        typeof m.content === 'string' && /json/i.test(m.content)
+      );
+      if (!mentionsJson) {
+        const sys = chatRequest.messages.find(m => m.role === 'system');
+        const note = '\n\nRespond with valid JSON.';
+        if (sys) {
+          sys.content = (sys.content ?? '') + note;
+        } else {
+          chatRequest.messages.unshift({ role: 'system', content: note.trim() });
+        }
+      }
+    }
+
+    let completion;
+    try {
+      completion = await this.#openRouterAPI.chat.send({ chatRequest });
+    } catch (error) {
+      console.error('[LLMWrapper OpenRouter] Request failed for model:', model);
+      try {
+        console.error('[LLMWrapper OpenRouter] chatRequest:', JSON.stringify(chatRequest, null, 2));
+      } catch {
+        console.error('[LLMWrapper OpenRouter] chatRequest (non-serializable)');
+      }
+      console.error('[LLMWrapper OpenRouter] error.message:', error?.message);
+      console.error('[LLMWrapper OpenRouter] error.statusCode:', error?.statusCode);
+      console.error('[LLMWrapper OpenRouter] error.body:', error?.body);
+      if (error?.error) {
+        try {
+          console.error('[LLMWrapper OpenRouter] error.error:', JSON.stringify(error.error, null, 2));
+        } catch {
+          console.error('[LLMWrapper OpenRouter] error.error (non-serializable):', error.error);
+        }
+      }
+      if (error?.rawResponse) {
+        try {
+          const rawText = await error.rawResponse.clone().text();
+          console.error('[LLMWrapper OpenRouter] rawResponse body:', rawText);
+        } catch (readErr) {
+          console.error('[LLMWrapper OpenRouter] rawResponse read failed:', readErr?.message);
+        }
+      }
+      throw error;
+    }
+    this.#tokenReporter.report({ provider: Provider.OPENROUTER, model, usage: completion.usage, clientKey: this.#clientKey });
+
+    const message = completion.choices?.[0]?.message ?? {};
+    const content = typeof message.content === 'string'
+      ? message.content
+      : Array.isArray(message.content)
+        ? message.content.filter(b => b && (b.type === 'text' || typeof b.text === 'string')).map(b => b.text ?? '').join('')
+        : '';
+    return { ...message, content };
   }
 
   async #createOpenAIChatCompletion(messages, model, zodSchema = null, temperature = null, reasoningEffort = null) {
@@ -934,6 +1068,14 @@ export class LLMWrapper {
             saveForUser: "global",
             label: "Anthropic API Key",
             description: "Leave blank for the default, or your Anthropic API key - sk-ant-XXXXXX"
+        },{
+            name: "openRouterKey",
+            type: "string",
+            required: false,
+            uiElement: "password",
+            saveForUser: "global",
+            label: "OpenRouter API Key",
+            description: "Leave blank for the default, or your OpenRouter API key - sk-or-XXXXXX"
         },{
             name: "underlyingModel",
             type: "string",
