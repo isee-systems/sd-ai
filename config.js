@@ -46,7 +46,7 @@ const config = {
     // model-building engines, `nonBuild` drives discussion/narrative engines.
     "agentToolModels": {
         anthropic: {
-            build:    { normal: 'claude-sonnet-4-6', hard: 'claude-opus-4-8' },
+            build:    { normal: 'gemini-3.5-flash low', hard: 'gemini-3.5-flash high' },
             nonBuild: { normal: 'claude-sonnet-4-6', hard: 'claude-opus-4-8' }
         },
         google: {
