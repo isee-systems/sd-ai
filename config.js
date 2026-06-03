@@ -41,9 +41,6 @@ const config = {
     "agentAnthropicEffort": "medium",
     "agentAnthropicThinking": { type: "enabled", "budget_tokens": 10000 },
     "agentGeminiThinking": { thinkingLevel: ThinkingLevel.MEDIUM },
-    // Per-provider model selection for the LLMs invoked by agent tools
-    // The agent picks the entry matching `this.provider`; the `build` lane drives
-    // model-building engines, `nonBuild` drives discussion/narrative engines.
     "agentToolModels": {
         anthropic: {
             build:    { normal: 'gemini-3.5-flash low', hard: 'gemini-3.5-flash high' },
