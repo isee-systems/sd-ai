@@ -2,12 +2,30 @@ import { randomBytes } from 'crypto';
 import { tmpdir } from 'os';
 import { dirname, join } from 'path';
 import { existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'fs';
-import Anthropic from '@anthropic-ai/sdk';
-import { GoogleGenAI } from '@google/genai';
+// Anthropic / Gemini / OpenRouter SDKs are lazy-loaded — only one is needed per
+// session (provider depends on the conversation format) and the summarization
+// path that uses them is the only consumer. Eager imports cost ~50ms (Anthropic
+// + Gemini) and ~250ms (OpenRouter).
+let _AnthropicSdk;
+const loadAnthropicSdk = async () => _AnthropicSdk ??= (await import('@anthropic-ai/sdk')).default;
+let _GoogleGenai;
+const loadGoogleGenai = async () => _GoogleGenai ??= (await import('@google/genai')).GoogleGenAI;
+let _OpenRouterSdk;
+const loadOpenRouterSdk = async () => _OpenRouterSdk ??= (await import('@openrouter/sdk')).OpenRouter;
 import { countTokens } from '@anthropic-ai/tokenizer';
 import logger from '../../utilities/logger.js';
 import TokenUsageReporter, { Provider } from '../../utilities/TokenUsageReporter.js';
 import config from '../../config.js';
+
+// External provider ids that route through OpenRouter. Kept local to avoid a
+// SessionManager → AgentOrchestrator import cycle; must stay in sync with
+// OPENROUTER_PROVIDERS in AgentOrchestrator.js.
+const OPENROUTER_PROVIDERS = new Set(['qwen', 'deepseek', 'moonshotai']);
+const OPENROUTER_SUMMARY_MODELS = {
+  qwen: 'agentQwenSummaryModel',
+  deepseek: 'agentDeepseekSummaryModel',
+  moonshotai: 'agentMoonshotaiSummaryModel',
+};
 
 /**
  * SessionManager
@@ -440,30 +458,33 @@ export class SessionManager {
   /**
    * Summarize an array of messages using the LLM and return a single summary message object.
    * Private — only called by #summarizeContextIfNeeded and cleanupContext.
+   *
+   * `provider` selects the summarization API: 'google' → Gemini (Gemini-format
+   * output), an OpenRouter brand (qwen/deepseek/moonshotai) → OpenRouter chat
+   * completions, anything else → Anthropic. OpenRouter and Anthropic share the
+   * same `{role, content}` output shape; only Gemini emits `{role, parts}`.
    */
-  async #summarizeMessages(messages, sessionId) {
+  async #summarizeMessages(messages, sessionId, provider) {
+    const isGeminiFormat = provider === 'google';
+    const isOpenRouter = OPENROUTER_PROVIDERS.has(provider);
     try {
-      const isGeminiFormat = messages.some(m => Array.isArray(m.parts));
-
       const conversationText = messages.map((msg) => {
-        if (isGeminiFormat) {
+        if (Array.isArray(msg.parts)) {
           const role = msg.role === 'user' ? 'User' : 'Assistant';
-          if (!Array.isArray(msg.parts)) return '';
           const text = msg.parts.filter(p => p.text).map(p => p.text).join('\n');
           return text ? `${role}: ${text}` : '';
-        } else {
-          if (msg.role === 'user') {
-            return `User: ${typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)}`;
-          } else if (msg.role === 'assistant') {
-            if (Array.isArray(msg.content)) {
-              const textContent = msg.content
-                .filter(block => block.type === 'text')
-                .map(block => block.text || block)
-                .join('\n');
-              return textContent ? `Assistant: ${textContent}` : '';
-            }
-            return `Assistant: ${msg.content}`;
+        }
+        if (msg.role === 'user') {
+          return `User: ${typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)}`;
+        } else if (msg.role === 'assistant') {
+          if (Array.isArray(msg.content)) {
+            const textContent = msg.content
+              .filter(block => block.type === 'text')
+              .map(block => block.text || block)
+              .join('\n');
+            return textContent ? `Assistant: ${textContent}` : '';
           }
+          return `Assistant: ${msg.content}`;
         }
         return '';
       }).filter(line => line).join('\n\n');
@@ -485,6 +506,7 @@ ${conversationText}`;
       let summaryText;
       if (isGeminiFormat) {
         if (!this.gemini) {
+          const GoogleGenAI = await loadGoogleGenai();
           this.gemini = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
         }
         const response = await this.gemini.models.generateContent({
@@ -493,8 +515,31 @@ ${conversationText}`;
         });
         reporter.report({ provider: Provider.GOOGLE, model: config.agentGeminiSummaryModel, usage: response.usageMetadata, clientKey: false }).catch(() => {});
         summaryText = response.text || response.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      } else if (isOpenRouter) {
+        if (!this.openRouter) {
+          const OpenRouter = await loadOpenRouterSdk();
+          this.openRouter = new OpenRouter({ apiKey: process.env.OPEN_ROUTER_API_KEY });
+        }
+        const model = config[OPENROUTER_SUMMARY_MODELS[provider]];
+        const completion = await this.openRouter.chat.send({
+          chatRequest: {
+            model,
+            messages: [{ role: 'user', content: summaryPrompt }],
+            maxCompletionTokens: 1024,
+          }
+        });
+        reporter.report({ provider: Provider.OPENROUTER, model, usage: completion.usage, clientKey: false }).catch(() => {});
+        const message = completion.choices?.[0]?.message;
+        if (typeof message?.content === 'string') {
+          summaryText = message.content;
+        } else if (Array.isArray(message?.content)) {
+          summaryText = message.content.filter(b => typeof b?.text === 'string').map(b => b.text).join('');
+        } else {
+          summaryText = '';
+        }
       } else {
         if (!this.anthropic) {
+          const Anthropic = await loadAnthropicSdk();
           this.anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
         }
         const response = await this.anthropic.messages.create({
@@ -521,7 +566,6 @@ ${conversationText}`;
 
     } catch (error) {
       logger.error('Error summarizing message history:', error);
-      const isGeminiFormat = messages.some(m => Array.isArray(m.parts));
       if (isGeminiFormat) {
         return { role: 'user', parts: [{ text: '[Previous conversation summary: Earlier messages were condensed to save context. The conversation is continuing from this point.]' }] };
       }
@@ -538,7 +582,7 @@ ${conversationText}`;
    * into chunks of MAX_COMPRESSION_TOKENS_PER_PASS before summarizing to handle large
    * histories (e.g. on session initialization) that would exceed the LLM's input limit.
    */
-  async #summarizeContextIfNeeded(sessionId, maxContextTokens) {
+  async #summarizeContextIfNeeded(sessionId, maxContextTokens, provider) {
     const session = this.getSession(sessionId);
     if (!session) return;
 
@@ -583,7 +627,7 @@ ${conversationText}`;
     }
     if (chunk.length > 0) chunks.push(chunk);
 
-    const summaries = await Promise.all(chunks.map(c => this.#summarizeMessages(c, sessionId)));
+    const summaries = await Promise.all(chunks.map(c => this.#summarizeMessages(c, sessionId, provider)));
     const replacement = [...summaries, ...tail];
     messages.splice(0, messages.length, ...replacement);
 
@@ -594,8 +638,8 @@ ${conversationText}`;
   /**
    * Clean up the session's conversation context by summarizing if over the token limit.
    */
-  async cleanupContext(sessionId, maxContextTokens) {
-    await this.#summarizeContextIfNeeded(sessionId, maxContextTokens);
+  async cleanupContext(sessionId, maxContextTokens, provider) {
+    await this.#summarizeContextIfNeeded(sessionId, maxContextTokens, provider);
   }
 
   /**

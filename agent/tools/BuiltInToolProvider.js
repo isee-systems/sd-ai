@@ -1,7 +1,15 @@
 import { VisualizationEngine } from '../utilities/VisualizationEngine.js';
-import { createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk';
-import { FunctionTool } from '@google/adk';
 import { tool, sanitizeSchemaForGemini } from './builtin/toolHelpers.js';
+
+// Lazy-loaded provider SDK symbols. Each tool provider serves multiple agent
+// loops (SDK, ADK, manual) but only one is selected per session — eagerly
+// importing both costs ~500ms (dominated by @google/adk).
+let _createSdkMcpServer;
+const loadCreateSdkMcpServer = async () =>
+  _createSdkMcpServer ??= (await import('@anthropic-ai/claude-agent-sdk')).createSdkMcpServer;
+let _FunctionTool;
+const loadFunctionTool = async () =>
+  _FunctionTool ??= (await import('@google/adk')).FunctionTool;
 import logger from '../../utilities/logger.js';
 import {
   createGenerateQuantitativeModelTool,
@@ -106,7 +114,8 @@ export class BuiltInToolProvider {
    * Exposes all built-in tools — allowedTools in the SDK query handles mode/token filtering
    * @returns {Object} MCP server instance
    */
-  getMcpServer() {
+  async getMcpServer() {
+    const createSdkMcpServer = await loadCreateSdkMcpServer();
     const toolCollection = this.#createToolCollection();
     const toolsArr = [];
 
@@ -122,7 +131,7 @@ export class BuiltInToolProvider {
         return result;
       };
 
-      toolsArr.push(tool({
+      toolsArr.push(await tool({
         name: toolName,
         description: toolDef.description,
         inputSchema: toolDef.inputSchema,
@@ -138,7 +147,8 @@ export class BuiltInToolProvider {
     });
   }
 
-  getAdkTools(mode = null, modelTokenCount = 0) {
+  async getAdkTools(mode = null, modelTokenCount = 0) {
+    const FunctionTool = await loadFunctionTool();
     const toolCollection = this.getTools();
     const adkTools = [];
 

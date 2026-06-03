@@ -1,13 +1,24 @@
-import Anthropic from '@anthropic-ai/sdk';
-import { query } from '@anthropic-ai/claude-agent-sdk';
-import { GoogleGenAI } from '@google/genai';
-import { LlmAgent, Runner, InMemorySessionService, isFinalResponse } from '@google/adk';
-import { OpenRouter } from '@openrouter/sdk';
-import { callModel, stepCountIs, tool as orTool } from '@openrouter/agent';
 import { setMaxListeners } from 'events';
 import { encode } from 'gpt-tokenizer';
 import { marked } from 'marked';
 import { countTokens } from '@anthropic-ai/tokenizer';
+
+// Provider SDKs are lazy-loaded — each session uses exactly one provider, but
+// eagerly importing all of them at module load cost ~990ms (dominated by
+// @google/adk at ~500ms and @openrouter/sdk at ~250ms). Module-level memoization
+// means the import is paid once per worker process per provider on first call.
+let _anthropicSdk;
+const loadAnthropicSdk = async () => _anthropicSdk ??= (await import('@anthropic-ai/sdk')).default;
+let _claudeAgentSdk;
+const loadClaudeAgentSdk = async () => _claudeAgentSdk ??= await import('@anthropic-ai/claude-agent-sdk');
+let _googleGenai;
+const loadGoogleGenai = async () => _googleGenai ??= await import('@google/genai');
+let _googleAdk;
+const loadGoogleAdk = async () => _googleAdk ??= await import('@google/adk');
+let _openRouterSdk;
+const loadOpenRouterSdk = async () => _openRouterSdk ??= await import('@openrouter/sdk');
+let _openRouterAgent;
+const loadOpenRouterAgent = async () => _openRouterAgent ??= await import('@openrouter/agent');
 
 // External provider ids that name the upstream LLM brand but resolve to the same
 // OpenRouter-routed code paths. The OpenRouter gateway is an implementation detail —
@@ -25,7 +36,6 @@ import {
 } from './utilities/MessageProtocol.js';
 import logger from '../utilities/logger.js';
 import config from '../config.js';
-import { LLMWrapper } from '../utilities/LLMWrapper.js';
 import TokenUsageReporter, { Provider } from '../utilities/TokenUsageReporter.js';
 import { sanitizeSchemaForGemini } from './tools/builtin/toolHelpers.js';
 
@@ -122,23 +132,64 @@ export class AgentOrchestrator {
     this.builtInToolProvider = new BuiltInToolProvider(sessionManager, sessionId, sendToClient, this.provider);
     this.dynamicToolProvider = new DynamicToolProvider(sessionManager, sessionId, sendToClient);
 
-    // Initialize Anthropic client (for non-SDK mode)
-    this.anthropic = new Anthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY
-    });
-
-    this.gemini = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    // Provider SDK clients are lazy-instantiated via #getX() — see top-of-file
+    // loaders. A single session uses exactly one provider, so eager
+    // instantiation of all four wastes ~500ms of @google/adk module load and
+    // hundreds of ms in OpenRouter SDK setup on every session start.
+    this.anthropic = null;
+    this.gemini = null;
     this.geminiAdkSessionId = null;
-    this.geminiAdkSessionService = new InMemorySessionService();
-
-    this.openRouterClient = new OpenRouter({ apiKey: process.env.OPEN_ROUTER_API_KEY });
+    this.geminiAdkSessionService = null;
+    this.openRouterClient = null;
     this.openRouterConversationState = null;
 
     const clientId = sessionManager.getSession(sessionId)?.clientId ?? null;
-    this.llm = new LLMWrapper({ clientId, underlyingModel: config.agentAnthropicSummaryModel });
     this.tokenReporter = new TokenUsageReporter(config.tokenReporterURL, clientId);
 
+    // Kick off the provider SDK import in the background. Users typically take
+    // multiple seconds to type their first chat, so this hides the import cost.
+    // startConversationX awaits the same loaders before using their symbols.
+    this.#providerPreload = this.#preloadProviderSDK().catch(err =>
+      logger.warn(`Provider SDK preload failed: ${err.message}`)
+    );
+
     logger.log(`AgentOrchestrator initialized for session ${sessionId} (loop: ${this.configManager.getAgentMode()}, provider: ${this.provider})`);
+  }
+
+  #providerPreload = null;
+
+  async #preloadProviderSDK() {
+    const loop = this.configManager.getAgentMode();
+    if (this.provider === 'anthropic') {
+      await (loop === 'sdk' ? loadClaudeAgentSdk() : loadAnthropicSdk());
+    } else if (this.provider === 'google') {
+      await loadGoogleGenai();
+      if (loop === 'sdk') await loadGoogleAdk();
+    } else if (OPENROUTER_PROVIDERS.has(this.provider)) {
+      await loadOpenRouterSdk();
+      if (loop === 'sdk') await loadOpenRouterAgent();
+    }
+  }
+
+  async #getAnthropic() {
+    if (this.anthropic) return this.anthropic;
+    const Anthropic = await loadAnthropicSdk();
+    this.anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    return this.anthropic;
+  }
+
+  async #getGemini() {
+    if (this.gemini) return this.gemini;
+    const { GoogleGenAI } = await loadGoogleGenai();
+    this.gemini = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    return this.gemini;
+  }
+
+  async #getOpenRouter() {
+    if (this.openRouterClient) return this.openRouterClient;
+    const { OpenRouter } = await loadOpenRouterSdk();
+    this.openRouterClient = new OpenRouter({ apiKey: process.env.OPEN_ROUTER_API_KEY });
+    return this.openRouterClient;
   }
 
   /**
@@ -225,6 +276,7 @@ export class AgentOrchestrator {
    */
   async startConversationAnthropicManual(userMessage) {
     const session = this.sessionManager.getSession(this.sessionId);
+    const anthropic = await this.#getAnthropic();
 
     // Add user message to conversation history
     this.sessionManager.addToConversationHistory(this.sessionId, {
@@ -242,7 +294,7 @@ export class AgentOrchestrator {
 
     // Start agent conversation loop
     // Clean up context (remove stale models, summarize if over limit) before first API call
-    await this.sessionManager.cleanupContext(this.sessionId, config.agentMaxContextTokens);
+    await this.sessionManager.cleanupContext(this.sessionId, config.agentMaxContextTokens, this.provider);
 
     // Use the live session context as the messages array — no local copy
     const messages = this.sessionManager.getConversationContext(this.sessionId);
@@ -291,12 +343,12 @@ export class AgentOrchestrator {
         iteration++;
 
         // Summarize context in-place if it has grown over the token limit
-        await this.sessionManager.cleanupContext(this.sessionId, config.agentMaxContextTokens);
+        await this.sessionManager.cleanupContext(this.sessionId, config.agentMaxContextTokens, this.provider);
 
         try {
           // Call Claude API
           const thinkingEnabled = config.agentAnthropicThinking?.type !== 'disabled';
-          const response = await this.anthropic.messages.create({
+          const response = await anthropic.messages.create({
             model: config.agentAnthropicModel,
             max_tokens: Math.max(8192, (config.agentAnthropicThinking?.budget_tokens || 0) + 2048),
             system: systemBlocks,
@@ -405,6 +457,7 @@ export class AgentOrchestrator {
   async startConversationWithAnthropicSdk(userMessage, previousAgentContext = null) {
     const session = this.sessionManager.getSession(this.sessionId);
     const mode = session.mode;
+    const { query } = await loadClaudeAgentSdk();
 
     // Track user message for cross-mode replay (SDK → manual on future switch)
     this.sessionManager.addToConversationHistory(this.sessionId, {
@@ -435,11 +488,11 @@ export class AgentOrchestrator {
       const builtInSdkTools = ['Read', /*'Edit', 'Write',*/ 'Glob', 'Grep'];
 
       let mcpServers = {
-        builtin: this.builtInToolProvider.getMcpServer()
+        builtin: await this.builtInToolProvider.getMcpServer()
       };
 
       // Get client MCP server and derive allowed tool names from the same source
-      const clientMcpServer = this.dynamicToolProvider.getMcpServer();
+      const clientMcpServer = await this.dynamicToolProvider.getMcpServer();
       const clientToolNames = this.dynamicToolProvider.getToolNames(); // client_* prefixed, used for system prompt
       const prefixedClientToolNames = clientToolNames.map(name => `mcp__client__${name.replace(/^client_/, '')}`);
       if (clientMcpServer) {
@@ -1047,7 +1100,8 @@ export class AgentOrchestrator {
   async #summarizePriorContextWithAnthropic(conversationText, messageCount) {
     try {
       logger.log(`Anthropic: Summarizing prior agent context (${messageCount} messages) before injection`);
-      const response = await this.anthropic.messages.create({
+      const anthropic = await this.#getAnthropic();
+      const response = await anthropic.messages.create({
         model: config.agentAnthropicSummaryModel,
         max_tokens: 1024,
         messages: [{ role: 'user', content: `Summarize this conversation history concisely (2-4 paragraphs):\n\n${conversationText}` }]
@@ -1065,7 +1119,8 @@ export class AgentOrchestrator {
   async #summarizePriorContextWithGemini(conversationText, messageCount) {
     try {
       logger.log(`Gemini: Summarizing prior agent context (${messageCount} messages) before injection`);
-      const response = await this.gemini.models.generateContent({
+      const gemini = await this.#getGemini();
+      const response = await gemini.models.generateContent({
         model: config.agentGeminiSummaryModel,
         contents: [{
           role: 'user',
@@ -1093,7 +1148,8 @@ export class AgentOrchestrator {
     const model = summaryModelMap[this.provider] || this.#resolveOpenRouterModel();
     try {
       logger.log(`OpenRouter (${this.provider}): Summarizing prior agent context (${messageCount} messages) before injection`);
-      const completion = await this.openRouterClient.chat.send({
+      const openRouterClient = await this.#getOpenRouter();
+      const completion = await openRouterClient.chat.send({
         chatRequest: {
           model,
           messages: [
@@ -1229,6 +1285,7 @@ export class AgentOrchestrator {
   // ─── Gemini manual pathway ──────────────────────────────────────────────────
 
   async startConversationGeminiManual(userMessage) {
+    const gemini = await this.#getGemini();
     this.sessionManager.addToConversationHistory(this.sessionId, {
       role: 'user',
       parts: [{ text: userMessage }]
@@ -1240,7 +1297,7 @@ export class AgentOrchestrator {
     const builtInTools = this.builtInToolProvider.getTools();
     const dynamicTools = this.dynamicToolProvider.getTools();
 
-    await this.sessionManager.cleanupContext(this.sessionId, config.agentMaxContextTokens);
+    await this.sessionManager.cleanupContext(this.sessionId, config.agentMaxContextTokens, this.provider);
 
     const messages = this.sessionManager.getConversationContext(this.sessionId);
 
@@ -1276,10 +1333,10 @@ export class AgentOrchestrator {
 
       while (continueLoop && iteration < maxIterations && !this.stopRequested) {
         iteration++;
-        await this.sessionManager.cleanupContext(this.sessionId, config.agentMaxContextTokens);
+        await this.sessionManager.cleanupContext(this.sessionId, config.agentMaxContextTokens, this.provider);
 
         try {
-          const response = await this.gemini.models.generateContent({
+          const response = await gemini.models.generateContent({
             model: config.agentGeminiModel,
             contents: messages,
             config: geminiConfig
@@ -1429,6 +1486,10 @@ export class AgentOrchestrator {
   async startConversationWithGeminiAdk(userMessage, previousAgentContext = null) {
     const session = this.sessionManager.getSession(this.sessionId);
     const mode = session.mode;
+    const { LlmAgent, Runner, InMemorySessionService, isFinalResponse } = await loadGoogleAdk();
+    if (!this.geminiAdkSessionService) {
+      this.geminiAdkSessionService = new InMemorySessionService();
+    }
 
     this.sessionManager.addToConversationHistory(this.sessionId, {
       role: 'user',
@@ -1454,8 +1515,8 @@ export class AgentOrchestrator {
     let maxIterationsHit = false;
 
     try {
-      const builtInAdkTools = this.builtInToolProvider.getAdkTools(mode, modelTokenCount);
-      const clientAdkTools = this.dynamicToolProvider.getAdkTools();
+      const builtInAdkTools = await this.builtInToolProvider.getAdkTools(mode, modelTokenCount);
+      const clientAdkTools = await this.dynamicToolProvider.getAdkTools();
 
       const pendingCallIds = new Map();
 
@@ -1708,10 +1769,12 @@ export class AgentOrchestrator {
       };
     }
 
+    const gemini = await this.#getGemini();
+
     // Delete the old cache if the key changed or it expired
     if (this.#geminiManualCacheName) {
       try {
-        await this.gemini.caches.delete({ name: this.#geminiManualCacheName });
+        await gemini.caches.delete({ name: this.#geminiManualCacheName });
       } catch (e) {
         // Gemini may have already expired the cache — ignore deletion failures
       }
@@ -1729,7 +1792,7 @@ export class AgentOrchestrator {
         cacheConfig.tools = [{ functionDeclarations: toolDeclarations }];
       }
 
-      const cache = await this.gemini.caches.create({
+      const cache = await gemini.caches.create({
         model: config.agentGeminiModel,
         config: cacheConfig
       });
@@ -1814,6 +1877,8 @@ export class AgentOrchestrator {
     const session = this.sessionManager.getSession(this.sessionId);
     const mode = session.mode;
     const model = this.#resolveOpenRouterModel();
+    const openRouterClient = await this.#getOpenRouter();
+    const { callModel, stepCountIs } = await loadOpenRouterAgent();
 
     this.sessionManager.addToConversationHistory(this.sessionId, {
       role: 'user',
@@ -1834,7 +1899,7 @@ export class AgentOrchestrator {
     const maxIterations = this.configManager.getMaxIterations();
 
     try {
-      const orTools = this.#buildOpenRouterTools(mode, modelTokenCount);
+      const orTools = await this.#buildOpenRouterTools(mode, modelTokenCount);
 
       let userPromptText = userMessage;
       if (previousAgentContext?.length > 0) {
@@ -1875,7 +1940,7 @@ export class AgentOrchestrator {
         // can report it immediately rather than waiting for getResponse() to
         // resolve (which an abort skips); `getToolCallsStream()` gives us
         // parsed-argument tool calls for live notifications before execution.
-        const result = callModel(this.openRouterClient, {
+        const result = callModel(openRouterClient, {
           ...baseRequest,
           input
         });
@@ -2053,6 +2118,7 @@ export class AgentOrchestrator {
     try {
       const session = this.sessionManager.getSession(this.sessionId);
       const model = this.#resolveOpenRouterModel();
+      const openRouterClient = await this.#getOpenRouter();
       llmUsed = model;
 
       this.sessionManager.addToConversationHistory(this.sessionId, {
@@ -2065,7 +2131,7 @@ export class AgentOrchestrator {
       const builtInTools = this.builtInToolProvider.getTools();
       const dynamicTools = this.dynamicToolProvider.getTools();
 
-      await this.sessionManager.cleanupContext(this.sessionId, config.agentMaxContextTokens);
+      await this.sessionManager.cleanupContext(this.sessionId, config.agentMaxContextTokens, this.provider);
 
       const messages = this.sessionManager.getConversationContext(this.sessionId);
       // Normalize Anthropic/Gemini formats to plain {role, content} for the chat API.
@@ -2101,10 +2167,10 @@ export class AgentOrchestrator {
 
         while (continueLoop && iteration < maxIterations && !this.stopRequested) {
           iteration++;
-          await this.sessionManager.cleanupContext(this.sessionId, config.agentMaxContextTokens);
+          await this.sessionManager.cleanupContext(this.sessionId, config.agentMaxContextTokens, this.provider);
 
           try {
-            const completion = await this.openRouterClient.chat.send({
+            const completion = await openRouterClient.chat.send({
               chatRequest: {
                 model,
                 messages: [{ role: 'system', content: systemPrompt }, ...messages],
@@ -2257,7 +2323,8 @@ export class AgentOrchestrator {
    * Wrap built-in and dynamic tools in @openrouter/agent's `tool()` factory so
    * the agent loop auto-executes them.
    */
-  #buildOpenRouterTools(mode, modelTokenCount) {
+  async #buildOpenRouterTools(mode, modelTokenCount) {
+    const { tool: orTool } = await loadOpenRouterAgent();
     const builtInTools = this.builtInToolProvider.getTools();
     const dynamicTools = this.dynamicToolProvider.getTools();
     const tools = [];

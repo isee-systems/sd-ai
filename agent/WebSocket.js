@@ -101,6 +101,10 @@ export class WebSocketHandler {
   #workerSpawnPromise = null;
   // True on the first chat message after a select_agent — tells worker to bridge context
   #pendingAgentSwitch = false;
+  // True once the first select_agent has succeeded. Differentiates a true
+  // agent-switch (need to fetch context from old worker, kill it, spawn new)
+  // from the first select_agent where the worker may already be prewarmed.
+  #agentSelected = false;
 
   // SIGKILL every live worker immediately. Called by process signal handlers so
   // workers don't outlive the main process as orphans.
@@ -131,6 +135,51 @@ export class WebSocketHandler {
     this.#ws.on('message', (data) => this.#onMessage(data));
     this.#ws.on('close', (code, reason) => this.#onClose(code, reason));
     this.#ws.on('error', (error) => this.#onError(error));
+
+    // Pre-warm the worker process in parallel with the client's
+    // initialize_session/select_agent round-trips. Clients always select an
+    // agent, so we'd spawn this worker anyway — doing it now overlaps the
+    // bwrap startup + Node module load with the network handshake. Saves
+    // ~1-1.5s of user-perceived session-start latency on the common case.
+    this.#prewarmWorker();
+  }
+
+  /**
+   * Spawn a sandboxed worker eagerly on WS connect (before select_agent
+   * arrives). The worker's IPC socket is up by the time the client sends
+   * its first select_agent, so the only remaining latency is the two IPC
+   * sends (initialize + select_agent).
+   *
+   * Errors are non-fatal: if the prewarmed spawn fails (bwrap diagnostics,
+   * retries exhausted), #handleSelectAgent falls back to a fresh spawn that
+   * surfaces the error to the client.
+   */
+  #prewarmWorker() {
+    const tempDir = this.#sessionManager.getSessionTempDir(this.#sessionId);
+    const spawnPromise = WorkerSpawner.spawn(this.#sessionId, tempDir);
+    this.#workerSpawnPromise = spawnPromise;
+
+    spawnPromise
+      .then(w => {
+        // Cleanup path may have moved on (WS closed during spawn, or an
+        // agent-switch replaced this promise) — the orphan worker must be
+        // killed so it doesn't sit around eating resources.
+        if (this.#workerSpawnPromise !== spawnPromise) {
+          try { killWorkerProcess(w, 'SIGKILL'); } catch { /* already dead */ }
+          return;
+        }
+        this.#worker = w;
+        liveWorkers.add(w);
+        this.#setupWorkerRelay(w);
+        this.#sessionManager.setWorkerTeardown(this.#sessionId, () => this.#killWorker());
+        this.#workerSpawnPromise = null;
+      })
+      .catch(err => {
+        logger.warn(`[session:${this.#sessionId}] Worker prewarm failed: ${err.message} — select_agent will retry`);
+        if (this.#workerSpawnPromise === spawnPromise) {
+          this.#workerSpawnPromise = null;
+        }
+      });
   }
 
   async #sendToClient(message) {
@@ -244,7 +293,10 @@ export class WebSocketHandler {
           }
         }
 
-        await this.#sessionManager.cleanupContext(this.#sessionId, config.agentMaxContextTokens);
+        // Historical-message summarization runs before any orchestrator (and
+        // its provider choice) exists — fall back to the default provider's
+        // summary API.
+        await this.#sessionManager.cleanupContext(this.#sessionId, config.agentMaxContextTokens, config.agentDefaultProvider);
         logger.log(`Loaded ${message.historicalMessages.length} historical messages for session ${this.#sessionId}`);
       }
 
@@ -280,7 +332,9 @@ export class WebSocketHandler {
         }
       }
 
-      const isSwitching = this.#worker !== null;
+      // First select_agent uses the prewarmed worker (or falls back to fresh
+      // spawn if the prewarm failed). Subsequent select_agents are switches.
+      const isSwitching = this.#agentSelected;
 
       // When switching agents, ask the running worker for its current conversation
       // history so the new worker can bridge context across the handoff.
@@ -304,43 +358,57 @@ export class WebSocketHandler {
       if (this.#ws.readyState !== 1) return;
 
       const tempDir = this.#sessionManager.getSessionTempDir(this.#sessionId);
-      // Publish the in-flight spawn so #onClose/#onError/disconnect can await
-      // it before deleteSession runs rmSync on tempDir. Without this, a WS
-      // close arriving during bwrap retry delays (up to 9s) lets the cleanup
-      // path rm the bind-mount source mid-spawn — the worker then hits
-      // ENOENT on /session/ipc-*.sock the moment it tries to connect.
-      const spawnPromise = WorkerSpawner.spawn(this.#sessionId, tempDir);
-      this.#workerSpawnPromise = spawnPromise;
-      try {
-        this.#worker = await spawnPromise;
-      } finally {
-        if (this.#workerSpawnPromise === spawnPromise) {
-          this.#workerSpawnPromise = null;
-        }
+
+      // Await prewarm if it's still in flight; on success #worker is already
+      // set up (liveWorkers, relay, teardown hook all wired in #prewarmWorker).
+      if (this.#workerSpawnPromise) {
+        try { await this.#workerSpawnPromise; }
+        catch { /* prewarm rejected; fall through to fresh spawn below */ }
       }
 
-      // Guard: WS may have closed during bwrap retry delays (up to 9s).
-      if (this.#ws.readyState !== 1) {
-        // Await — the worker process is alive and bind-mounted to tempDir.
-        // cleanupSessionTempDir below rmSync's that source synchronously, so
-        // the worker must be reaped first or it'll write into a vanished
-        // bind mount (root cause of the model.sdjson ENOENT).
+      if (!this.#worker) {
+        // Prewarm failed, or this is an agent-switch that just killed the
+        // prior worker. Spawn fresh. Publish the in-flight spawn so
+        // #onClose/#onError/disconnect can await it before deleteSession runs
+        // rmSync on tempDir.
+        const spawnPromise = WorkerSpawner.spawn(this.#sessionId, tempDir);
+        this.#workerSpawnPromise = spawnPromise;
+        try {
+          this.#worker = await spawnPromise;
+        } finally {
+          if (this.#workerSpawnPromise === spawnPromise) {
+            this.#workerSpawnPromise = null;
+          }
+        }
+
+        // Guard: WS may have closed during bwrap retry delays (up to 9s).
+        if (this.#ws.readyState !== 1) {
+          // Await — the worker process is alive and bind-mounted to tempDir.
+          // cleanupSessionTempDir below rmSync's that source synchronously, so
+          // the worker must be reaped first or it'll write into a vanished
+          // bind mount (root cause of the model.sdjson ENOENT).
+          await this.#killWorker();
+          if (!this.#sessionManager.getSession(this.#sessionId)) {
+            this.#sessionManager.cleanupSessionTempDir(tempDir);
+          }
+          return;
+        }
+
+        liveWorkers.add(this.#worker);
+        this.#setupWorkerRelay(this.#worker);
+        // Let SessionManager's stale-cleanup path await worker exit before
+        // rmSync'ing the bwrap bind-mount source.
+        this.#sessionManager.setWorkerTeardown(this.#sessionId, () => this.#killWorker());
+      } else if (this.#ws.readyState !== 1) {
+        // Prewarmed worker was set up successfully, but the WS closed while
+        // we were waiting on agent-switch teardown or upstream awaits. Reap
+        // the orphan to free the sandbox.
         await this.#killWorker();
-        // If the session was already deleted by #onClose, the spawn's
-        // mkdirSync may have re-created the temp dir after deleteSession's
-        // rmSync removed it. Clean it up so it doesn't become orphaned.
         if (!this.#sessionManager.getSession(this.#sessionId)) {
           this.#sessionManager.cleanupSessionTempDir(tempDir);
         }
         return;
       }
-
-      liveWorkers.add(this.#worker);
-      this.#setupWorkerRelay(this.#worker);
-
-      // Let SessionManager's stale-cleanup path await worker exit before
-      // rmSync'ing the bwrap bind-mount source.
-      this.#sessionManager.setWorkerTeardown(this.#sessionId, () => this.#killWorker());
 
       const session = this.#sessionManager.getSession(this.#sessionId);
       if (!this.#worker.connected) {

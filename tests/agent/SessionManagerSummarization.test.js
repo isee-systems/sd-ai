@@ -20,6 +20,55 @@ function makeGeminiMock(summaryText = 'Mocked summary.') {
   };
 }
 
+function makeAnthropicMock(summaryText = 'Mocked summary.') {
+  return {
+    messages: {
+      create: jest.fn().mockResolvedValue({
+        content: [{ type: 'text', text: summaryText }],
+        usage: { input_tokens: 10, output_tokens: 20 }
+      })
+    }
+  };
+}
+
+function makeOpenRouterMock(summaryText = 'Mocked summary.') {
+  return {
+    chat: {
+      send: jest.fn().mockResolvedValue({
+        choices: [{ message: { content: summaryText } }],
+        usage: { prompt_tokens: 10, completion_tokens: 20, cost: 0.0001 }
+      })
+    }
+  };
+}
+
+// Pre-populate every SDK instance property with a throw-on-call guard so a test
+// that triggers summarization without first wiring the provider it exercises
+// fails loudly instead of attempting a real LLM call. The lazy loaders in
+// SessionManager only instantiate a fresh SDK when the instance is falsy, so
+// truthy guards short-circuit the import-and-instantiate path entirely. Tests
+// that need a working mock for a specific provider replace the relevant
+// property after this is installed.
+function installSdkGuards(sessionManager) {
+  const guard = (provider) => jest.fn(() => {
+    throw new Error(
+      `Test triggered ${provider} LLM call without installing a mock. ` +
+      `Set sessionManager.${provider} to a mock before calling cleanupContext().`
+    );
+  });
+  sessionManager.anthropic = { messages: { create: guard('anthropic') } };
+  sessionManager.gemini = { models: { generateContent: guard('gemini') } };
+  sessionManager.openRouter = { chat: { send: guard('openRouter') } };
+}
+
+function userTextMsg(text) {
+  return { role: 'user', content: text };
+}
+
+function assistantTextMsg(text) {
+  return { role: 'assistant', content: text };
+}
+
 function userMsg(text) {
   return { role: 'user', parts: [{ text }] };
 }
@@ -62,6 +111,7 @@ describe('SessionManager.cleanupContext', () => {
     sessionManager = new SessionManager();
     sessionId = sessionManager.createSession(null);
     sessionManager.initializeSession(sessionId, 'cld', {}, [], {}, 'test-client');
+    installSdkGuards(sessionManager);
     sessionManager.gemini = makeGeminiMock();
   });
 
@@ -72,7 +122,7 @@ describe('SessionManager.cleanupContext', () => {
     sessionManager.addToConversationHistory(sessionId, modelMsg('Hi there'));
 
     const contextBefore = [...sessionManager.getConversationContext(sessionId)];
-    await sessionManager.cleanupContext(sessionId, 100_000);
+    await sessionManager.cleanupContext(sessionId, 100_000, 'google');
 
     expect(sessionManager.getConversationContext(sessionId)).toEqual(contextBefore);
     expect(sessionManager.gemini.models.generateContent).not.toHaveBeenCalled();
@@ -84,7 +134,7 @@ describe('SessionManager.cleanupContext', () => {
       sessionManager.addToConversationHistory(sessionId, modelMsg(`Response ${i}`));
     }
 
-    await sessionManager.cleanupContext(sessionId, 1);
+    await sessionManager.cleanupContext(sessionId, 1, 'google');
 
     const context = sessionManager.getConversationContext(sessionId);
     expect(context[0].role).toBe('user');
@@ -101,7 +151,7 @@ describe('SessionManager.cleanupContext', () => {
     const liveRef = sessionManager.getConversationContext(sessionId);
     const originalLength = liveRef.length;
 
-    await sessionManager.cleanupContext(sessionId, 1);
+    await sessionManager.cleanupContext(sessionId, 1, 'google');
 
     // splice is in-place: the same array object must be updated, not replaced
     expect(liveRef).toBe(sessionManager.getConversationContext(sessionId));
@@ -117,7 +167,7 @@ describe('SessionManager.cleanupContext', () => {
       sessionManager.addToConversationHistory(sessionId, modelMsg(`Response ${i}`));
     }
 
-    await sessionManager.cleanupContext(sessionId, 1);
+    await sessionManager.cleanupContext(sessionId, 1, 'google');
 
     const context = sessionManager.getConversationContext(sessionId);
     expect(context[0].parts[0].text).toMatch(/condensed/);
@@ -125,7 +175,7 @@ describe('SessionManager.cleanupContext', () => {
 
   it('does nothing for a non-existent session ID', async () => {
     await expect(
-      sessionManager.cleanupContext('non-existent-id', 1)
+      sessionManager.cleanupContext('non-existent-id', 1, 'google')
     ).resolves.toBeUndefined();
   });
 });
@@ -140,6 +190,7 @@ describe('SessionManager.cleanupContext', () => {
     sessionManager = new SessionManager();
     sessionId = sessionManager.createSession(null);
     sessionManager.initializeSession(sessionId, 'cld', {}, [], {}, 'test-client');
+    installSdkGuards(sessionManager);
     sessionManager.gemini = makeGeminiMock();
   });
 
@@ -147,7 +198,7 @@ describe('SessionManager.cleanupContext', () => {
 
   it('does nothing when context is empty', async () => {
     await expect(
-      sessionManager.cleanupContext(sessionId, 100_000)
+      sessionManager.cleanupContext(sessionId, 100_000, 'google')
     ).resolves.toBeUndefined();
     expect(sessionManager.getConversationContext(sessionId)).toHaveLength(0);
   });
@@ -159,7 +210,7 @@ describe('SessionManager.cleanupContext', () => {
       sessionManager.addToConversationHistory(sessionId, modelResultMessage(String(i)));
     }
 
-    await sessionManager.cleanupContext(sessionId, 1);
+    await sessionManager.cleanupContext(sessionId, 1, 'google');
 
     const context = sessionManager.getConversationContext(sessionId);
     const hasSummary = context.some(
@@ -181,8 +232,10 @@ describe('Agent switch - context continuity between orchestrators', () => {
     sessionManager = new SessionManager();
     sessionId = sessionManager.createSession(null);
     sessionManager.initializeSession(sessionId, 'cld', {}, [], {}, 'test-client');
+    installSdkGuards(sessionManager);
     process.env.GEMINI_API_KEY = 'dummy_key';
     process.env.ANTHROPIC_API_KEY = 'dummy_key';
+    process.env.OPEN_ROUTER_API_KEY = 'dummy_key';
   });
 
   afterEach(() => {
@@ -229,7 +282,7 @@ describe('Agent switch - context continuity between orchestrators', () => {
     const fullLength = sessionManager.getConversationContext(sessionId).length;
 
     // Summarization fires during agent A's last turn
-    await sessionManager.cleanupContext(sessionId, 1);
+    await sessionManager.cleanupContext(sessionId, 1, 'google');
 
     // websocket.js captures context and creates agent B
     const capturedOnSwitch = sessionManager.getConversationContext(sessionId);
@@ -246,5 +299,222 @@ describe('Agent switch - context continuity between orchestrators', () => {
 
     orchestratorA.destroy();
     orchestratorB.destroy();
+  });
+});
+
+// ─── SessionManager.cleanupContext (Anthropic provider) ──────────────────────
+
+describe('SessionManager.cleanupContext (Anthropic)', () => {
+  let sessionManager;
+  let sessionId;
+
+  beforeEach(() => {
+    sessionManager = new SessionManager();
+    sessionId = sessionManager.createSession(null);
+    sessionManager.initializeSession(sessionId, 'cld', {}, [], {}, 'test-client');
+    installSdkGuards(sessionManager);
+    sessionManager.anthropic = makeAnthropicMock();
+  });
+
+  afterEach(() => { sessionManager.shutdown(); });
+
+  it('does nothing when context is under the token limit', async () => {
+    sessionManager.addToConversationHistory(sessionId, userTextMsg('Hello'));
+    sessionManager.addToConversationHistory(sessionId, assistantTextMsg('Hi there'));
+
+    const contextBefore = [...sessionManager.getConversationContext(sessionId)];
+    await sessionManager.cleanupContext(sessionId, 100_000, 'anthropic');
+
+    expect(sessionManager.getConversationContext(sessionId)).toEqual(contextBefore);
+    expect(sessionManager.anthropic.messages.create).not.toHaveBeenCalled();
+  });
+
+  it('replaces old messages with a Claude-format summary when over the token limit', async () => {
+    for (let i = 0; i < 10; i++) {
+      sessionManager.addToConversationHistory(sessionId, userTextMsg(`Message ${i}`));
+      sessionManager.addToConversationHistory(sessionId, assistantTextMsg(`Response ${i}`));
+    }
+
+    await sessionManager.cleanupContext(sessionId, 1, 'anthropic');
+
+    const context = sessionManager.getConversationContext(sessionId);
+    // Anthropic path emits {role, content} shape, not Gemini's {role, parts}
+    expect(context[0].role).toBe('user');
+    expect(typeof context[0].content).toBe('string');
+    expect(context[0].content).toMatch(/\[Previous conversation summary\]/);
+    expect(sessionManager.anthropic.messages.create).toHaveBeenCalled();
+  });
+
+  it('uses a fallback summary message when Anthropic call fails', async () => {
+    sessionManager.anthropic.messages.create.mockRejectedValue(new Error('API error'));
+
+    for (let i = 0; i < 5; i++) {
+      sessionManager.addToConversationHistory(sessionId, userTextMsg(`Message ${i}`));
+      sessionManager.addToConversationHistory(sessionId, assistantTextMsg(`Response ${i}`));
+    }
+
+    await sessionManager.cleanupContext(sessionId, 1, 'anthropic');
+
+    const context = sessionManager.getConversationContext(sessionId);
+    expect(context[0].content).toMatch(/condensed/);
+  });
+
+  it('summarizes assistant messages with tool_use/text content blocks', async () => {
+    sessionManager.addToConversationHistory(sessionId, userTextMsg('Run the tool'));
+    sessionManager.addToConversationHistory(sessionId, {
+      role: 'assistant',
+      content: [
+        { type: 'text', text: 'I will use the tool now.' },
+        { type: 'tool_use', id: 't1', name: 'do_thing', input: {} }
+      ]
+    });
+    sessionManager.addToConversationHistory(sessionId, {
+      role: 'user',
+      content: [{ type: 'tool_result', tool_use_id: 't1', content: 'ok' }]
+    });
+    for (let i = 0; i < 5; i++) {
+      sessionManager.addToConversationHistory(sessionId, userTextMsg(`Followup ${i}`));
+      sessionManager.addToConversationHistory(sessionId, assistantTextMsg(`Reply ${i}`));
+    }
+
+    await sessionManager.cleanupContext(sessionId, 1, 'anthropic');
+
+    expect(sessionManager.anthropic.messages.create).toHaveBeenCalled();
+    const callArgs = sessionManager.anthropic.messages.create.mock.calls[0][0];
+    // The prompt should include the text content from the assistant block
+    expect(callArgs.messages[0].content).toContain('I will use the tool now.');
+  });
+});
+
+// ─── SessionManager.cleanupContext (OpenRouter provider) ─────────────────────
+
+describe('SessionManager.cleanupContext (OpenRouter)', () => {
+  let sessionManager;
+  let sessionId;
+
+  beforeEach(() => {
+    sessionManager = new SessionManager();
+    sessionId = sessionManager.createSession(null);
+    sessionManager.initializeSession(sessionId, 'cld', {}, [], {}, 'test-client');
+    installSdkGuards(sessionManager);
+    sessionManager.openRouter = makeOpenRouterMock();
+  });
+
+  afterEach(() => { sessionManager.shutdown(); });
+
+  it.each(['qwen', 'deepseek', 'moonshotai'])(
+    'routes %s provider through the OpenRouter SDK', async (provider) => {
+      for (let i = 0; i < 10; i++) {
+        sessionManager.addToConversationHistory(sessionId, userTextMsg(`Message ${i}`));
+        sessionManager.addToConversationHistory(sessionId, assistantTextMsg(`Response ${i}`));
+      }
+
+      await sessionManager.cleanupContext(sessionId, 1, provider);
+
+      expect(sessionManager.openRouter.chat.send).toHaveBeenCalled();
+      const context = sessionManager.getConversationContext(sessionId);
+      expect(context[0].role).toBe('user');
+      expect(typeof context[0].content).toBe('string');
+      expect(context[0].content).toMatch(/\[Previous conversation summary\]/);
+    }
+  );
+
+  it('passes the brand-specific summary model to OpenRouter', async () => {
+    for (let i = 0; i < 10; i++) {
+      sessionManager.addToConversationHistory(sessionId, userTextMsg(`Message ${i}`));
+      sessionManager.addToConversationHistory(sessionId, assistantTextMsg(`Response ${i}`));
+    }
+
+    await sessionManager.cleanupContext(sessionId, 1, 'qwen');
+
+    const callArgs = sessionManager.openRouter.chat.send.mock.calls[0][0];
+    expect(callArgs.chatRequest.model).toMatch(/qwen/);
+    expect(callArgs.chatRequest.messages[0].role).toBe('user');
+    expect(callArgs.chatRequest.maxCompletionTokens).toBe(1024);
+  });
+
+  it('uses a fallback summary message when OpenRouter call fails', async () => {
+    sessionManager.openRouter.chat.send.mockRejectedValue(new Error('OR error'));
+
+    for (let i = 0; i < 5; i++) {
+      sessionManager.addToConversationHistory(sessionId, userTextMsg(`Message ${i}`));
+      sessionManager.addToConversationHistory(sessionId, assistantTextMsg(`Response ${i}`));
+    }
+
+    await sessionManager.cleanupContext(sessionId, 1, 'deepseek');
+
+    const context = sessionManager.getConversationContext(sessionId);
+    expect(context[0].content).toMatch(/condensed/);
+  });
+
+  it('handles array-shaped OpenRouter content blocks', async () => {
+    sessionManager.openRouter.chat.send.mockResolvedValue({
+      choices: [{
+        message: {
+          content: [
+            { type: 'text', text: 'First part. ' },
+            { type: 'text', text: 'Second part.' }
+          ]
+        }
+      }],
+      usage: { prompt_tokens: 10, completion_tokens: 20, cost: 0.0001 }
+    });
+
+    for (let i = 0; i < 10; i++) {
+      sessionManager.addToConversationHistory(sessionId, userTextMsg(`Message ${i}`));
+      sessionManager.addToConversationHistory(sessionId, assistantTextMsg(`Response ${i}`));
+    }
+
+    await sessionManager.cleanupContext(sessionId, 1, 'moonshotai');
+
+    const context = sessionManager.getConversationContext(sessionId);
+    expect(context[0].content).toContain('First part. Second part.');
+  });
+});
+
+// ─── SDK guards ──────────────────────────────────────────────────────────────
+// Guards short-circuit the lazy SDK loader path: when a test triggers
+// summarization without first mocking the provider it routes to, the guard
+// throws synchronously inside #summarizeMessages. That exception is caught by
+// the surrounding try/catch and a fallback summary is produced instead. The
+// test below verifies both that no real SDK was instantiated AND that the
+// guard's call counter recorded the attempted call.
+
+describe('SessionManager.cleanupContext SDK guards', () => {
+  let sessionManager;
+  let sessionId;
+
+  beforeEach(() => {
+    sessionManager = new SessionManager();
+    sessionId = sessionManager.createSession(null);
+    sessionManager.initializeSession(sessionId, 'cld', {}, [], {}, 'test-client');
+    installSdkGuards(sessionManager);
+  });
+
+  afterEach(() => { sessionManager.shutdown(); });
+
+  it.each([
+    ['google', 'gemini', sm => sm.gemini.models.generateContent],
+    ['anthropic', 'anthropic', sm => sm.anthropic.messages.create],
+    ['qwen', 'openRouter', sm => sm.openRouter.chat.send],
+    ['deepseek', 'openRouter', sm => sm.openRouter.chat.send],
+    ['moonshotai', 'openRouter', sm => sm.openRouter.chat.send],
+  ])('guard for %s fires when no working mock is installed', async (provider, _instance, getMockFn) => {
+    for (let i = 0; i < 5; i++) {
+      sessionManager.addToConversationHistory(sessionId, userTextMsg(`Message ${i}`));
+      sessionManager.addToConversationHistory(sessionId, assistantTextMsg(`Response ${i}`));
+    }
+
+    // Should not throw — the guard's throw is caught and converted to a fallback summary.
+    await sessionManager.cleanupContext(sessionId, 1, provider);
+
+    expect(getMockFn(sessionManager)).toHaveBeenCalled();
+
+    const context = sessionManager.getConversationContext(sessionId);
+    const summaryMsg = context[0];
+    const summaryText = Array.isArray(summaryMsg.parts)
+      ? summaryMsg.parts[0].text
+      : summaryMsg.content;
+    expect(summaryText).toMatch(/condensed/);
   });
 });

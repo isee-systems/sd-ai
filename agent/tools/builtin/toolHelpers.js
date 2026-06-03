@@ -1,7 +1,9 @@
 /**
  * Helper utilities shared across built-in tools
  */
-import { tool as sdkTool } from '@anthropic-ai/claude-agent-sdk';
+// Claude Agent SDK is lazy-loaded — only the Anthropic SDK loop uses tool().
+let _sdkTool;
+const loadSdkTool = async () => _sdkTool ??= (await import('@anthropic-ai/claude-agent-sdk')).tool;
 import { readdirSync, readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import logger from '../../../utilities/logger.js';
@@ -29,7 +31,8 @@ export function selectEngineModel(provider, difficulty, kind) {
  * @param {Function} config.execute - Tool execution function
  * @returns {Object} SDK tool instance
  */
-export function tool({ name, description, inputSchema, execute }) {
+export async function tool({ name, description, inputSchema, execute }) {
+  const sdkTool = await loadSdkTool();
   return sdkTool(name, description, inputSchema, execute);
 }
 

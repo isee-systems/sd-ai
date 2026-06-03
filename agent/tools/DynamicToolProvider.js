@@ -1,8 +1,14 @@
 import { StructuredOutputToZodConverter } from '../../utilities/StructuredOutputToZodConverter.js';
-import { FunctionTool } from '@google/adk';
 import { tool, sanitizeSchemaForGemini } from './builtin/toolHelpers.js';
-import { createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk';
 import logger from '../../utilities/logger.js';
+
+// Provider SDK symbols are lazy-loaded — see BuiltInToolProvider for the same pattern.
+let _createSdkMcpServer;
+const loadCreateSdkMcpServer = async () =>
+  _createSdkMcpServer ??= (await import('@anthropic-ai/claude-agent-sdk')).createSdkMcpServer;
+let _FunctionTool;
+const loadFunctionTool = async () =>
+  _FunctionTool ??= (await import('@google/adk')).FunctionTool;
 
 /**
  * DynamicToolProvider
@@ -154,11 +160,12 @@ export class DynamicToolProvider {
    * Wraps existing tool collection into SDK MCP server format
    * @returns {Object|null} MCP server instance or null if no tools
    */
-  getMcpServer() {
+  async getMcpServer() {
     if (!this.toolCollection) {
       return null;
     }
 
+    const createSdkMcpServer = await loadCreateSdkMcpServer();
     const tools = [];
 
     // Convert tool collection to SDK tool instances
@@ -166,7 +173,7 @@ export class DynamicToolProvider {
       // Remove 'client_' prefix for SDK (SDK will add 'mcp__client__' prefix)
       const unprefixedName = toolName.replace(/^client_/, '');
 
-      tools.push(tool({
+      tools.push(await tool({
         name: unprefixedName,
         description: toolDef.description,
         inputSchema: toolDef.inputSchema,
@@ -187,9 +194,10 @@ export class DynamicToolProvider {
     });
   }
 
-  getAdkTools() {
+  async getAdkTools() {
     if (!this.toolCollection) return [];
 
+    const FunctionTool = await loadFunctionTool();
     const adkTools = [];
 
     for (const [toolName, toolDef] of Object.entries(this.toolCollection.tools)) {
