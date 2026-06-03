@@ -139,9 +139,16 @@ export class WorkerSpawner {
   // error rather than a silent security regression.
   static #allowUnsandboxedFallback = process.env.ALLOW_UNSANDBOXED_FALLBACK === 'true';
 
+  // `which` shells out via execSync — ~5-30ms each on Linux — and the answer
+  // never changes for the lifetime of the process. Cache per binary name.
+  static #binaryCache = new Map();
   static #findBinary(name) {
-    try { return execSync(`which ${name}`, { encoding: 'utf8' }).trim(); }
-    catch { return null; }
+    if (WorkerSpawner.#binaryCache.has(name)) return WorkerSpawner.#binaryCache.get(name);
+    let result = null;
+    try { result = execSync(`which ${name}`, { encoding: 'utf8' }).trim(); }
+    catch { /* not found */ }
+    WorkerSpawner.#binaryCache.set(name, result);
+    return result;
   }
 
   static #logBwrapDiagnostics(bwrapBin) {
@@ -206,40 +213,46 @@ export class WorkerSpawner {
    * IPC is handled via a Unix domain socket at /session/ipc.sock rather than
    * Node.js IPC fd forwarding, so no --forward-fd flag is needed.
    */
-  static #buildBwrapArgs(sessionTempDir) {
+  // Everything in #buildBwrapArgs except the per-session --bind line is invariant
+  // for the lifetime of the process: same node binary, same PATH, same filesystem
+  // layout. We compute it once and splice the session-specific bind in #buildBwrapArgs.
+  static #bwrapStaticPrefix = null;
+  static #bwrapStaticSuffix = null;
+
+  static #buildBwrapStaticArgs() {
     const nodeBin = process.execPath;
     const nodeBinDir = dirname(nodeBin);
     const claudeBin = WorkerSpawner.#findBinary('claude');
 
-    const args = [
+    const prefix = [
       '--ro-bind', '/usr', '/usr',
     ];
 
     for (const lib of ['/lib', '/lib64', '/lib/x86_64-linux-gnu', '/lib/aarch64-linux-gnu']) {
-      if (existsSync(lib)) args.push('--ro-bind', lib, lib);
+      if (existsSync(lib)) prefix.push('--ro-bind', lib, lib);
     }
 
     for (const path of ['/etc/ssl', '/etc/resolv.conf', '/etc/hosts', '/etc/nsswitch.conf', '/etc/gai.conf']) {
-      if (existsSync(path)) args.push('--ro-bind', path, path);
+      if (existsSync(path)) prefix.push('--ro-bind', path, path);
     }
 
-    args.push('--ro-bind', APP_ROOT, '/app');
+    prefix.push('--ro-bind', APP_ROOT, '/app');
 
     if (!nodeBin.startsWith('/usr/')) {
       const parts = nodeBinDir.split('/').filter(Boolean);
       for (let i = 1; i <= parts.length; i++) {
-        args.push('--dir', '/' + parts.slice(0, i).join('/'));
+        prefix.push('--dir', '/' + parts.slice(0, i).join('/'));
       }
-      args.push('--ro-bind', nodeBinDir, nodeBinDir);
+      prefix.push('--ro-bind', nodeBinDir, nodeBinDir);
     }
 
     if (claudeBin && !claudeBin.startsWith('/usr/')) {
       const claudeDir = dirname(claudeBin);
       const parts = claudeDir.split('/').filter(Boolean);
       for (let i = 1; i <= parts.length; i++) {
-        args.push('--dir', '/' + parts.slice(0, i).join('/'));
+        prefix.push('--dir', '/' + parts.slice(0, i).join('/'));
       }
-      args.push('--ro-bind', claudeDir, claudeDir);
+      prefix.push('--ro-bind', claudeDir, claudeDir);
     }
 
     // Mount any non-/usr directories from PATH (e.g. python venv).
@@ -254,13 +267,12 @@ export class WorkerSpawner {
       alreadyMounted.add(mountTarget);
       const parts = mountTarget.split('/').filter(Boolean);
       for (let i = 1; i < parts.length; i++) {
-        args.push('--dir', '/' + parts.slice(0, i).join('/'));
+        prefix.push('--dir', '/' + parts.slice(0, i).join('/'));
       }
-      args.push('--ro-bind', mountTarget, mountTarget);
+      prefix.push('--ro-bind', mountTarget, mountTarget);
     }
 
-    args.push(
-      '--bind', sessionTempDir, WorkerSpawner.CONTAINER_SESSION_PATH,
+    const suffix = [
       '--dev', '/dev',
       '--proc', '/proc',
       '--tmpfs', '/tmp',
@@ -269,9 +281,22 @@ export class WorkerSpawner {
       '--',
       nodeBin,
       '/app/agent/AgentWorker.js'
-    );
+    ];
 
-    return args;
+    return { prefix, suffix };
+  }
+
+  static #buildBwrapArgs(sessionTempDir) {
+    if (!WorkerSpawner.#bwrapStaticPrefix) {
+      const { prefix, suffix } = WorkerSpawner.#buildBwrapStaticArgs();
+      WorkerSpawner.#bwrapStaticPrefix = prefix;
+      WorkerSpawner.#bwrapStaticSuffix = suffix;
+    }
+    return [
+      ...WorkerSpawner.#bwrapStaticPrefix,
+      '--bind', sessionTempDir, WorkerSpawner.CONTAINER_SESSION_PATH,
+      ...WorkerSpawner.#bwrapStaticSuffix,
+    ];
   }
 
   /**

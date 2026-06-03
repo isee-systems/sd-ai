@@ -19,7 +19,14 @@ import { ProviderDisplayNames } from '../utilities/TokenUsageReporter.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+// Cached result of the agent-config scan. Agent .md files don't change at
+// runtime, so we read + parse once on first call and reuse for every session
+// (originally scanned twice per session — initialize_session and select_agent).
+let _availableAgentsCache = null;
+
 function getAvailableAgents() {
+  if (_availableAgentsCache) return _availableAgentsCache;
+
   const configDir = join(__dirname, 'config');
   const agents = [];
 
@@ -56,7 +63,8 @@ function getAvailableAgents() {
     cld: 'socrates'
   };
 
-  return { agents, defaults };
+  _availableAgentsCache = { agents, defaults };
+  return _availableAgentsCache;
 }
 
 // Registry of all live worker processes so signal handlers can kill them all.
