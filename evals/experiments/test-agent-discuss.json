@@ -1,0 +1,25 @@
+{
+    "sequential": true,
+    "verbose": true,
+    "engineConfigs": {
+        "merlin-anthropic-sdk-discuss": {
+            "engine": "test-agent-discuss",
+            "additionalParameters": {
+                "agentName": "merlin",
+                "agentMode": "sdk",
+                "provider": "anthropic",
+                "mode": "sfd-discuss"
+            },
+            "limits": {
+                "tokensPerMinute": 200000,
+                "baselineTokenUsage": 50000,
+                "requestsPerMinute": 3
+            }
+        }
+    },
+    "categories": {
+        "feedbackExplanation": true,
+        "modelBuildingSteps": true,
+        "errorFixingSuggestions": true
+    }
+}

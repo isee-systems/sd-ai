@@ -200,6 +200,84 @@ def _log_model(y: np.ndarray, x: np.ndarray, offset_grid: np.ndarray) -> Tuple[f
     return best
 
 
+def _detect_oscillation_fallback(ts: np.ndarray) -> Dict[str, Any]:
+    """
+    Zero-crossing oscillation detector for non-sinusoidal waveforms.
+
+    The curve-fitting sine/damped-sine models can misclassify relaxation
+    oscillations (e.g. Van der Pol) because the sine basis is a poor fit
+    for the waveform shape. This heuristic looks at sign changes after
+    detrending and confirms oscillation if there are enough sustained,
+    roughly periodic crossings with significant amplitude.
+
+    Returns dict with: is_oscillating, zero_crossings, amplitude,
+    sustained_in_both_halves.
+    """
+    n = ts.size
+    if n < 3:
+        return {
+            "is_oscillating": False,
+            "zero_crossings": 0,
+            "amplitude": 0.0,
+            "sustained_in_both_halves": False,
+        }
+
+    # Detrend by removing both the mean AND the linear trend so a noisy
+    # linear ramp doesn't look like oscillation around its midpoint.
+    idx = np.arange(n, dtype=float)
+    slope, intercept = np.polyfit(idx, ts, 1)
+    detrended = ts - (slope * idx + intercept)
+
+    signs_prev = detrended[:-1]
+    signs_next = detrended[1:]
+    crossing_mask = ((signs_prev >= 0) & (signs_next < 0)) | ((signs_prev < 0) & (signs_next >= 0))
+    crossing_indices = np.where(crossing_mask)[0] + 1
+    zero_crossings = int(crossing_indices.size)
+
+    amplitude = float(np.max(ts) - np.min(ts))
+    abs_mean = abs(float(np.mean(ts)))
+
+    mid = n // 2
+    first_half_crossings = int(np.sum(crossing_indices < mid))
+    second_half_crossings = int(np.sum(crossing_indices >= mid))
+    sustained_in_both_halves = first_half_crossings >= 1 and second_half_crossings >= 1
+
+    has_enough_crossings = zero_crossings >= 4
+
+    # Amplitude must be above an absolute floor (to reject constant series)
+    # AND, when the mean is far from zero, must also be significant relative
+    # to the mean (to reject tiny ripples on a large offset).
+    AMPLITUDE_FLOOR = 1e-6
+    has_significant_amplitude = (
+        amplitude > AMPLITUDE_FLOOR
+        and (abs_mean < AMPLITUDE_FLOOR or amplitude > 0.1 * abs_mean)
+    )
+
+    # Periodicity check: true oscillation has roughly regular intervals
+    # between zero crossings; noise or detrended trends have irregular ones.
+    is_periodic = False
+    if crossing_indices.size >= 4:
+        intervals = np.diff(crossing_indices.astype(float))
+        interval_mean = float(np.mean(intervals))
+        interval_std = float(np.std(intervals))
+        cv = interval_std / interval_mean if interval_mean > 0 else np.inf
+        is_periodic = cv < 0.5
+
+    is_oscillating = (
+        has_enough_crossings
+        and has_significant_amplitude
+        and sustained_in_both_halves
+        and is_periodic
+    )
+
+    return {
+        "is_oscillating": is_oscillating,
+        "zero_crossings": zero_crossings,
+        "amplitude": amplitude,
+        "sustained_in_both_halves": sustained_in_both_halves,
+    }
+
+
 def _overshoot_model(y: np.ndarray, x: np.ndarray, peak_pos_grid: np.ndarray, decay_rate_grid: np.ndarray, steady_state_grid: np.ndarray) -> Tuple[float, int]:
     """
     Climate overshoot model: S-curve rise to peak, then exponential decay to steady state.
@@ -413,6 +491,18 @@ def classify_timeseries_shape_and_scale(
         probs = {k: 0.02 for k in probs}
         probs["stable"] = 0.92
         best_label = "stable"
+
+    # Zero-crossing fallback: the sine/damped-sine fits can miss non-sinusoidal
+    # oscillations (e.g. Van der Pol relaxation oscillations). If the heuristic
+    # detector confirms oscillation but the curve-fit classifier picked a
+    # non-oscillatory family, override to "oscillating".
+    oscillation_family = {"oscillating", "dampening"}
+    if best_label not in oscillation_family:
+        oscillation_check = _detect_oscillation_fallback(y_raw)
+        if oscillation_check["is_oscillating"]:
+            probs = {k: 0.05 for k in probs}
+            probs["oscillating"] = 0.75
+            best_label = "oscillating"
 
     # optional "none-of-the-above/complex" diagnostic
     # (kept as metadata rather than a new class)

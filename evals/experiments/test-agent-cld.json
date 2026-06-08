@@ -1,0 +1,26 @@
+{
+    "sequential": true,
+    "verbose": true,
+    "engineConfigs": {
+        "merlin-anthropic-sdk-cld": {
+            "engine": "test-agent-build",
+            "additionalParameters": {
+                "agentName": "merlin",
+                "agentMode": "sdk",
+                "provider": "anthropic",
+                "mode": "cld"
+            },
+            "limits": {
+                "tokensPerMinute": 200000,
+                "baselineTokenUsage": 50000,
+                "requestsPerMinute": 3
+            }
+        }
+    },
+    "categories": {
+        "qualitativeTranslation": false,
+        "conformance": false,
+        "qualitativeCausalReasoning": true,
+        "qualitativeIteration": false
+    }
+}

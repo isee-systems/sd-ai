@@ -1,12 +1,16 @@
 import express from 'express'
 import fs from 'fs'
+import config from '../../config.js'
 
 const router = express.Router()
 const quantitativeEngines = ['quantitative'];
 
 router.get("/", async (req, res) => {
     const path = "engines"
-    const dirs = fs.readdirSync(path).filter(f => fs.lstatSync(`${path}/${f}`).isDirectory()).filter(f => !f.startsWith('test-'));
+    let dirs = fs.readdirSync(path).filter(f => fs.lstatSync(`${path}/${f}`).isDirectory());
+    if (!config.includeTestEngines) {
+        dirs = dirs.filter(f => !f.startsWith('test-'));
+    }
 
     const engines = [];
     for (const dir of dirs) {

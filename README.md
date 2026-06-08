@@ -297,6 +297,7 @@ Some engines require additional dependencies to be installed on your system:
 
 - **Go 1.24.0 or later** - Required for the causal-chains engine ([installation guide](https://go.dev/doc/install))
 - **Python 3.x** - Required for the causal-decoder engine and the and the agentic tools
+- **Docker** (or Podman aliased as `docker`) - Required for the test-simlin-agent engine ([Docker installation guide](https://docs.docker.com/get-docker/)). The Docker daemon must be running when `npm install` runs the postinstall hook; if Docker is missing or the daemon is unreachable, the image build is skipped and the engine is disabled.
 
 These dependencies are automatically built/installed when you run `npm install` via postinstall hooks, but only if the respective toolchains are available on your PATH.
 
@@ -321,6 +322,7 @@ Available component names and what they affect:
 | `PySD-simulator` | Breaks evals |
 | `time-series-behavior-analysis` | Breaks evals |
 | `visualization-engine` | Breaks agentic tools |
+| `simlin-agent` | Disables the test-simlin-agent engine |
 
 ## Agent Sandbox (Production Linux Only)
 

@@ -10,6 +10,11 @@ const config = {
     */
     "metricsReporterURL": process.env.METRICS_REPORTER_URL || null, // Optional URL to POST engine usage metrics
     "tokenReporterURL": process.env.TOKEN_REPORTER_URL || null, // Optional URL to POST agent LLM token usage
+
+    /*
+    * Engine exposure
+    */
+    "includeTestEngines": false, // When true, engines whose directory starts with `test-` are returned by GET /v1/engines
     
     /*
     * Defaults for the engines that use LLMWrapper and the agent tools that use those engines

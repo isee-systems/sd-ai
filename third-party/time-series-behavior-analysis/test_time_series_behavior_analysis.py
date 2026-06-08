@@ -20,6 +20,7 @@ from __init__ import (
     _weights_from_scores,
     _ols_fit,
     _poly_model,
+    _detect_oscillation_fallback,
 )
 
 
@@ -822,6 +823,125 @@ class TestMonotonicityAndCorrelation:
         
         # Constant series has undefined correlation (we return 0)
         assert scale["correlation_with_time"] == 0.0
+
+
+def _generate_van_der_pol(mu=1.0, pos_init=0.1, vel_init=0.0, dt=0.03125,
+                          stop_time=100.0, save_step=0.25):
+    """Euler integration of the Van der Pol oscillator."""
+    pos = pos_init
+    vel = vel_init
+    save_every = int(round(save_step / dt))
+    total_steps = int(round(stop_time / dt))
+    results = [pos]
+    for i in range(1, total_steps + 1):
+        d_pos = vel
+        d_vel = mu * (1 - pos * pos) * vel - pos
+        pos += d_pos * dt
+        vel += d_vel * dt
+        if i % save_every == 0:
+            results.append(pos)
+    return np.array(results)
+
+
+class TestDetectOscillationFallback:
+    """Tests for the zero-crossing oscillation fallback detector."""
+
+    def test_pure_sinusoid(self):
+        data = np.array([2.0 * np.sin(2 * np.pi * i / 50) for i in range(400)])
+        result = _detect_oscillation_fallback(data)
+        assert result["is_oscillating"] is True
+        assert result["zero_crossings"] >= 4
+
+    def test_van_der_pol(self):
+        data = _generate_van_der_pol()
+        assert data.size == 401
+        result = _detect_oscillation_fallback(data)
+        assert result["is_oscillating"] is True
+        assert result["zero_crossings"] >= 4
+        assert result["sustained_in_both_halves"] is True
+
+    def test_flat_constant(self):
+        data = np.full(400, 5.0)
+        result = _detect_oscillation_fallback(data)
+        assert result["is_oscillating"] is False
+
+    def test_exponential_growth(self):
+        data = np.exp(0.01 * np.arange(400))
+        result = _detect_oscillation_fallback(data)
+        assert result["is_oscillating"] is False
+
+    def test_linear_growth(self):
+        data = 3 * np.arange(400) + 10
+        result = _detect_oscillation_fallback(data)
+        assert result["is_oscillating"] is False
+
+    def test_exponential_decay(self):
+        data = 100 * np.exp(-0.02 * np.arange(400))
+        result = _detect_oscillation_fallback(data)
+        assert result["is_oscillating"] is False
+
+    def test_s_curve(self):
+        data = 100 / (1 + np.exp(-0.05 * (np.arange(400) - 200)))
+        result = _detect_oscillation_fallback(data)
+        assert result["is_oscillating"] is False
+
+    def test_dampened_oscillation(self):
+        i = np.arange(400)
+        data = 5.0 * np.exp(-0.005 * i) * np.sin(2 * np.pi * i / 40)
+        result = _detect_oscillation_fallback(data)
+        assert result["is_oscillating"] is True
+        assert result["sustained_in_both_halves"] is True
+
+    def test_oscillation_around_nonzero_mean(self):
+        data = 50 + 10 * np.sin(2 * np.pi * np.arange(400) / 50)
+        result = _detect_oscillation_fallback(data)
+        assert result["is_oscillating"] is True
+
+    def test_tiny_amplitude_relative_to_mean(self):
+        # Amplitude 0.002 around mean 100 -- less than 10% of |mean|
+        data = 100 + 0.001 * np.sin(2 * np.pi * np.arange(400) / 50)
+        result = _detect_oscillation_fallback(data)
+        assert result["is_oscillating"] is False
+
+    def test_step_function(self):
+        data = np.where(np.arange(400) < 200, 0.0, 10.0)
+        result = _detect_oscillation_fallback(data)
+        assert result["is_oscillating"] is False
+
+    def test_too_few_crossings(self):
+        data = np.empty(400)
+        data[:100] = 1.0
+        data[100:200] = -1.0
+        data[200:] = 0.5
+        result = _detect_oscillation_fallback(data)
+        assert result["zero_crossings"] < 4
+        assert result["is_oscillating"] is False
+
+    def test_noisy_exponential_growth(self):
+        rng = np.random.default_rng(12345)
+        data = np.exp(0.005 * np.arange(400)) + 0.5 * (rng.random(400) - 0.5)
+        result = _detect_oscillation_fallback(data)
+        assert result["is_oscillating"] is False
+
+    def test_random_walk(self):
+        rng = np.random.default_rng(67890)
+        data = np.cumsum(rng.random(400) - 0.5)
+        result = _detect_oscillation_fallback(data)
+        assert result["is_oscillating"] is False
+
+    def test_short_series(self):
+        data = np.array([1, -1, 1, -1, 1], dtype=float)
+        result = _detect_oscillation_fallback(data)
+        assert result["is_oscillating"] is True
+
+
+class TestVanDerPolClassification:
+    """Integration: Van der Pol relaxation oscillation should classify as oscillating."""
+
+    def test_van_der_pol_classifies_as_oscillating(self):
+        data = _generate_van_der_pol()
+        result = classify_timeseries_shape_and_scale(data.tolist())
+        assert result["shape"]["base_shape"] == "oscillating"
 
 
 if __name__ == "__main__":

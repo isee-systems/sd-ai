@@ -527,10 +527,8 @@ function buildFlow(flow, model, currentModule = '') {
     // Get access attribute (for module inputs/outputs)
     const accessAttr = getAccessAttribute(flow, model);
 
-    // Determine if flow is non-negative based on uniflow attribute
-    // If uniflow is explicitly set, use that value
-    // If uniflow is not set, default to true (non-negative) for backward compatibility
-    const nonNegative = flow.uniflow !== false;
+    // Only constrain to non-negative when uniflow is explicitly true
+    const nonNegative = !!flow.uniflow;
 
     lines.push(`      <flow name="${escapeNameAttribute(xmileName)}"${accessAttr}>`);
 
@@ -607,7 +605,7 @@ function buildAuxiliary(aux, model, currentModule = '') {
         }
 
         // Handle graphical functions
-        if (aux.graphicalFunction && aux.graphicalFunction.points && aux.graphicalFunction.points.length > 1) {
+        if (aux.graphicalFunction && aux.graphicalFunction.points) {
             lines.push(...buildGraphicalFunction(aux.graphicalFunction, equation));
         } else if (equation) {
             // Regular equation
