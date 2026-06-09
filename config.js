@@ -44,7 +44,7 @@ const config = {
     "agentMoonshotaiModel": 'moonshotai/kimi-k2.6',
     "agentMoonshotaiSummaryModel": 'moonshotai/kimi-k2.6',
     "agentAnthropicEffort": "medium",
-    "agentAnthropicThinking": { type: "enabled", "budget_tokens": 10000 },
+    "agentAnthropicThinking": { type: "adaptive" }, // Opus 4.7+/Sonnet 4.6 use adaptive thinking; depth is controlled by agentAnthropicEffort (budget_tokens is removed and 400s)
     "agentGeminiThinking": { thinkingLevel: ThinkingLevel.MEDIUM },
     "agentToolModels": {
         anthropic: {

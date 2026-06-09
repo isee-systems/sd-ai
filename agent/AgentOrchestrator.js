@@ -346,14 +346,17 @@ export class AgentOrchestrator {
         await this.sessionManager.cleanupContext(this.sessionId, config.agentMaxContextTokens, this.provider);
 
         try {
-          // Call Claude API
+          // Call Claude API. Adaptive thinking controls depth via `effort`
+          // (output_config) rather than a token budget — budget_tokens is removed
+          // on Opus 4.7+/Sonnet 4.6 and would 400.
           const thinkingEnabled = config.agentAnthropicThinking?.type !== 'disabled';
           const response = await anthropic.messages.create({
             model: config.agentAnthropicModel,
-            max_tokens: Math.max(8192, (config.agentAnthropicThinking?.budget_tokens || 0) + 2048),
+            max_tokens: 8192,
             system: systemBlocks,
             messages: messages,
             thinking: config.agentAnthropicThinking,
+            ...(thinkingEnabled && { output_config: { effort: config.agentAnthropicEffort } }),
             tools: tools.length > 0 ? tools : undefined
           });
 
