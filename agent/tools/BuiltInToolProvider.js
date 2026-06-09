@@ -1,12 +1,17 @@
 import { VisualizationEngine } from '../utilities/VisualizationEngine.js';
-import { tool, sanitizeSchemaForGemini } from './builtin/toolHelpers.js';
+import { sanitizeSchemaForGemini } from './builtin/toolHelpers.js';
 
 // Lazy-loaded provider SDK symbols. Each tool provider serves multiple agent
 // loops (SDK, ADK, manual) but only one is selected per session — eagerly
 // importing both costs ~500ms (dominated by @google/adk).
-let _createSdkMcpServer;
-const loadCreateSdkMcpServer = async () =>
-  _createSdkMcpServer ??= (await import('@anthropic-ai/claude-agent-sdk')).createSdkMcpServer;
+// MCP's own McpServer (hoisted @modelcontextprotocol/sdk). Used in place of the
+// Claude Agent SDK's tool()/createSdkMcpServer because the agent SDK bundles an
+// older MCP whose zod→JSON-Schema converter silently strips field descriptions
+// from advertised tool schemas. MCP 1.29's converter is zod-v4-aware and keeps
+// them, which the model needs to call rich tools correctly.
+let _McpServer;
+const loadMcpServer = async () =>
+  _McpServer ??= (await import('@modelcontextprotocol/sdk/server/mcp.js')).McpServer;
 let _FunctionTool;
 const loadFunctionTool = async () =>
   _FunctionTool ??= (await import('@google/adk')).FunctionTool;
@@ -115,9 +120,10 @@ export class BuiltInToolProvider {
    * @returns {Object} MCP server instance
    */
   async getMcpServer() {
-    const createSdkMcpServer = await loadCreateSdkMcpServer();
+    const McpServer = await loadMcpServer();
     const toolCollection = this.#createToolCollection();
-    const toolsArr = [];
+    const server = new McpServer({ name: 'builtin', version: '1.0.0' });
+    let count = 0;
 
     for (const [toolName, toolDef] of Object.entries(toolCollection.tools)) {
       if (toolDef.nonSdkOnly) continue;
@@ -131,20 +137,20 @@ export class BuiltInToolProvider {
         return result;
       };
 
-      toolsArr.push(await tool({
-        name: toolName,
+      // Register via MCP's own registerTool so MCP 1.29's zod-v4-aware converter
+      // builds the advertised schema (preserving field descriptions and full
+      // structure). registerTool takes the raw zod shape and wraps it internally.
+      server.registerTool(toolName, {
         description: toolDef.description,
-        inputSchema: toolDef.inputSchema,
-        execute: sdkHandler
-      }));
+        inputSchema: toolDef.inputSchema.shape
+      }, sdkHandler);
+      count++;
     }
 
-    logger.log(`Creating builtin MCP server with ${toolsArr.length} tools`);
-    return createSdkMcpServer({
-      name: 'builtin',
-      version: '1.0.0',
-      tools: toolsArr
-    });
+    logger.log(`Creating builtin MCP server with ${count} tools`);
+    // Match the shape the Agent SDK's createSdkMcpServer returns; query() consumes
+    // `instance` as a generic MCP server over a transport (no class check).
+    return { type: 'sdk', name: 'builtin', instance: server };
   }
 
   async getAdkTools(mode = null, modelTokenCount = 0) {

@@ -1,11 +1,14 @@
 import { StructuredOutputToZodConverter } from '../../utilities/StructuredOutputToZodConverter.js';
-import { tool, sanitizeSchemaForGemini } from './builtin/toolHelpers.js';
+import { sanitizeSchemaForGemini } from './builtin/toolHelpers.js';
 import logger from '../../utilities/logger.js';
 
 // Provider SDK symbols are lazy-loaded — see BuiltInToolProvider for the same pattern.
-let _createSdkMcpServer;
-const loadCreateSdkMcpServer = async () =>
-  _createSdkMcpServer ??= (await import('@anthropic-ai/claude-agent-sdk')).createSdkMcpServer;
+// Use MCP's own McpServer instead of the Claude Agent SDK's tool()/createSdkMcpServer:
+// the agent SDK bundles an older MCP whose converter strips field descriptions from
+// advertised tool schemas. See BuiltInToolProvider for the full rationale.
+let _McpServer;
+const loadMcpServer = async () =>
+  _McpServer ??= (await import('@modelcontextprotocol/sdk/server/mcp.js')).McpServer;
 let _FunctionTool;
 const loadFunctionTool = async () =>
   _FunctionTool ??= (await import('@google/adk')).FunctionTool;
@@ -165,33 +168,32 @@ export class DynamicToolProvider {
       return null;
     }
 
-    const createSdkMcpServer = await loadCreateSdkMcpServer();
-    const tools = [];
+    const McpServer = await loadMcpServer();
+    const server = new McpServer({ name: 'client', version: '1.0.0' });
+    let count = 0;
 
-    // Convert tool collection to SDK tool instances
+    // Register client tools via MCP's own registerTool (preserves descriptions)
     for (const [toolName, toolDef] of Object.entries(this.toolCollection.tools)) {
       // Remove 'client_' prefix for SDK (SDK will add 'mcp__client__' prefix)
       const unprefixedName = toolName.replace(/^client_/, '');
 
-      tools.push(await tool({
-        name: unprefixedName,
+      // inputSchema is a zod object (built by StructuredOutputToZodConverter);
+      // registerTool takes the raw shape. Fall back to an empty shape for a
+      // parameterless tool whose schema isn't a zod object.
+      server.registerTool(unprefixedName, {
         description: toolDef.description,
-        inputSchema: toolDef.inputSchema,
-        execute: toolDef.handler
-      }));
+        inputSchema: toolDef.inputSchema?.shape ?? {}
+      }, toolDef.handler);
+      count++;
     }
 
-    if (tools.length === 0) {
+    if (count === 0) {
       return null;
     }
 
-    logger.log(`Creating client MCP server with ${tools.length} tools`);
+    logger.log(`Creating client MCP server with ${count} tools`);
 
-    return createSdkMcpServer({
-      name: 'client',
-      version: '1.0.0',
-      tools
-    });
+    return { type: 'sdk', name: 'client', instance: server };
   }
 
   async getAdkTools() {
