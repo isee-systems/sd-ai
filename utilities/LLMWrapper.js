@@ -65,6 +65,28 @@ export class ModelCapabilities {
           return ModelType.OPEN_AI;
       }
   }
+
+  // Which Claude models accept `thinking: {type: "adaptive"}`. Sending adaptive
+  // to a model that doesn't support it (Sonnet 4.5, Haiku 4.5, Opus 4.5 and
+  // earlier) is a 400, so we only auto-enable thinking where it's accepted:
+  // the Fable/Mythos models (always-on), plus Sonnet and Opus from 4.6 onward.
+  get supportsAdaptiveThinking() {
+      const n = this.name.toLowerCase();
+      if (n.includes('fable') || n.includes('mythos')) return true;
+      // Adaptive landed on Sonnet 4.6 and Opus 4.6; assume every later version of
+      // those families keeps it. Parse <family>-<major>-<minor> and compare to the
+      // first version that supported it so new releases don't need a code change.
+      const thresholds = { sonnet: [4, 6], opus: [4, 6] };
+      for (const [family, [minMajor, minMinor]] of Object.entries(thresholds)) {
+          const m = n.match(new RegExp(`${family}-(\\d+)-(\\d+)`));
+          if (m) {
+              const major = Number(m[1]);
+              const minor = Number(m[2]);
+              if (major > minMajor || (major === minMajor && minor >= minMinor)) return true;
+          }
+      }
+      return false;
+  }
 };
 
 export class LLMWrapper {
@@ -87,6 +109,10 @@ export class LLMWrapper {
   #anthropicAPI = null;
   #openRouterAPI = null;
   #tokenReporter = null;
+  // Per-model cache of the Anthropic model's maximum output tokens, resolved
+  // lazily from the Models API so we never impose an arbitrary cap that could
+  // truncate a large generation mid-JSON.
+  #anthropicMaxTokensByModel = new Map();
 
   model = new ModelCapabilities(LLMWrapper.BUILD_DEFAULT_MODEL);
 
@@ -816,7 +842,10 @@ export class LLMWrapper {
     const completionParams = {
       model,
       messages: claudeMessages.messages,
-      max_tokens: 8192
+      // The Messages API requires max_tokens, so we can't omit it — but we don't
+      // want an arbitrary cap that truncates a large generation mid-JSON. Honor a
+      // caller-supplied limit, otherwise use the model's own maximum output.
+      max_tokens: this.#maxTokens ?? await this.#resolveAnthropicMaxTokens(model)
     };
 
     if (claudeMessages.system) {
@@ -827,35 +856,73 @@ export class LLMWrapper {
       completionParams.temperature = temperature;
     }
 
-    // Use structured outputs with output_format parameter
+    // Claude models think by default: honor an explicit caller-provided thinking
+    // config, otherwise enable adaptive thinking on every model that supports it
+    // (Opus 4.6+/Sonnet 4.6/Fable/Mythos). At the default effort the model almost
+    // always thinks, which improves generation quality. Models without adaptive
+    // support are left alone so we don't trigger a 400.
+    if (this.#thinking) {
+      completionParams.thinking = this.#thinking;
+    } else if (this.model.supportsAdaptiveThinking) {
+      completionParams.thinking = { type: 'adaptive' };
+    }
+
+    // Structured outputs via the current `output_config.format` parameter
+    // (GA on Opus 4.8 / Sonnet 4.6 / Haiku 4.5). This supersedes the deprecated
+    // top-level `output_format` + `structured-outputs-2025-11-13` beta header;
+    // no beta header is required. The model returns a JSON string in a text block.
     if (zodSchema) {
-      completionParams.output_format = {
-        type: "json_schema",
-        schema: zodSchema.toJSONSchema()
+      completionParams.output_config = {
+        format: {
+          type: "json_schema",
+          schema: zodSchema.toJSONSchema()
+        }
       };
     }
 
-    // Set the beta header for structured outputs
-    const headers = zodSchema ? {
-      'anthropic-beta': 'structured-outputs-2025-11-13'
-    } : undefined;
-
-    const completion = await this.#anthropicAPI.messages.create(
-      completionParams,
-      { headers }
-    );
+    // Stream and reassemble: max_tokens above ~16K risks the SDK HTTP timeout on
+    // a non-streaming call, so we always stream here and collect the final message
+    // (same shape as messages.create).
+    const completion = await this.#anthropicAPI.messages.stream(completionParams).finalMessage();
     this.#tokenReporter.report({ provider: Provider.ANTHROPIC, model, usage: completion.usage, clientKey: this.#clientKey });
 
-    // With output_format, the response is always in content[0].text as JSON
-    if (zodSchema) {
-      return {
-        content: completion.content[0].text
-      };
+    // A truncated response produces invalid JSON downstream; surface the real
+    // cause instead of letting it fail later as an opaque "Bad JSON" parse error.
+    if (completion.stop_reason === 'max_tokens') {
+      throw new Error(`Anthropic response truncated at max_tokens (${completionParams.max_tokens}) for model ${model}; increase max_tokens`);
     }
 
+    // Don't assume content[0] is the text block. When thinking is enabled the
+    // content array carries one or more `thinking` blocks BEFORE the text block,
+    // so content[0].text is undefined. Scan for the first text block instead —
+    // this holds for both the structured-output and plain paths.
+    const textBlock = (completion.content ?? []).find(
+      (block) => block?.type === 'text' && typeof block.text === 'string'
+    );
+
     return {
-      content: completion.content[0].text
+      content: textBlock ? textBlock.text : null
     };
+  }
+
+  // Resolve a model's maximum output tokens from the Models API (cached per
+  // model). Falls back to 32000 if the lookup fails (e.g. the model isn't listed
+  // by the endpoint), which still comfortably exceeds typical generations.
+  async #resolveAnthropicMaxTokens(model) {
+    if (this.#anthropicMaxTokensByModel.has(model)) {
+      return this.#anthropicMaxTokensByModel.get(model);
+    }
+    let maxTokens = 32000;
+    try {
+      const info = await this.#anthropicAPI.models.retrieve(model);
+      if (Number.isInteger(info?.max_tokens) && info.max_tokens > 0) {
+        maxTokens = info.max_tokens;
+      }
+    } catch {
+      // Models endpoint unavailable or model not listed — keep the safe default.
+    }
+    this.#anthropicMaxTokensByModel.set(model, maxTokens);
+    return maxTokens;
   }
 
   convertMessagesToGeminiFormat(messages) {
