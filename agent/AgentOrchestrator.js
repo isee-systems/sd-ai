@@ -655,6 +655,44 @@ export class AgentOrchestrator {
   }
 
   /**
+   * Render an AskUserQuestion tool call's full payload to markdown so the end
+   * user sees everything they need to answer: each question, whether multiple
+   * selections are allowed, and every option with its label and description.
+   * The client only ever replies with free text, so the options are presented
+   * as a plain bulleted list (no checkboxes/combo boxes) the user reads and
+   * then answers in prose. The SDK can't execute this tool in our headless
+   * context, so we surface the content to the client and stop the loop to
+   * await the user's reply.
+   */
+  #formatAskUserQuestions(questions) {
+    if (!Array.isArray(questions) || questions.length === 0) return '';
+
+    const sections = [];
+    for (const q of questions) {
+      if (!q || typeof q.question !== 'string' || !q.question.trim()) continue;
+
+      const lines = [];
+      lines.push(`**${q.question.trim()}**`);
+      if (q.multiSelect) {
+        lines.push('_(select all that apply)_');
+      }
+
+      const options = Array.isArray(q.options) ? q.options : [];
+      for (const opt of options) {
+        if (!opt || typeof opt.label !== 'string' || !opt.label.trim()) continue;
+        const description = typeof opt.description === 'string' && opt.description.trim()
+          ? ` — ${opt.description.trim()}`
+          : '';
+        lines.push(`- **${opt.label.trim()}**${description}`);
+      }
+
+      sections.push(lines.join('\n'));
+    }
+
+    return sections.join('\n\n');
+  }
+
+  /**
    * Handle messages from Agent SDK
    */
   async #handleAnthropicSdkMessage(message) {
@@ -728,6 +766,17 @@ export class AgentOrchestrator {
           await this.sendToClient(createAgentTextMessage(this.sessionId, html, true));*/
         }
         else if (block.type === 'tool_use' && block.name) {
+          if (block.name === 'AskUserQuestion') {
+            const questionsMarkdown = this.#formatAskUserQuestions(block.input?.questions);
+            if (questionsMarkdown) {
+              const html = await marked.parse(questionsMarkdown);
+              await this.sendToClient(createAgentTextMessage(this.sessionId, html, false));
+            }
+            this.stopRequested = true;
+            this.abortController?.abort();
+            return;
+          }
+
           this.pendingToolCalls.set(block.id, block.name);
 
           const isFilesystemTool = ['Read', 'Edit', 'Write', 'Glob', 'Grep'].includes(block.name);
@@ -749,7 +798,9 @@ export class AgentOrchestrator {
           const displayName = this.#stripMcpPrefix(toolName);
 
           if (block.is_error) {
-            logger.log(`Anthropic SDK: Tool error for ${toolName} (${block.tool_use_id}):`, block.content);
+            if (toolName !== 'AskUserQuestion') {
+              logger.log(`Anthropic SDK: Tool error for ${toolName} (${block.tool_use_id}):`, block.content);
+            }
           } else {
             logger.log(`Anthropic SDK: Tool call completed: ${displayName}`);
           }
