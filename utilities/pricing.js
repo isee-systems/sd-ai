@@ -9,6 +9,20 @@ import { Provider } from './TokenUsageReporter.js';
 // ─── Anthropic ───────────────────────────────────────────────────────────────
 // Source: https://platform.claude.com/docs/en/about-claude/pricing
 export const anthropic = {
+  'claude-mythos-5': {
+    inputTokens: 10.00,
+    cacheCreation5mInputTokens: 12.50,
+    cacheCreation1hInputTokens: 20.00,
+    cacheReadInputTokens: 1.0,
+    outputTokens: 50.00,
+  },
+  'claude-fable-5': {
+    inputTokens: 10.00,
+    cacheCreation5mInputTokens: 12.50,
+    cacheCreation1hInputTokens: 20.00,
+    cacheReadInputTokens: 1.0,
+    outputTokens: 50.00,
+  },
   'claude-opus-4-8': {
     inputTokens: 5.00,
     cacheCreation5mInputTokens: 6.25,
