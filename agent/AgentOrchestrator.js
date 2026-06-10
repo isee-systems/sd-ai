@@ -123,7 +123,12 @@ export class AgentOrchestrator {
     // SDK-specific properties (for SDK mode)
     this.abortController = null;
     this.anthropicSdkSessionId = null; // SDK session ID for conversation continuity
-    this.pendingToolCalls = new Map(); // Track tool_use_id -> tool_name mapping
+    this.anthropicSdkPendingToolCalls = new Map(); // Track tool_use_id -> tool_name mapping
+    // tool_use ids for AskUserQuestion calls we intercepted. The SDK can't execute
+    // AskUserQuestion in headless mode and emits an error tool_result for it; we
+    // surface the question as text and abort, then swallow that error result so it
+    // doesn't surface as a spurious "Tool error for unknown" log / client message.
+    this.anthropicSdkAskUserQuestionToolUseIds = new Set();
 
     // Load configuration
     this.configManager = new AgentConfigurationManager(agentConfig);
@@ -770,6 +775,9 @@ export class AgentOrchestrator {
         }
         else if (block.type === 'tool_use' && block.name) {
           if (block.name === 'AskUserQuestion') {
+            // Remember this id so the SDK's "can't answer" error result for it is
+            // swallowed rather than logged/forwarded as a tool failure.
+            this.anthropicSdkAskUserQuestionToolUseIds.add(block.id);
             const questionsMarkdown = this.#formatAskUserQuestions(block.input?.questions);
             if (questionsMarkdown) {
               const html = await marked.parse(questionsMarkdown);
@@ -780,7 +788,7 @@ export class AgentOrchestrator {
             return;
           }
 
-          this.pendingToolCalls.set(block.id, block.name);
+          this.anthropicSdkPendingToolCalls.set(block.id, block.name);
 
           const isFilesystemTool = ['Read', 'Edit', 'Write', 'Glob', 'Grep'].includes(block.name);
           const isBuiltInMcpTool = block.name.startsWith('mcp__builtin__');
@@ -797,13 +805,18 @@ export class AgentOrchestrator {
           ));
         }
         else if (block.type === 'tool_result' && block.tool_use_id) {
-          const toolName = this.pendingToolCalls.get(block.tool_use_id) || 'unknown';
+          // Swallow the SDK's unanswerable-AskUserQuestion error result — already
+          // handled by surfacing the question and aborting.
+          if (this.anthropicSdkAskUserQuestionToolUseIds.has(block.tool_use_id)) {
+            this.anthropicSdkAskUserQuestionToolUseIds.delete(block.tool_use_id);
+            continue;
+          }
+
+          const toolName = this.anthropicSdkPendingToolCalls.get(block.tool_use_id) || 'unknown';
           const displayName = this.#stripMcpPrefix(toolName);
 
           if (block.is_error) {
-            if (toolName !== 'AskUserQuestion') {
-              logger.log(`Anthropic SDK: Tool error for ${toolName} (${block.tool_use_id}):`, block.content);
-            }
+            logger.log(`Anthropic SDK: Tool error for ${toolName} (${block.tool_use_id}):`, block.content);
           } else {
             logger.log(`Anthropic SDK: Tool call completed: ${displayName}`);
           }
@@ -819,7 +832,7 @@ export class AgentOrchestrator {
             responseType
           ));
 
-          this.pendingToolCalls.delete(block.tool_use_id);
+          this.anthropicSdkPendingToolCalls.delete(block.tool_use_id);
         }
       }
     }
@@ -842,7 +855,14 @@ export class AgentOrchestrator {
     if (content && Array.isArray(content)) {
       for (const block of content) {
         if (block.type === 'tool_result' && block.tool_use_id) {
-          const toolName = this.pendingToolCalls.get(block.tool_use_id) || 'unknown';
+          // Swallow the SDK's unanswerable-AskUserQuestion error result — already
+          // handled by surfacing the question and aborting.
+          if (this.anthropicSdkAskUserQuestionToolUseIds.has(block.tool_use_id)) {
+            this.anthropicSdkAskUserQuestionToolUseIds.delete(block.tool_use_id);
+            continue;
+          }
+
+          const toolName = this.anthropicSdkPendingToolCalls.get(block.tool_use_id) || 'unknown';
           const displayName = this.#stripMcpPrefix(toolName);
 
           if (block.is_error) {
@@ -862,7 +882,7 @@ export class AgentOrchestrator {
             responseType
           ));
 
-          this.pendingToolCalls.delete(block.tool_use_id);
+          this.anthropicSdkPendingToolCalls.delete(block.tool_use_id);
         }
       }
     }
