@@ -38,6 +38,7 @@ import logger from '../utilities/logger.js';
 import config from '../config.js';
 import TokenUsageReporter, { Provider } from '../utilities/TokenUsageReporter.js';
 import { sanitizeSchemaForGemini } from './tools/builtin/toolHelpers.js';
+import { join } from 'path';
 
 // Normalize a single message to Gemini format {role:'user'|'model', parts:[{text}]}.
 // Handles Anthropic-format messages ({role, content}) that arrive when switching
@@ -291,7 +292,7 @@ export class AgentOrchestrator {
 
     // Build system prompt from config
     const mode = session.mode;
-    const systemPrompt = this.configManager.buildSystemPrompt(mode);
+    const systemPrompt = this.#buildSystemPromptWithRag(mode);
 
     // Get tool collections
     const builtInTools = this.builtInToolProvider.getTools();
@@ -473,7 +474,7 @@ export class AgentOrchestrator {
       content: userMessage
     });
 
-    let systemPrompt = this.configManager.buildSystemPrompt(mode);
+    let systemPrompt = this.#buildSystemPromptWithRag(mode);
 
     // Check model token count and handle large models (for SDK mode)
     const currentModel = session?.clientModel;
@@ -1139,6 +1140,38 @@ export class AgentOrchestrator {
    * format ({role, parts}); each summarizer extracts text from both shapes via
    * the shared normalizer below.
    */
+  /**
+   * Universal RAG hook: every route builds its system prompt through here so
+   * attached-file context reaches all six provider/loop paths identically.
+   * Appends an "Attached Files" manifest listing each ready file.
+   *
+   * Wording is intentionally tool-agnostic for the read-in-full (manifest) tier
+   * ("open and read the file at <path>") — the anthropic-sdk route excludes the
+   * read_file built-in (it uses the SDK's native Read) and would rewrite a
+   * literal `read_file` token to a non-existent MCP tool. The `search_documents`
+   * token is safe to mention (it exists on every route).
+   */
+  #buildSystemPromptWithRag(mode) {
+    const base = this.configManager.buildSystemPrompt(mode);
+    const files = this.sessionManager.getAttachedFiles(this.sessionId).filter(f => f.status === 'ready');
+    if (files.length === 0) return base;
+
+    const tempDir = this.sessionManager.getSessionTempDir(this.sessionId);
+    const lines = files.map(f => {
+      if (f.tier === 'vector') {
+        return `- "${f.name}" (${f.mimeType}, ~${f.tokenCount} tokens) — large document. Use the search_documents tool to find relevant passages (optionally restrict to this file with fileId "${f.fileId}").`;
+      }
+      const path = join(tempDir, 'rag', f.fileId, 'extracted.txt');
+      return `- "${f.name}" (${f.mimeType}, ~${f.tokenCount} tokens) — open and read the file at ${path} to use its full contents.`;
+    });
+
+    return `${base}
+
+## Attached Files
+The user has attached the following reference documents to this session. Consult them whenever they are relevant to the request.
+${lines.join('\n')}`;
+  }
+
   async #buildPriorContextTextHelper(history) {
     const conversationText = this.#normalizeHistoryToText(history);
     const tokenCount = countTokens(conversationText);
@@ -1367,7 +1400,7 @@ export class AgentOrchestrator {
 
     const session = this.sessionManager.getSession(this.sessionId);
     const mode = session.mode;
-    const systemPrompt = this.configManager.buildSystemPrompt(mode);
+    const systemPrompt = this.#buildSystemPromptWithRag(mode);
     const builtInTools = this.builtInToolProvider.getTools();
     const dynamicTools = this.dynamicToolProvider.getTools();
 
@@ -1570,7 +1603,7 @@ export class AgentOrchestrator {
       parts: [{ text: userMessage }]
     });
 
-    let systemPrompt = this.configManager.buildSystemPrompt(mode);
+    let systemPrompt = this.#buildSystemPromptWithRag(mode);
     const currentModel = session?.clientModel;
     let modelTokenCount = 0;
 
@@ -1959,7 +1992,7 @@ export class AgentOrchestrator {
       content: userMessage
     });
 
-    const systemPrompt = this.configManager.buildSystemPrompt(mode);
+    const systemPrompt = this.#buildSystemPromptWithRag(mode);
     const currentModel = session?.clientModel;
     let modelTokenCount = 0;
     if (currentModel) {
@@ -2201,7 +2234,7 @@ export class AgentOrchestrator {
       });
 
       const mode = session.mode;
-      const systemPrompt = this.configManager.buildSystemPrompt(mode);
+      const systemPrompt = this.#buildSystemPromptWithRag(mode);
       const builtInTools = this.builtInToolProvider.getTools();
       const dynamicTools = this.dynamicToolProvider.getTools();
 

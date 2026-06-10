@@ -8,7 +8,10 @@ import {
   createToolCallCompletedMessage,
   createAgentCompleteMessage,
   createErrorMessage,
-  createSessionReadyMessage
+  createSessionReadyMessage,
+  validateClientMessage,
+  createFileAddedMessage,
+  createFileRemovedMessage
 } from '../../agent/utilities/MessageProtocol.js';
 
 describe('MessageProtocol', () => {
@@ -130,6 +133,75 @@ describe('MessageProtocol', () => {
 
       const result = ModelUpdatedNotificationSchema.safeParse(message);
       expect(result.success).toBe(true);
+    });
+  });
+
+  describe('add_file / remove_file messages', () => {
+    it('validates a well-formed add_file message', () => {
+      const result = validateClientMessage({
+        type: 'add_file',
+        sessionId: 'test-123',
+        name: 'spec.md',
+        mimeType: 'text/markdown',
+        encoding: 'utf8',
+        content: '# Spec\nhello'
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects add_file with a bad encoding', () => {
+      const result = validateClientMessage({
+        type: 'add_file',
+        sessionId: 'test-123',
+        name: 'spec.md',
+        mimeType: 'text/markdown',
+        encoding: 'hex',
+        content: 'abc'
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects add_file missing required fields', () => {
+      const result = validateClientMessage({
+        type: 'add_file',
+        sessionId: 'test-123',
+        name: 'spec.md'
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('validates a well-formed remove_file message', () => {
+      const result = validateClientMessage({
+        type: 'remove_file',
+        sessionId: 'test-123',
+        fileId: 'file_abc'
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects remove_file without a fileId', () => {
+      const result = validateClientMessage({
+        type: 'remove_file',
+        sessionId: 'test-123'
+      });
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('file snapshot builders', () => {
+    it('createFileAddedMessage carries the full file snapshot', () => {
+      const files = [{ fileId: 'f1', name: 'a.txt', status: 'ready' }];
+      const message = createFileAddedMessage('session-1', files);
+      expect(message.type).toBe('file_added');
+      expect(message.sessionId).toBe('session-1');
+      expect(message.files).toEqual(files);
+      expect(message.timestamp).toBeDefined();
+    });
+
+    it('createFileRemovedMessage carries the full file snapshot', () => {
+      const message = createFileRemovedMessage('session-1', []);
+      expect(message.type).toBe('file_removed');
+      expect(message.files).toEqual([]);
     });
   });
 

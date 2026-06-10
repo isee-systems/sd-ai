@@ -37,7 +37,8 @@ import {
   createEditModulesTool,
   createReadFileTool,
   createWriteFileTool,
-  createEditFileTool
+  createEditFileTool,
+  createSearchDocumentsTool
 } from './builtin/index.js';
 
 /**
@@ -100,9 +101,10 @@ export class BuiltInToolProvider {
         edit_relationships: createEditRelationshipsTool(this.sessionManager, this.sessionId, this.sendToClient),
         edit_specs: createEditSpecsTool(this.sessionManager, this.sessionId, this.sendToClient),
         edit_modules: createEditModulesTool(this.sessionManager, this.sessionId, this.sendToClient),
-        read_file: createReadFileTool()
+        read_file: createReadFileTool(),
         //write_file: createWriteFileTool(),
         //edit_file: createEditFileTool()
+        search_documents: createSearchDocumentsTool(this.sessionManager, this.sessionId)
       }
     };
   }

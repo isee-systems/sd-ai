@@ -18,17 +18,22 @@
  *   stop          – abort the current agent iteration
  *   tool_response – callId + result; resolves a pending client tool promise
  *   model_updated – new client model object
+ *   add_file      – RAG: fileId + metadata; worker extracts/chunks/embeds the
+ *                   bytes the main process already wrote to <session>/rag/<id>/
+ *   remove_file   – RAG: fileId; worker deletes the file's artifacts + vectors
  *   get_context   – requestId; worker replies with current conversation history
  *   shutdown      – clean exit
  *
  * IPC messages OUT (worker → main):
- *   to_client      – relay to the WebSocket client verbatim
- *   context_response – reply to get_context
- *   worker_error   – unhandled top-level error
+ *   to_client          – relay to the WebSocket client verbatim
+ *   context_response   – reply to get_context
+ *   rag_file_processed – RAG: a file finished extraction/embedding (meta update)
+ *   worker_error       – unhandled top-level error
  */
 
 import { AgentOrchestrator } from './AgentOrchestrator.js';
 import { SessionManager } from './utilities/SessionManager.js';
+import { RagStore, createGeminiEmbedder } from './utilities/RagStore.js';
 import logger from '../utilities/logger.js';
 import config from '../config.js';
 import { join } from 'path';
@@ -57,6 +62,9 @@ class AgentWorker {
   #sessionManager = new SessionManager({ disableCleanup: true });
 
   #orchestrator = null;
+
+  // Per-worker RAG store (one session per worker). Created on initialize.
+  #ragStore = null;
 
   #conversationRunning = false;
 
@@ -107,6 +115,25 @@ class AgentWorker {
   #toMain(msg) { this.#sendToMain(msg); }
   #toClient(msg) { this.#toMain({ type: 'to_client', message: msg }); }
 
+  // Extract/chunk/embed a newly added file off the critical path, then tell the
+  // main process its final metadata so it can emit an updated file snapshot.
+  // Extraction + embedding awaits yield the event loop so an in-flight agent
+  // conversation keeps running.
+  async #processRagFile(msg) {
+    const fileMeta = { fileId: msg.fileId, name: msg.name, mimeType: msg.mimeType, addedAt: msg.addedAt };
+    try {
+      const meta = await this.#ragStore.processFile(this.#sessionManager, SESSION_ID, fileMeta);
+      this.#toMain({ type: 'rag_file_processed', fileId: meta.fileId, meta });
+    } catch (err) {
+      logger.error(`[worker:${SESSION_ID}] Failed to process RAG file ${msg.fileId}:`, err);
+      this.#toMain({
+        type: 'rag_file_processed',
+        fileId: msg.fileId,
+        meta: { ...fileMeta, status: 'error', error: err.message }
+      });
+    }
+  }
+
   async #handleMessage(msg) {
     try {
       switch (msg.type) {
@@ -121,6 +148,17 @@ class AgentWorker {
           this.#sessionManager.initializeSession(SESSION_ID, msg.mode, msg.model, msg.tools, msg.context, msg.clientId, capabilities);
           for (const h of (msg.conversationHistory || [])) {
             this.#sessionManager.addToConversationHistory(SESSION_ID, h);
+          }
+
+          // RAG: stand up the per-worker store and reconcile files already on
+          // disk. Files carried across an agent switch keep their extracted text
+          // + embeddings (no re-embedding — just re-registered); files whose
+          // bytes were written before any worker existed get processed now.
+          this.#ragStore = new RagStore(createGeminiEmbedder(msg.clientId));
+          this.#sessionManager.ragStore = this.#ragStore;
+          const freshlyProcessed = await this.#ragStore.reconcile(this.#sessionManager, SESSION_ID, msg.attachedFiles || []);
+          for (const meta of freshlyProcessed) {
+            this.#toMain({ type: 'rag_file_processed', fileId: meta.fileId, meta });
           }
           break;
         }
@@ -190,6 +228,24 @@ class AgentWorker {
 
         case 'model_updated': {
           this.#sessionManager.updateClientModel(SESSION_ID, msg.model);
+          break;
+        }
+
+        case 'add_file': {
+          // If the store isn't up yet the bytes are safely on disk and will be
+          // picked up by reconcile() on initialize. Otherwise process now.
+          if (this.#ragStore) this.#processRagFile(msg);
+          break;
+        }
+
+        case 'remove_file': {
+          if (this.#ragStore) {
+            try {
+              this.#ragStore.removeFile(this.#sessionManager, SESSION_ID, msg.fileId);
+            } catch (err) {
+              logger.error(`[worker:${SESSION_ID}] Failed to remove RAG file ${msg.fileId}:`, err);
+            }
+          }
           break;
         }
 

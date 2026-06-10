@@ -4,6 +4,10 @@ import { ThinkingLevel } from "@google/genai";
 const config = {
     "port": process.env.PORT || 3000,
     "websocketPort": process.env.WEBSOCKET_PORT || 3000,
+    // Maximum size (bytes) of a single WebSocket frame. Caps client uploads
+    // (add_file content is sent inline). Without this the `ws` library defaults
+    // to ~100 MiB silently; set it explicitly so the ceiling is tunable here.
+    "websocketMaxPayloadBytes": Number(process.env.WEBSOCKET_MAX_PAYLOAD_BYTES) || 100 * 1024 * 1024,
 
     /*
     * Reporting URLs
@@ -46,6 +50,21 @@ const config = {
     "agentAnthropicEffort": "medium",
     "agentAnthropicThinking": { type: "adaptive" }, // Opus 4.7+/Sonnet 4.6 use adaptive thinking; depth is controlled by agentAnthropicEffort (budget_tokens is removed and 400s)
     "agentGeminiThinking": { thinkingLevel: ThinkingLevel.MEDIUM },
+    /*
+    * Retrieval-Augmented Generation (RAG). Clients attach files over the
+    * WebSocket; the worker extracts text, reads small files in full and
+    * chunks+embeds large ones for semantic search via the search_documents tool.
+    * Embeddings use a Gemini model (decoupled from the chat provider) so
+    * retrieval is identical across every agent route.
+    */
+    "ragMaxFileBytes": Number(process.env.RAG_MAX_FILE_BYTES) || 50 * 1024 * 1024, // Per-file upload cap (decoded bytes)
+    "ragMaxFilesPerSession": Number(process.env.RAG_MAX_FILES_PER_SESSION) || 25, // Max attached files per session
+    "ragEmbeddingModel": 'gemini-embedding-2', // Gemini embedding model (reuses GEMINI_API_KEY; no extra key needed)
+    "ragEmbeddingDimensions": 768, // outputDimensionality for embeddings (smaller vectors → lighter storage)
+    "ragManifestMaxTokens": 4000, // Files at/under this token count are read in full; larger files are chunked + embedded
+    "ragChunkTokens": 600, // Target tokens per chunk for vector-tier files
+    "ragChunkOverlap": 80, // Token overlap between adjacent chunks
+    "ragSearchTopK": 8, // Default number of chunks returned by search_documents
     "agentToolModels": {
         anthropic: {
             build:    { normal: 'gemini-3.5-flash low', hard: 'gemini-3.5-flash high' },

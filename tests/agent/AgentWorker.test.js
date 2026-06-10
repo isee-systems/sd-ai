@@ -9,7 +9,7 @@
 
 import { fork } from 'child_process';
 import { jest } from '@jest/globals';
-import { mkdirSync, rmSync } from 'fs';
+import { mkdirSync, rmSync, writeFileSync, existsSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { fileURLToPath } from 'url';
@@ -330,5 +330,85 @@ describe('AgentWorker IPC — error handling', () => {
 
     expect(responses.map((r) => r.requestId)).toEqual(ids);
   }, 10000);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('AgentWorker IPC — RAG files', () => {
+  let worker;
+  let tempDir;
+
+  beforeEach(() => {
+    tempDir = makeTempDir();
+    worker = spawnWorker(tempDir);
+  });
+
+  afterEach(() => {
+    worker.kill('SIGKILL');
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  // Place a file's raw bytes where the main process would have written them.
+  function placeOriginal(fileId, content) {
+    const dir = join(tempDir, 'rag', fileId);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'original.bin'), Buffer.from(content, 'utf8'));
+    return dir;
+  }
+
+  it('processes an add_file and reports rag_file_processed (manifest tier, no embedding)', async () => {
+    sendInit(worker);
+    const fileId = 'file_small_1';
+    const dir = placeOriginal(fileId, 'A short attached reference note for the agent.');
+
+    worker.send({ type: 'add_file', fileId, name: 'note.txt', mimeType: 'text/plain', addedAt: new Date().toISOString() });
+
+    const msg = await waitForMessage(
+      worker,
+      (m) => m.type === 'rag_file_processed' && m.fileId === fileId,
+      30000
+    );
+
+    expect(msg.meta.status).toBe('ready');
+    expect(msg.meta.tier).toBe('manifest');
+    expect(existsSync(join(dir, 'extracted.txt'))).toBe(true);
+  }, 30000);
+
+  it('removes a file and deletes its artifacts', async () => {
+    sendInit(worker);
+    const fileId = 'file_small_2';
+    const dir = placeOriginal(fileId, 'Another note to be removed.');
+
+    worker.send({ type: 'add_file', fileId, name: 'note.txt', mimeType: 'text/plain', addedAt: new Date().toISOString() });
+    await waitForMessage(worker, (m) => m.type === 'rag_file_processed' && m.fileId === fileId, 30000);
+    expect(existsSync(dir)).toBe(true);
+
+    worker.send({ type: 'remove_file', fileId });
+
+    // Use a get_context round-trip as a barrier — IPC messages are processed in
+    // order, so once the context reply arrives the remove has been handled.
+    const requestId = 'barrier-after-remove';
+    worker.send({ type: 'get_context', requestId });
+    await waitForMessage(worker, (m) => m.type === 'context_response' && m.requestId === requestId, 10000);
+
+    expect(existsSync(dir)).toBe(false);
+  }, 30000);
+
+  it('reconciles attachedFiles passed on initialize (uploaded before the worker)', async () => {
+    const fileId = 'file_pre_init';
+    const dir = placeOriginal(fileId, 'Uploaded before the worker was ready.');
+
+    sendInit(worker, {
+      attachedFiles: [{ fileId, name: 'pre.txt', mimeType: 'text/plain', addedAt: new Date().toISOString(), status: 'processing' }]
+    });
+
+    const msg = await waitForMessage(
+      worker,
+      (m) => m.type === 'rag_file_processed' && m.fileId === fileId,
+      30000
+    );
+    expect(msg.meta.status).toBe('ready');
+    expect(existsSync(join(dir, 'extracted.txt'))).toBe(true);
+  }, 30000);
 });
 

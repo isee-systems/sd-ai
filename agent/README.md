@@ -41,8 +41,8 @@ Each agent session runs in a dedicated **worker subprocess** spawned by `WorkerS
 **On macOS / Linux without bwrap:** falls back to a plain Node.js `fork()`. The fork runs in its own process group (`detached: true`) so killing the group also terminates any grandchild processes (e.g. the Claude CLI subprocess spawned by the Anthropic Agent SDK).
 
 IPC messages between the main process and worker:
-- **Main → Worker:** `initialize`, `select_agent`, `chat`, `stop`, `tool_response`, `model_updated`, `get_context`, `shutdown`
-- **Worker → Main:** `to_client` (relayed to the WebSocket), `context_response`, `worker_error`
+- **Main → Worker:** `initialize`, `select_agent`, `chat`, `stop`, `tool_response`, `model_updated`, `add_file`, `remove_file`, `get_context`, `shutdown`
+- **Worker → Main:** `to_client` (relayed to the WebSocket), `context_response`, `rag_file_processed`, `worker_error`
 
 ### Model Type Enforcement
 
@@ -51,6 +51,28 @@ Each session works with ONE model type that cannot be changed:
 - **SFD** (Stock Flow Diagram) — Quantitative models with stocks, flows, and equations
 
 The model type is declared at session initialization and enforced throughout.
+
+### Retrieval-Augmented Generation (RAG)
+
+Clients can attach reference documents to a session with the `add_file` / `remove_file` messages. Attached files are available to the agent on **every** provider/loop route, because retrieval is implemented independently of the chat provider.
+
+**Hybrid, threshold-based tiers** (the threshold is `config.ragManifestMaxTokens`):
+- **manifest tier** (small files) — listed in an "Attached Files" section appended to the system prompt; the agent reads the full extracted text on demand from the file's path.
+- **vector tier** (large files) — chunked and embedded; the agent retrieves relevant passages with the universal `search_documents` tool. Embeddings use a Gemini embedding model (`config.ragEmbeddingModel`), decoupled from the chat provider, so behavior is identical across all routes.
+
+**Flow.** The main process is authoritative for "the bytes exist": on `add_file` it decodes the inline content, writes the raw bytes to `<tempDir>/rag/<fileId>/original.bin` (the worker's `/session` bind-mount source), records metadata, acks the client immediately with a full file snapshot (`status: "processing"`), then forwards a lightweight `add_file` IPC to the worker. The worker extracts text (txt/md/csv/json as-is; PDF via pdfjs, DOCX via mammoth, XLSX via SheetJS), classifies the tier, chunks + embeds large files, persists artifacts, and reports back with `rag_file_processed`; the main process then pushes an updated snapshot (`status: "ready"`).
+
+**On-disk layout** (under the session temp dir, which survives agent switches):
+```
+rag/
+  manifest.json                 # array of file metadata
+  <fileId>/
+    original.bin                # raw uploaded bytes
+    extracted.txt               # extracted plain text
+    chunks.json                 # [{chunkIndex,text,startChar,endChar,page?}]  (vector tier)
+    embeddings.json             # [[float,...]] aligned to chunks.json          (vector tier)
+```
+Because the session temp dir is reused across agent switches, a worker spawned for a new agent **reloads** the existing artifacts (via the `attachedFiles` list on `initialize`) instead of re-embedding. The whole `rag/` directory is removed with the session on disconnect.
 
 ### Message Flow
 
@@ -283,7 +305,39 @@ Interrupts the current agent loop without disconnecting the session.
 
 The agent stops after the current API call completes, then sends `agent_complete` with status `awaiting_user`. The session remains active and can receive new `chat` messages.
 
-#### 7. Disconnect
+#### 7. Add File (RAG)
+
+Attaches a reference document to the session. The content is sent inline — as plain UTF-8 text or, for binary documents (PDF/DOCX/XLSX), base64-encoded. Decoded size is capped by `config.ragMaxFileBytes`, and the number of attached files by `config.ragMaxFilesPerSession`. The overall WebSocket frame is capped by `config.websocketMaxPayloadBytes`.
+
+```json
+{
+  "type": "add_file",
+  "sessionId": "sess_abc123",
+  "fileId": "optional-client-id",
+  "name": "requirements.pdf",
+  "mimeType": "application/pdf",
+  "encoding": "base64",
+  "content": "JVBERi0xLjQ..."
+}
+```
+
+`fileId` is optional; the server assigns one if omitted. The server replies with a `file_added` snapshot immediately (`status: "processing"`) and again once extraction/embedding completes (`status: "ready"`).
+
+#### 8. Remove File (RAG)
+
+Removes a previously attached file and all of its artifacts.
+
+```json
+{
+  "type": "remove_file",
+  "sessionId": "sess_abc123",
+  "fileId": "file_9f3a..."
+}
+```
+
+The server replies with a `file_removed` snapshot.
+
+#### 9. Disconnect
 
 Gracefully closes the session and cleans up all server-side resources including the temp directory.
 
@@ -672,8 +726,50 @@ Reports errors during processing.
 | `AGENT_SELECTION_ERROR` | `select_agent` failed — e.g. unknown `agentId`, or `agentConfig` frontmatter is missing required `name` / `agent_mode` fields. The session remains active; send another `select_agent` to recover. |
 | `TOOL_TIMEOUT` | A built-in or custom tool did not receive a `tool_call_response` within its timeout. |
 | `NO_AGENT` | A `chat` message arrived before `select_agent` was sent. |
+| `FILE_TOO_LARGE` | An `add_file` decoded to more than `config.ragMaxFileBytes` bytes. |
+| `FILE_LIMIT_EXCEEDED` | An `add_file` would exceed `config.ragMaxFilesPerSession`. |
+| `ADD_FILE_ERROR` / `REMOVE_FILE_ERROR` | An attach/remove operation failed server-side. |
 
 Note that receiving an `error` message does not mean the agent has stopped — the agent may still continue iterating. Wait for `agent_complete` before treating the agent as idle.
+
+#### 13. File Added (RAG)
+
+Acknowledges an `add_file`. Carries the **full snapshot** of currently attached files so the client always has authoritative state. Sent twice per upload: once immediately (`status: "processing"`) and again when extraction/embedding completes (`status: "ready"`, or `"error"` on failure).
+
+```json
+{
+  "type": "file_added",
+  "sessionId": "sess_abc123",
+  "files": [
+    {
+      "fileId": "file_9f3a...",
+      "name": "requirements.pdf",
+      "mimeType": "application/pdf",
+      "bytes": 482113,
+      "tokenCount": 18240,
+      "tier": "vector",
+      "chunkCount": 34,
+      "status": "ready"
+    }
+  ],
+  "timestamp": "2025-01-15T10:30:00.000Z"
+}
+```
+
+`tier` is `"manifest"` (read in full by the agent) or `"vector"` (searched via `search_documents`).
+
+#### 14. File Removed (RAG)
+
+Acknowledges a `remove_file`, carrying the updated full snapshot (the same `files` shape as `file_added`).
+
+```json
+{
+  "type": "file_removed",
+  "sessionId": "sess_abc123",
+  "files": [],
+  "timestamp": "2025-01-15T10:30:00.000Z"
+}
+```
 
 ---
 
@@ -773,7 +869,10 @@ All core tools are registered server-side. Clients do not need to register them.
 - **edit_modules** — Add, update, or remove modules in a large model in place
 
 ### File Utilities
-- **read_file** — Read a file from the session temp directory (supports line range and search filtering)
+- **read_file** — Read a file from the session temp directory (supports line range and search filtering). Used to read manifest-tier attached files in full. (Excluded from the Anthropic SDK route, which uses the SDK's native `Read`.)
+
+### Retrieval (RAG)
+- **search_documents** — Semantic search over large (vector-tier) attached documents. Inputs: `query` (required), `topK` (optional), `fileId` (optional, restrict to one file). Returns ranked excerpts, each with the source file name, chunk index, and location. Small (manifest-tier) files are not searched — the agent reads those in full from their path. Available on every provider/loop route.
 
 ---
 

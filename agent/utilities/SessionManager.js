@@ -213,6 +213,11 @@ export class SessionManager {
       // Agent conversation context (for Claude Agent SDK)
       conversationContext: [],
 
+      // RAG: metadata for files the client has attached this session. Keyed by
+      // fileId. The main process holds metadata only (bytes live on disk);
+      // the worker additionally holds the in-memory vector index via its RagStore.
+      attachedFiles: new Map(),
+
       // Async hook installed by WebSocketHandler so stale-session cleanup can
       // wait for the worker to exit before rmSync removes the bwrap bind-mount
       // source. Null when no worker is running for this session.
@@ -258,6 +263,7 @@ export class SessionManager {
       modelTokenCount: 0,
       pendingToolCalls: new Map(),
       conversationContext: [],
+      attachedFiles: new Map(),
       workerTeardown: null,
     };
 
@@ -453,6 +459,33 @@ export class SessionManager {
   getConversationContext(sessionId) {
     const session = this.getSession(sessionId);
     return session?.conversationContext || [];
+  }
+
+  /**
+   * Add or replace an attached file's metadata (keyed by fileId).
+   */
+  addAttachedFile(sessionId, fileMeta) {
+    const session = this.getSession(sessionId);
+    if (session) {
+      session.attachedFiles.set(fileMeta.fileId, fileMeta);
+    }
+  }
+
+  /**
+   * Remove an attached file's metadata. Returns true if it existed.
+   */
+  removeAttachedFile(sessionId, fileId) {
+    const session = this.getSession(sessionId);
+    return session ? session.attachedFiles.delete(fileId) : false;
+  }
+
+  /**
+   * Get the current attached-file metadata as an array (the snapshot sent to the
+   * client and used to build the RAG manifest in the system prompt).
+   */
+  getAttachedFiles(sessionId) {
+    const session = this.getSession(sessionId);
+    return session ? Array.from(session.attachedFiles.values()) : [];
   }
 
   /**
@@ -727,6 +760,7 @@ ${conversationText}`;
       session.ws = null;
       session.clientModel = null;
       session.conversationContext = [];
+      session.attachedFiles.clear();
 
       this.sessions.delete(sessionId);
 

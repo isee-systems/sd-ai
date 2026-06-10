@@ -6,12 +6,15 @@ import {
   createSessionReadyMessage,
   createAgentSelectedMessage,
   createAgentTextMessage,
-  createErrorMessage
+  createErrorMessage,
+  createFileAddedMessage,
+  createFileRemovedMessage
 } from './utilities/MessageProtocol.js';
 import { join } from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
-import { readdirSync, readFileSync } from 'fs';
+import { randomBytes } from 'crypto';
+import { readdirSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'fs';
 import logger from '../utilities/logger.js';
 import utils from '../utilities/utils.js';
 import config from '../config.js';
@@ -218,6 +221,12 @@ export class WebSocketHandler {
         case 'stop_iteration':
           await this.#handleStopIteration(message);
           break;
+        case 'add_file':
+          await this.#handleAddFile(message);
+          break;
+        case 'remove_file':
+          await this.#handleRemoveFile(message);
+          break;
         case 'disconnect': {
           const sessionId = this.#sessionId;
           await this.#waitForSpawnAndKill();
@@ -422,6 +431,9 @@ export class WebSocketHandler {
         context: session.context,
         clientId: session.clientId,
         conversationHistory,
+        // RAG: the new worker reconciles these against on-disk artifacts (which
+        // survive an agent switch) so it reloads rather than re-embeds.
+        attachedFiles: this.#sessionManager.getAttachedFiles(this.#sessionId),
         supportsArrays: session.supportsArrays,
         supportsModules: session.supportsModules,
         supportsSubTypes: session.supportsSubTypes,
@@ -506,6 +518,72 @@ export class WebSocketHandler {
     } catch (error) {
       logger.error(`Error stopping iteration for session ${this.#sessionId}:`, error);
       await this.#sendToClient(createErrorMessage(this.#sessionId, error.message, 'STOP_ITERATION_ERROR'));
+    }
+  }
+
+  // RAG: client attaches a file. The main process is authoritative for "the
+  // bytes exist": it writes them to the host temp dir (== the worker's /session
+  // bind-mount source), tracks metadata, acks immediately with the full file
+  // snapshot, then forwards a lightweight notification to the worker which does
+  // the extraction/embedding and reports back via rag_file_processed.
+  async #handleAddFile(message) {
+    try {
+      const fileId = message.fileId || `file_${randomBytes(8).toString('hex')}`;
+
+      const existing = this.#sessionManager.getAttachedFiles(this.#sessionId);
+      const isNew = !existing.some(f => f.fileId === fileId);
+      if (isNew && existing.length >= config.ragMaxFilesPerSession) {
+        await this.#sendToClient(createErrorMessage(this.#sessionId, `Attached file limit reached (${config.ragMaxFilesPerSession}).`, 'FILE_LIMIT_EXCEEDED'));
+        return;
+      }
+
+      const buffer = Buffer.from(message.content, message.encoding === 'base64' ? 'base64' : 'utf8');
+      if (buffer.length > config.ragMaxFileBytes) {
+        await this.#sendToClient(createErrorMessage(this.#sessionId, `File '${message.name}' exceeds the maximum size of ${config.ragMaxFileBytes} bytes.`, 'FILE_TOO_LARGE'));
+        return;
+      }
+
+      const tempDir = this.#sessionManager.getSessionTempDir(this.#sessionId);
+      const fileDir = join(tempDir, 'rag', fileId);
+      mkdirSync(fileDir, { recursive: true });
+      writeFileSync(join(fileDir, 'original.bin'), buffer);
+
+      const addedAt = new Date().toISOString();
+      this.#sessionManager.addAttachedFile(this.#sessionId, {
+        fileId,
+        name: message.name,
+        mimeType: message.mimeType,
+        bytes: buffer.length,
+        tokenCount: null,
+        tier: null,
+        chunkCount: 0,
+        status: 'processing',
+        addedAt
+      });
+
+      // Immediate ack (status: processing). A second file_added snapshot follows
+      // from the worker's rag_file_processed once extraction/embedding completes.
+      await this.#sendToClient(createFileAddedMessage(this.#sessionId, this.#sessionManager.getAttachedFiles(this.#sessionId)));
+
+      this.#worker?.send({ type: 'add_file', fileId, name: message.name, mimeType: message.mimeType, addedAt });
+    } catch (error) {
+      logger.error(`Error adding file for session ${this.#sessionId}:`, error);
+      await this.#sendToClient(createErrorMessage(this.#sessionId, error.message, 'ADD_FILE_ERROR'));
+    }
+  }
+
+  // RAG: client removes a file. Drop metadata + on-disk artifacts (covers the
+  // no-worker case) and forward to the worker so it drops its in-memory vectors.
+  async #handleRemoveFile(message) {
+    try {
+      const tempDir = this.#sessionManager.getSessionTempDir(this.#sessionId);
+      this.#sessionManager.removeAttachedFile(this.#sessionId, message.fileId);
+      try { rmSync(join(tempDir, 'rag', message.fileId), { recursive: true, force: true }); } catch { /* already gone */ }
+      await this.#sendToClient(createFileRemovedMessage(this.#sessionId, this.#sessionManager.getAttachedFiles(this.#sessionId)));
+      this.#worker?.send({ type: 'remove_file', fileId: message.fileId });
+    } catch (error) {
+      logger.error(`Error removing file for session ${this.#sessionId}:`, error);
+      await this.#sendToClient(createErrorMessage(this.#sessionId, error.message, 'REMOVE_FILE_ERROR'));
     }
   }
 
@@ -595,6 +673,16 @@ export class WebSocketHandler {
         }
       } else if (msg.type === 'worker_error') {
         logger.error(`[worker:${this.#sessionId}] ${msg.error}`);
+      } else if (msg.type === 'rag_file_processed') {
+        // The worker finished extraction/embedding. Update the authoritative
+        // metadata and push a refreshed snapshot so the client sees the final
+        // status (and so a future agent switch re-initializes correctly).
+        if (this.#worker === w) {
+          this.#sessionManager.addAttachedFile(this.#sessionId, msg.meta);
+          if (this.#ws.readyState === 1) {
+            this.#ws.send(JSON.stringify(createFileAddedMessage(this.#sessionId, this.#sessionManager.getAttachedFiles(this.#sessionId))));
+          }
+        }
       }
       // context_response is handled inside #getWorkerContext via its own listener
     });

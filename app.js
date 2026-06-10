@@ -61,14 +61,16 @@ if (useSamePort) {
   // WebSocket on the same HTTP server as REST API
   wss = new WebSocketServer({
     server: server,
-    path: '/api/v1'
+    path: '/api/v1',
+    maxPayload: config.websocketMaxPayloadBytes
   });
 } else {
   // WebSocket on a separate HTTP server and port
   wsHttpServer = createServer();
   wss = new WebSocketServer({
     server: wsHttpServer,
-    path: '/api/v1'
+    path: '/api/v1',
+    maxPayload: config.websocketMaxPayloadBytes
   });
 }
 

@@ -270,6 +270,15 @@ The `agent/` directory contains a WebSocket server that wraps the SD-AI engines 
 
 **Protocol summary:** client connects → `initialize_session` (model type + initial model) → `session_ready` (agent list) → `select_agent` → `chat` messages → agent responds with `agent_text`, `visualization`, and `tool_call_request` messages that the client must answer.
 
+## File Attachments (RAG)
+
+Clients can attach reference documents (text, Markdown, CSV, JSON, source code, and binary docs — PDF/DOCX/XLSX) to a session and the agent will use them on **every** provider/route:
+
+- **`add_file` / `remove_file`** messages send file content inline (UTF-8 or base64). The server replies with `file_added` / `file_removed` messages carrying a full snapshot of the currently attached files.
+- **Hybrid retrieval:** small files are read in full by the agent; large files are chunked, embedded, and reached via the universal `search_documents` tool. Embeddings use a **Gemini** embedding model (`config.ragEmbeddingModel`, default `gemini-embedding-001`) — this reuses the existing `GEMINI_API_KEY`, so **no additional API key is required** — and is decoupled from the chat provider.
+- **Relevant config keys** (`config.js`): `websocketMaxPayloadBytes`, `ragMaxFileBytes`, `ragMaxFilesPerSession`, `ragEmbeddingModel`, `ragEmbeddingDimensions`, `ragManifestMaxTokens`, `ragChunkTokens`, `ragChunkOverlap`, `ragSearchTopK`.
+- **Extraction dependencies:** `pdfjs-dist` (PDF), `mammoth` (DOCX), `xlsx` (XLSX).
+
 See [agent/README.md](agent/README.md) for the full WebSocket protocol, all message types, tool call request/response formats, and example client implementation.
 
 # Setup

@@ -156,6 +156,36 @@ describe('SessionManager', () => {
     });
   });
 
+  describe('attachedFiles (RAG metadata)', () => {
+    it('adds, retrieves, and removes attached file metadata', () => {
+      const sessionId = sessionManager.createSession(null);
+      sessionManager.initializeSession(sessionId, 'cld', {}, [], {}, 'client');
+
+      expect(sessionManager.getAttachedFiles(sessionId)).toEqual([]);
+
+      sessionManager.addAttachedFile(sessionId, { fileId: 'f1', name: 'a.txt', status: 'ready' });
+      sessionManager.addAttachedFile(sessionId, { fileId: 'f2', name: 'b.txt', status: 'processing' });
+      expect(sessionManager.getAttachedFiles(sessionId)).toHaveLength(2);
+
+      // Re-adding the same fileId replaces (updates status)
+      sessionManager.addAttachedFile(sessionId, { fileId: 'f2', name: 'b.txt', status: 'ready' });
+      expect(sessionManager.getAttachedFiles(sessionId)).toHaveLength(2);
+      expect(sessionManager.getAttachedFiles(sessionId).find(f => f.fileId === 'f2').status).toBe('ready');
+
+      expect(sessionManager.removeAttachedFile(sessionId, 'f1')).toBe(true);
+      expect(sessionManager.removeAttachedFile(sessionId, 'nope')).toBe(false);
+      expect(sessionManager.getAttachedFiles(sessionId)).toHaveLength(1);
+    });
+
+    it('clears attached files on deleteSession', () => {
+      const sessionId = sessionManager.createSession(null);
+      sessionManager.initializeSession(sessionId, 'cld', {}, [], {}, 'client');
+      sessionManager.addAttachedFile(sessionId, { fileId: 'f1', name: 'a.txt', status: 'ready' });
+      sessionManager.deleteSession(sessionId);
+      expect(sessionManager.getAttachedFiles(sessionId)).toEqual([]);
+    });
+  });
+
   describe('shutdown', () => {
     it('should clean up all sessions', () => {
       const sessionId1 = sessionManager.createSession(null);

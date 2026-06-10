@@ -1,5 +1,6 @@
 import { timeout } from 'async';
 import { z } from 'zod';
+import config from '../../config.js';
 
 /**
  * Message Protocol Schemas
@@ -174,6 +175,26 @@ const DisconnectMessageSchema = z.object({
   sessionId: z.string().describe('Unique session identifier for the session to disconnect')
 });
 
+export const AddFileMessageSchema = z.object({
+  type: z.literal('add_file').describe('Message type identifier'),
+  sessionId: z.string().describe('Unique session identifier'),
+  fileId: z.string().optional().describe('Optional client-provided file id; the server assigns one if omitted'),
+  name: z.string().describe('Display name of the file, including its extension (used as an extraction hint)'),
+  mimeType: z.string().describe('MIME type of the file (e.g. "application/pdf", "text/markdown")'),
+  encoding: z.enum(['utf8', 'base64']).describe('Encoding of the content field: "utf8" for plain text, "base64" for binary files'),
+  // Coarse guard against absurd frames; the decoded byte size is validated
+  // against config.ragMaxFileBytes when the message is handled.
+  content: z.string().max(config.websocketMaxPayloadBytes).describe('The file content, encoded per the encoding field'),
+  timestamp: z.string().optional().describe('ISO 8601 timestamp of when the message was created')
+});
+
+const RemoveFileMessageSchema = z.object({
+  type: z.literal('remove_file').describe('Message type identifier'),
+  sessionId: z.string().describe('Unique session identifier'),
+  fileId: z.string().describe('Id of the attached file to remove'),
+  timestamp: z.string().optional().describe('ISO 8601 timestamp of when the message was created')
+});
+
 const ClientMessageSchema = z.discriminatedUnion('type', [
   InitializeSessionMessageSchema,
   SelectAgentMessageSchema,
@@ -181,6 +202,8 @@ const ClientMessageSchema = z.discriminatedUnion('type', [
   ToolCallResponseMessageSchema,
   ModelUpdatedNotificationSchema,
   StopIterationMessageSchema,
+  AddFileMessageSchema,
+  RemoveFileMessageSchema,
   DisconnectMessageSchema
 ]);
 
@@ -347,6 +370,27 @@ export function createGetVariableDataMessage(sessionId, requestId, variableNames
     variableNames,
     runIds,
     detailed,
+    timestamp: new Date().toISOString()
+  };
+}
+
+// `files` is the full snapshot of currently attached files so the client always
+// has authoritative state. Each entry: {fileId, name, mimeType, bytes,
+// tokenCount, tier, chunkCount, status}.
+export function createFileAddedMessage(sessionId, files) {
+  return {
+    type: 'file_added',
+    sessionId,
+    files,
+    timestamp: new Date().toISOString()
+  };
+}
+
+export function createFileRemovedMessage(sessionId, files) {
+  return {
+    type: 'file_removed',
+    sessionId,
+    files,
     timestamp: new Date().toISOString()
   };
 }

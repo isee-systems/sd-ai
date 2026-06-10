@@ -1,0 +1,228 @@
+/**
+ * Unit tests for RagStore. Extraction, tier classification, chunking, semantic
+ * search, removal, and agent-switch reconciliation are exercised with a
+ * deterministic fake embedder so no network / GEMINI_API_KEY is needed.
+ */
+import { jest } from '@jest/globals';
+import { mkdirSync, writeFileSync, existsSync, readFileSync, rmSync } from 'fs';
+import { join } from 'path';
+import { tmpdir } from 'os';
+import { randomBytes } from 'crypto';
+import * as XLSX from 'xlsx';
+import { RagStore } from '../../agent/utilities/RagStore.js';
+import { SessionManager } from '../../agent/utilities/SessionManager.js';
+import config from '../../config.js';
+
+// Deterministic fake embedder: bag-of-words over a tiny vocabulary, L2
+// normalized so dot product == cosine. A query embeds near chunks that share
+// its keywords.
+const VOCAB = ['apple', 'banana', 'carrot', 'dolphin', 'elephant', 'forest'];
+function featurize(text) {
+  const lower = text.toLowerCase();
+  const counts = VOCAB.map(w => (lower.match(new RegExp(w, 'g')) || []).length);
+  counts.push(0.001); // avoid a zero vector
+  let norm = Math.sqrt(counts.reduce((s, v) => s + v * v, 0));
+  return counts.map(v => v / norm);
+}
+
+function makeFakeEmbedder() {
+  return {
+    calls: 0,
+    async embed(texts) {
+      this.calls += texts.length;
+      return texts.map(featurize);
+    }
+  };
+}
+
+describe('RagStore', () => {
+  let sessionManager;
+  let sessionId;
+  let tempDir;
+  let embedder;
+  let store;
+
+  beforeEach(() => {
+    const base = join(tmpdir(), `ragstore-test-${Date.now()}-${randomBytes(4).toString('hex')}`);
+    sessionManager = new SessionManager({ tempBasePath: base, disableCleanup: true });
+    sessionId = sessionManager.createSession(null);
+    tempDir = sessionManager.getSessionTempDir(sessionId);
+    embedder = makeFakeEmbedder();
+    store = new RagStore(embedder);
+  });
+
+  afterEach(() => {
+    sessionManager.shutdown();
+  });
+
+  function writeOriginal(fileId, buffer) {
+    const dir = join(tempDir, 'rag', fileId);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'original.bin'), buffer);
+    return dir;
+  }
+
+  // Build text guaranteed to exceed the manifest threshold, with distinct
+  // keyword-bearing paragraphs so semantic search can discriminate.
+  function buildLargeText() {
+    const applePara = 'The apple orchard discussion. ' + 'apple '.repeat(40);
+    const dolphinPara = 'The dolphin migration discussion. ' + 'dolphin '.repeat(40);
+    const blocks = [];
+    for (let i = 0; i < 60; i++) {
+      blocks.push(applePara);
+      blocks.push(dolphinPara);
+    }
+    return blocks.join('\n\n');
+  }
+
+  describe('processFile — extraction & tiering', () => {
+    it('classifies a small text file as the manifest tier and writes extracted.txt', async () => {
+      const dir = writeOriginal('f1', Buffer.from('A short reference note about systems.', 'utf8'));
+      const meta = await store.processFile(sessionManager, sessionId, { fileId: 'f1', name: 'note.txt', mimeType: 'text/plain', addedAt: 'now' });
+
+      expect(meta.tier).toBe('manifest');
+      expect(meta.status).toBe('ready');
+      expect(meta.chunkCount).toBe(0);
+      expect(existsSync(join(dir, 'extracted.txt'))).toBe(true);
+      expect(existsSync(join(dir, 'embeddings.json'))).toBe(false);
+      expect(embedder.calls).toBe(0); // never embeds a manifest-tier file
+      expect(sessionManager.getAttachedFiles(sessionId)).toHaveLength(1);
+    });
+
+    it('extracts text from a PDF', async () => {
+      const pdf = `%PDF-1.4
+1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj
+2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj
+3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 300 200]/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>endobj
+4 0 obj<</Length 52>>stream
+BT /F1 18 Tf 20 100 Td (Hello RAG world) Tj ET
+endstream
+endobj
+5 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj
+trailer<</Root 1 0 R>>
+%%EOF`;
+      const dir = writeOriginal('pdf1', Buffer.from(pdf, 'latin1'));
+      await store.processFile(sessionManager, sessionId, { fileId: 'pdf1', name: 'doc.pdf', mimeType: 'application/pdf', addedAt: 'now' });
+      const text = readFileSync(join(dir, 'extracted.txt'), 'utf8');
+      expect(text).toContain('Hello RAG world');
+    }, 20000);
+
+    it('extracts text from an XLSX workbook', async () => {
+      const ws = XLSX.utils.aoa_to_sheet([['City', 'Population'], ['Springfield', 30720]]);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Towns');
+      const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+      const dir = writeOriginal('xl1', buffer);
+      await store.processFile(sessionManager, sessionId, { fileId: 'xl1', name: 'data.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', addedAt: 'now' });
+      const text = readFileSync(join(dir, 'extracted.txt'), 'utf8');
+      expect(text).toContain('Springfield');
+      expect(text).toContain('Population');
+    });
+
+    it('throws if the embedder returns fewer vectors than chunks (alignment guard)', async () => {
+      // Mimics an embedding API that aggregates a batch into a single vector —
+      // the exact failure that stranded every chunk but the opening one.
+      const collapsing = { async embed(texts) { return texts.length ? [featurize('only one')] : []; } };
+      const badStore = new RagStore(collapsing);
+      writeOriginal('bad1', Buffer.from(buildLargeText(), 'utf8'));
+      await expect(
+        badStore.processFile(sessionManager, sessionId, { fileId: 'bad1', name: 'bad.txt', mimeType: 'text/plain', addedAt: 'now' })
+      ).rejects.toThrow(/does not match chunk count/);
+    });
+
+    it('classifies a large file as the vector tier and writes chunks + embeddings', async () => {
+      const dir = writeOriginal('big1', Buffer.from(buildLargeText(), 'utf8'));
+      const meta = await store.processFile(sessionManager, sessionId, { fileId: 'big1', name: 'big.txt', mimeType: 'text/plain', addedAt: 'now' });
+
+      expect(meta.tier).toBe('vector');
+      expect(meta.tokenCount).toBeGreaterThan(config.ragManifestMaxTokens);
+      expect(meta.chunkCount).toBeGreaterThan(0);
+      expect(existsSync(join(dir, 'chunks.json'))).toBe(true);
+      expect(existsSync(join(dir, 'embeddings.json'))).toBe(true);
+
+      const chunks = JSON.parse(readFileSync(join(dir, 'chunks.json'), 'utf8'));
+      const vectors = JSON.parse(readFileSync(join(dir, 'embeddings.json'), 'utf8'));
+      expect(chunks.length).toBe(vectors.length);
+      expect(chunks[0]).toHaveProperty('startChar');
+      expect(chunks[0]).toHaveProperty('endChar');
+    });
+  });
+
+  describe('search', () => {
+    it('returns the most relevant chunk for a query', async () => {
+      writeOriginal('big1', Buffer.from(buildLargeText(), 'utf8'));
+      await store.processFile(sessionManager, sessionId, { fileId: 'big1', name: 'big.txt', mimeType: 'text/plain', addedAt: 'now' });
+
+      const results = await store.search(sessionManager, sessionId, 'apple', { topK: 3 });
+      expect(results.length).toBeGreaterThan(0);
+      expect(results[0].text.toLowerCase()).toContain('apple');
+      expect(results[0]).toHaveProperty('fileId', 'big1');
+      expect(results[0]).toHaveProperty('location');
+    });
+
+    it('respects topK', async () => {
+      writeOriginal('big1', Buffer.from(buildLargeText(), 'utf8'));
+      await store.processFile(sessionManager, sessionId, { fileId: 'big1', name: 'big.txt', mimeType: 'text/plain', addedAt: 'now' });
+      const results = await store.search(sessionManager, sessionId, 'dolphin', { topK: 2 });
+      expect(results.length).toBeLessThanOrEqual(2);
+    });
+
+    it('filters by fileId', async () => {
+      writeOriginal('big1', Buffer.from(buildLargeText(), 'utf8'));
+      await store.processFile(sessionManager, sessionId, { fileId: 'big1', name: 'big.txt', mimeType: 'text/plain', addedAt: 'now' });
+      const results = await store.search(sessionManager, sessionId, 'apple', { fileId: 'does-not-exist' });
+      expect(results).toEqual([]);
+    });
+
+    it('returns empty when there are no vector-tier files', async () => {
+      writeOriginal('f1', Buffer.from('tiny note', 'utf8'));
+      await store.processFile(sessionManager, sessionId, { fileId: 'f1', name: 'note.txt', mimeType: 'text/plain', addedAt: 'now' });
+      const results = await store.search(sessionManager, sessionId, 'apple', {});
+      expect(results).toEqual([]);
+    });
+  });
+
+  describe('removeFile', () => {
+    it('deletes artifacts, manifest entry, and session metadata', async () => {
+      const dir = writeOriginal('f1', Buffer.from('note', 'utf8'));
+      await store.processFile(sessionManager, sessionId, { fileId: 'f1', name: 'note.txt', mimeType: 'text/plain', addedAt: 'now' });
+      expect(existsSync(dir)).toBe(true);
+
+      store.removeFile(sessionManager, sessionId, 'f1');
+      expect(existsSync(dir)).toBe(false);
+      expect(sessionManager.getAttachedFiles(sessionId)).toHaveLength(0);
+      expect(store.readManifest(tempDir).find(m => m.fileId === 'f1')).toBeUndefined();
+    });
+  });
+
+  describe('reconcile', () => {
+    it('re-registers an already-processed file without re-embedding (agent switch)', async () => {
+      writeOriginal('big1', Buffer.from(buildLargeText(), 'utf8'));
+      await store.processFile(sessionManager, sessionId, { fileId: 'big1', name: 'big.txt', mimeType: 'text/plain', addedAt: 'now' });
+      const embedCallsAfterProcess = embedder.calls;
+
+      // Simulate a new worker: fresh store + fresh session, same temp dir on disk.
+      const newSm = new SessionManager({ tempBasePath: join(tempDir, '..'), disableCleanup: true });
+      // Point the new session at the SAME temp dir by reusing the same sessionId dir.
+      const newSessionId = sessionId;
+      // Re-register the session object so getSessionTempDir resolves.
+      newSm.createSessionWithId(newSessionId, null, tempDir);
+      const newStore = new RagStore(embedder);
+
+      const fresh = await newStore.reconcile(newSm, newSessionId, [{ fileId: 'big1', name: 'big.txt', mimeType: 'text/plain', addedAt: 'now' }]);
+      expect(fresh).toHaveLength(0); // nothing freshly processed
+      expect(embedder.calls).toBe(embedCallsAfterProcess); // no re-embedding
+      expect(newSm.getAttachedFiles(newSessionId).find(f => f.fileId === 'big1')?.tier).toBe('vector');
+
+      newSm.shutdown();
+    });
+
+    it('processes a file whose bytes exist but was never extracted (uploaded before a worker)', async () => {
+      writeOriginal('pre1', Buffer.from('A note added before any worker existed.', 'utf8'));
+      const fresh = await store.reconcile(sessionManager, sessionId, [{ fileId: 'pre1', name: 'pre.txt', mimeType: 'text/plain', addedAt: 'now' }]);
+      expect(fresh).toHaveLength(1);
+      expect(fresh[0].status).toBe('ready');
+      expect(existsSync(join(tempDir, 'rag', 'pre1', 'extracted.txt'))).toBe(true);
+    });
+  });
+});

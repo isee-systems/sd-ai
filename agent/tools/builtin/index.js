@@ -27,6 +27,7 @@ export {
   createEditModulesTool
 } from './largeModelTools.js';
 export { createReadFileTool, createWriteFileTool, createEditFileTool } from './fileTools.js';
+export { createSearchDocumentsTool } from './searchDocuments.js';
 
 // Helper utilities
 export { generateRequestId, createErrorResponse } from './toolHelpers.js';
