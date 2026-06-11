@@ -617,7 +617,11 @@ export class LLMWrapper {
 
   async createChatCompletion(messages, model, zodSchema = null, temperature = null, reasoningEffort = null) {
     let normalizedMessages = messages;
-    if (this.model.kind === ModelType.LLAMA || this.model.kind === ModelType.DEEPSEEK) {
+    // DeepSeek (and other strict upstreams) reject non-alternating turns, so
+    // consecutive user messages must be collapsed into one. OpenRouter is included
+    // here because slugs like `deepseek/deepseek-v4-pro` route as OPEN_ROUTER, not
+    // DEEPSEEK — so without this they'd bypass the collapse the local path gets.
+    if (this.model.kind === ModelType.LLAMA || this.model.kind === ModelType.DEEPSEEK || this.model.kind === ModelType.OPEN_ROUTER) {
       normalizedMessages = this.#collapseUserMessages(messages);
     }
 
