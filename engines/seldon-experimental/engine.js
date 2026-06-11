@@ -1,5 +1,6 @@
 import { LLMWrapper } from '../../utilities/LLMWrapper.js';
 import SeldonBrain from '../seldon/SeldonBrain.js'
+import logger from '../../utilities/logger.js'
 
 class Engine {
         static SYSTEM_PROMPT_DESC = 
