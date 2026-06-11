@@ -12,6 +12,20 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = dirname(__dirname);  // sd-ai root (parent of agent/)
 
 /**
+ * Thrown by spawn() when the sandbox cannot be created and no fallback is
+ * permitted (bwrap broken + ALLOW_UNSANDBOXED_FALLBACK unset). This condition
+ * is permanent for the lifetime of the process — retrying always fails
+ * identically — so callers should treat it as fatal and close the connection
+ * rather than return a retryable error that invites a client hot-loop.
+ */
+export class SandboxUnavailableError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'SandboxUnavailableError';
+  }
+}
+
+/**
  * Wraps a bwrap ChildProcess with a Unix-socket-based IPC channel.
  *
  * bwrap cannot pass the Node.js IPC fd (fd 3) into the sandbox. 
@@ -133,7 +147,19 @@ class IpcWorker extends EventEmitter {
 export class WorkerSpawner {
   static CONTAINER_SESSION_PATH = '/session';
   static #WORKER_PATH = join(__dirname, 'AgentWorker.js');
-  static #bwrapBroken = false; // set true on first bwrap sandbox failure
+  // Epoch-ms until which bwrap is treated as broken. A failed spawn (3 attempts
+  // exhausted) arms this for #BWRAP_COOLDOWN_MS; once it elapses the next spawn
+  // re-probes bwrap. This is a SELF-HEALING cooldown, not a permanent latch:
+  // under PM2 cluster mode each process has its own copy of this field, so a
+  // permanent latch let a single transient blip (e.g. resource pressure under a
+  // connection burst) poison ONE cluster worker for its entire lifetime —
+  // every session PM2 routed to it failed forever while sibling workers served
+  // fine. The cooldown bounds that blast radius to one window; a genuinely
+  // broken host still fast-fails, re-probing once per cooldown instead of
+  // paying the full 9s retry on every spawn.
+  static #BWRAP_COOLDOWN_MS = 60_000;
+  static #bwrapBrokenUntil = 0;
+  static #bwrapCurrentlyBroken() { return Date.now() < WorkerSpawner.#bwrapBrokenUntil; }
   // Set ALLOW_UNSANDBOXED_FALLBACK=true to allow unsandboxed fork workers when
   // bwrap fails at runtime.  Defaults to false so a sandbox failure is a hard
   // error rather than a silent security regression.
@@ -318,7 +344,7 @@ export class WorkerSpawner {
   static async spawn(sessionId, sessionTempDir) {
     if (process.platform === 'linux') {
       const bwrapBin = WorkerSpawner.#findBinary('bwrap');
-      if (bwrapBin && !WorkerSpawner.#bwrapBroken) {
+      if (bwrapBin && !WorkerSpawner.#bwrapCurrentlyBroken()) {
         const MAX_ATTEMPTS = 3;
         for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
           const attemptLabel = attempt > 1 ? ` (attempt ${attempt}/${MAX_ATTEMPTS})` : '';
@@ -409,10 +435,11 @@ export class WorkerSpawner {
             );
             await new Promise(r => setTimeout(r, 3000));
           } else {
-            WorkerSpawner.#bwrapBroken = true;
+            WorkerSpawner.#bwrapBrokenUntil = Date.now() + WorkerSpawner.#BWRAP_COOLDOWN_MS;
+            const cooldownSecs = Math.round(WorkerSpawner.#BWRAP_COOLDOWN_MS / 1000);
             const fallbackNote = WorkerSpawner.#allowUnsandboxedFallback
-              ? 'Future workers will fall back to unsandboxed fork (ALLOW_UNSANDBOXED_FALLBACK=true).'
-              : 'Worker spawning will now FAIL until bwrap is fixed (set ALLOW_UNSANDBOXED_FALLBACK=true to override).';
+              ? `Workers will fall back to unsandboxed fork for the next ${cooldownSecs}s (ALLOW_UNSANDBOXED_FALLBACK=true), then bwrap is re-probed.`
+              : `Worker spawning will FAIL for the next ${cooldownSecs}s, then bwrap is re-probed (set ALLOW_UNSANDBOXED_FALLBACK=true to fall back instead).`;
             logger.error(
               `[worker:${sessionId}] bwrap exited early (code=${code} signal=${signal}) — sandbox unavailable after ${MAX_ATTEMPTS} attempts. See stderr above.\n` +
               fallbackNote + '\n' +
@@ -421,11 +448,11 @@ export class WorkerSpawner {
             WorkerSpawner.#logBwrapDiagnostics(bwrapBin);
           }
         }
-        // All attempts failed — fall through to bwrapBroken handling below.
+        // All attempts failed — fall through to cooldown handling below.
       }
-      if (WorkerSpawner.#bwrapBroken) {
+      if (WorkerSpawner.#bwrapCurrentlyBroken()) {
         if (!WorkerSpawner.#allowUnsandboxedFallback) {
-          throw new Error('bwrap sandbox is unavailable and ALLOW_UNSANDBOXED_FALLBACK is not set — refusing to spawn unsandboxed worker');
+          throw new SandboxUnavailableError('bwrap sandbox is unavailable and ALLOW_UNSANDBOXED_FALLBACK is not set — refusing to spawn unsandboxed worker');
         }
         logger.warn(`[worker:${sessionId}] bwrap sandbox unavailable — spawning unsandboxed worker`);
       } else {

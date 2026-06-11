@@ -1,4 +1,4 @@
-import { WorkerSpawner } from './WorkerSpawner.js';
+import { WorkerSpawner, SandboxUnavailableError } from './WorkerSpawner.js';
 import { AgentConfigurationManager } from './utilities/AgentConfigurationManager.js';
 import {
   validateClientMessage,
@@ -460,6 +460,17 @@ export class WebSocketHandler {
       }
     } catch (error) {
       logger.error(`Failed to select agent for session ${this.#sessionId}:`, error);
+      // A SandboxUnavailableError is permanent for the lifetime of this process
+      // (bwrap is broken with no fallback). Returning a retryable
+      // AGENT_SELECTION_ERROR here invites a client hot-loop: the client
+      // re-sends select_agent on error, spawn fails instantly (no retry delay
+      // once #bwrapBroken is latched), and the same socket logs tens of
+      // thousands of identical failures per minute. Close the connection
+      // instead so there's nothing to retry against on this socket.
+      if (error instanceof SandboxUnavailableError) {
+        if (this.#ws.readyState === 1) this.#ws.close(1011, 'Worker sandbox unavailable');
+        return;
+      }
       await this.#sendToClient(createErrorMessage(this.#sessionId, `Agent selection failed: ${error.message}`, 'AGENT_SELECTION_ERROR'));
     }
   }
