@@ -693,36 +693,7 @@ export class LLMWrapper {
       }
     }
 
-    let completion;
-    try {
-      completion = await this.#openRouterAPI.chat.send({ chatRequest });
-    } catch (error) {
-      console.error('[LLMWrapper OpenRouter] Request failed for model:', model);
-      try {
-        console.error('[LLMWrapper OpenRouter] chatRequest:', JSON.stringify(chatRequest, null, 2));
-      } catch {
-        console.error('[LLMWrapper OpenRouter] chatRequest (non-serializable)');
-      }
-      console.error('[LLMWrapper OpenRouter] error.message:', error?.message);
-      console.error('[LLMWrapper OpenRouter] error.statusCode:', error?.statusCode);
-      console.error('[LLMWrapper OpenRouter] error.body:', error?.body);
-      if (error?.error) {
-        try {
-          console.error('[LLMWrapper OpenRouter] error.error:', JSON.stringify(error.error, null, 2));
-        } catch {
-          console.error('[LLMWrapper OpenRouter] error.error (non-serializable):', error.error);
-        }
-      }
-      if (error?.rawResponse) {
-        try {
-          const rawText = await error.rawResponse.clone().text();
-          console.error('[LLMWrapper OpenRouter] rawResponse body:', rawText);
-        } catch (readErr) {
-          console.error('[LLMWrapper OpenRouter] rawResponse read failed:', readErr?.message);
-        }
-      }
-      throw error;
-    }
+    const completion = await this.#openRouterAPI.chat.send({ chatRequest });
     this.#tokenReporter.report({ provider: Provider.OPENROUTER, model, usage: completion.usage, clientKey: this.#clientKey });
 
     const message = completion.choices?.[0]?.message ?? {};
