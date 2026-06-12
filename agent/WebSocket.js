@@ -689,9 +689,19 @@ export class WebSocketHandler {
         // metadata and push a refreshed snapshot so the client sees the final
         // status (and so a future agent switch re-initializes correctly).
         if (this.#worker === w) {
-          this.#sessionManager.addAttachedFile(this.#sessionId, msg.meta);
-          if (this.#ws.readyState === 1) {
-            this.#ws.send(JSON.stringify(createFileAddedMessage(this.#sessionId, this.#sessionManager.getAttachedFiles(this.#sessionId))));
+          // Drop a late result for a file that's no longer tracked: a quick
+          // attach-then-remove deletes the shared rag/<id> bytes out from under
+          // the still-queued add_file, so the worker reports it (errored) after
+          // the main already removed it. Re-adding here would resurrect a
+          // removed file in the client's snapshot.
+          const stillTracked = this.#sessionManager.getAttachedFiles(this.#sessionId).some(f => f.fileId === msg.fileId);
+          if (!stillTracked) {
+            logger.log(`[session:${this.#sessionId}] Ignoring RAG result for untracked file ${msg.fileId} (removed before processing finished)`);
+          } else {
+            this.#sessionManager.addAttachedFile(this.#sessionId, msg.meta);
+            if (this.#ws.readyState === 1) {
+              this.#ws.send(JSON.stringify(createFileAddedMessage(this.#sessionId, this.#sessionManager.getAttachedFiles(this.#sessionId))));
+            }
           }
         }
       }

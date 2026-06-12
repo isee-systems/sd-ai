@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, readdirSync } from 'fs';
 import { join } from 'path';
 import { countTokens } from '@anthropic-ai/tokenizer';
 import logger from '../../utilities/logger.js';
@@ -278,7 +278,27 @@ export class RagStore {
     const dir = this.#fileDir(tempDir, fileMeta.fileId);
     const originalPath = join(dir, 'original.bin');
     if (!existsSync(originalPath)) {
-      throw new Error(`original.bin missing for file ${fileMeta.fileId}`);
+      // The main process writes original.bin (synchronously) before signalling
+      // us, and we read it back through the shared /session bind mount — so a
+      // missing file here is never a simple timing race. Capture a compact view
+      // of what this worker can actually see so the caller can tell a benign
+      // mid-flight removal (the file's whole dir is gone — remove_file rmSync'd
+      // the shared rag/<id> out from under a still-queued add_file) apart from an
+      // unexpected loss / stale bind-mount inode (the dir is present, or the rag
+      // root is unexpectedly empty though the main wrote here).
+      const ragDir = this.#ragDir(tempDir);
+      const fileDirExists = existsSync(dir);
+      let ragRootExists = false;
+      let ragRootEntries = [];
+      try {
+        ragRootExists = existsSync(ragDir);
+        if (ragRootExists) ragRootEntries = readdirSync(ragDir);
+      } catch { /* best-effort diagnostic only */ }
+      const err = new Error(`original.bin missing for file ${fileMeta.fileId}`);
+      err.code = 'ORIGINAL_BIN_MISSING';
+      err.fileDirExists = fileDirExists;
+      err.diagnostic = `tempDir=${tempDir} fileDirExists=${fileDirExists} ragRootExists=${ragRootExists} ragRootEntries=[${ragRootEntries.join(', ')}]`;
+      throw err;
     }
 
     const buffer = readFileSync(originalPath);

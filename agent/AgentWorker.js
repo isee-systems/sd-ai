@@ -125,7 +125,23 @@ class AgentWorker {
       const meta = await this.#ragStore.processFile(this.#sessionManager, SESSION_ID, fileMeta);
       this.#toMain({ type: 'rag_file_processed', fileId: meta.fileId, meta });
     } catch (err) {
-      logger.error(`[worker:${SESSION_ID}] Failed to process RAG file ${msg.fileId}:`, err);
+      // A vanished original.bin is usually benign: a quick attach-then-remove
+      // (or a session teardown) deletes the shared rag/<id> dir out from under
+      // this still-queued add_file. When the file's dir is gone, log quietly.
+      // When it's still present the bytes went missing unexpectedly (e.g. a
+      // stale bwrap bind-mount inode) — log loudly with the directory snapshot
+      // so that genuine bug is diagnosable from prod logs.
+      if (err.code === 'ORIGINAL_BIN_MISSING') {
+        if (err.fileDirExists) {
+          logger.error(`[worker:${SESSION_ID}] RAG file ${msg.fileId}: original.bin missing though its dir exists — ${err.diagnostic}`);
+        } else {
+          logger.log(`[worker:${SESSION_ID}] RAG file ${msg.fileId} bytes gone before processing (likely removed) — ${err.diagnostic}`);
+        }
+      } else {
+        logger.error(`[worker:${SESSION_ID}] Failed to process RAG file ${msg.fileId}:`, err);
+      }
+      // Always report back so the client's "processing" status resolves. The
+      // main process drops this if the file is no longer tracked (i.e. removed).
       this.#toMain({
         type: 'rag_file_processed',
         fileId: msg.fileId,
