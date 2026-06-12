@@ -309,7 +309,15 @@ Returns all parameters in the model that have been changed from their default (e
 Restores parameters (including graphical functions) to their default (equation) values. Can target a single parameter or all input/output/devices at once.
 - `action` (enum: `"restore_parameter"`, `"restore_inputs"`, `"restore_outputs"`, `"restore_all_devices"`) — required
 - `parameterName` (string) — fully qualified parameter name; required when `action` is `"restore_parameter"`
-- **Note:** `restore_outputs` and `restore_all_devices` also delete run data
+- **Note:** `restore_outputs` and `restore_all_devices` also delete run data — but runs that have been saved (see `save_run`) are preserved and not deleted
+
+#### Run Tools
+
+**`save_run`**
+Names a simulation run and marks it as saved. Saved runs are preserved and are NOT deleted when `restore_parameters` is called with `"restore_outputs"` or `"restore_all_devices"`.
+- `name` (string, optional) — name to give the run; if omitted, the run keeps its current name
+- `runId` (integer, optional) — id of the run to name and save; use `-1` (the default) to operate on the current (most recent) run
+- Returns: `{ status: "saved", runId, name }` where `name` is the run's resulting name
 
 ---
 
@@ -364,7 +372,10 @@ Restores parameters (including graphical functions) to their default (equation) 
 **When to use:** When the user asks what parameters have been changed, before restoring parameters, or to help the user reflect on what they have modified in the model.
 
 #### `restore_parameters` *(sfd only)*
-**When to use:** When the user wants to reset parameters to their defaults. Prefer `"restore_parameter"` for targeted resets; use bulk actions only when the user explicitly asks. Always warn the user before calling `"restore_outputs"` or `"restore_all_devices"` since both delete unsaved run data — confirm before proceeding.
+**When to use:** When the user wants to reset parameters to their defaults. Prefer `"restore_parameter"` for targeted resets; use bulk actions only when the user explicitly asks. Always warn the user before calling `"restore_outputs"` or `"restore_all_devices"` since both delete run data — except runs that have been saved via `save_run` — and confirm before proceeding. If the user has runs worth keeping, suggest `save_run` first.
+
+#### `save_run` *(sfd only)*
+**When to use:** When the user wants to preserve a run, give a run a meaningful name, or protect run data before a bulk parameter reset. Saving a run shields it from deletion by `"restore_outputs"` and `"restore_all_devices"`. Omit `runId` (or pass `-1`) to operate on the current run. Proactively offer to save important runs before any operation that would delete run data.
 
 ---
 
