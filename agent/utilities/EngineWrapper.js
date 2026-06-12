@@ -22,11 +22,50 @@ import SeldonILEUserBrain from '../../engines/seldon-ile-user/SeldonILEUserBrain
  * - LTM Narrative
  */
 
+const hasText = (value) => typeof value === 'string' && value.trim().length > 0;
+
+/**
+ * Every engine assembles an LLM request from a fixed set of inputs, and several
+ * push the user prompt unconditionally. When the prompt is empty and nothing
+ * else supplies content, the request collapses to a bare system instruction:
+ * Gemini's SDK then throws a cryptic "contents are required" and other providers
+ * reject the empty turn list too. The guards below catch that at the wrapper
+ * boundary so the agent gets an actionable error it can recover from, rather
+ * than a confusing failure from deep inside a provider SDK.
+ *
+ * Documentation and LTM are deliberately called with an empty prompt and already
+ * self-guard inside their brains (a model with variables / valid feedback content
+ * is required, and is always appended to the request), so they need no guard here.
+ *
+ * Generation engines (quantitative/qualitative) can build from a prompt, a
+ * problem statement, background knowledge, or an existing model — require at
+ * least one.
+ */
+export function assertGenerationInput(prompt, currentModel, parameters) {
+  const hasModel = !!currentModel && ((currentModel.variables?.length > 0) || (currentModel.relationships?.length > 0));
+
+  if (!hasText(prompt) && !hasText(parameters?.problemStatement) && !hasText(parameters?.backgroundKnowledge) && !hasModel) {
+    throw new Error('A non-empty prompt is required (or a problem statement, background knowledge, or existing model to build from).');
+  }
+}
+
+/**
+ * Discussion engines (Seldon / Seldon-ILE / Seldon Mentor) answer a question
+ * about a model, so they require a non-empty prompt — there is nothing to
+ * discuss without one.
+ */
+export function assertDiscussionPrompt(prompt) {
+  if (!hasText(prompt)) {
+    throw new Error('A non-empty prompt (the question or topic to discuss) is required.');
+  }
+}
+
 /**
  * Call the Quantitative Engine
  */
 export async function callQuantitativeEngine(prompt, currentModel, parameters = {}) {
   try {
+    assertGenerationInput(prompt, currentModel, parameters);
 
     // Create engine instance with parameters
     const engine = new QuantitativeEngine(parameters);
@@ -54,6 +93,7 @@ export async function callQuantitativeEngine(prompt, currentModel, parameters = 
  */
 export async function callQualitativeEngine(prompt, currentModel, parameters = {}) {
   try {
+    assertGenerationInput(prompt, currentModel, parameters);
 
     const engine = new QualitativeEngine(parameters);
     const result = await engine.generate(prompt, currentModel, parameters);
@@ -78,6 +118,7 @@ export async function callQualitativeEngine(prompt, currentModel, parameters = {
  */
 export async function callSeldonEngine(prompt, model, feedbackContent, parameters = {}) {
   try {
+    assertDiscussionPrompt(prompt);
 
     const engine = new SeldonEngine(parameters);
 
@@ -110,6 +151,7 @@ export async function callSeldonEngine(prompt, model, feedbackContent, parameter
  */
 export async function callSeldonILEEngine(prompt, model, runName, parameters = {}) {
   try {
+    assertDiscussionPrompt(prompt);
 
     const engine = new SeldonILEEngine(parameters);
 
@@ -200,6 +242,7 @@ export async function callLTMEngine(model, feedbackContent, parameters = {}) {
  */
 export async function callSeldonMentorEngine(prompt, model, feedbackContent, parameters = {}) {
   try {
+    assertDiscussionPrompt(prompt);
 
     const engine = new SeldonMentorEngine(parameters);
 
