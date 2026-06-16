@@ -19,6 +19,7 @@ export {
   createGetVariableDataTool
 } from './clientInteractionTools.js';
 export { createVisualizationTool } from './createVisualization.js';
+export { createDrawCausalLoopDiagramTool } from './drawCausalLoopDiagram.js';
 export {
   createReadModelSectionTool,
   createEditVariablesTool,

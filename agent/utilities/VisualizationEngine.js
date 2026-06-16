@@ -3,6 +3,7 @@ import { join, resolve, normalize, dirname } from 'path';
 import { writeFileSync, readFileSync, existsSync, unlinkSync } from 'fs';
 import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
+import { XMLValidator } from 'fast-xml-parser';
 import { LLMWrapper } from '../../utilities/LLMWrapper.js';
 import logger from '../../utilities/logger.js';
 
@@ -107,6 +108,153 @@ export class VisualizationEngine {
     } else {
       return await this.createVisualizationWithPython(type, data, variables, options);
     }
+  }
+
+  /**
+   * Render a simplified causal loop diagram - returns SVG string.
+   *
+   * An LLM writes the SVG directly from the simplified loops the agent supplies
+   * (no Python, no graphviz/networkx dependency). The spec is authored by the
+   * agent LLM from feedback analysis — it is NOT the raw Loops That Matter
+   * structure.
+   *
+   * The generated markup is validated as well-formed XML; if it is malformed the
+   * broken SVG and the parser's error are sent back to the model to repair, up to
+   * a few attempts. Throws if no valid SVG can be produced.
+   */
+  async createCausalLoopDiagram(spec, options = {}) {
+    const loops = Array.isArray(spec.loops) ? spec.loops.filter(l => Array.isArray(l.links) && l.links.length) : [];
+    if (loops.length === 0) {
+      throw new Error('No loops with links were provided to draw.');
+    }
+
+    const width = options.width || 940;
+    const height = options.height || 700;
+    const title = options.title || spec.title || 'Causal Loop Diagram';
+    const notes = options.notes || spec.notes || '';
+    // Long-form prose (per-loop explanations + the narrative caption) is omitted
+    // by default so the diagram stays clean; only drawn when the end user asks.
+    const showDescriptions = options.showDescriptions === true;
+
+    const systemPrompt = `You are an expert systems-dynamics diagrammer. You draw clean, publication-quality causal loop diagrams (CLDs) as a single self-contained SVG document.
+
+OUTPUT CONTRACT:
+- Output ONLY the SVG. No prose, no markdown fences. Start with <svg ...> (an <?xml ...?> prolog is allowed) and end with </svg>.
+- The SVG must be WELL-FORMED XML: every element closed, every attribute quoted, and every literal & < > inside text or attributes escaped as &amp; &lt; &gt;.
+- It must be self-contained (no external fonts/images/scripts) and use the exact canvas size requested.
+- Render EVERY variable and EVERY link given, exactly as specified. Never invent, drop, rename, or merge variables or links. Reproduce variable names verbatim (XML-escaped).
+
+CLD CONVENTIONS:
+- Draw each variable as a labelled node (text, optionally in a soft rounded box). Wrap long labels.
+- Draw each link as a curved directed arrow from "from" to "to" with a clear arrowhead.
+- Place the link polarity beside each arrow: "+" for "+", and the minus sign "−" (U+2212) for "-".
+- Mark each loop near its centre with its id and type: reinforcing loops use a clockwise icon "↻", balancing loops use a counter-clockwise icon "↺". Give each loop a distinct colour and colour its links to match.
+- Include a legend listing each loop: colour swatch, id, Reinforcing/Balancing, its short label, and (when provided) "~N% of behavior". Sort the legend by dominance, highest first. Thicken links of more dominant loops slightly.
+- Put the title at the top.
+- KEEP THE DIAGRAM CLEAN: do not add any descriptive prose of your own. Render per-loop explanation sentences and a narrative caption ONLY when they are explicitly provided in the user message below; otherwise show just the structure (nodes, links, polarity, loop badges) and the concise legend.
+
+LAYOUT QUALITY — this is what separates a good diagram from a bad one:
+- Position nodes to MINIMISE node overlap and crossing connectors. Spread nodes out; never let boxes touch or text collide.
+- Group the variables of each loop together so each loop reads as its own ring/cluster.
+- Emphasise loops by curving each edge around the centroid of the SHORTEST loop that edge belongs to (the edge should bow on the side away from that loop's centre, so the loop's edges enclose its centre like a rounded ring). For a two-node reciprocal pair, curve the two arrows to opposite sides so they never overlap.
+- Keep arrowheads touching their target node; keep polarity marks legible on a small white halo if they sit over a line.`;
+
+    // Strip explanations from the loop JSON unless descriptions were requested,
+    // so the model has nothing extra to render.
+    const loopsForPrompt = showDescriptions
+      ? loops
+      : loops.map(({ explanation, ...rest }) => rest);
+
+    const descriptionDirective = showDescriptions
+      ? `Descriptions ARE requested: render each loop's "explanation" in the legend, and${notes ? '' : ' (if you have one)'} render the narrative caption at the bottom in italic.\n${notes ? `Narrative caption (render at the bottom, italic):\n${notes}\n` : ''}`
+      : `Keep the diagram clean: show only the structure and the concise legend. Do NOT draw any loop explanation sentences or a narrative caption.\n`;
+
+    const userPrompt = `Draw this causal loop diagram as SVG.
+
+Canvas: ${width} wide by ${height} tall (px).
+Title: ${title}
+${descriptionDirective}Loops to draw (JSON — id, polarity, optional label/dominance${showDescriptions ? '/explanation' : ''}, and ordered links each with from/to/polarity):
+${JSON.stringify(loopsForPrompt, null, 2)}
+
+Remember: output ONLY the SVG document, drawn at ${width}x${height}, reproducing every variable and link exactly.`;
+
+    const vizLLM = new LLMWrapper({ clientId: this.clientId, underlyingModel: options.underlyingModel });
+    const { temperature, underlyingModel: parsedModel, reasoningEffort } = vizLLM.getLLMParameters(0.2);
+
+    const messages = [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt }
+    ];
+
+    const maxAttempts = 3;
+    let lastError = null;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const response = await vizLLM.createChatCompletion(messages, parsedModel, null, temperature, reasoningEffort);
+      const raw = response.content || '';
+      const svg = this.#extractSvgDocument(raw);
+      const validation = this.#validateSvg(svg);
+
+      if (validation.ok) {
+        return svg;
+      }
+
+      lastError = validation.error;
+      logger.log(`[VizEngine] CLD SVG invalid on attempt ${attempt}/${maxAttempts}: ${lastError}`);
+
+      if (attempt < maxAttempts) {
+        // Show the model exactly what it returned and the parser error, ask it to fix.
+        messages.push({ role: 'assistant', content: svg ?? raw });
+        messages.push({
+          role: 'user',
+          content: `The SVG you returned is not valid: ${lastError}
+
+Here is the SVG you returned:
+${svg ?? raw}
+
+Return a corrected version that is well-formed XML and renders the same causal loop diagram. Output ONLY the SVG document, nothing else.`
+        });
+      }
+    }
+
+    throw new Error(`Could not produce a valid SVG after ${maxAttempts} attempts. Last error: ${lastError}`);
+  }
+
+  /**
+   * Pull the SVG document out of a model response, tolerating markdown fences and
+   * surrounding prose. Returns the SVG string, or null if none is present.
+   */
+  #extractSvgDocument(content) {
+    let text = String(content || '').trim();
+    if (text.startsWith('```')) {
+      text = text.replace(/^```[a-zA-Z]*\r?\n/, '').replace(/\r?\n```$/, '').trim();
+    }
+    const startIdx = text.search(/<\?xml|<svg[\s>]/i);
+    const endIdx = text.toLowerCase().lastIndexOf('</svg>');
+    if (startIdx === -1 || endIdx === -1 || endIdx < startIdx) {
+      return null;
+    }
+    return text.slice(startIdx, endIdx + '</svg>'.length);
+  }
+
+  /**
+   * Validate that a string is a well-formed SVG document.
+   * @returns {{ok: boolean, error?: string}}
+   */
+  #validateSvg(svg) {
+    if (!svg) {
+      return { ok: false, error: 'No <svg>…</svg> document was found in the response.' };
+    }
+    if (!/<svg[\s>]/i.test(svg)) {
+      return { ok: false, error: 'The content does not contain an <svg> root element.' };
+    }
+    const result = XMLValidator.validate(svg);
+    if (result === true) {
+      return { ok: true };
+    }
+    const err = result?.err;
+    const where = err?.line ? ` (line ${err.line}, col ${err.col})` : '';
+    return { ok: false, error: `Malformed XML${where}: ${err?.msg || 'unknown parse error'}` };
   }
 
   /**

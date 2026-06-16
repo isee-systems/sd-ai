@@ -850,6 +850,7 @@ All core tools are registered server-side. Clients do not need to register them.
 
 ### Visualization
 - **create_visualization** — Create SVG charts; supports `time_series`, `phase_portrait`, `feedback_dominance`, `comparison`, and AI-custom types
+- **draw_causal_loop_diagram** (SFD only) — Render an SVG causal loop diagram from simplified, LLM-authored feedback loops to explain the origins of model behavior
 
 ### Client Model Interaction
 - **get_current_model** — Fetch current model state from client

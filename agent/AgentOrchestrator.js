@@ -1018,6 +1018,12 @@ export class AgentOrchestrator {
             `Creating ${vizType} visualization: "${title}"... This may take a moment.`,
             false
           ));
+        } else if (block.name === 'draw_causal_loop_diagram') {
+          await this.sendToClient(createAgentTextMessage(
+            this.sessionId,
+            `Drawing causal loop diagram: "${block.input.title || 'Causal Loop Diagram'}"... This may take a moment.`,
+            false
+          ));
         } else if (block.name === 'get_variable_data') {
           const varCount = block.input.variableNames?.length || 0;
           const runCount = block.input.runIds?.length || 0;
@@ -1791,6 +1797,8 @@ ${lines.join('\n')}`;
     if (toolName === 'create_visualization') {
       const vizType = args?.useAICustom ? 'AI-generated custom' : (args?.type || 'standard');
       await this.sendToClient(createAgentTextMessage(this.sessionId, `Creating ${vizType} visualization: "${args?.title || 'visualization'}"... This may take a moment.`, false));
+    } else if (toolName === 'draw_causal_loop_diagram') {
+      await this.sendToClient(createAgentTextMessage(this.sessionId, `Drawing causal loop diagram: "${args?.title || 'Causal Loop Diagram'}"... This may take a moment.`, false));
     } else if (toolName === 'get_variable_data') {
       const varCount = args?.variableNames?.length || 0;
       const runCount = args?.runIds?.length || 0;

@@ -30,6 +30,7 @@ import {
   createGetRunInfoTool,
   createGetVariableDataTool,
   createVisualizationTool,
+  createDrawCausalLoopDiagramTool,
   createReadModelSectionTool,
   createEditVariablesTool,
   createEditRelationshipsTool,
@@ -58,6 +59,7 @@ import {
  * - discuss_with_mentor
  * - generate_ltm_narrative
  * - create_visualization
+ * - draw_causal_loop_diagram
  * - get_feedback_information
  * - get_current_model
  * - update_model
@@ -96,6 +98,7 @@ export class BuiltInToolProvider {
         get_run_info: createGetRunInfoTool(this.sessionManager, this.sessionId, this.sendToClient),
         get_variable_data: createGetVariableDataTool(this.sessionManager, this.sessionId, this.sendToClient),
         create_visualization: createVisualizationTool(this.sessionManager, this.sessionId, this.sendToClient, this.vizEngine, this.provider),
+        draw_causal_loop_diagram: createDrawCausalLoopDiagramTool(this.sessionManager, this.sessionId, this.sendToClient, this.vizEngine, this.provider),
         read_model_section: createReadModelSectionTool(this.sessionManager, this.sessionId),
         edit_variables: createEditVariablesTool(this.sessionManager, this.sessionId, this.sendToClient),
         edit_relationships: createEditRelationshipsTool(this.sessionManager, this.sessionId, this.sendToClient),

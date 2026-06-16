@@ -114,6 +114,12 @@ Never write, generate, or construct a data file yourself and pass it to create_v
 When asked to visualize feedback loop dominance alongside a variable's behavior, use the includeFeedbackContext: true option on the create_visualization tool with a time_series type. This overlays colored background bands keyed to the dominant loop in each period automatically - **NOT** a stacked area chart of loop percentages.
 
 Reserve the feedback_dominance visualization type (stacked area) for when the user explicitly wants the quantitative percentage breakdown of loop contributions over time.
+
+## Drawing a Causal Loop Diagram to Explain Behavior
+Use draw_causal_loop_diagram to render a simplified causal loop diagram (SVG) that visually explains the ORIGINS of the model's behavior. Reach for it when the user wants to SEE the feedback structure behind the dynamics — it complements the prose explanations from discuss_model_with_seldon and generate_ltm_narrative.
+- This tool does NOT read the raw feedback data. First call get_feedback_information (and, if helpful, generate_ltm_narrative or discuss_model_with_seldon) to learn which loops drive behavior, then DISTILL that analysis into a handful of clean, human-readable loops and pass them to the tool.
+- For each loop provide its polarity (reinforcing/balancing) and its ordered links (from → to, each with + or − polarity); include the loop's dominance (% of behavior explained) when known so dominant loops are emphasized.
+- Use the notes field to narrate, in plain language, how these loops produce the observed behavior over time.
 `;
 
   static CLD_AGENT_INSTRUCTIONS =
