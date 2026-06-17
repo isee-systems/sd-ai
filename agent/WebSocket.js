@@ -47,7 +47,7 @@ function getAvailableAgents() {
             name: metadata.name || file.replace('.md', ''),
             role: metadata.role || 'Agent',
             supportedModes: metadata.supported_modes || [],
-            supportedProviders: (metadata.supported_providers?.length ? metadata.supported_providers : ['anthropic', 'google', 'qwen', 'deepseek', 'moonshotai'])
+            supportedProviders: (metadata.supported_providers?.length ? metadata.supported_providers : config.agentProviders)
               .map(id => ({ id, name: ProviderDisplayNames[id] ?? id })),
             description: metadata.description || ''
           });
@@ -330,7 +330,7 @@ export class WebSocketHandler {
         selectedAgent = {
           id: 'custom',
           name: metadata.name,
-          supportedProviders: (metadata.supported_providers?.length ? metadata.supported_providers : ['anthropic', 'google', 'qwen', 'deepseek', 'moonshotai'])
+          supportedProviders: (metadata.supported_providers?.length ? metadata.supported_providers : config.agentProviders)
             .map(id => ({ id, name: ProviderDisplayNames[id] ?? id }))
         };
       } else {

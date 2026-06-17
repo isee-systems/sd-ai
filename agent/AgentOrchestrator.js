@@ -20,10 +20,6 @@ const loadOpenRouterSdk = async () => _openRouterSdk ??= await import('@openrout
 let _openRouterAgent;
 const loadOpenRouterAgent = async () => _openRouterAgent ??= await import('@openrouter/agent');
 
-// External provider ids that name the upstream LLM brand but resolve to the same
-// OpenRouter-routed code paths. The OpenRouter gateway is an implementation detail —
-// users pick the brand they want and the orchestrator routes through the OR SDK.
-const OPENROUTER_PROVIDERS = new Set(['qwen', 'deepseek', 'moonshotai']);
 import { AgentConfigurationManager } from './utilities/AgentConfigurationManager.js';
 import { BuiltInToolProvider } from './tools/BuiltInToolProvider.js';
 import { DynamicToolProvider } from './tools/DynamicToolProvider.js';
@@ -39,6 +35,13 @@ import config from '../config.js';
 import TokenUsageReporter, { Provider } from '../utilities/TokenUsageReporter.js';
 import { sanitizeSchemaForGemini } from './tools/builtin/toolHelpers.js';
 import { join } from 'path';
+
+// External provider ids that name the upstream LLM brand but resolve to the same
+// OpenRouter-routed code paths. The OpenRouter gateway is an implementation detail —
+// users pick the brand they want and the orchestrator routes through the OR SDK.
+// Derived from the shared config registry so adding/removing a brand is a single
+// config.js edit (see config.openRouterAgentProviders).
+const OPENROUTER_PROVIDERS = new Set(Object.keys(config.openRouterAgentProviders));
 
 // Normalize a single message to Gemini format {role:'user'|'model', parts:[{text}]}.
 // Handles Anthropic-format messages ({role, content}) that arrive when switching
@@ -232,8 +235,8 @@ export class AgentOrchestrator {
         }
       }
 
-      // OpenRouter-routed brands (qwen/deepseek/moonshotai) all dispatch through the
-      // shared OpenRouter-SDK/manual methods — the brand selects the model slug, the
+      // OpenRouter-routed brands (config.openRouterAgentProviders) all dispatch through
+      // the shared OpenRouter-SDK/manual methods — the brand selects the model slug, the
       // gateway is the same. Brand-specific cases keep the dispatch table explicit.
       const isOpenRouterBrand = OPENROUTER_PROVIDERS.has(this.provider);
       switch (`${this.provider}-${loopStyle}`) {
@@ -1251,14 +1254,9 @@ ${lines.join('\n')}`;
   }
 
   async #summarizePriorContextWithOpenRouter(conversationText, messageCount) {
-    // Pick the per-brand summary model. Falls back to the agent's primary model
-    // for any unforeseen brand so summarization at least proceeds.
-    const summaryModelMap = {
-      qwen: config.agentQwenSummaryModel,
-      deepseek: config.agentDeepseekSummaryModel,
-      moonshotai: config.agentMoonshotaiSummaryModel,
-    };
-    const model = summaryModelMap[this.provider] || this.#resolveOpenRouterModel();
+    // Pick the per-brand summary model from the OpenRouter registry. Falls back to
+    // the agent's primary model for any unforeseen brand so summarization proceeds.
+    const model = config.openRouterAgentProviders[this.provider]?.summaryModel || this.#resolveOpenRouterModel();
     try {
       logger.log(`OpenRouter (${this.provider}): Summarizing prior agent context (${messageCount} messages) before injection`);
       const openRouterClient = await this.#getOpenRouter();
@@ -1968,24 +1966,19 @@ ${lines.join('\n')}`;
   }
 
   /**
-   * Resolve the model slug to use for the current brand provider. The brand
-   * (qwen/deepseek/moonshotai) is set on construction; the slug comes from the
-   * matching per-brand config key (agentQwenModel / agentDeepseekModel / ...).
+   * Resolve the model slug to use for the current brand provider. The brand is set
+   * on construction; the slug comes from the matching entry in the shared registry
+   * config.openRouterAgentProviders.
    */
   #resolveOpenRouterModel() {
-    const map = {
-      qwen: config.agentQwenModel,
-      deepseek: config.agentDeepseekModel,
-      moonshotai: config.agentMoonshotaiModel,
-    };
-    const model = map[this.provider];
-    if (!model) throw new Error(`No agent<Brand>Model configured for provider "${this.provider}"`);
+    const model = config.openRouterAgentProviders[this.provider]?.model;
+    if (!model) throw new Error(`No openRouterAgentProviders entry configured for provider "${this.provider}"`);
     return model;
   }
 
   /**
    * Start conversation using @openrouter/agent (the OpenRouter Agent SDK).
-   * Used for any provider in OPENROUTER_PROVIDERS (qwen / deepseek / moonshotai).
+   * Used for any provider in OPENROUTER_PROVIDERS (config.openRouterAgentProviders).
    * The brand selects the model slug; the gateway is shared.
    */
   async startConversationOpenRouterSDK(userMessage, previousAgentContext = null) {

@@ -17,15 +17,10 @@ import logger from '../../utilities/logger.js';
 import TokenUsageReporter, { Provider } from '../../utilities/TokenUsageReporter.js';
 import config from '../../config.js';
 
-// External provider ids that route through OpenRouter. Kept local to avoid a
-// SessionManager → AgentOrchestrator import cycle; must stay in sync with
-// OPENROUTER_PROVIDERS in AgentOrchestrator.js.
-const OPENROUTER_PROVIDERS = new Set(['qwen', 'deepseek', 'moonshotai']);
-const OPENROUTER_SUMMARY_MODELS = {
-  qwen: 'agentQwenSummaryModel',
-  deepseek: 'agentDeepseekSummaryModel',
-  moonshotai: 'agentMoonshotaiSummaryModel',
-};
+// External provider ids that route through OpenRouter, derived from the shared
+// config registry (config.openRouterAgentProviders) so adding/removing a brand is a
+// single config.js edit. The same registry carries each brand's summaryModel slug.
+const OPENROUTER_PROVIDERS = new Set(Object.keys(config.openRouterAgentProviders));
 
 /**
  * SessionManager
@@ -493,7 +488,7 @@ export class SessionManager {
    * Private — only called by #summarizeContextIfNeeded and cleanupContext.
    *
    * `provider` selects the summarization API: 'google' → Gemini (Gemini-format
-   * output), an OpenRouter brand (qwen/deepseek/moonshotai) → OpenRouter chat
+   * output), an OpenRouter brand (config.openRouterAgentProviders) → OpenRouter chat
    * completions, anything else → Anthropic. OpenRouter and Anthropic share the
    * same `{role, content}` output shape; only Gemini emits `{role, parts}`.
    */
@@ -553,7 +548,7 @@ ${conversationText}`;
           const OpenRouter = await loadOpenRouterSdk();
           this.openRouter = new OpenRouter({ apiKey: process.env.OPEN_ROUTER_API_KEY });
         }
-        const model = config[OPENROUTER_SUMMARY_MODELS[provider]];
+        const model = config.openRouterAgentProviders[provider].summaryModel;
         const completion = await this.openRouter.chat.send({
           chatRequest: {
             model,

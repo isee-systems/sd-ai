@@ -237,6 +237,7 @@ export class LLMWrapper {
       {label: "Deepseek v4 Pro", value: 'deepseek/deepseek-v4-pro'},
       {label: "Deepseek v4 Flash", value: 'deepseek/deepseek-v4-flash'},
       {label: "Kimi K2.6", value: 'moonshotai/kimi-k2.6'},
+      {label: "GLM 5.2", value: 'z-ai/glm-5.2'},
   ];
 
   static BUILD_DEFAULT_MODEL = config.buildDefaultModel;

@@ -38,15 +38,56 @@ const config = {
     "agentAnthropicSummaryModel": 'claude-haiku-4-5', // Model used for conversation history summarization MUST BE Anthropic models
     "agentGeminiModel": 'gemini-3.5-flash', // Model used for agent conversations MUST BE gemini models
     "agentGeminiSummaryModel": 'gemini-3.1-flash-lite', // Model used for conversation history summarization MUST BE gemini models
-    // Per-brand defaults for OpenRouter-routed providers. AgentOrchestrator picks the
-    // entry matching `this.provider` (qwen/deepseek/moonshotai). All slugs MUST be
-    // OpenRouter slugs (provider/model form).
-    "agentQwenModel": 'qwen/qwen3.7-max',
-    "agentQwenSummaryModel": 'qwen/qwen3.6-flash',
-    "agentDeepseekModel": 'deepseek/deepseek-v4-pro',
-    "agentDeepseekSummaryModel": 'deepseek/deepseek-v4-flash',
-    "agentMoonshotaiModel": 'moonshotai/kimi-k2.6',
-    "agentMoonshotaiSummaryModel": 'moonshotai/kimi-k2.6',
+    // OpenRouter-backed agent providers — the single source of truth for every
+    // OpenRouter-routed brand. Add or remove an entry here and the whole agent stack
+    // picks it up: the orchestrator's model/summary-model resolution, the context
+    // summarizer, provider display names, the select_agent provider enum, and the
+    // per-agent supported_providers defaults all derive from these keys. Keys are the
+    // provider IDs clients send in `select_agent`; `displayName` is the UI label;
+    // `model`/`summaryModel` MUST be OpenRouter slugs (provider/model form).
+    "openRouterAgentProviders": {
+        qwen: { 
+            displayName: 'Qwen',     
+            model: 'qwen/qwen3.7-max',         
+            summaryModel: 'qwen/qwen3.6-flash' 
+        },
+        deepseek:   { 
+            displayName: 'Deepseek', 
+            model: 'deepseek/deepseek-v4-pro', 
+            summaryModel: 'deepseek/deepseek-v4-flash' 
+        },
+        moonshotai: { 
+            displayName: 'Kimi',     
+            model: 'moonshotai/kimi-k2.6',     
+            summaryModel: 'moonshotai/kimi-k2.6' 
+        },
+        zai: { 
+            displayName: 'GLM',      
+            model: 'z-ai/glm-5.2',             
+            summaryModel: 'z-ai/glm-5.2' 
+        }
+    },
+    // Underlying model the engine tools use, by provider. `default` is the fallback
+    // for every provider (including the OpenRouter brands in openRouterAgentProviders),
+    // so a newly added provider works with no extra config. To override the models for
+    // a specific provider, add a key matching that provider id alongside `default`, e.g.:
+    //   anthropic: {
+    //       build:    { normal: 'claude-sonnet-4-6', hard: 'claude-opus-4-8' },
+    //       nonBuild: { normal: 'claude-haiku-4-5', hard: 'claude-sonnet-4-6' }
+    //   },
+    "agentToolModels": {
+        default: {
+            build:    { normal: 'gemini-3.5-flash low', hard: 'gemini-3.5-flash high' },
+            nonBuild: { normal: 'gemini-3.5-flash low', hard: 'gemini-3.5-flash high' }
+        }
+    },
+    // Full ordered list of valid agent provider IDs: the two direct-API providers
+    // plus every OpenRouter-backed brand above. A getter so it always tracks the
+    // registry — adding/removing a brand above is the only edit needed. Drives the
+    // select_agent provider enum and the per-agent supported_providers defaults.
+    get agentProviders() {
+        return ['anthropic', 'google', ...Object.keys(this.openRouterAgentProviders)];
+    },
     "agentAnthropicEffort": "medium",
     "agentAnthropicThinking": { type: "adaptive" }, // Opus 4.7+/Sonnet 4.6 use adaptive thinking; depth is controlled by agentAnthropicEffort (budget_tokens is removed and 400s)
     "agentGeminiThinking": { thinkingLevel: ThinkingLevel.MEDIUM },
@@ -64,29 +105,8 @@ const config = {
     "ragManifestMaxTokens": 4000, // Files at/under this token count are read in full; larger files are chunked + embedded
     "ragChunkTokens": 600, // Target tokens per chunk for vector-tier files
     "ragChunkOverlap": 80, // Token overlap between adjacent chunks
-    "ragSearchTopK": 8, // Default number of chunks returned by search_documents
-    "agentToolModels": {
-        anthropic: {
-            build:    { normal: 'gemini-3.5-flash low', hard: 'gemini-3.5-flash high' },
-            nonBuild: { normal: 'gemini-3.5-flash low', hard: 'gemini-3.5-flash high' }
-        },
-        google: {
-            build:    { normal: 'gemini-3.5-flash low', hard: 'gemini-3.5-flash high' },
-            nonBuild: { normal: 'gemini-3.5-flash low', hard: 'gemini-3.5-flash high' }
-        },
-        qwen: {
-            build:    { normal: 'gemini-3.5-flash low', hard: 'gemini-3.5-flash high' },
-            nonBuild: { normal: 'gemini-3.5-flash low', hard: 'gemini-3.5-flash high' }
-        },
-        deepseek: {
-            build:    { normal: 'gemini-3.5-flash low', hard: 'gemini-3.5-flash high' },
-            nonBuild: { normal: 'gemini-3.5-flash low', hard: 'gemini-3.5-flash high' }
-        },
-        moonshotai: {
-            build:    { normal: 'gemini-3.5-flash low', hard: 'gemini-3.5-flash high' },
-            nonBuild: { normal: 'gemini-3.5-flash low', hard: 'gemini-3.5-flash high' }
-        }
-    }
+    "ragSearchTopK": 8 // Default number of chunks returned by search_documents
+    
 };
 
 export default config

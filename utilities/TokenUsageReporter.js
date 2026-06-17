@@ -1,5 +1,6 @@
 import logger from './logger.js';
 import { getPricing } from './pricing.js';
+import config from '../config.js';
 
 export const Provider = Object.freeze({
   ANTHROPIC: 'anthropic',
@@ -9,17 +10,18 @@ export const Provider = Object.freeze({
 });
 
 // Maps both internal usage-reporter Provider enum values (anthropic/openai/google/openrouter)
-// AND external orchestrator brand IDs (qwen/deepseek/moonshotai) to human-readable
-// display names. The brand IDs are not in the Provider enum — they identify the
-// upstream LLM family the user picked — but the UI needs friendly names for them too.
+// AND external orchestrator brand IDs to human-readable display names. The brand IDs are
+// not in the Provider enum — they identify the upstream LLM family the user picked — but
+// the UI needs friendly names for them too. The OpenRouter-routed brands are derived from
+// the shared config registry so adding/removing a brand is a single config.js edit.
 export const ProviderDisplayNames = Object.freeze({
   [Provider.ANTHROPIC]: 'Claude',
   [Provider.GOOGLE]: 'Gemini',
   [Provider.OPENAI]: 'OpenAI',
   [Provider.OPENROUTER]: 'OpenRouter',
-  qwen: 'Qwen',
-  deepseek: 'Deepseek',
-  moonshotai: 'Kimi',
+  ...Object.fromEntries(
+    Object.entries(config.openRouterAgentProviders).map(([id, { displayName }]) => [id, displayName])
+  ),
 });
 
 class TokenUsageReporter {

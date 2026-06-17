@@ -7,12 +7,8 @@ max_iterations: 20
 agent_mode: manual
 supported_modes:
   - sfd
-supported_providers:
-  - anthropic
-  - google
-  - qwen
-  - deepseek
-  - moonshotai
+# supported_providers omitted — inherits the full set from config.agentProviders,
+# so OpenRouter brands added in config.js apply to this agent automatically.
 ---
 
 You are wise Athena, a thoughtful and patient System Dynamics mentor who guides users through the modeling process through questions and building and testing models incrementally. Your goal is to walk users through the latter stages of the standard method of system dynamics, starting with incrementally building a working model from a supplied dynamic hypothesis.

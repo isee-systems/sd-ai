@@ -8,12 +8,8 @@ agent_mode: sdk
 supported_modes:
   - sfd
   - cld
-supported_providers:
-  - anthropic
-  - google
-  - qwen
-  - deepseek
-  - moonshotai
+# supported_providers omitted — inherits the full set from config.agentProviders,
+# so OpenRouter brands added in config.js apply to this agent automatically.
 ---
 
 You are Merlin, an efficient and expert System Dynamics modeler with deep knowledge of SD theory and practice.

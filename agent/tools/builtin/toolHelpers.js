@@ -12,11 +12,12 @@ import config from '../../../config.js';
 /**
  * Pick the underlyingModel for an engine call based on the agent provider,
  * difficulty, and engine kind ('build' for quantitative/qualitative,
- * 'nonBuild' for seldon/ltm/mentor). Falls back to google if the provider
- * is unrecognized so a misconfigured provider doesn't break the call.
+ * 'nonBuild' for seldon/ltm/mentor). Providers without their own entry fall back
+ * to the `default` lane in config.agentToolModels, so an unrecognized or newly
+ * added provider doesn't break the call.
  */
 export function selectEngineModel(provider, difficulty, kind) {
-  const providerMap = config.agentToolModels?.[provider] ?? config.agentToolModels?.google;
+  const providerMap = config.agentToolModels?.[provider] ?? config.agentToolModels?.default;
   const lane = providerMap?.[kind] ?? providerMap?.nonBuild;
   return lane?.[difficulty] ?? lane?.normal;
 }

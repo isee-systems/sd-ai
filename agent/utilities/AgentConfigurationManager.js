@@ -1,5 +1,6 @@
 import { readFileSync } from 'fs';
 import logger from '../../utilities/logger.js';
+import config from '../../config.js';
 
 /**
  * AgentConfigurationManager
@@ -191,7 +192,7 @@ CLDs (Causal Loop Diagrams) are QUALITATIVE ONLY:
         max_iterations: 20,
         agent_mode: 'sdk',
         supported_modes: ['sfd','cld'],
-        supported_providers: ['anthropic', 'google', 'qwen', 'deepseek', 'moonshotai']
+        supported_providers: config.agentProviders
       },
       content: fileContent
     };

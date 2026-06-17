@@ -235,7 +235,7 @@ The `agentConfig` string must be a Markdown document with valid YAML frontmatter
 **Fields:**
 - `agentId` — ID of a built-in agent (e.g., `"socrates"`, `"merlin"`). Available agent IDs are returned in `session_ready`. Required if `agentConfig` is not provided.
 - `agentConfig` — Full agent configuration as a Markdown string. Required if `agentId` is not provided. Server returns `AGENT_SELECTION_ERROR` if the frontmatter is missing or invalid.
-- `provider` — LLM provider: one of `"anthropic"`, `"google"`, `"qwen"`, `"deepseek"`, or `"moonshotai"`. The first two reach their vendor APIs directly; the latter three name the upstream LLM brand and are routed internally through the OpenRouter gateway. Defaults to `agentDefaultProvider` in `config.js`. Ignored when the agent's `supportedProviders` has exactly one entry.
+- `provider` — LLM provider. `"anthropic"` and `"google"` reach their vendor APIs directly; every other id names an upstream LLM brand routed internally through the OpenRouter gateway. The OpenRouter-backed brands are defined in `config.openRouterAgentProviders` (currently `qwen`, `deepseek`, `moonshotai`, `zai`/GLM) — add or remove one there and the full set updates everywhere. The complete accepted list is `config.agentProviders`. Defaults to `agentDefaultProvider` in `config.js`. Ignored when the agent's `supportedProviders` has exactly one entry.
 
 #### 3. Chat Message
 
@@ -382,7 +382,8 @@ Sent after successful initialization. Lists available agents.
         {"id": "google", "name": "Gemini"},
         {"id": "qwen", "name": "Qwen"},
         {"id": "deepseek", "name": "Deepseek"},
-        {"id": "moonshotai", "name": "Kimi"}
+        {"id": "moonshotai", "name": "Kimi"},
+        {"id": "zai", "name": "GLM"}
       ],
       "description": "System Dynamics mentor who uses Socratic questioning..."
     },
@@ -395,7 +396,8 @@ Sent after successful initialization. Lists available agents.
         {"id": "google", "name": "Gemini"},
         {"id": "qwen", "name": "Qwen"},
         {"id": "deepseek", "name": "Deepseek"},
-        {"id": "moonshotai", "name": "Kimi"}
+        {"id": "moonshotai", "name": "Kimi"},
+        {"id": "zai", "name": "GLM"}
       ],
       "description": "..."
     }
@@ -423,7 +425,8 @@ Confirms the selected agent is ready.
     {"id": "google", "name": "Gemini (Google)"},
     {"id": "qwen", "name": "Qwen (OpenRouter)"},
     {"id": "deepseek", "name": "Deepseek (OpenRouter)"},
-    {"id": "moonshotai", "name": "Kimi (OpenRouter)"}
+    {"id": "moonshotai", "name": "Kimi (OpenRouter)"},
+    {"id": "zai", "name": "GLM (OpenRouter)"}
   ],
   "currentProvider": "anthropic",
   "timestamp": "2025-01-15T10:30:00.200Z"
@@ -433,7 +436,7 @@ Confirms the selected agent is ready.
 - `agentId` — `"custom"` when a custom `agentConfig` was used; otherwise the built-in agent ID.
 - `agentName` — Display name from the agent's frontmatter.
 - `supportedProviders` — Providers this agent accepts, in `{id, name}` form. Same format as the `supportedProviders` array in `session_ready`. Use this to populate a provider selector after agent selection — especially important for custom agents where the supported providers are only known after the server parses the config.
-- `currentProvider` — The provider ID that was actually selected for this session (e.g. `"anthropic"`, `"google"`, `"qwen"`, `"deepseek"`, or `"moonshotai"`). Resolved from the `provider` field of the `select_agent` message, falling back to `agentDefaultProvider` in config, or forced to the single entry when `supportedProviders` has exactly one item. The OpenRouter-routed brands (`qwen`/`deepseek`/`moonshotai`) all share the same internal code paths but pick different model slugs via `agentQwenModel` / `agentDeepseekModel` / `agentMoonshotaiModel` in `config.js`.
+- `currentProvider` — The provider ID that was actually selected for this session (one of `config.agentProviders`, e.g. `"anthropic"`, `"google"`, or an OpenRouter brand such as `"zai"`). Resolved from the `provider` field of the `select_agent` message, falling back to `agentDefaultProvider` in config, or forced to the single entry when `supportedProviders` has exactly one item. The OpenRouter-routed brands all share the same internal code paths but pick different model slugs from their `config.openRouterAgentProviders` entry (`model` / `summaryModel`).
 
 #### 4. Agent Text
 
@@ -899,12 +902,13 @@ agent_mode: manual          # Loop strategy: 'sdk' (managed framework) or 'manua
 supported_modes:
   - sfd
   - cld
-supported_providers:        # LLM provider IDs this agent accepts; omit to allow all
-  - anthropic               # Claude (direct Anthropic API)
-  - google                  # Gemini (direct Google API)
-  - qwen                    # Qwen (via OpenRouter)
-  - deepseek                # Deepseek (via OpenRouter)
-  - moonshotai              # Kimi (via OpenRouter)
+# supported_providers omitted — allows the full set (config.agentProviders). The
+# built-in agents omit it so OpenRouter brands added in config.js apply automatically.
+# To restrict, list a subset, e.g.:
+#   supported_providers:
+#     - anthropic             # Claude (direct Anthropic API)
+#     - google                # Gemini (direct Google API)
+#     - zai                   # GLM (via OpenRouter)
 ---
 ```
 
@@ -912,9 +916,9 @@ supported_providers:        # LLM provider IDs this agent accepts; omit to allow
 - `sdk` — uses a managed agent framework (Anthropic Agent SDK, Google ADK, or OpenRouter Agent SDK) that handles iteration and tool calling internally
 - `manual` — uses an explicit `while` loop that calls the provider API directly
 
-**`supported_providers`** lists which LLM providers are valid for this agent. The client selects the actual provider at runtime via the `provider` field in `select_agent`. If the list has exactly one entry, that provider is always used. If the field is absent, all providers are allowed.
+**`supported_providers`** lists which LLM providers are valid for this agent. The client selects the actual provider at runtime via the `provider` field in `select_agent`. If the list has exactly one entry, that provider is always used. If the field is absent, all providers are allowed (`config.agentProviders`) — the built-in agents omit it for exactly this reason, so a brand added to `config.openRouterAgentProviders` becomes available to every agent with no per-agent edit.
 
-Provider IDs name the actual LLM brand the user is choosing. `anthropic` and `google` reach their vendor APIs directly. `qwen`, `deepseek`, and `moonshotai` are upstream LLM brands routed internally through the OpenRouter gateway — the orchestrator shares one code path for all three and resolves the model slug from the matching `agent<Brand>Model` config key.
+Provider IDs name the actual LLM brand the user is choosing. `anthropic` and `google` reach their vendor APIs directly. The OpenRouter-backed brands are defined entirely in `config.openRouterAgentProviders` (currently `qwen`, `deepseek`, `moonshotai`, `zai`) — the orchestrator shares one code path for all of them and resolves the model slug from each brand's `model` / `summaryModel` entry. Adding or removing a brand is a single edit to that object in `config.js`.
 
 The Markdown body below the frontmatter is the agent's full system prompt/instructions.
 
@@ -966,7 +970,8 @@ ws.on('message', (data) => {
     case 'session_ready':
       const agentId = message.defaults?.sfd || message.availableAgents[0]?.id;
       // Optionally specify a provider; omit to use the server default (anthropic).
-      // Other supported values: 'google', 'qwen', 'deepseek', 'moonshotai'.
+      // Other supported values: 'google' plus the OpenRouter brands in
+      // config.openRouterAgentProviders ('qwen', 'deepseek', 'moonshotai', 'zai').
       ws.send(JSON.stringify({ type: 'select_agent', sessionId, agentId, provider: 'anthropic' }));
       break;
 
