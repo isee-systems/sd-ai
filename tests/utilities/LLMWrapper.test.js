@@ -438,6 +438,19 @@ describe('LLMWrapper', () => {
         expect(params.underlyingModel).toBe('gpt-5.1');
         expect(params.reasoningEffort).toBe('low');
       });
+
+      it('should parse claude with max effort and strip it from the model id', () => {
+        const wrapper = new LLMWrapper({
+          anthropicKey: 'test-claude-key',
+          underlyingModel: 'claude-opus-4-8 max'
+        });
+
+        const params = wrapper.getLLMParameters();
+
+        expect(params.underlyingModel).toBe('claude-opus-4-8');
+        expect(params.reasoningEffort).toBe('max');
+        expect(params.systemRole).toBe('system');
+      });
     });
 
     describe('standard models without reasoning effort', () => {

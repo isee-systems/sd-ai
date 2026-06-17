@@ -449,16 +449,10 @@ export class LLMWrapper {
   generateQuantitativeSDJSONResponseSchema(mentorMode, supportsArrays, supportsSubTypes) {
       const TypeEnum = z.enum(["stock", "flow", "variable"]).describe(LLMWrapper.SCHEMA_STRINGS.type);
       const PolarityEnum = z.enum(["+", "-"]).describe(LLMWrapper.SCHEMA_STRINGS.polarity);
-
       const Dimension = LLMWrapper.dimensionSchema();
-
-
       const GraphicalFunction = LLMWrapper.graphicalFunctionSchema().describe(LLMWrapper.SCHEMA_STRINGS.gfEquation);
-
       const Relationship = z.object(LLMWrapper.relationshipSchemaBase()).describe(LLMWrapper.SCHEMA_STRINGS.relationship);
-
       const Relationships = z.array(Relationship).describe(LLMWrapper.SCHEMA_STRINGS.relationships);
-
       const ArrayElementEquation = LLMWrapper.arrayElementEquationSchema().describe(LLMWrapper.SCHEMA_STRINGS.arrayElementEquation);
 
       const variableObj = {
@@ -535,6 +529,13 @@ export class LLMWrapper {
       reasoningEffort = parts[1].trim();
     } else if (underlyingModel.includes('gemini') && underlyingModel.includes(' ')) {
       // Parse gemini models with thinking levels (e.g., 'gemini-3-flash-preview medium')
+      const parts = underlyingModel.split(' ');
+      underlyingModel = parts[0];
+      reasoningEffort = parts[1].trim();
+    } else if (underlyingModel.includes('claude') && underlyingModel.includes(' ')) {
+      // Parse Claude models with an effort level (e.g. 'claude-opus-4-8 max').
+      // Effort is low | medium | high | xhigh | max and is applied via
+      // output_config.effort on the Anthropic path; the bare id is sent to the API.
       const parts = underlyingModel.split(' ');
       underlyingModel = parts[0];
       reasoningEffort = parts[1].trim();
@@ -634,7 +635,7 @@ export class LLMWrapper {
     if (this.model.kind === ModelType.GEMINI) {
       return await this.#createGeminiChatCompletion(normalizedMessages, model, effectiveSchema, temperature, reasoningEffort);
     } else if (this.model.kind === ModelType.CLAUDE) {
-      return await this.#createClaudeChatCompletion(normalizedMessages, model, effectiveSchema, temperature);
+      return await this.#createClaudeChatCompletion(normalizedMessages, model, effectiveSchema, temperature, reasoningEffort);
     } else if (this.model.kind === ModelType.OPEN_ROUTER) {
       return await this.#createOpenRouterChatCompletion(normalizedMessages, model, effectiveSchema, temperature);
     }
@@ -808,7 +809,7 @@ export class LLMWrapper {
     };
   }
 
-  async #createClaudeChatCompletion(messages, model, zodSchema = null, temperature = null) {
+  async #createClaudeChatCompletion(messages, model, zodSchema = null, temperature = null, reasoningEffort = null) {
     const claudeMessages = this.convertMessagesToClaudeFormat(messages);
 
     const completionParams = {
@@ -824,7 +825,10 @@ export class LLMWrapper {
       completionParams.system = claudeMessages.system;
     }
 
-    if (temperature !== null && temperature !== undefined) {
+    // An effort level runs with adaptive thinking, which only permits
+    // temperature=1 (and Opus 4.7/4.8 reject sampling params outright). So when an
+    // effort level is requested, omit temperature and let the model default it.
+    if (!reasoningEffort && temperature !== null && temperature !== undefined) {
       completionParams.temperature = temperature;
     }
 
@@ -839,17 +843,28 @@ export class LLMWrapper {
       completionParams.thinking = { type: 'adaptive' };
     }
 
-    // Structured outputs via the current `output_config.format` parameter
-    // (GA on Opus 4.8 / Sonnet 4.6 / Haiku 4.5). This supersedes the deprecated
-    // top-level `output_format` + `structured-outputs-2025-11-13` beta header;
-    // no beta header is required. The model returns a JSON string in a text block.
+    // output_config carries two independent settings, so build it incrementally:
+    //   - format: structured outputs via the current `output_config.format`
+    //     parameter (GA on Opus 4.8 / Sonnet 4.6 / Haiku 4.5). This supersedes the
+    //     deprecated top-level `output_format` + `structured-outputs-2025-11-13`
+    //     beta header; no beta header is required. The model returns a JSON string
+    //     in a text block.
+    //   - effort: thinking depth + token spend (low | medium | high | xhigh | max),
+    //     parsed from the model name (e.g. 'claude-opus-4-8 max'). Default when
+    //     omitted is `high`. `max` is Opus-tier only; Haiku 4.5 / Sonnet 4.5 reject
+    //     effort entirely, so we only send it when the caller asked for a level.
+    const outputConfig = {};
     if (zodSchema) {
-      completionParams.output_config = {
-        format: {
-          type: "json_schema",
-          schema: zodSchema.toJSONSchema()
-        }
+      outputConfig.format = {
+        type: "json_schema",
+        schema: zodSchema.toJSONSchema()
       };
+    }
+    if (reasoningEffort) {
+      outputConfig.effort = reasoningEffort;
+    }
+    if (Object.keys(outputConfig).length > 0) {
+      completionParams.output_config = outputConfig;
     }
 
     // Stream and reassemble: max_tokens above ~16K risks the SDK HTTP timeout on
