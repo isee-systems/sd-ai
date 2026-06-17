@@ -15,13 +15,13 @@ export function createDrawCausalLoopDiagramTool(sessionManager, sessionId, sendT
   return {
     description: `Draw a simplified causal loop diagram (CLD) as an SVG and display it in chat. SFD models only.
 
-Use this to visually explain the ORIGINS of a model's behavior. The diagram shows the key feedback loops you have identified, the causal links between variables (with + / − polarity), and which loops dominate.
+Use this to visually explain the ORIGINS of a model's behavior. The diagram shows the key feedback loops you have identified and the causal links between variables (with + / − polarity).
 
 IMPORTANT — this tool does not read the raw feedback data. First understand the dynamics by calling get_feedback_information (then generate_ltm_narrative or discuss_model_with_seldon if helpful), then SIMPLIFY that analysis into a handful of clean loops yourself and pass them here:
 - Focus on a SINGLE loopset — one coherent group of interconnected loops that together explain the behavior at hand. Do NOT try to depict every loop in the model; choose the smallest set of loops that tells the story. To explain a separate dynamic, draw a separate diagram.
-- Collapse long Loops That Matter loops into their essential variables; use readable names, not raw identifiers.
+- Collapse long feedback loops into their essential variables; use readable names, not raw identifiers.
 - Keep links ordered so each loop reads as a closed cycle (each link's "to" is the next link's "from", returning to the start).
-- Set each loop's polarity (reinforcing/balancing) and, when known from the analysis, its dominance (% of behavior explained) so dominant loops are emphasized.
+- Set each loop's polarity (reinforcing/balancing).
 
 By default the diagram is kept CLEAN — it shows only the structure (loops, links, polarity, loop ids) and a concise legend. Do NOT expect the per-loop 'explanation' text or the 'notes' narrative caption to appear on the diagram. Only set showDescriptions=true (and supply 'explanation'/'notes') when the end user EXPLICITLY asks for the written descriptions to be drawn on the diagram itself. Otherwise, explain the loops in your chat reply, not on the image.`,
     supportedModes: ['sfd'],
@@ -32,7 +32,6 @@ By default the diagram is kept CLEAN — it shows only the structure (loops, lin
         id: z.string().describe('Short loop badge label, e.g. "R1" or "B2"'),
         polarity: z.enum(['reinforcing', 'balancing']).describe('Loop polarity: reinforcing (R) amplifies, balancing (B) counteracts'),
         label: z.string().optional().describe('Human-readable name for the loop, e.g. "Word of mouth"'),
-        dominance: z.number().min(0).max(100).optional().describe('Approx % of model behavior this loop explains (from Loops That Matter); used to rank loops in the legend and thicken their links'),
         explanation: z.string().optional().describe('One short sentence on how this loop contributes to the behavior. Only drawn on the diagram when showDescriptions=true; otherwise omit it.'),
         links: z.array(z.object({
           from: z.string().describe('Source variable'),

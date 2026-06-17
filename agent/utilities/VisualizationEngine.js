@@ -145,19 +145,20 @@ OUTPUT CONTRACT:
 - Render EVERY variable and EVERY link given, exactly as specified. Never invent, drop, rename, or merge variables or links. Reproduce variable names verbatim (XML-escaped).
 
 CLD CONVENTIONS:
-- Draw each variable as a labelled node (text, optionally in a soft rounded box). Wrap long labels.
-- Draw each link as a curved directed arrow from "from" to "to" with a clear arrowhead.
-- Place the link polarity beside each arrow: "+" for "+", and the minus sign "−" (U+2212) for "-".
-- Mark each loop near its centre with its id and type: reinforcing loops use a clockwise icon "↻", balancing loops use a counter-clockwise icon "↺". Give each loop a distinct colour and colour its links to match.
-- Include a legend listing each loop: colour swatch, id, Reinforcing/Balancing, its short label, and (when provided) "~N% of behavior". Sort the legend by dominance, highest first. Thicken links of more dominant loops slightly.
+- Draw each variable as a PLAIN TEXT label. Do NOT enclose variable names in boxes, ellipses, circles, or any shape — text only. Wrap long names onto multiple lines.
+- Draw each link as a curved directed arrow from "from" to "to". Use a FILLED triangle arrowhead (solid fill in the link's loop color) with markerWidth="6" markerHeight="6"; the arrowhead must stop at least 8 px from the destination label's bounding box edge so it never overlaps the text or the polarity mark.
+- Each link's polarity mark is "+" for a "+" link and the minus sign "−" (U+2212) for a "-" link. Place it near the arrowhead (the destination end of the link), offset 10–12 px perpendicular to the curve and away from the loop centre. Render it bold, font-size 13 px minimum, in the exact hex color of that loop's arrows. Back every polarity mark with a solid white filled rectangle (2 px padding on each side, no stroke, opacity 1.0) so it reads clearly over any overlapping line. Never render a polarity mark in black or any color other than its loop color.
+- Mark each loop near its centre with just a rotation symbol and its id, e.g. "↻ R1" (clockwise "↻" for reinforcing, counter-clockwise "↺" for balancing). Do NOT enclose this loop indicator in a circle, badge, box, or any shape — only the symbol and the identifier, drawn in the loop's color. Give each loop a distinct color and color its links to match; choose colors dark enough to contrast strongly with the white canvas/backing — if a loop color's luminance is within ~40 WCAG units of white, darken it until it clearly stands out.
+- Include a legend GROUPED into two sections under the headings "Reinforcing" and "Balancing", so the loop type is written once per section, never repeated per loop. Under each heading list that section's loops — color swatch, id, and short label — ordered alphabetically by loop id. Omit a heading if it has no loops. NEVER print any percentage or "% of behavior" anywhere on the diagram.
+- Draw ALL links with the SAME stroke thickness. Do not vary link width for any reason.
 - Put the title at the top.
 - KEEP THE DIAGRAM CLEAN: do not add any descriptive prose of your own. Render per-loop explanation sentences and a narrative caption ONLY when they are explicitly provided in the user message below; otherwise show just the structure (nodes, links, polarity, loop badges) and the concise legend.
 
 LAYOUT QUALITY — this is what separates a good diagram from a bad one:
-- Position nodes to MINIMISE node overlap and crossing connectors. Spread nodes out; never let boxes touch or text collide.
-- Group the variables of each loop together so each loop reads as its own ring/cluster.
-- Emphasise loops by curving each edge around the centroid of the SHORTEST loop that edge belongs to (the edge should bow on the side away from that loop's centre, so the loop's edges enclose its centre like a rounded ring). For a two-node reciprocal pair, curve the two arrows to opposite sides so they never overlap.
-- Keep arrowheads touching their target node; keep polarity marks legible on a small white halo if they sit over a line.`;
+- MOST IMPORTANT — DRAW EVERY LOOP AS A CIRCLE. A reader must instantly recognise each feedback loop as a ring; a circular shape is the single most important visual property of the diagram.
+- Reinforce the circular shape by curving each edge around the centroid of the SHORTEST loop it belongs to — the edge bows outward, away from that loop's centre, so the loop's edges enclose its centre like a ring. For a two-node reciprocal pair, curve the two arrows to opposite sides so together they form a small circle.
+- Position labels to MINIMIZE overlap and crossing connectors. Spread them out; never let text labels collide or sit on top of arrows.
+- Start and end each arrow with a small gap from the text labels (do not let arrowheads touch the letters).`;
 
     // Strip explanations from the loop JSON unless descriptions were requested,
     // so the model has nothing extra to render.
@@ -173,7 +174,7 @@ LAYOUT QUALITY — this is what separates a good diagram from a bad one:
 
 Canvas: ${width} wide by ${height} tall (px).
 Title: ${title}
-${descriptionDirective}Loops to draw (JSON — id, polarity, optional label/dominance${showDescriptions ? '/explanation' : ''}, and ordered links each with from/to/polarity):
+${descriptionDirective}Loops to draw (JSON — id, polarity, optional label${showDescriptions ? '/explanation' : ''}, and ordered links each with from/to/polarity):
 ${JSON.stringify(loopsForPrompt, null, 2)}
 
 Remember: output ONLY the SVG document, drawn at ${width}x${height}, reproducing every variable and link exactly.`;
