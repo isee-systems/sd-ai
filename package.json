@@ -30,6 +30,7 @@
   },
   "scripts": {
     "postinstall": "node third-party/install.js",
+    "install:core": "SKIP_THIRD_PARTY_COMPONENTS=causal-chains,causal-decoder,PySD-simulator,simlin-agent,time-series-behavior-analysis npm install",
     "start": "nodemon --env-file=.env app.js",
     "evals": "node evals/run.js",
     "test": "NODE_OPTIONS=\"--experimental-vm-modules\" jest",

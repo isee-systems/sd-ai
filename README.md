@@ -275,7 +275,7 @@ The `agent/` directory contains a WebSocket server that wraps the SD-AI engines 
 Clients can attach reference documents (text, Markdown, CSV, JSON, source code, and binary docs — PDF/DOCX/XLSX) to a session and the agent will use them on **every** provider/route:
 
 - **`add_file` / `remove_file`** messages send file content inline (UTF-8 or base64). The server replies with `file_added` / `file_removed` messages carrying a full snapshot of the currently attached files.
-- **Hybrid retrieval:** small files are read in full by the agent; large files are chunked, embedded, and reached via the universal `search_documents` tool. Embeddings use a **Gemini** embedding model (`config.ragEmbeddingModel`, default `gemini-embedding-001`) — this reuses the existing `GEMINI_API_KEY`, so **no additional API key is required** — and is decoupled from the chat provider.
+- **Hybrid retrieval:** small files are read in full by the agent; large files are chunked, embedded, and reached via the universal `search_documents` tool. Embeddings use a **Gemini** embedding model (`config.ragEmbeddingModel`, default `gemini-embedding-2`) — this reuses the existing `GEMINI_API_KEY`, so **no additional API key is required** — and is decoupled from the chat provider.
 - **Relevant config keys** (`config.js`): `websocketMaxPayloadBytes`, `ragMaxFileBytes`, `ragMaxFilesPerSession`, `ragEmbeddingModel`, `ragEmbeddingDimensions`, `ragManifestMaxTokens`, `ragChunkTokens`, `ragChunkOverlap`, `ragSearchTopK`.
 - **Extraction dependencies:** `pdfjs-dist` (PDF), `mammoth` (DOCX), `xlsx` (XLSX).
 
@@ -321,6 +321,14 @@ SKIP_THIRD_PARTY_COMPONENTS=causal-decoder,PySD-simulator,time-series-behavior-a
 ```bat
 set SKIP_THIRD_PARTY_COMPONENTS=causal-decoder,PySD-simulator,time-series-behavior-analysis && npm install
 ```
+
+To install only the core app with the most frequently used engines, without the ability to run the all of the evals run:
+
+```bash
+npm run install:core
+```
+
+This is a shortcut that sets `SKIP_THIRD_PARTY_COMPONENTS` to every component except `visualization-engine`. Windows users can run the equivalent `set SKIP_THIRD_PARTY_COMPONENTS=causal-chains,causal-decoder,PySD-simulator,simlin-agent,time-series-behavior-analysis && npm install`.
 
 Available component names and what they affect:
 
