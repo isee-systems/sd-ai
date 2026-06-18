@@ -549,6 +549,59 @@ describe('per-section edit tools normalization', () => {
 
       expect(getModel().relationships).toHaveLength(0);
     });
+
+    it('removes relationship stored WITH underscores when queried with spaces', async () => {
+      resetModel({ variables: [], relationships: [{ from: 'birth_rate', to: 'net_revenue', polarity: '+' }], modules: [] });
+      const { sendToClient, getModel } = makeSendToClient();
+      const tools = makeEditTools(sendToClient);
+
+      await tools.relationships.handler({ operation: 'remove', data: [
+        { from: 'birth rate', to: 'net revenue' }
+      ]});
+
+      expect(getModel().relationships).toHaveLength(0);
+    });
+
+    it('removes relationship stored WITHOUT underscores when queried with underscores', async () => {
+      resetModel({ variables: [], relationships: [{ from: 'birth rate', to: 'net revenue', polarity: '+' }], modules: [] });
+      const { sendToClient, getModel } = makeSendToClient();
+      const tools = makeEditTools(sendToClient);
+
+      await tools.relationships.handler({ operation: 'remove', data: [
+        { from: 'birth_rate', to: 'net_revenue' }
+      ]});
+
+      expect(getModel().relationships).toHaveLength(0);
+    });
+
+    it('normalizes case AND underscore/space on both from and to together', async () => {
+      resetModel({ variables: [], relationships: [{ from: 'Birth_Rate', to: 'net revenue', polarity: '+' }], modules: [] });
+      const { sendToClient, getModel } = makeSendToClient();
+      const tools = makeEditTools(sendToClient);
+
+      await tools.relationships.handler({ operation: 'remove', data: [
+        { from: 'birth rate', to: 'NET_REVENUE' }
+      ]});
+
+      expect(getModel().relationships).toHaveLength(0);
+    });
+
+    it('only removes the matching relationship, leaving others intact', async () => {
+      resetModel({ variables: [], relationships: [
+        { from: 'birth_rate', to: 'net revenue', polarity: '+' },
+        { from: 'death rate', to: 'net_revenue', polarity: '-' },
+      ], modules: [] });
+      const { sendToClient, getModel } = makeSendToClient();
+      const tools = makeEditTools(sendToClient);
+
+      await tools.relationships.handler({ operation: 'remove', data: [
+        { from: 'Birth Rate', to: 'Net_Revenue' }
+      ]});
+
+      const rels = getModel().relationships;
+      expect(rels).toHaveLength(1);
+      expect(rels[0].from).toBe('death rate');
+    });
   });
 
   describe('modules add', () => {
