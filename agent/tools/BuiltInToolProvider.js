@@ -121,10 +121,18 @@ export class BuiltInToolProvider {
 
   /**
    * Create MCP server from tool instances (for SDK mode)
-   * Exposes all built-in tools — allowedTools in the SDK query handles mode/token filtering
+   *
+   * Tools are filtered by mode and model-token constraints HERE, at registration
+   * time — NOT via the SDK query's allowedTools. Under permissionMode
+   * 'bypassPermissions' the Agent SDK auto-approves every registered tool
+   * regardless of allowedTools (allowedTools only pre-approves; it never removes a
+   * tool the model can see). A tool left on the server — e.g.
+   * draw_causal_loop_diagram, which is sfd-only, in cld mode — would still be
+   * advertised and callable. Omitting it from the server is the only reliable way
+   * to keep it unavailable. Mirrors the filtering in getAdkTools.
    * @returns {Object} MCP server instance
    */
-  async getMcpServer() {
+  async getMcpServer(mode, modelTokenCount) {
     const McpServer = await loadMcpServer();
     const toolCollection = this.#createToolCollection();
     const server = new McpServer({ name: 'builtin', version: '1.0.0' });
@@ -132,6 +140,16 @@ export class BuiltInToolProvider {
 
     for (const [toolName, toolDef] of Object.entries(toolCollection.tools)) {
       if (toolDef.nonSdkOnly) continue;
+      // The Claude Agent SDK — getMcpServer's only caller — provides a native Read
+      // tool, so the builtin read_file is redundant here. It must be excluded at
+      // registration (not just from the query's allowedTools): bypassPermissions
+      // ignores allowedTools, so a registered read_file stays callable alongside
+      // native Read. (read_file can't be flagged nonSdkOnly — the Gemini ADK path
+      // has no native Read and genuinely needs it.)
+      if (toolName === 'read_file') continue;
+      if (mode && toolDef.supportedModes && !toolDef.supportedModes.includes(mode)) continue;
+      if (toolDef.maxModelTokens && modelTokenCount > toolDef.maxModelTokens) continue;
+      if (toolDef.minModelTokens && modelTokenCount < toolDef.minModelTokens) continue;
 
       // Tools in SDK mode need to throw errors instead of returning error responses
       const sdkHandler = async (args) => {
@@ -158,7 +176,7 @@ export class BuiltInToolProvider {
     return { type: 'sdk', name: 'builtin', instance: server };
   }
 
-  async getAdkTools(mode = null, modelTokenCount = 0) {
+  async getAdkTools(mode, modelTokenCount) {
     const FunctionTool = await loadFunctionTool();
     const toolCollection = this.getTools();
     const adkTools = [];

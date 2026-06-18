@@ -500,7 +500,7 @@ export class AgentOrchestrator {
       const builtInSdkTools = ['Read', /*'Edit', 'Write',*/ 'Glob', 'Grep'];
 
       let mcpServers = {
-        builtin: await this.builtInToolProvider.getMcpServer()
+        builtin: await this.builtInToolProvider.getMcpServer(mode, modelTokenCount)
       };
 
       // Get client MCP server and derive allowed tool names from the same source
