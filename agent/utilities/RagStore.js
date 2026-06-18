@@ -252,6 +252,17 @@ export class RagStore {
   #fileDir(tempDir, fileId) { return join(this.#ragDir(tempDir), fileId); }
   #manifestPath(tempDir) { return join(this.#ragDir(tempDir), 'manifest.json'); }
 
+  // The shared rag/<fileId> dir was deleted by a remove_file (the main process
+  // rmSync's it in #handleRemoveFile; our own removeFile would too) while a
+  // processFile was suspended on a slow await — so a write below it now fails
+  // with ENOENT on a vanished parent. Surface it as a typed, benign error so
+  // callers log it quietly, the same treatment the original.bin read gets above.
+  #removedDuringProcessing(fileId) {
+    const err = new Error(`rag dir for file ${fileId} removed during processing`);
+    err.code = 'FILE_REMOVED_DURING_PROCESSING';
+    return err;
+  }
+
   readManifest(tempDir) {
     const path = this.#manifestPath(tempDir);
     if (!existsSync(path)) return [];
@@ -303,54 +314,81 @@ export class RagStore {
 
     const buffer = readFileSync(originalPath);
     const { text, pageBoundaries } = await extractText(buffer, fileMeta.mimeType, fileMeta.name);
-    writeFileSync(join(dir, 'extracted.txt'), text);
 
-    const tokenCount = countTokens(text);
-    let tier = 'manifest';
-    let chunkCount = 0;
+    // Everything below writes artifacts into `dir`. Between the original.bin read
+    // above and these writes we cross slow awaits (extractText, and embedder.embed
+    // below). A remove_file arriving in that window deletes the shared rag/<fileId>
+    // dir out from under us, so a write here throws ENOENT on a parent that no
+    // longer exists. That's the same benign mid-flight removal the original.bin
+    // read already handles — detect a vanished dir and surface it as such instead
+    // of letting it escape as a loud, unexpected ENOENT.
+    try {
+      writeFileSync(join(dir, 'extracted.txt'), text);
 
-    if (tokenCount > config.ragManifestMaxTokens) {
-      tier = 'vector';
-      const chunks = chunkText(text, config.ragChunkTokens, config.ragChunkOverlap, pageBoundaries);
-      const vectors = await this.embedder.embed(chunks.map(c => c.text));
-      // Guard the chunk↔vector alignment search() relies on. A mismatch means the
-      // embedder collapsed inputs (e.g. an embedding API aggregating a batch) and
-      // would silently strand most chunks as unsearchable.
-      if (vectors.length !== chunks.length) {
-        throw new Error(`Embedding count (${vectors.length}) does not match chunk count (${chunks.length}) for ${fileMeta.name}`);
+      const tokenCount = countTokens(text);
+      let tier = 'manifest';
+      let chunkCount = 0;
+
+      if (tokenCount > config.ragManifestMaxTokens) {
+        tier = 'vector';
+        const chunks = chunkText(text, config.ragChunkTokens, config.ragChunkOverlap, pageBoundaries);
+        // Don't pay for (network) embedding if the file was already removed while
+        // we extracted — the dir is gone and the writes below would fail anyway.
+        // Only short-circuit on the benign remove_file race (file dir gone, rag
+        // root intact); a vanished rag root is a teardown bug left for the writes
+        // to surface loudly below.
+        if (!existsSync(dir) && existsSync(this.#ragDir(tempDir))) throw this.#removedDuringProcessing(fileMeta.fileId);
+        const vectors = await this.embedder.embed(chunks.map(c => c.text));
+        // Guard the chunk↔vector alignment search() relies on. A mismatch means the
+        // embedder collapsed inputs (e.g. an embedding API aggregating a batch) and
+        // would silently strand most chunks as unsearchable.
+        if (vectors.length !== chunks.length) {
+          throw new Error(`Embedding count (${vectors.length}) does not match chunk count (${chunks.length}) for ${fileMeta.name}`);
+        }
+        const chunkRecords = chunks.map((c, i) => ({
+          chunkIndex: i,
+          text: c.text,
+          startChar: c.startChar,
+          endChar: c.endChar,
+          ...(c.page != null ? { page: c.page } : {})
+        }));
+        writeFileSync(join(dir, 'chunks.json'), JSON.stringify(chunkRecords));
+        writeFileSync(join(dir, 'embeddings.json'), JSON.stringify(vectors));
+        chunkCount = chunkRecords.length;
+        this.cache.set(fileMeta.fileId, { chunks: chunkRecords, vectors });
       }
-      const chunkRecords = chunks.map((c, i) => ({
-        chunkIndex: i,
-        text: c.text,
-        startChar: c.startChar,
-        endChar: c.endChar,
-        ...(c.page != null ? { page: c.page } : {})
-      }));
-      writeFileSync(join(dir, 'chunks.json'), JSON.stringify(chunkRecords));
-      writeFileSync(join(dir, 'embeddings.json'), JSON.stringify(vectors));
-      chunkCount = chunkRecords.length;
-      this.cache.set(fileMeta.fileId, { chunks: chunkRecords, vectors });
+
+      const meta = {
+        fileId: fileMeta.fileId,
+        name: fileMeta.name,
+        mimeType: fileMeta.mimeType,
+        bytes: buffer.length,
+        tokenCount,
+        tier,
+        chunkCount,
+        status: 'ready',
+        addedAt: fileMeta.addedAt
+      };
+
+      const list = this.readManifest(tempDir).filter(f => f.fileId !== meta.fileId);
+      list.push(meta);
+      this.#writeManifest(tempDir, list);
+      sessionManager.addAttachedFile(sessionId, meta);
+
+      logger.log(`RagStore: processed ${meta.name} (${meta.tier} tier, ${tokenCount} tokens, ${chunkCount} chunks)`);
+      return meta;
+    } catch (err) {
+      // A write failed because the file's dir vanished mid-flight. If the rag root
+      // still stands, this is the benign remove_file race (remove_file only deletes
+      // rag/<id>); reclassify so callers log it quietly. If the rag root is gone
+      // too, the whole session tree was torn down under a live worker (a teardown
+      // race / stale bind mount) — a genuine bug, so let the raw ENOENT propagate
+      // and be logged loudly with its stack.
+      if (err.code === 'ENOENT' && !existsSync(dir) && existsSync(this.#ragDir(tempDir))) {
+        throw this.#removedDuringProcessing(fileMeta.fileId);
+      }
+      throw err;
     }
-
-    const meta = {
-      fileId: fileMeta.fileId,
-      name: fileMeta.name,
-      mimeType: fileMeta.mimeType,
-      bytes: buffer.length,
-      tokenCount,
-      tier,
-      chunkCount,
-      status: 'ready',
-      addedAt: fileMeta.addedAt
-    };
-
-    const list = this.readManifest(tempDir).filter(f => f.fileId !== meta.fileId);
-    list.push(meta);
-    this.#writeManifest(tempDir, list);
-    sessionManager.addAttachedFile(sessionId, meta);
-
-    logger.log(`RagStore: processed ${meta.name} (${meta.tier} tier, ${tokenCount} tokens, ${chunkCount} chunks)`);
-    return meta;
   }
 
   /**
@@ -451,7 +489,13 @@ export class RagStore {
         try {
           freshlyProcessed.push(await this.processFile(sessionManager, sessionId, file));
         } catch (err) {
-          logger.error(`RagStore: reconcile failed to process ${file.fileId}: ${err.message}`);
+          // A removal racing this reconcile-time processing is benign (see
+          // processFile); anything else is a real failure worth an error log.
+          if (err.code === 'FILE_REMOVED_DURING_PROCESSING' || err.code === 'ORIGINAL_BIN_MISSING') {
+            logger.log(`RagStore: reconcile skipped ${file.fileId} (removed during processing)`);
+          } else {
+            logger.error(`RagStore: reconcile failed to process ${file.fileId}: ${err.message}`);
+          }
           const meta = { ...file, status: 'error', error: err.message };
           sessionManager.addAttachedFile(sessionId, meta);
           freshlyProcessed.push(meta);

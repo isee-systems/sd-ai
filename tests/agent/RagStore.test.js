@@ -148,6 +148,44 @@ trailer<</Root 1 0 R>>
     });
   });
 
+  describe('processFile — removal races', () => {
+    // A remove_file landing while extraction/embedding is in flight deletes the
+    // shared rag/<id> dir out from under processFile, so its artifact writes hit
+    // ENOENT. The embedder hook stands in for that mid-flight deletion.
+    it('reclassifies a remove that races embedding as a benign typed error (rag root intact)', async () => {
+      const fileId = 'race1';
+      const dir = writeOriginal(fileId, Buffer.from(buildLargeText(), 'utf8'));
+      const racingEmbedder = {
+        async embed(texts) {
+          // What removeFile / #handleRemoveFile do: delete just this file's dir.
+          rmSync(dir, { recursive: true, force: true });
+          return texts.map(featurize);
+        }
+      };
+      const racingStore = new RagStore(racingEmbedder);
+      await expect(
+        racingStore.processFile(sessionManager, sessionId, { fileId, name: 'big.txt', mimeType: 'text/plain', addedAt: 'now' })
+      ).rejects.toMatchObject({ code: 'FILE_REMOVED_DURING_PROCESSING' });
+    });
+
+    it('lets a vanished rag root (session teardown) surface as a raw ENOENT, not the benign code', async () => {
+      const fileId = 'race2';
+      writeOriginal(fileId, Buffer.from(buildLargeText(), 'utf8'));
+      const teardownEmbedder = {
+        async embed(texts) {
+          // The whole session rag tree torn down under a live worker — a genuine
+          // bug that must stay loud rather than be masked as a benign removal.
+          rmSync(join(tempDir, 'rag'), { recursive: true, force: true });
+          return texts.map(featurize);
+        }
+      };
+      const racingStore = new RagStore(teardownEmbedder);
+      await expect(
+        racingStore.processFile(sessionManager, sessionId, { fileId, name: 'big.txt', mimeType: 'text/plain', addedAt: 'now' })
+      ).rejects.toMatchObject({ code: 'ENOENT' });
+    });
+  });
+
   describe('search', () => {
     it('returns the most relevant chunk for a query', async () => {
       writeOriginal('big1', Buffer.from(buildLargeText(), 'utf8'));

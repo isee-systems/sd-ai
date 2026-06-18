@@ -137,6 +137,11 @@ class AgentWorker {
         } else {
           logger.log(`[worker:${SESSION_ID}] RAG file ${msg.fileId} bytes gone before processing (likely removed) — ${err.diagnostic}`);
         }
+      } else if (err.code === 'FILE_REMOVED_DURING_PROCESSING') {
+        // The shared rag/<id> dir was deleted while we were extracting/embedding
+        // (a remove_file raced this still-in-flight add_file). Benign — the main
+        // process already dropped the file and discards the error report below.
+        logger.log(`[worker:${SESSION_ID}] RAG file ${msg.fileId} removed during processing (raced a remove) — skipping`);
       } else {
         logger.error(`[worker:${SESSION_ID}] Failed to process RAG file ${msg.fileId}:`, err);
       }
