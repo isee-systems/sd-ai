@@ -328,7 +328,7 @@ To install only the core app with the most frequently used engines, without the 
 npm run install:core
 ```
 
-This is a shortcut that sets `SKIP_THIRD_PARTY_COMPONENTS` to every component except `visualization-engine`. Windows users can run the equivalent `set SKIP_THIRD_PARTY_COMPONENTS=causal-chains,causal-decoder,PySD-simulator,simlin-agent,time-series-behavior-analysis && npm install`.
+This is a shortcut that sets `SKIP_THIRD_PARTY_COMPONENTS` to every component except `visualization-engine`. It works on all platforms (Mac/Linux/Windows).
 
 Available component names and what they affect:
 
