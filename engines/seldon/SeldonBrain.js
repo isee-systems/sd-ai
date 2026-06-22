@@ -153,7 +153,7 @@ As the world's best System Dynamics Modeler, you will consider and apply the Sys
 
         return {
             textContent: reply,
-            feedbackInformationRequired: originalResponse.feedbackInformationRequired
+            feedbackInformationRequired: originalResponse.feedbackInformationRequired || false
         };
     }
 
@@ -163,6 +163,29 @@ As the world's best System Dynamics Modeler, you will consider and apply the Sys
 
     #isValidFeedbackContent() {
         return utils.isValidFeedbackContent(this.#data.feedbackContent);
+    }
+
+    // A causal loop diagram (CLD) has no real, simulatable equations — every
+    // variable either has no equation or only a NAN equation (one that contains
+    // NAN, e.g. NAN(cause1,cause2)). Feedback / loop dominance information can
+    // never apply to such a model, so we drop the feedback prompting and the
+    // feedbackInformationRequired field from the structured output.
+    #isCLD(model) {
+        if (!model || !model.variables || model.variables.length === 0) {
+            return true;
+        }
+
+        return model.variables.every(variable => {
+            const equation = (variable.equation || '').trim();
+            return equation === '' || equation.toUpperCase().includes('NAN');
+        });
+    }
+
+    #stripFeedbackInstructions(systemPrompt) {
+        return systemPrompt
+            .replace(SeldonEngineBrain.FEEDBACK_INFORMATION_INSTRUCTIONS, '')
+            .replace(/\n{3,}/g, '\n\n')
+            .trim();
     }
 
     #filterModelForErrors(model) {
@@ -184,9 +207,13 @@ As the world's best System Dynamics Modeler, you will consider and apply the Sys
 
     setupLLMParameters(userPrompt, lastModel) {
         const { underlyingModel, systemRole, temperature, reasoningEffort } = this.#llmWrapper.getLLMParameters();
-        const responseFormat = this.#llmWrapper.generateSeldonResponseSchema();
 
-        const messages = [{ role: systemRole, content: this.#data.systemPrompt }];
+        const isCLD = this.#isCLD(lastModel);
+        const responseFormat = this.#llmWrapper.generateSeldonResponseSchema(!isCLD);
+
+        const systemPrompt = isCLD ? this.#stripFeedbackInstructions(this.#data.systemPrompt) : this.#data.systemPrompt;
+
+        const messages = [{ role: systemRole, content: systemPrompt }];
 
         if (this.#data.backgroundKnowledge)
             messages.push({ role: "user", content: this.#data.backgroundPrompt.replaceAll("{backgroundKnowledge}", this.#data.backgroundKnowledge) });

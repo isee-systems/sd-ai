@@ -356,10 +356,112 @@ describe('SeldonEngineBrain', () => {
       );
       expect(behaviorMessage).toBeUndefined();
 
-      const feedbackMessage = result.messages.find(m => 
+      const feedbackMessage = result.messages.find(m =>
         m.content.includes('Feedback:')
       );
       expect(feedbackMessage).toBeDefined();
+    });
+  });
+
+  describe('CLD detection (feedback information handling)', () => {
+    const hasFeedbackField = (result) =>
+      Object.prototype.hasOwnProperty.call(result.responseFormat.shape, 'feedbackInformationRequired');
+    const systemPromptHasInstructions = (result) =>
+      result.messages[0].content.includes(SeldonEngineBrain.FEEDBACK_INFORMATION_INSTRUCTIONS);
+
+    it('keeps feedback handling for a stock-and-flow model (at least one real equation)', () => {
+      const lastModel = {
+        variables: [
+          { name: 'Population', type: 'stock', equation: '1000' },
+          { name: 'Births', type: 'flow', equation: 'NAN(Population)' }
+        ]
+      };
+
+      const result = seldonEngine.setupLLMParameters('Why does population grow?', lastModel);
+
+      expect(hasFeedbackField(result)).toBe(true);
+      expect(systemPromptHasInstructions(result)).toBe(true);
+    });
+
+    it('detects a CLD when every variable has a NAN(...) equation', () => {
+      const lastModel = {
+        variables: [
+          { name: 'A', equation: 'NAN(B)' },
+          { name: 'B', equation: 'NAN(A)' }
+        ]
+      };
+
+      const result = seldonEngine.setupLLMParameters('Why does A grow?', lastModel);
+
+      expect(hasFeedbackField(result)).toBe(false);
+      expect(systemPromptHasInstructions(result)).toBe(false);
+    });
+
+    it('detects a CLD when an equation is a bare NAN', () => {
+      const lastModel = { variables: [{ name: 'A', equation: 'NAN' }] };
+
+      const result = seldonEngine.setupLLMParameters('Test prompt', lastModel);
+
+      expect(hasFeedbackField(result)).toBe(false);
+      expect(systemPromptHasInstructions(result)).toBe(false);
+    });
+
+    it('detects a CLD when variables have no equations at all', () => {
+      const lastModel = {
+        variables: [
+          { name: 'A' },
+          { name: 'B', equation: '' },
+          { name: 'C', equation: '   ' }
+        ]
+      };
+
+      const result = seldonEngine.setupLLMParameters('Test prompt', lastModel);
+
+      expect(hasFeedbackField(result)).toBe(false);
+      expect(systemPromptHasInstructions(result)).toBe(false);
+    });
+
+    it('detects a CLD with a mix of empty and NAN equations', () => {
+      const lastModel = {
+        variables: [
+          { name: 'A', equation: 'NAN(B)' },
+          { name: 'B' },
+          { name: 'C', equation: '' }
+        ]
+      };
+
+      const result = seldonEngine.setupLLMParameters('Test prompt', lastModel);
+
+      expect(hasFeedbackField(result)).toBe(false);
+    });
+
+    it('is case-insensitive when detecting NAN equations', () => {
+      const lastModel = { variables: [{ name: 'A', equation: 'nan(B)' }] };
+
+      const result = seldonEngine.setupLLMParameters('Test prompt', lastModel);
+
+      expect(hasFeedbackField(result)).toBe(false);
+    });
+
+    it('treats a null or empty model as having no equations (CLD-like)', () => {
+      const nullResult = seldonEngine.setupLLMParameters('Test prompt', null);
+      expect(hasFeedbackField(nullResult)).toBe(false);
+      expect(systemPromptHasInstructions(nullResult)).toBe(false);
+
+      const emptyResult = seldonEngine.setupLLMParameters('Test prompt', { variables: [] });
+      expect(hasFeedbackField(emptyResult)).toBe(false);
+    });
+
+    it('leaves the rest of the system prompt intact when stripping feedback instructions', () => {
+      const lastModel = { variables: [{ name: 'A', equation: 'NAN(B)' }] };
+
+      const result = seldonEngine.setupLLMParameters('Test prompt', lastModel);
+      const systemPrompt = result.messages[0].content;
+
+      // Core identity text is preserved...
+      expect(systemPrompt).toContain("You are the world's best System Dynamics Modeler");
+      // ...and removing the block does not leave a blank-line gap.
+      expect(systemPrompt).not.toMatch(/\n{3,}/);
     });
   });
 });

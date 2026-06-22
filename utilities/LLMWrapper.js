@@ -341,11 +341,22 @@ export class LLMWrapper {
     "overflow": "QUEUE only: If true, an automatic queue overflow flow is created to handle items that cannot enter because the queue is full."
   };
 
-  generateSeldonResponseSchema() {
-      return z.object({
-        response: z.string().describe("The text containing the response. This text can only contain simple HTML formatted text.  Use only the HTML tags <h4>, <h5>, <h6>, <ol>, <ul>, <li>, <a>, <b>, <i>, <br>, <p> and <span>. Do not use markdown, LaTeX or any other kind of formatting. If feedbackInformationRequired is true and no feedback information was passed, this response should be only one sentence long explaining why feedback loop information is necessary to properly answer the question"),
-        feedbackInformationRequired: z.boolean().describe("A boolean indicating whether feedback loop information (loops that matter) is required to answer the question. Set to true for any question involving feedback loops, answering why or how things work in the model, or anything which requires knowledge of what is happening within the model's dynamics. Feedback information is essential for understanding model behavior and causality")
-      });
+  generateSeldonResponseSchema(includeFeedbackInformationRequired) {
+      let responseDescription = "The text containing the response. This text can only contain simple HTML formatted text.  Use only the HTML tags <h4>, <h5>, <h6>, <ol>, <ul>, <li>, <a>, <b>, <i>, <br>, <p> and <span>. Do not use markdown, LaTeX or any other kind of formatting.";
+
+      const shape = {};
+
+      if (includeFeedbackInformationRequired) {
+        responseDescription += " If feedbackInformationRequired is true and no feedback information was passed, this response should be only one sentence long explaining why feedback loop information is necessary to properly answer the question";
+      }
+
+      shape.response = z.string().describe(responseDescription);
+
+      if (includeFeedbackInformationRequired) {
+        shape.feedbackInformationRequired = z.boolean().describe("A boolean indicating whether feedback loop information (loops that matter) is required to answer the question. Set to true for any question involving feedback loops, answering why or how things work in the model, or anything which requires knowledge of what is happening within the model's dynamics. Feedback information is essential for understanding model behavior and causality");
+      }
+
+      return z.object(shape);
   }
 
   generateLTMNarrativeResponseSchema(removeDescription = false) {

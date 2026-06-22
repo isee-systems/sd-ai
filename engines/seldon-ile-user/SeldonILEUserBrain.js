@@ -149,7 +149,7 @@ A dominant feedback process is one that drives more than 50% of the model's beha
         //start with the system prompt
         const { underlyingModel, systemRole, temperature, reasoningEffort } = this.#llmWrapper.getLLMParameters();
         let systemPrompt = this.#data.systemPrompt;
-        let responseFormat = this.#llmWrapper.generateSeldonResponseSchema();
+        let responseFormat = this.#llmWrapper.generateSeldonResponseSchema(true);
 
         let messages = [{
             role: systemRole,
