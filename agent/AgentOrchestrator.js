@@ -1431,9 +1431,6 @@ ${lines.join('\n')}`;
 
     const toolDeclarations = this.#geminiManualConvertTools(builtInTools, dynamicTools, modelTokenCount, mode);
 
-    // Build or reuse per-session Gemini context cache (system prompt + tools)
-    let geminiConfig = await this.#getGeminiManualConfig(systemPrompt, toolDeclarations);
-
     const maxIterations = this.configManager.getMaxIterations();
 
     while (true) {
@@ -1441,10 +1438,16 @@ ${lines.join('\n')}`;
       let completedNaturally = false;
       let iteration = 0;
       let retries = 0;
+      let cacheRetries = 0;
 
       while (continueLoop && iteration < maxIterations && !this.stopRequested) {
         iteration++;
         await this.sessionManager.cleanupContext(this.sessionId, config.agentMaxContextTokens, this.provider);
+
+        // Refresh the context cache before each call. #getGeminiManualConfig
+        // returns the live cache cheaply while it's valid, and proactively
+        // recreates it ~30s before its 300s TTL so it never expires mid-flight.
+        const geminiConfig = await this.#getGeminiManualConfig(systemPrompt, toolDeclarations);
 
         try {
           const response = await gemini.models.generateContent({
@@ -1454,6 +1457,7 @@ ${lines.join('\n')}`;
           });
 
           this.#logApiUsage(Provider.GOOGLE, response.usageMetadata);
+          cacheRetries = 0;
 
           if (this.stopRequested) break;
 
@@ -1468,13 +1472,16 @@ ${lines.join('\n')}`;
             (error instanceof TypeError && error.message === 'terminated');
           const isStaleCacheError = error?.status === 403 &&
             typeof error?.message === 'string' && error.message.includes('CachedContent not found');
-          if (isStaleCacheError && retries < 1) {
-            retries++;
-            logger.warn('Gemini Manual: cached content expired mid-session, recreating cache');
+          if (isStaleCacheError && cacheRetries < 3) {
+            cacheRetries++;
+            logger.warn(`Gemini Manual: cached content expired mid-session, recreating cache (attempt ${cacheRetries}/3)`);
+            // Invalidate the dead cache; the next iteration rebuilds geminiConfig
+            // with a fresh one via #getGeminiManualConfig. cacheRetries is its own
+            // counter (reset on every successful call) so a long session can
+            // recover from each cache expiry independently of network/quota retries.
             this.#geminiManualCacheName = null;
             this.#geminiManualCacheKey = null;
             this.#geminiManualCacheExpiry = null;
-            geminiConfig = await this.#getGeminiManualConfig(systemPrompt, toolDeclarations);
           } else if ((isQuota || isNetworkError) && retries < 3) {
             retries++;
             const reason = isQuota ? 'quota/rate-limited (429)' : 'network error';
