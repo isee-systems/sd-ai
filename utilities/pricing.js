@@ -44,6 +44,13 @@ export const anthropic = {
     cacheReadInputTokens: 0.50,
     outputTokens: 25.00,
   },
+  'claude-sonnet-5': {
+    inputTokens: 2.00,
+    cacheCreation5mInputTokens: 2.50,
+    cacheCreation1hInputTokens: 4.00,
+    cacheReadInputTokens: 0.20,
+    outputTokens: 10.00,
+  },
   'claude-sonnet-4-6': {
     inputTokens: 3.00,
     cacheCreation5mInputTokens: 3.75,

@@ -230,6 +230,7 @@ export class LLMWrapper {
       {label: "Gemini 2.5-pro", value: 'gemini-2.5-pro'},
       //{label: "Claude Fable 5", value: 'claude-fable-5'},
       {label: "Claude Opus 4.8", value: 'claude-opus-4-8'},
+      {label: "Claude Sonnet 5", value: 'claude-sonnet-5'},
       {label: "Claude Sonnet 4.6", value: 'claude-sonnet-4-6'},
       {label: "Claude Haiku 4.5", value: 'claude-haiku-4-5'},
       {label: "Qwen3.7 Max", value: 'qwen/qwen3.7-max'},
