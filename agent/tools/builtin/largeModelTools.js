@@ -375,6 +375,14 @@ function variablesMutator(operation, data) {
       }
       const normalizedRemoveNames = data.map(item => normSearch(item?.name));
       model.variables = model.variables.filter(v => !normalizedRemoveNames.includes(normSearch(v.name)));
+      // A removed variable orphans any causal arrow touching it; drop those too
+      // so we never leave a relationship pointing at a non-existent variable.
+      if (Array.isArray(model.relationships)) {
+        model.relationships = model.relationships.filter(r =>
+          !normalizedRemoveNames.includes(normSearch(r.from)) &&
+          !normalizedRemoveNames.includes(normSearch(r.to))
+        );
+      }
     }
     return null;
   };
@@ -464,7 +472,7 @@ export function createEditVariablesTool(sessionManager, sessionId, sendToClient)
 
 - add: every object must also include 'type' (stock|flow|variable); other fields populate the new variable
 - update: 'name' locates the existing variable; the other fields you include replace those values. To rename, also pass 'newName' — the tool then rewrites ALL references to the old name across every equation, arrayEquations entry, and equation-valued additionalProperties field (processTime, capacity, leakFraction, purgeEq, etc.) in every variable across every module, matching case-insensitively in XMILE format (with underscores). To change additionalProperties, provide the COMPLETE replacement object.
-- remove: only 'name' is read; all other fields are ignored
+- remove: only 'name' is read; all other fields are ignored. Removing a variable also automatically removes every relationship where it is the 'from' or 'to' (its causal arrows), so you do NOT need a separate edit_relationships call to clean those up. Note this does NOT rewrite equations that still reference the removed variable — fix those separately.
 
 CRITICAL EQUATION RULES:
 - XMILE naming: replace spaces with underscores in variable references inside equations ("birth_rate" not "birth rate")

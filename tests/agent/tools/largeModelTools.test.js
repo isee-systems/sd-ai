@@ -458,6 +458,57 @@ describe('per-section edit tools normalization', () => {
 
       expect(getModel().variables).toHaveLength(0);
     });
+
+    it('also removes relationships where the removed variable is the from or the to', async () => {
+      resetModel({
+        variables: [
+          { name: 'birth rate', type: 'variable', equation: '0.1' },
+          { name: 'Population', type: 'stock', equation: '1000' },
+          { name: 'death rate', type: 'variable', equation: '0.05' },
+        ],
+        relationships: [
+          { from: 'birth rate', to: 'Population', polarity: '+' }, // removed: from-match
+          { from: 'Population', to: 'birth rate', polarity: '+' }, // removed: to-match
+          { from: 'death rate', to: 'Population', polarity: '-' }, // kept: untouched
+        ],
+        modules: [],
+      });
+      const { sendToClient, getModel } = makeSendToClient();
+      const tools = makeEditTools(sendToClient);
+
+      await tools.variables.handler({ operation: 'remove', data: [{ name: 'birth_rate' }] });
+
+      const model = getModel();
+      expect(model.variables.map(v => v.name)).toEqual(['Population', 'death rate']);
+      expect(model.relationships).toEqual([
+        { from: 'death rate', to: 'Population', polarity: '-' },
+      ]);
+    });
+
+    it('prunes relationships for every variable in a multi-variable remove', async () => {
+      resetModel({
+        variables: [
+          { name: 'birth rate', type: 'variable', equation: '0.1' },
+          { name: 'death rate', type: 'variable', equation: '0.05' },
+          { name: 'Population', type: 'stock', equation: '1000' },
+        ],
+        relationships: [
+          { from: 'birth rate', to: 'Population', polarity: '+' },
+          { from: 'death rate', to: 'Population', polarity: '-' },
+        ],
+        modules: [],
+      });
+      const { sendToClient, getModel } = makeSendToClient();
+      const tools = makeEditTools(sendToClient);
+
+      await tools.variables.handler({ operation: 'remove', data: [
+        { name: 'birth_rate' }, { name: 'death_rate' }
+      ]});
+
+      const model = getModel();
+      expect(model.variables.map(v => v.name)).toEqual(['Population']);
+      expect(model.relationships).toHaveLength(0);
+    });
   });
 
   describe('relationships add', () => {
