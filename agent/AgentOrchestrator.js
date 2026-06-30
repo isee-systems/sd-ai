@@ -323,6 +323,19 @@ export class AgentOrchestrator {
       }
     }
 
+    // The configured Anthropic model (4.6+ family) rejects assistant-message prefill:
+    // the conversation MUST end with a user turn or the API 400s with
+    // "This model does not support assistant message prefill". The array can end on an
+    // assistant turn here if the incoming userMessage was empty/whitespace (dropped by the
+    // filter above) or an agent-switch handoff left the history ending on an assistant turn.
+    // Re-append a user turn so the request is valid. An empty message historically meant
+    // "continue" (it worked via prefill on older models); preserve that intent explicitly.
+    if (messages.length === 0 || messages[messages.length - 1].role !== 'user') {
+      const text = (typeof userMessage === 'string' && userMessage.trim()) ? userMessage : 'Please continue.';
+      messages.push({ role: 'user', content: text });
+      logger.debug(`Anthropic Manual: appended trailing user turn to satisfy no-prefill requirement (userMessage was ${userMessage?.trim() ? 'non-empty' : 'empty'})`);
+    }
+
     // Check model token count and update session state
     const currentModel = session?.clientModel;
     let modelTokenCount = 0;
