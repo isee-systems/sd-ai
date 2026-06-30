@@ -397,12 +397,25 @@ export class SessionManager {
     try {
       writeFileSync(modelPath, JSON.stringify(model, null, 2));
     } catch (err) {
-      // ENOENT here on a path whose parent we just mkdir'd usually means the
-      // host removed the bwrap bind-mount source out from under this worker
-      // (e.g. WebSocket closed and triggered cleanupSessionTempDir while we
-      // were mid-tool-call). Capture the directory state so the post-mortem
-      // confirms the race rather than guessing.
       const dirExists = existsSync(sessionTempDir);
+      // ENOENT on a path whose parent we just mkdir'd on the line above can only
+      // mean the host removed the bwrap bind-mount source out from under this
+      // worker — the WebSocket closed and cleanupSessionTempDir rmSync'd the
+      // `--bind` source while we were mid-write. The mount point `/session` still
+      // stats OK (existsSync=true) but its inode was unlinked, so the create fails.
+      // Don't escalate to a fatal worker_error: instead of throwing, hand the agent
+      // a message it can respond to so a mid-conversation model write degrades
+      // gracefully (the LLM can tell the user the change wasn't persisted) rather
+      // than crashing the conversation loop. Any other errno is a genuine failure
+      // and still throws.
+      if (err.code === 'ENOENT') {
+        logger.warn(`[${sessionId}] Session temp dir vanished during model write to '${modelPath}' (mount point exists=${dirExists}) — session is tearing down; skipping write.`);
+        return {
+          modelPath,
+          message: `The model could not be saved — this session's storage is no longer available (the session is likely closing). Do not retry writing the model; let the user know the latest change was not persisted.`,
+          skipped: true,
+        };
+      }
       logger.error(`[${sessionId}] Failed to write model to '${modelPath}' (sessionTempDir exists=${dirExists}):`, err);
       throw new Error(`Failed to write model to '${modelPath}': ${err.message}`);
     }
