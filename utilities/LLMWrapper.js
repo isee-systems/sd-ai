@@ -870,7 +870,7 @@ export class LLMWrapper {
     if (zodSchema) {
       outputConfig.format = {
         type: "json_schema",
-        schema: zodSchema.toJSONSchema()
+        schema: LLMWrapper.#makeClaudeSchemaStrict(zodSchema.toJSONSchema())
       };
     }
     if (reasoningEffort) {
@@ -900,9 +900,22 @@ export class LLMWrapper {
       (block) => block?.type === 'text' && typeof block.text === 'string'
     );
 
-    return {
-      content: textBlock ? textBlock.text : null
-    };
+    let content = textBlock ? textBlock.text : null;
+
+    // Structured outputs went out with every optional field forced to
+    // required-but-nullable (see #makeClaudeSchemaStrict), so the model emits
+    // explicit nulls for absent optionals. Strip them so downstream sees the same
+    // shape the other providers produce. Guarded: if it isn't valid JSON (it always
+    // should be under a schema), leave the raw text untouched.
+    if (content && zodSchema) {
+      try {
+        content = JSON.stringify(LLMWrapper.#stripNullValues(JSON.parse(content)));
+      } catch {
+        // Not parseable JSON — return as-is rather than dropping the response.
+      }
+    }
+
+    return { content };
   }
 
   // Resolve a model's maximum output tokens from the Models API (cached per
@@ -992,6 +1005,79 @@ export class LLMWrapper {
     }
 
     return claudeMessages;
+  }
+
+  // Anthropic compiles a structured-output schema into a grammar and caps the
+  // number of OPTIONAL parameters (keys absent from an object's `required`) at 24
+  // across the whole schema; our quantitative schema has 26 and 400s. Rewrite the
+  // schema so every property is `required`, expressing former optionality as
+  // "required but may be null" (anyOf with a null branch). This drops the optional
+  // count to zero — the same transform OpenAI strict mode applies, which is why the
+  // OpenAI/Gemini paths never hit this. Only used on the Claude path. Mutates and
+  // returns the (freshly generated, unshared) schema.
+  static #makeClaudeSchemaStrict(schema) {
+    const makeNullable = (node) => {
+      if (node && typeof node === 'object'
+          && Array.isArray(node.anyOf) && node.anyOf.some((s) => s && s.type === 'null')) {
+        return node; // already nullable
+      }
+      if (node && typeof node === 'object') {
+        const { description, ...rest } = node;
+        const wrapped = { anyOf: [rest, { type: 'null' }] };
+        if (description !== undefined) wrapped.description = description;
+        return wrapped;
+      }
+      return { anyOf: [node, { type: 'null' }] };
+    };
+
+    const walk = (node) => {
+      if (Array.isArray(node)) {
+        node.forEach(walk);
+        return;
+      }
+      if (!node || typeof node !== 'object') return;
+
+      if (node.type === 'object' && node.properties) {
+        const originallyRequired = new Set(node.required ?? []);
+        for (const key of Object.keys(node.properties)) {
+          walk(node.properties[key]); // strictify children first
+          if (!originallyRequired.has(key)) {
+            node.properties[key] = makeNullable(node.properties[key]);
+          }
+        }
+        node.required = Object.keys(node.properties);
+      }
+
+      if (node.items) walk(node.items);
+      if (node.anyOf) walk(node.anyOf);
+      if (node.oneOf) walk(node.oneOf);
+      if (node.allOf) walk(node.allOf);
+      if (node.$defs) Object.values(node.$defs).forEach(walk);
+      if (node.definitions) Object.values(node.definitions).forEach(walk);
+    };
+
+    walk(schema);
+    return schema;
+  }
+
+  // Counterpart to #makeClaudeSchemaStrict: the model returns explicit nulls for the
+  // fields we forced to be required-but-nullable. Recursively drop null-valued keys
+  // so callers get the same shape the other providers produce (optional fields
+  // simply absent). Safe because none of our schemas declare a field nullable, so
+  // every null here is an omitted optional.
+  static #stripNullValues(value) {
+    if (Array.isArray(value)) {
+      return value.map((item) => LLMWrapper.#stripNullValues(item));
+    }
+    if (value && typeof value === 'object') {
+      const out = {};
+      for (const [key, val] of Object.entries(value)) {
+        if (val === null) continue;
+        out[key] = LLMWrapper.#stripNullValues(val);
+      }
+      return out;
+    }
+    return value;
   }
 
   static moduleSchema() {
