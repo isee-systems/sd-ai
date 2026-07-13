@@ -64,6 +64,9 @@ class TokenUsageReporter {
         inputTokens: usage.prompt_tokens ?? 0,
         outputTokens: usage.completion_tokens ?? 0,
         cachedTokens: usage.prompt_tokens_details?.cached_tokens ?? 0,
+        // GPT-5.6+ report tokens written to cache and bill them separately (1.25x input);
+        // older models omit this field, so it defaults to 0 and costs nothing.
+        cacheWriteTokens: usage.prompt_tokens_details?.cache_write_tokens ?? 0,
         reasoningTokens: usage.completion_tokens_details?.reasoning_tokens ?? 0,
       };
     } else if (isGemini) {
@@ -117,6 +120,7 @@ class TokenUsageReporter {
         ` input=${fmt(tokens.inputTokens, costs?.inputTokens)}` +
         ` output=${fmt(tokens.outputTokens, costs?.outputTokens)}` +
         ` cached=${fmt(tokens.cachedTokens, costs?.cachedTokens)}` +
+        ` cache_write=${fmt(tokens.cacheWriteTokens, costs?.cacheWriteTokens)}` +
         ` reasoning=${tokens.reasoningTokens}` +
         (costs ? ` total=$${costs.total.toFixed(6)}` : '')
       );
@@ -225,17 +229,24 @@ class TokenUsageReporter {
     }
 
     // openai (and unknown providers, which fall back to openai pricing)
-    // cachedTokens are a subset of inputTokens; bill non-cached at full rate, cached at reduced rate
-    // reasoningTokens are already included in outputTokens (completion_tokens), so not billed separately
-    const nonCached = tokens.inputTokens - tokens.cachedTokens;
+    // cachedTokens (read from cache) and cacheWriteTokens (written to cache, GPT-5.6+)
+    // are disjoint subsets of inputTokens: cache writes bill at 1.25x input IN PLACE OF
+    // the normal input charge, so they're subtracted from the full-rate bucket too.
+    // Models without cache-write pricing report 0 write tokens (rate defaults to 0), so
+    // this reduces to the prior behavior. reasoningTokens are already in completion_tokens.
+    const cacheWriteTokenCount = tokens.cacheWriteTokens ?? 0;
+    const cacheWriteRate = pricing.cacheWriteTokens ?? 0;
+    const nonCached = tokens.inputTokens - tokens.cachedTokens - cacheWriteTokenCount;
     const inputTokens = per(nonCached, pricing.inputTokens);
     const cachedTokens = per(tokens.cachedTokens, pricing.cachedTokens);
+    const cacheWriteTokens = per(cacheWriteTokenCount, cacheWriteRate);
     const outputTokens = per(tokens.outputTokens, pricing.outputTokens);
     return {
       inputTokens,
       cachedTokens,
+      cacheWriteTokens,
       outputTokens,
-      total: inputTokens + cachedTokens + outputTokens,
+      total: inputTokens + cachedTokens + cacheWriteTokens + outputTokens,
     };
   }
 }

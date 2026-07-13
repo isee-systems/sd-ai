@@ -132,21 +132,39 @@ export const gemini = {
 // Source: https://developers.openai.com/api/docs/pricing
 // Reasoning tokens are billed at the output token rate and are already included
 // in completion_tokens, so they must not be double-counted.
-// cachedTokens are a subset of inputTokens and billed at the cached rate instead.
+// cachedTokens (cache reads) and cacheWriteTokens (cache writes, GPT-5.6+) are
+// disjoint subsets of inputTokens, each billed at its own rate instead of input.
 // Aliases resolve before the pricing lookup.
 export const openaiAliases = {
-  'gpt-5': 'gpt-5.5',       // same as newest gpt-5.X model
-  'gpt-5-mini': 'gpt-5.4-mini', // same as newest gpt-5.X mini model
+  'gpt-5': 'gpt-5.6-sol',        // bare alias → newest gpt-5.X flagship tier
+  'gpt-5-mini': 'gpt-5.4-mini',  // bare alias → newest gpt-5.X mini model
 };
 
 export const openai = {
+  // GPT-5.6 family (GA 2026-07-09): three flagship tiers — Sol/Terra/Luna.
+  // Like gpt-5.5, prompts over 272K input tokens are billed at the higher
+  // "long context" rate for the ENTIRE request (not just the overflow tokens),
+  // so the tier is selected on total inputTokens. Cached (read) input bills at
+  // 10% of input; cacheWriteTokens (tokens written to cache) bills at 1.25x input.
+  'gpt-5.6-sol': [
+    { maxInputTokens: 272000, inputTokens: 5.00, cachedTokens: 0.50, cacheWriteTokens: 6.25, outputTokens: 30.00 },
+    {                         inputTokens: 10.00, cachedTokens: 1.00, cacheWriteTokens: 12.50, outputTokens: 45.00 },
+  ],
+  'gpt-5.6-terra': [
+    { maxInputTokens: 272000, inputTokens: 2.50, cachedTokens: 0.25, cacheWriteTokens: 3.125, outputTokens: 15.00 },
+    {                         inputTokens: 5.00, cachedTokens: 0.50, cacheWriteTokens: 6.25, outputTokens: 22.50 },
+  ],
+  'gpt-5.6-luna': [
+    { maxInputTokens: 272000, inputTokens: 1.00, cachedTokens: 0.10, cacheWriteTokens: 1.25, outputTokens: 6.00 },
+    {                         inputTokens: 2.00, cachedTokens: 0.20, cacheWriteTokens: 2.50, outputTokens: 9.00 },
+  ],
   'gpt-5.5': [
     { maxInputTokens: 272000, inputTokens: 5.00, cachedTokens: 0.50, outputTokens: 30.00 },
     {                         inputTokens: 10.00, cachedTokens: 1.00, outputTokens: 45.00 },
   ],
   'gpt-5.4-mini': {
     inputTokens: 0.75,
-    cachedTokens: 0.08,
+    cachedTokens: 0.075,
     outputTokens: 4.50,
   },
   default: {
