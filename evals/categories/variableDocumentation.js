@@ -109,6 +109,13 @@ const summarizeRelationshipsFor = function(model, variableName) {
 /**
  * Builds a compact textual description of a single variable, including its structural role
  * (type, equation, units, flows) and the causal links that connect it to the rest of the model.
+ *
+ * Graphical-function (lookup) variables need special care: their `equation` field holds only
+ * the INPUT expression, and the actual — usually non-linear — relationship is encoded in the
+ * lookup points. Presenting just the equation makes it look like a direct linear assignment to
+ * the input, which caused the judge to wrongly flag correct documentation (e.g. an inverse
+ * lookup documented as "attractiveness falls as delay rises") as contradicting its equation.
+ * So we label the equation as the lookup input and spell out the points.
  * @param {Object} variable The variable to describe
  * @param {Object} model The full generated model, used to find the variable's causal links
  * @returns {string} A multi-line description of the variable
@@ -116,7 +123,22 @@ const summarizeRelationshipsFor = function(model, variableName) {
 const describeVariable = function(variable, model) {
     const parts = [`Name: ${variable.name}`, `Type: ${variable.type}`];
     if (variable.units) parts.push(`Units: ${variable.units}`);
-    if (variable.equation) parts.push(`Equation: ${variable.equation}`);
+
+    const gfPoints = (variable.graphicalFunction && Array.isArray(variable.graphicalFunction.points))
+        ? variable.graphicalFunction.points
+        : [];
+    const hasGraphicalFunction = gfPoints.length > 0;
+
+    if (variable.equation) {
+        parts.push(hasGraphicalFunction
+            ? `Graphical function input (the equation is the lookup's input, not a closed-form value): ${variable.equation}`
+            : `Equation: ${variable.equation}`);
+    }
+    if (hasGraphicalFunction) {
+        const pts = gfPoints.map((p) => `(${p.x}, ${p.y})`).join(', ');
+        parts.push(`Graphical function points mapping the input above to this variable's value (input, output): ${pts}`);
+    }
+
     if (Array.isArray(variable.inflows) && variable.inflows.length) parts.push(`Inflows: ${variable.inflows.join(', ')}`);
     if (Array.isArray(variable.outflows) && variable.outflows.length) parts.push(`Outflows: ${variable.outflows.join(', ')}`);
 
