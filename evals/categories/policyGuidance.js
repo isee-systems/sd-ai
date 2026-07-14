@@ -38,15 +38,18 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 /**
- * Loads the `model` portion of one of the shared full example models used by the feedback
- * explanation category. Only the model structure is needed here; the accompanying feedback
- * analysis in those files is ignored.
+ * Loads one of the shared full example models used by the feedback explanation category,
+ * returning both the model structure and its precomputed feedback-loop dominance analysis.
+ * The feedback analysis is passed to the engine as `feedbackContent` so that single-pass
+ * discussion engines (which do not run the model themselves) have the loop-dominance
+ * information a policy discussion fundamentally depends on — matching the convention the
+ * feedbackExplanation category uses with these same files.
  * @param {string} fileName The file name within feedbackExplanationData (e.g. 'armsRace.json')
- * @returns {Object} The full SD-JSON model
+ * @returns {{ model: Object, feedback: Object }} The full SD-JSON model and its feedback analysis
  */
-const loadExampleModel = function(fileName) {
+const loadExample = function(fileName) {
     const data = JSON.parse(readFileSync(join(__dirname, 'feedbackExplanationData', fileName), 'utf-8'));
-    return data.model;
+    return { model: data.model, feedback: data.feedback };
 };
 
 /**
@@ -58,7 +61,7 @@ const loadExampleModel = function(fileName) {
  */
 const cases = {
     "Arms Race": {
-        model: loadExampleModel('armsRace.json'),
+        ...loadExample('armsRace.json'),
         problemStatement: "I'm new to system dynamics and I've been handed this arms race model. I want to understand what policies could keep the two arsenals from spiraling ever upward.",
         currentBehavior: "each side keeps building more weapons in response to the other, so both arsenals escalate without bound",
         desirableBehavior: "the two arsenals stabilizing — and ideally coming down — instead of spiraling upward in an ever-escalating buildup",
@@ -70,7 +73,7 @@ const cases = {
         ]
     },
     "Bass Diffusion": {
-        model: loadExampleModel('bassDiffusion.json'),
+        ...loadExample('bassDiffusion.json'),
         problemStatement: "I'm new to system dynamics and I have this product-adoption model. I want to understand what policies could get the product to catch on faster.",
         currentBehavior: "adoption starts slowly, then accelerates through word of mouth, and finally levels off as the pool of potential adopters is used up",
         desirableBehavior: "adoption taking off sooner and reaching the market faster — an earlier, quicker S-curve",
@@ -81,7 +84,7 @@ const cases = {
         ]
     },
     "Inventory Workforce": {
-        model: loadExampleModel('inventoryWorkforce.json'),
+        ...loadExample('inventoryWorkforce.json'),
         problemStatement: "I'm new to system dynamics and I've been given this inventory-and-workforce model. I want to understand what policies would keep inventory and staffing steady instead of swinging up and down.",
         currentBehavior: "inventory and the workforce overshoot and oscillate around their desired levels rather than settling smoothly",
         desirableBehavior: "inventory and the workforce adjusting smoothly to demand and settling at their targets, instead of oscillating",
@@ -93,7 +96,7 @@ const cases = {
         ]
     },
     "Market Growth": {
-        model: loadExampleModel('marketGrowth.json'),
+        ...loadExample('marketGrowth.json'),
         problemStatement: "I'm new to system dynamics and I have this market growth model for a company. I want to understand what policies would let the business keep growing instead of stalling out.",
         currentBehavior: "the business grows for a while but then stalls or oscillates because it fails to keep capacity up with demand",
         desirableBehavior: "sustained, stable growth of the business instead of growth that stalls or oscillates",
@@ -138,7 +141,11 @@ const generateTest = function(name) {
         currentModel: c.model,
         additionalParameters: {
             problemStatement: c.problemStatement,
-            backgroundKnowledge: `Right now, ${c.currentBehavior}. The desirable behavior I am aiming for is ${c.desirableBehavior}.`
+            backgroundKnowledge: `Right now, ${c.currentBehavior}. The desirable behavior I am aiming for is ${c.desirableBehavior}.`,
+            // Provide the precomputed feedback-loop dominance analysis so the engine can ground
+            // its policy discussion in the model's feedback structure. Without this, single-pass
+            // engines correctly refuse to answer a dynamics question and ask for loop information.
+            feedbackContent: c.feedback
         },
         expectations: {
             systemName: name,
