@@ -95,6 +95,8 @@
     "categories": {
         "feedbackExplanation": true,
         "modelBuildingSteps": true,
-        "errorFixingSuggestions": true
+        "errorFixingSuggestions": true,
+        "modelScoping": true,
++       "policyGuidance": true
     }
 }
