@@ -368,6 +368,11 @@ export class WorkerSpawner {
             // Point it at /session so each sandbox gets a fresh, writable home dir.
             HOME: WorkerSpawner.CONTAINER_SESSION_PATH,
             PATH: process.env.PATH,
+            // The bwrap env is an explicit allowlist, so the main process's
+            // NODE_ENV / JEST_WORKER_ID never reach the worker. Forward a dedicated
+            // quiet-logging flag when the main process is in test/eval mode so the
+            // worker's logger stays silent instead of spewing into test/eval output.
+            ...(logger.isTestMode ? { SDAI_TEST_MODE: 'true' } : {}),
           };
           const bwrapArgs = WorkerSpawner.#buildBwrapArgs(sessionTempDir);
           logger.log(`[worker:${sessionId}] bwrap args: ${bwrapArgs.join(' ')}`);
@@ -481,7 +486,12 @@ export class WorkerSpawner {
     // the group (process.kill(-pid, signal)) also kills grandchildren like the
     // claude CLI subprocess spawned by the Agent SDK.
     return fork(WorkerSpawner.#WORKER_PATH, [], {
-      env: { ...process.env, SESSION_ID: sessionId, SESSION_TEMP_DIR: sessionTempDir },
+      env: {
+        ...process.env,
+        ...(logger.isTestMode ? { SDAI_TEST_MODE: 'true' } : {}),
+        SESSION_ID: sessionId,
+        SESSION_TEMP_DIR: sessionTempDir,
+      },
       stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
       // detached only on Unix: puts the worker in its own process group so
       // process.kill(-pid) can kill grandchildren (e.g. the claude CLI).

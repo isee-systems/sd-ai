@@ -28,6 +28,15 @@ import {
 
 import "dotenv/config";
 
+// Running evals: silence the engines' / agent's internal logger so its debug
+// output doesn't interleave with the progress bar and result tables. The logger
+// reads this at construction, and every engine, category, and agent module is
+// pulled in via the dynamic import()s below — all of which run after this line,
+// so the flag is always set in time. WorkerSpawner forwards the same flag into
+// any sandboxed sub-process it spawns. Set SDAI_TEST_MODE explicitly to opt out
+// (e.g. SDAI_TEST_MODE=false) when you need the agent's logs while debugging.
+process.env.SDAI_TEST_MODE ??= 'true';
+
 const argv = yargs(hideBin(process.argv))
   .option("experiment", {
     alias: "e",
