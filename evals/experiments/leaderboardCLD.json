@@ -1,130 +1,115 @@
 {
     "engineConfigs": {
-         "qualitative-gemini-2.5-flash": {
+        "qualitative-gpt-5.6-sol": {
             "engine": "qualitative",
             "additionalParameters": {
-                "underlyingModel": "gemini-2.5-flash"
-            },
-            "limits": {
-                "tokensPerMinute": 90000,
-                "requestsPerMinute": 10
-            }
-        },
-
-        "causal-chains-o4-mini": {
-            "engine": "causal-chains",
-            "additionalParameters": {
-                "underlyingModel": "o4-mini"
+                "underlyingModel": "gpt-5.6-sol"
             },
             "limits": {
                 "baselineTokenUsage": 10000
             }
         },
-        
-        "recursivecausal-o4-mini": {
-            "engine": "recursivecausal",
+        "qualitative-gpt-5.6-terra": {
+            "engine": "qualitative",
             "additionalParameters": {
-                "underlyingModel": "o4-mini",
-                "depth": 1
-            },
-            "limits": {
-                "baselineTokenUsage": 10000,
-                "requestsPerMinute": 1
-            }
-        },
-
-        "qualitative-zero-gpt-4.1-nano": {
-            "engine": "qualitative-zero",
-            "additionalParameters": {
-                "underlyingModel": "gpt-4.1-nano"
-            }
-        },
-
-        "qualitative-zero-gpt-4.1": {
-            "engine": "qualitative-zero",
-            "additionalParameters": {
-                "underlyingModel": "gpt-4.1"
-            }
-        },
-
-        "qualitative-zero-gpt-5.1": {
-            "engine": "qualitative-zero",
-            "additionalParameters": {
-                "underlyingModel": "gpt-5.1 medium"
-            }
-        },
-
-        "qualitative-zero-gpt-5.2": {
-            "engine": "qualitative-zero",
-            "additionalParameters": {
-                "underlyingModel": "gpt-5.2 medium"
-            }
-        },
-
-        "qualitative-zero-gpt-5-mini": {
-            "engine": "qualitative-zero",
-            "additionalParameters": {
-                "underlyingModel": "gpt-5-mini"
-            }
-        },
-
-        "qualitative-zero-gpt-5-nano": {
-            "engine": "qualitative-zero",
-            "additionalParameters": {
-                "underlyingModel": "gpt-5-nano"
-            }
-        },
-
-        "qualitative-zero-o4-mini": {
-            "engine": "qualitative-zero",
-            "additionalParameters": {
-                "underlyingModel": "o4-mini"
+                "underlyingModel": "gpt-5.6-terra"
             },
             "limits": {
                 "baselineTokenUsage": 10000
             }
         },
-
-        "qualitative-zero-o1": {
-            "engine": "qualitative-zero",
+        "qualitative-gpt-5.6-luna": {
+            "engine": "qualitative",
             "additionalParameters": {
-                "underlyingModel": "o1"
+                "underlyingModel": "gpt-5.6-luna"
+            },
+            "limits": {
+                "baselineTokenUsage": 10000
             }
         },
-
-        "qualitative-zero-gemini-2.5-flash-lite": {
-            "engine": "qualitative-zero",
+        "qualitative-gemini-3.1-pro-preview": {
+            "engine": "qualitative",
             "additionalParameters": {
-                "underlyingModel": "gemini-2.5-flash-lite"
+                "underlyingModel": "gemini-3.1-pro-preview"
             },
             "limits": {
                 "tokensPerMinute": 90000,
                 "requestsPerMinute": 10
             }
         },
-
-        "qualitative-zero-gemini-2.5-flash": {
-            "engine": "qualitative-zero",
+        "qualitative-gemini-3.5-flash": {
+            "engine": "qualitative",
             "additionalParameters": {
-                "underlyingModel": "gemini-2.5-flash"
+                "underlyingModel": "gemini-3.5-flash"
             },
             "limits": {
                 "tokensPerMinute": 90000,
                 "requestsPerMinute": 10
             }
         },
-
-        "qualitative-zero-gemini-2.5-pro": {
-            "engine": "qualitative-zero",
+        "qualitative-claude-opus-4-8": {
+            "engine": "qualitative",
             "additionalParameters": {
-                "underlyingModel": "gemini-2.5-pro"
+                "underlyingModel": "claude-opus-4-8"
             },
             "limits": {
-                "tokensPerMinute": 90000,
-                "requestsPerMinute": 10
+                "baselineTokenUsage": 10000
             }
-        }
-    },
+        },
+        "qualitative-claude-sonnet-5": {
+            "engine": "qualitative",
+            "additionalParameters": {
+                "underlyingModel": "claude-sonnet-5"
+            },
+            "limits": {
+                "baselineTokenUsage": 10000
+            }
+        },
+        "qualitative-claude-fable-5": {
+            "engine": "qualitative",
+            "additionalParameters": {
+                "underlyingModel": "claude-fable-5"
+            },
+            "limits": {
+                "baselineTokenUsage": 10000
+            }
+        },
+        "qualitative-qwen3.7-max": {
+            "engine": "qualitative",
+            "additionalParameters": {
+                "underlyingModel": "qwen/qwen3.7-max"
+            },
+            "limits": {
+                "baselineTokenUsage": 10000
+            }
+        },
+        "qualitative-deepseek-v4-pro": {
+            "engine": "qualitative",
+            "additionalParameters": {
+                "underlyingModel": "deepseek/deepseek-v4-pro"
+            },
+            "limits": {
+                "baselineTokenUsage": 10000
+            }
+        },
+        "qualitative-kimi-k2.6": {
+            "engine": "qualitative",
+            "additionalParameters": {
+                "underlyingModel": "moonshotai/kimi-k2.6"
+            },
+            "limits": {
+                "baselineTokenUsage": 10000
+            }
+        },
+        "qualitative-glm-5.2": {
+            "engine": "qualitative",
+            "additionalParameters": {
+                "underlyingModel": "z-ai/glm-5.2"
+            },
+            "limits": {
+                "baselineTokenUsage": 10000
+            }
+        },
         "merlin-anthropic-cld": {
             "engine": "test-agent-build",
             "additionalParameters": {
@@ -139,7 +124,6 @@
                 "requestsPerMinute": 3
             }
         },
-
         "merlin-google-cld": {
             "engine": "test-agent-build",
             "additionalParameters": {
