@@ -604,8 +604,12 @@ function buildAuxiliary(aux, model, currentModule = '') {
             lines.push('        <isee:delay_aux/>');
         }
 
-        // Handle graphical functions
-        if (aux.graphicalFunction && aux.graphicalFunction.points) {
+        // Handle graphical functions. An empty points array ([]) is truthy, so we must
+        // check length explicitly — engines emit a default graphicalFunction:{points:[]}
+        // on plain variables, and without the length check that empty object would be
+        // treated as a real lookup, suppressing the numeric <eqn> and producing an
+        // equation-less <aux> that fails to load in the simulator.
+        if (aux.graphicalFunction && aux.graphicalFunction.points && aux.graphicalFunction.points.length > 0) {
             lines.push(...buildGraphicalFunction(aux.graphicalFunction, equation));
         } else if (equation) {
             // Regular equation

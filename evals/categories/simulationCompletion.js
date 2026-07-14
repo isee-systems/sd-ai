@@ -32,6 +32,7 @@
 import PySDSimulator from '../utilities/simulator/PySDSimulator.js';
 import { validateEvaluationResult } from '../evaluationSchema.js';
 import SDJsonToXMILE from '../../utilities/SDJsonToXMILE.js';
+import utils from '../../utilities/utils.js';
 
 /**
  * Returns the description for this category
@@ -165,7 +166,11 @@ export const evaluate = async function(generatedResponse, expectations) {
 
     // 3) Simulatability: run the model, tracking every stock (the integrated state variables).
     // If PySD cannot load or integrate the model it raises, which surfaces here as an error.
-    const stockNames = stocks.map((s) => s.name);
+    // Track by the XMILE-normalized name (spaces -> underscores): SDJsonToXMILE names the
+    // model elements via utils.xmileName, so the simulator only knows a stock like
+    // "savings balance" as "savings_balance". Passing the raw name makes PySD reject it as a
+    // missing model element.
+    const stockNames = stocks.map((s) => utils.xmileName(s.name));
     let simulationResults;
     try {
         const simulator = new PySDSimulator(xmileContent);
@@ -200,12 +205,12 @@ export const evaluate = async function(generatedResponse, expectations) {
 
     // 4b) Completion: every stock must hold finite values across the whole run. A non-finite
     // value means the model diverged (overflow, division blow-up, etc.) before reaching the end.
-    for (const name of stockNames) {
-        const series = simulationResults[name];
+    for (const stock of stocks) {
+        const series = simulationResults[utils.xmileName(stock.name)];
         if (!Array.isArray(series) || series.length === 0) {
             failures.push({
                 type: 'Missing stock trajectory',
-                details: `The simulator returned no trajectory for stock "${name}".`
+                details: `The simulator returned no trajectory for stock "${stock.name}".`
             });
             continue;
         }
@@ -213,7 +218,7 @@ export const evaluate = async function(generatedResponse, expectations) {
         if (badIndex !== -1) {
             failures.push({
                 type: 'Non-finite simulation values',
-                details: `Stock "${name}" produced a non-finite value (${series[badIndex]}) at time ${time[badIndex]}, indicating the model did not simulate cleanly to the end.`
+                details: `Stock "${stock.name}" produced a non-finite value (${series[badIndex]}) at time ${time[badIndex]}, indicating the model did not simulate cleanly to the end.`
             });
         }
     }
