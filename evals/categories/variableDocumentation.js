@@ -120,7 +120,7 @@ const summarizeRelationshipsFor = function(model, variableName) {
  * @param {Object} model The full generated model, used to find the variable's causal links
  * @returns {string} A multi-line description of the variable
  */
-const describeVariable = function(variable, model) {
+export const describeVariable = function(variable, model) {
     const parts = [`Name: ${variable.name}`, `Type: ${variable.type}`];
     if (variable.units) parts.push(`Units: ${variable.units}`);
 
