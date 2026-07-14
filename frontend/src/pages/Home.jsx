@@ -15,26 +15,38 @@ function Home() {
           </p>
           <p className="text-xl sm:text-2xl text-gray-600 max-w-4xl mx-auto mb-12 leading-relaxed"> 
           </p>
-          {/* Engines and Evaluations Introduction */}
+          {/* Engines, Agents, and Evaluations Introduction */}
           <div className="bg-gradient-to-r from-blue-50 to-green-50 p-8 sm:p-10 rounded-xl max-w-5xl mx-auto">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 sm:gap-12">
-              <div className="text-center">
-                <p className="text-gray-600 leading-relaxed mb-4">
-                  SD-AI has a growing list of engines for tasks like creating causal loop diagrams and simulating models. 
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 sm:gap-12">
+              <div className="text-center flex flex-col">
+                <p className="text-gray-600 leading-relaxed mb-4 flex-1">
+                  SD-AI has a growing list of engines for tasks like creating causal loop diagrams and simulating models.
                 </p>
-                <Link 
+                <Link
                   to="/engines"
                   className="inline-block px-6 py-3 bg-blue-600 text-white no-underline rounded-lg text-base font-semibold border-none cursor-pointer hover:bg-blue-700"
                 >
                   Explore Engines
                 </Link>
               </div>
-              
-              <div className="text-center">
-                <p className="text-gray-600 leading-relaxed mb-4">
+
+              <div className="text-center flex flex-col">
+                <p className="text-gray-600 leading-relaxed mb-4 flex-1">
+                  It also hosts conversational agents that guide you through the modeling process step by step.
+                </p>
+                <Link
+                  to="/agents"
+                  className="inline-block px-6 py-3 bg-indigo-600 text-white no-underline rounded-lg text-base font-semibold border-none cursor-pointer hover:bg-indigo-700"
+                >
+                  Explore Agents
+                </Link>
+              </div>
+
+              <div className="text-center flex flex-col">
+                <p className="text-gray-600 leading-relaxed mb-4 flex-1">
                   For each type of engine there is also a set of quality tests (called evals) used to benchmark performance of the engine.
                 </p>
-                <Link 
+                <Link
                   to="/evals"
                   className="inline-block px-6 py-3 bg-green-600 text-white no-underline rounded-lg text-base font-semibold border-none cursor-pointer hover:bg-green-700"
                 >
@@ -107,14 +119,28 @@ function Home() {
               >
                 CoModel
               </a>
-              , or you can{' '}
-              <Link 
-                to="/engines" 
+              , or explore the{' '}
+              <Link
+                to="/engines"
                 className="text-blue-600 hover:underline font-medium"
               >
-                play with engines
+                engines
               </Link>
-              {' '}directly on this website.
+              ,{' '}
+              <Link
+                to="/agents"
+                className="text-blue-600 hover:underline font-medium"
+              >
+                agents
+              </Link>
+              , and{' '}
+              <Link
+                to="/evals"
+                className="text-blue-600 hover:underline font-medium"
+              >
+                evaluations
+              </Link>
+              {' '}documented on this site.
             </p>
           </div>
         </div>

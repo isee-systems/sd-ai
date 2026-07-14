@@ -8,6 +8,7 @@ function Layout({ children }) {
   const navigationItems = [
     { path: '/', label: 'Home' },
     { path: '/engines', label: 'Engines', hasSubPages: true },
+    { path: '/agents', label: 'Agents', hasSubPages: true },
     { path: '/evals', label: 'Evaluations', hasSubPages: true },
     { 
       path: '/get-involved', 
