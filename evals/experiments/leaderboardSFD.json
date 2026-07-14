@@ -62,8 +62,7 @@
                 "tokensPerMinute": 90000,
                 "requestsPerMinute": 10
             }
-        }
-    },
+        },
         "merlin-anthropic-sfd": {
             "engine": "test-agent-build",
             "additionalParameters": {
@@ -100,6 +99,7 @@
         "quantitativeIteration": true,
         "conformance": true,
         "quantitativeErrorFixing": true,
-        "behavioralPattern": true
+        "behavioralPattern": true,
+        "variableDocumentation": true
     }
 }
