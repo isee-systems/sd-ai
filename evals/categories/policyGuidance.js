@@ -20,9 +20,11 @@
  * For each test the engine is asked, in the voice of a novice, to discuss what policies could
  * move the system toward a stated desirable behavior and to teach through guiding questions. A
  * single structured-output LLM judge then assesses, in one pass, (1) whether the discussion
- * conveys each of the key policy insights experts consider essential for that model, and (2)
- * whether the discussion actually generates guiding questions that engage the novice. A test
- * fails if any key policy insight is missing or if the engine does not pose guiding questions.
+ * engages each of the key policy insights experts consider essential for that model — counting
+ * an insight as covered whether it is stated directly or reached through a guiding question, so
+ * the rubric does not penalize genuine Socratic teaching — and (2) whether the discussion
+ * actually generates guiding questions that engage the novice. A test fails if any key policy
+ * insight is missing or if the engine does not pose guiding questions.
  *
  * @module categories/policyGuidance
  */
@@ -67,9 +69,8 @@ const cases = {
         desirableBehavior: "the two arsenals stabilizing — and ideally coming down — instead of spiraling upward in an ever-escalating buildup",
         keyPolicies: [
             "The escalation is produced by a reinforcing feedback loop in which each side sizes its arsenal to exceed the other's, so the leverage lies in how each side reacts to the other's weapons, not in its own weapons directly.",
-            "Reducing the desired safety margin — the excess each side wants to hold over the other — lowers the level the arsenals settle at and can convert escalation into de-escalation.",
-            "Slowing or dampening each side's reaction (responding less aggressively, over a longer time, to the other's buildup) weakens the reinforcing loop and calms the race.",
-            "Because the loop is mutual, unilateral restraint by one side is undercut by the other's response, so a durable policy requires coordinated, reciprocal reductions rather than one side acting alone."
+            "Reducing the desired safety margin — the excess each side wants to hold over the other — lowers the loop's gain: driving the margin toward zero neutralizes the amplification, and a negative margin (aiming for fewer weapons than the other side) turns the escalation into de-escalation.",
+            "This structure contains only the reinforcing loop and no balancing force limiting desired weapons, so the buildup is unbounded; introducing a balancing structure — such as a treaty ceiling or cap that decouples desired weapons from the other side's ever-growing stock — is what can halt the spiral."
         ]
     },
     "Bass Diffusion": {
@@ -90,8 +91,8 @@ const cases = {
         desirableBehavior: "inventory and the workforce adjusting smoothly to demand and settling at their targets, instead of oscillating",
         keyPolicies: [
             "The oscillation is caused by delays (the time to hire or fire and the time to adjust demand expectations) combined with aggressive gap-closing, so the leverage is in the adjustment times and how hard the system corrects — not in demand, which is exogenous.",
-            "Correcting the workforce and inventory more gradually rather than trying to close the entire gap at once reduces overshoot, though correcting too slowly leaves large persistent gaps — a tradeoff the modeler must tune.",
-            "Accounting for adjustments already in the pipeline — workers already being hired and production already underway — prevents over-hiring and over-producing and the overshoot that follows.",
+            "Correcting the workforce and inventory more gradually — lengthening the adjustment times rather than trying to close the entire gap at once — reduces the overshoot that drives the oscillation.",
+            "Because it takes time to hire, workers already in the hiring pipeline should be accounted for rather than reacting to the same workforce gap again and again, which would otherwise cause over-hiring and the overshoot that follows.",
             "Reducing the delay in perceiving and adjusting to demand (faster, steadier demand forecasting) lets the system track demand with less overshoot."
         ]
     },
@@ -103,7 +104,7 @@ const cases = {
         keyPolicies: [
             "Growth is powered by a reinforcing loop — revenue funds the sales force, which wins orders, which generates more revenue — and sustaining growth means keeping this engine running.",
             "Growth is choked by a balancing loop: as orders outrun capacity, the backlog and delivery delay rise, which lowers sales effectiveness and orders; the highest-leverage fix is to expand capacity ahead of demand — shortening the capacity acquisition delay and basing capacity on anticipated rather than current orders — so delivery delay stays low.",
-            "The company's own goal for acceptable delivery delay is both a leverage point and a trap: tolerating long delivery delays suppresses capacity investment and quietly stalls growth (an eroding-goals dynamic), so holding a tight delivery-delay goal drives timely capacity expansion.",
+            "The company's goal for acceptable delivery delay is a key leverage parameter, because it sets the pressure to expand capacity: a loose (long) delivery-delay goal tolerates poor service and suppresses capacity investment, letting growth stall, whereas holding a tight goal keeps expansion pressure high and drives timely capacity expansion.",
             "Delays in perceiving the delivery delay, by both the company and the market, make the balancing loop act late and contribute to overshoot and oscillation, so faster and clearer perception of service quality helps stabilize growth.",
             "Investment must be balanced between the sales force and production capacity — pouring money into selling without matching capacity worsens the delivery delay and backfires on growth."
         ]
@@ -164,7 +165,7 @@ const generateTest = function(name) {
 const policyGuidanceSchema = z.object({
     policyInsights: z.array(z.object({
         insightNumber: z.number().int().positive().describe('The number of the key policy insight (1-indexed) this verdict refers to'),
-        covered: z.boolean().describe('True if the discussion conveys this policy insight to the learner, false otherwise'),
+        covered: z.boolean().describe('True if the discussion engages this policy insight with the learner — either by stating it or by posing a guiding question that leads to that specific leverage point — false otherwise'),
         explanation: z.string().describe('A brief explanation of the assessment')
     })).describe('One verdict for every key policy insight provided, in the same numbering'),
     generatesGuidingQuestions: z.object({
@@ -189,7 +190,7 @@ const buildJudgeMessages = function(generatedText, expectations) {
             content: `You are a System Dynamics expert evaluating how well a tutoring discussion helps a novice modeler understand the policies that would move a system toward desirable behavior. You will be given the modeling context, the desirable behavior the novice wants, a numbered list of key policy insights that a good discussion should convey, and the discussion that was generated.
 
 Assess two things:
-1. Policy insight coverage — for each numbered key policy insight, decide whether the discussion conveys that idea to the learner. The discussion need not use the same wording or variable names; it is enough that the concept is clearly communicated. Mark covered=true only when the idea is genuinely present, not merely hinted at.
+1. Policy insight coverage — for each numbered key policy insight, decide whether the discussion brings that idea to the learner. The discussion need not use the same wording or variable names; it is enough that the specific concept is engaged. Because this is Socratic tutoring, an insight counts as covered whether the discussion states it directly OR poses a guiding question that leads the novice to that specific leverage point — for example, asking what would happen if the desired safety margin were reduced covers the safety-margin insight. Mark covered=true only when the specific idea is genuinely engaged — asserted or targeted by a question — not when merely an adjacent topic is mentioned in passing.
 2. Guiding questions — decide whether the discussion actually generates guiding questions that invite the novice to reason about the system or its policies (Socratic teaching). Genuine guiding questions probe the learner's understanding or prompt them to think about leverage points; generic pleasantries such as "Any other questions?" do not count.
 
 Return one coverage verdict for every numbered key policy insight, plus the single guiding-questions verdict.`
