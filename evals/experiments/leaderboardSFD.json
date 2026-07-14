@@ -146,6 +146,7 @@
         "conformance": true,
         "quantitativeErrorFixing": true,
         "behavioralPattern": true,
+        "physicalLaws": true,
         "variableDocumentation": true,
         "simulationCompletion": true,
         "quantitativeModularModification": true,
