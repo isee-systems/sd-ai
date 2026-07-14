@@ -219,9 +219,9 @@ const behavioralPatterns = [
     ),
     generateBasicBehaviorModeTest(
         "Logistic Decay Pattern",
-        "logistic decay behavior",
+        "logistic decay (inverse S-curve) behavior",
         "s_curve_decline",
-        "Logistic decay combines reinforcing and balancing feedback in reverse. Initially, decline is exponential due to reinforcing feedback that accelerates the decay. As the system approaches its minimum sustainable level or floor, balancing feedback becomes dominant, slowing the decline until the system stabilizes at a lower equilibrium. Examples include resource depletion with diminishing extraction rates, technology abandonment following an inverse S-curve, and population collapse with limited resilience. The output should start high and decline exponentially at first, then gradually slow and level off as it approaches a minimum sustainable level or floor."
+        "Logistic decay follows an S-shaped (sigmoid) decline and is the mirror image of logistic growth. The output starts high and declines only slowly at first while it is near its initial level. The decline then accelerates, reaching its maximum rate around the midpoint between the starting value and the floor, before slowing again as balancing feedback becomes dominant near the floor, until the system stabilizes at a lower equilibrium. Because the decline is slow at both the top and the bottom and fastest in the middle, the curve has an inflection point (it is NOT exponential decay, which declines fastest at the very start). A natural structure is an outflow proportional to both the distance still remaining above the floor and the distance already fallen from the initial value (for example, rate proportional to (initial - output) * (output - floor)), which is near zero at both ends and largest in between. Examples include the decline phase of a product life cycle and the abandonment of a technology following an inverse S-curve. The output should start high and nearly flat, decline most steeply through the middle, and then level off as it approaches a minimum sustainable level or floor."
     ),
     generateBasicBehaviorModeTest(
         "Standing Oscillation Pattern",
