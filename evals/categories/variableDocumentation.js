@@ -139,6 +139,22 @@ const describeVariable = function(variable, model) {
         parts.push(`Graphical function points mapping the input above to this variable's value (input, output): ${pts}`);
     }
 
+    // Arrayed variables span one or more dimensions and may carry per-element equations in
+    // arrayEquations instead of (or in addition to) the scalar `equation` field above. Without
+    // this the judge sees an arrayed variable as if it had no/one equation and can wrongly flag
+    // it as incomplete or inconsistent with documentation that describes per-element behavior.
+    if (Array.isArray(variable.dimensions) && variable.dimensions.length) {
+        parts.push(`Arrayed over dimension(s): ${variable.dimensions.join(', ')}`);
+    }
+    if (Array.isArray(variable.arrayEquations) && variable.arrayEquations.length) {
+        const arrayEqs = variable.arrayEquations.map((ae) => {
+            const rawElements = Array.isArray(ae.forElements) ? ae.forElements.join(', ') : (ae.forElements ?? ae.index ?? '');
+            const elements = String(rawElements).trim();
+            return `${elements ? `[${elements}]` : '[apply to all]'} = ${ae.equation}`;
+        }).join('; ');
+        parts.push(`Per-element equations: ${arrayEqs}`);
+    }
+
     if (Array.isArray(variable.inflows) && variable.inflows.length) parts.push(`Inflows: ${variable.inflows.join(', ')}`);
     if (Array.isArray(variable.outflows) && variable.outflows.length) parts.push(`Outflows: ${variable.outflows.join(', ')}`);
 
@@ -220,15 +236,22 @@ const documentationQualitySchema = z.object({
 export const evaluate = async function(generatedResponse, expectations) {
     const failures = [];
     const model = generatedResponse?.model;
-    const variables = (model && Array.isArray(model.variables)) ? model.variables : [];
+    const allVariables = (model && Array.isArray(model.variables)) ? model.variables : [];
 
-    if (!model || variables.length === 0) {
+    if (!model || allVariables.length === 0) {
         failures.push({
             type: 'No model produced',
             details: `The engine did not return a model containing variables to document.${generatedResponse?.err ? ` Engine error: ${generatedResponse.err}` : ''}`
         });
         return validateEvaluationResult(failures);
     }
+
+    // In modularized models the flat variables array also contains ghost variables
+    // (crossLevelGhostOf set): cross-module reference copies of a real variable defined in
+    // another module. Ghosts carry no authored documentation of their own — the real
+    // variable, which is also present in this list, holds it — so requiring or judging
+    // documentation on a ghost would spuriously fail every modular model. Exclude them.
+    const variables = allVariables.filter((v) => !((v.crossLevelGhostOf || '').toString().trim()));
 
     // 1) Coverage: every variable must be documented. A single undocumented variable fails
     // the evaluation outright, so there is no need to spend an LLM call judging quality in
