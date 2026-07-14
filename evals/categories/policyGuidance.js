@@ -129,32 +129,52 @@ const numberedPolicies = function(keyPolicies) {
 };
 
 /**
- * Generates a policy guidance test for a given case. The full example model is provided as the
- * engine's `currentModel` input so the discussion is grounded in real model structure.
+ * Generates the policy guidance tests for a given case. Each key policy insight becomes its own
+ * test, and one further test checks that the discussion poses guiding questions — so every
+ * criterion is graded (and reported) separately rather than collapsed into a single all-or-nothing
+ * verdict. Crucially, all of these tests share the exact same prompt, model, and parameters, so the
+ * run harness generates the engine's discussion only once per case and reuses that one discussion
+ * across every criterion's evaluation (see the generation cache in evals/run.js). Each test's
+ * `expectations` still carries the full key-policy list (so the shared judge pass can assess them
+ * all at once) plus a `criterion` naming the single thing that test is responsible for grading.
  * @param {string} name The name of the case (also used as the test/case key)
- * @returns {Object} Test case with prompt, model, parameters, and expectations
+ * @returns {Array<Object>} One test per key policy insight, plus one guiding-questions test
  */
-const generateTest = function(name) {
+const generateTests = function(name) {
     const c = cases[name];
-    return {
-        name: `${name} policy guidance`,
-        prompt: `I'm new to system dynamics, and I've loaded a complete model into our session. As it stands, ${c.currentBehavior}. What I actually want is ${c.desirableBehavior}. As a novice, help me understand what policies — changes to the model's structure or parameters — could move the system toward that desirable behavior, and why they would work in terms of the model's feedback structure. Please teach me through discussion, and ask me guiding questions that help me reason about the leverage points myself rather than just handing me a list of answers.`,
-        currentModel: c.model,
-        additionalParameters: {
-            problemStatement: c.problemStatement,
-            backgroundKnowledge: `Right now, ${c.currentBehavior}. The desirable behavior I am aiming for is ${c.desirableBehavior}.`,
-            // Provide the precomputed feedback-loop dominance analysis so the engine can ground
-            // its policy discussion in the model's feedback structure. Without this, single-pass
-            // engines correctly refuse to answer a dynamics question and ask for loop information.
-            feedbackContent: c.feedback
-        },
-        expectations: {
-            systemName: name,
-            problemStatement: c.problemStatement,
-            desirableBehavior: c.desirableBehavior,
-            keyPolicies: c.keyPolicies
-        }
+
+    // Shared generation inputs — identical object references across every criterion's test so the
+    // harness keys them to a single cached engine generation.
+    const prompt = `I'm new to system dynamics, and I've loaded a complete model into our session. As it stands, ${c.currentBehavior}. What I actually want is ${c.desirableBehavior}. As a novice, help me understand what policies — changes to the model's structure or parameters — could move the system toward that desirable behavior, and why they would work in terms of the model's feedback structure. Please teach me through discussion, and ask me guiding questions that help me reason about the leverage points myself rather than just handing me a list of answers.`;
+    const currentModel = c.model;
+    const additionalParameters = {
+        problemStatement: c.problemStatement,
+        backgroundKnowledge: `Right now, ${c.currentBehavior}. The desirable behavior I am aiming for is ${c.desirableBehavior}.`,
+        // Provide the precomputed feedback-loop dominance analysis so the engine can ground
+        // its policy discussion in the model's feedback structure. Without this, single-pass
+        // engines correctly refuse to answer a dynamics question and ask for loop information.
+        feedbackContent: c.feedback
     };
+    const baseExpectations = {
+        systemName: name,
+        problemStatement: c.problemStatement,
+        desirableBehavior: c.desirableBehavior,
+        keyPolicies: c.keyPolicies
+    };
+
+    const makeTest = (nameSuffix, criterion) => ({
+        name: `${name} policy guidance — ${nameSuffix}`,
+        prompt,
+        currentModel,
+        additionalParameters,
+        expectations: { ...baseExpectations, criterion }
+    });
+
+    const tests = c.keyPolicies.map((_, i) =>
+        makeTest(`policy insight ${i + 1}`, { kind: 'policy', index: i })
+    );
+    tests.push(makeTest('guiding questions', { kind: 'guidingQuestions' }));
+    return tests;
 };
 
 /**
@@ -218,17 +238,73 @@ For each numbered key policy insight, determine whether the discussion conveys i
 };
 
 /**
- * This method inspects the engine's tutoring discussion and returns a list of failure objects for
- * each key policy insight the discussion fails to convey, plus a failure if the discussion does
- * not generate guiding questions for the novice. Everything is judged in a single structured-
- * output LLM pass.
+ * Judge-result cache. Every criterion's test for one case is handed the identical shared
+ * discussion, so the structured-output judge pass (which scores all insights and the guiding-
+ * questions verdict at once) should run only once per distinct discussion. Keyed on the discussion
+ * text — which is unique per engine and case — and stores the in-flight promise so the concurrently
+ * running per-criterion evaluations await one judge call rather than each firing their own.
+ */
+const judgeResultCache = new Map();
+
+/**
+ * Runs the single structured-output judge pass over a discussion and normalizes it into a per-
+ * insight verdict map plus the guiding-questions verdict.
+ * @param {string} generatedText The engine's discussion text
+ * @param {Object} expectations The expectations carrying the full key-policy list and context
+ * @returns {Promise<Object>} `{ verdictByNumber, generatesGuidingQuestions }`, or `{ error }`
+ */
+const runJudge = async function(generatedText, expectations) {
+    const llm = new LLMWrapper({ underlyingModel: LLMWrapper.EVAL_MODEL });
+    const { underlyingModel, temperature } = llm.getLLMParameters(0);
+    try {
+        const messages = buildJudgeMessages(generatedText, expectations);
+        const response = await llm.createChatCompletion(
+            messages,
+            underlyingModel,
+            policyGuidanceSchema,
+            temperature
+        );
+        const parsed = JSON.parse(response.content);
+        const insights = Array.isArray(parsed?.policyInsights) ? parsed.policyInsights : [];
+        return {
+            verdictByNumber: new Map(insights.map((v) => [v.insightNumber, v])),
+            generatesGuidingQuestions: parsed?.generatesGuidingQuestions
+        };
+    } catch (error) {
+        return { error: error.message };
+    }
+};
+
+/**
+ * Returns the shared judge result for a discussion, running the judge at most once per distinct
+ * discussion across the whole experiment (see {@link judgeResultCache}).
+ * @param {string} generatedText The engine's discussion text
+ * @param {Object} expectations The expectations carrying the full key-policy list and context
+ * @returns {Promise<Object>} The normalized judge result
+ */
+const getJudgeResult = function(generatedText, expectations) {
+    let pending = judgeResultCache.get(generatedText);
+    if (!pending) {
+        pending = runJudge(generatedText, expectations);
+        judgeResultCache.set(generatedText, pending);
+    }
+    return pending;
+};
+
+/**
+ * Grades a single policy-guidance criterion (one key policy insight, or the guiding-questions
+ * check) for one case. Which criterion this call is responsible for is named by
+ * `expectations.criterion`; the discussion itself and the judge pass are both shared across all of
+ * a case's criteria, so this method only reads the verdict for its own criterion and reports
+ * pass/fail for it alone.
  * @param {Object} generatedResponse The response from the engine containing the discussion
- * @param {Object} expectations The expectations describing the case and its ground-truth insights
- * @returns {Array<Object>} A list of failures with type and details.
+ * @param {Object} expectations The expectations describing the case, its insights, and the criterion
+ * @returns {Array<Object>} A list of failures with type and details (empty if this criterion passes).
  */
 export const evaluate = async function(generatedResponse, expectations) {
     const failures = [];
     const keyPolicies = expectations.keyPolicies || [];
+    const criterion = expectations.criterion || { kind: 'policy', index: 0 };
 
     // Extract the engine's discussion text, matching the convention used by the other discussion
     // categories (feedbackExplanation, modelBuildingSteps).
@@ -242,51 +318,34 @@ export const evaluate = async function(generatedResponse, expectations) {
         return validateEvaluationResult(failures);
     }
 
-    // Create LLMWrapper instance configured for evaluation purposes.
-    const llm = new LLMWrapper({
-        underlyingModel: LLMWrapper.EVAL_MODEL
-    });
-    const { underlyingModel, temperature } = llm.getLLMParameters(0);
-
-    let parsed;
-    try {
-        const messages = buildJudgeMessages(generatedText, expectations);
-        const response = await llm.createChatCompletion(
-            messages,
-            underlyingModel,
-            policyGuidanceSchema,
-            temperature
-        );
-        parsed = JSON.parse(response.content);
-    } catch (error) {
+    const judge = await getJudgeResult(generatedText, expectations);
+    if (judge.error) {
         failures.push({
             type: 'Evaluation error',
-            details: `Error judging policy guidance: ${error.message}`
+            details: `Error judging policy guidance: ${judge.error}`
         });
         return validateEvaluationResult(failures);
     }
 
-    // 1) Policy insight coverage: every key policy insight must be conveyed to the learner.
-    const insights = Array.isArray(parsed?.policyInsights) ? parsed.policyInsights : [];
-    const verdictByNumber = new Map(insights.map((v) => [v.insightNumber, v]));
-
-    keyPolicies.forEach((policy, i) => {
-        const insightNumber = i + 1;
-        const verdict = verdictByNumber.get(insightNumber);
+    if (criterion.kind === 'guidingQuestions') {
+        // The discussion must generate genuine questions that engage the novice.
+        if (judge.generatesGuidingQuestions?.present !== true) {
+            failures.push({
+                type: 'No guiding questions for the novice',
+                details: `The discussion did not generate genuine guiding questions to help the novice reason about the leverage points.${judge.generatesGuidingQuestions?.explanation ? ` Judge note: ${judge.generatesGuidingQuestions.explanation}` : ''}`
+            });
+        }
+    } else {
+        // One specific key policy insight must be conveyed to the learner.
+        const insightNumber = criterion.index + 1;
+        const policy = keyPolicies[criterion.index];
+        const verdict = judge.verdictByNumber.get(insightNumber);
         if (!verdict || verdict.covered !== true) {
             failures.push({
                 type: 'Missing key policy insight',
                 details: `The discussion did not bring the novice to understand policy insight ${insightNumber}: "${policy}"${verdict?.explanation ? ` Judge note: ${verdict.explanation}` : ''}`
             });
         }
-    });
-
-    // 2) Guiding questions: the discussion must generate genuine questions that engage the novice.
-    if (parsed?.generatesGuidingQuestions?.present !== true) {
-        failures.push({
-            type: 'No guiding questions for the novice',
-            details: `The discussion did not generate genuine guiding questions to help the novice reason about the leverage points.${parsed?.generatesGuidingQuestions?.explanation ? ` Judge note: ${parsed.generatesGuidingQuestions.explanation}` : ''}`
-        });
     }
 
     return validateEvaluationResult(failures);
@@ -298,13 +357,13 @@ export const evaluate = async function(generatedResponse, expectations) {
  */
 export const groups = {
     "simplePolicyGuidance": [
-        generateTest("Arms Race"),
-        generateTest("Bass Diffusion")
+        ...generateTests("Arms Race"),
+        ...generateTests("Bass Diffusion")
     ],
     "mediumPolicyGuidance": [
-        generateTest("Inventory Workforce")
+        ...generateTests("Inventory Workforce")
     ],
     "complexPolicyGuidance": [
-        generateTest("Market Growth")
+        ...generateTests("Market Growth")
     ]
 };
