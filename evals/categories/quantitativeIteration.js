@@ -3,10 +3,10 @@
  * @returns {string} The description describing this category
  */
 export const description = () => {
-    return `The quantitative causal translation test evaluates an LLM’s ability to convert quantitative stock-and-flow 
-model descriptions with gibberish variables into simulating models by identifying underlying causal relationships 
-involving fixed, proportional, and interdependent flows.`;
-} 
+    return `The quantitative causal iteration test evaluates an LLM's ability to add new stocks and flows
+to existing stock-and-flow models with gibberish variables by identifying underlying causal relationships
+involving fixed, proportional, and interdependent flows, while preserving the pre-existing model structure.`;
+}
 
 import pluralize from 'pluralize';
 import numberToWords from 'number-to-words';
