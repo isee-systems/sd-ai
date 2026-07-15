@@ -3,9 +3,9 @@
  * @returns {string} The description describing this category
  */
 export const description = () => {
-    return `The quantitative modular translation test evalutes an LLM's ability to convert quantitative stock-and-flow
+    return `The quantitative modular translation test evaluates an LLM's ability to convert quantitative stock-and-flow
 model descriptions with gibberish variables into modular simulations by identifying underlying causal relationships
-involving both inter-module and cross-modular processes.
+involving both intra-module and cross-module processes.
 `;
 } 
 

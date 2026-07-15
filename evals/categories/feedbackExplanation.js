@@ -47,7 +47,7 @@ const maibabModel = JSON.parse(
  * @returns {string} The description describing this category
  */
 export const description = () => {
-    return `The feedback explanation test evaluates whether engines can accurately explain the origins of behavior of models.  It does so by checking for the prescence of known facts in the text returned by an engine.`;
+    return `The feedback explanation test evaluates whether engines can accurately explain the origins of a model's behavior from its feedback-loop dominance analysis. It does so by using an LLM to check for the presence of known facts in the text returned by an engine.`;
 };
 
 /**

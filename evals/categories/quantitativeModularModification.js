@@ -286,8 +286,8 @@ export const description = () => {
     existing stock-and-flow models and use the causal relationships and key processes present to create
     new models at the user's request. Tested abilities include the ability of LLMs to create a modular
     version of a non-modular model and create a non-modular model from a model where modules are present,
-    and the ability to add and delete relationships and modules in a provided model with modules, across domains like
-    predator-prey ecosystems and business hiearchy models.`
+    and the ability to add and delete modules in a provided modular model, across domains like
+    predator-prey ecosystems and urban dynamics models.`
 };
 
 
