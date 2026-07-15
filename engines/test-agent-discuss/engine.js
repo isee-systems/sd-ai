@@ -79,7 +79,10 @@ class Engine {
   async generate(prompt, currentModel, parameters) {
     try {
       const { explanation } = await runAgent(prompt, currentModel, parameters);
-      return { output: explanation };
+      // Match the discussion-engine response contract established by seldon: the eval
+      // categories all read `generatedResponse.output.textContent`, so the discussion
+      // must be wrapped rather than returned as a bare string.
+      return { output: { textContent: explanation } };
     } catch (err) {
       logger.error('[test-agent-discuss] generate error:', err);
       return { err: err.toString() };

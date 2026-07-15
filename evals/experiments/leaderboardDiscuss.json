@@ -1,67 +1,115 @@
 {
     "engineConfigs": {
-        "Seldon-o4-mini": {
+        "Seldon-gpt-5.6-sol": {
             "engine": "Seldon",
             "additionalParameters": {
-                "underlyingModel": "o4-mini"
+                "underlyingModel": "gpt-5.6-sol"
             },
             "limits": {
                 "baselineTokenUsage": 10000
             }
         },
-
-        "Seldon-gpt-4.1": {
+        "Seldon-gpt-5.6-terra": {
             "engine": "Seldon",
             "additionalParameters": {
-                "underlyingModel": "gpt-4.1"
+                "underlyingModel": "gpt-5.6-terra"
             },
             "limits": {
                 "baselineTokenUsage": 10000
             }
         },
-
-        "Seldon-gpt-5.1": {
+        "Seldon-gpt-5.6-luna": {
             "engine": "Seldon",
             "additionalParameters": {
-                "underlyingModel": "gpt-5.1 medium"
+                "underlyingModel": "gpt-5.6-luna"
             },
             "limits": {
                 "baselineTokenUsage": 10000
             }
         },
-
-        "Seldon-gpt-5.2": {
+        "Seldon-gemini-3.1-pro-preview": {
             "engine": "Seldon",
             "additionalParameters": {
-                "underlyingModel": "gpt-5.2 medium"
-            },
-            "limits": {
-                "baselineTokenUsage": 10000
-            }
-        },
-
-        "Seldon-gemini-2.5-pro": {
-            "engine": "Seldon",
-            "additionalParameters": {
-                "underlyingModel": "gemini-2.5-pro"
+                "underlyingModel": "gemini-3.1-pro-preview"
             },
             "limits": {
                 "tokensPerMinute": 90000,
                 "requestsPerMinute": 10
             }
         },
-
-        "Seldon-gemini-2.5-flash": {
+        "Seldon-gemini-3.5-flash": {
             "engine": "Seldon",
             "additionalParameters": {
-                "underlyingModel": "gemini-2.5-flash"
+                "underlyingModel": "gemini-3.5-flash"
             },
             "limits": {
                 "tokensPerMinute": 90000,
                 "requestsPerMinute": 10
             }
-        }
-    },
+        },
+        "Seldon-claude-opus-4-8": {
+            "engine": "Seldon",
+            "additionalParameters": {
+                "underlyingModel": "claude-opus-4-8"
+            },
+            "limits": {
+                "baselineTokenUsage": 10000
+            }
+        },
+        "Seldon-claude-sonnet-5": {
+            "engine": "Seldon",
+            "additionalParameters": {
+                "underlyingModel": "claude-sonnet-5"
+            },
+            "limits": {
+                "baselineTokenUsage": 10000
+            }
+        },
+        "Seldon-claude-fable-5": {
+            "engine": "Seldon",
+            "additionalParameters": {
+                "underlyingModel": "claude-fable-5"
+            },
+            "limits": {
+                "baselineTokenUsage": 10000
+            }
+        },
+        "Seldon-qwen3.7-max": {
+            "engine": "Seldon",
+            "additionalParameters": {
+                "underlyingModel": "qwen/qwen3.7-max"
+            },
+            "limits": {
+                "baselineTokenUsage": 10000
+            }
+        },
+        "Seldon-deepseek-v4-pro": {
+            "engine": "Seldon",
+            "additionalParameters": {
+                "underlyingModel": "deepseek/deepseek-v4-pro"
+            },
+            "limits": {
+                "baselineTokenUsage": 10000
+            }
+        },
+        "Seldon-kimi-k2.6": {
+            "engine": "Seldon",
+            "additionalParameters": {
+                "underlyingModel": "moonshotai/kimi-k2.6"
+            },
+            "limits": {
+                "baselineTokenUsage": 10000
+            }
+        },
+        "Seldon-glm-5.2": {
+            "engine": "Seldon",
+            "additionalParameters": {
+                "underlyingModel": "z-ai/glm-5.2"
+            },
+            "limits": {
+                "baselineTokenUsage": 10000
+            }
+        },
         "merlin-anthropic-discuss": {
             "engine": "test-agent-discuss",
             "additionalParameters": {
@@ -76,7 +124,6 @@
                 "requestsPerMinute": 3
             }
         },
-
         "merlin-google-discuss": {
             "engine": "test-agent-discuss",
             "additionalParameters": {
@@ -95,6 +142,8 @@
     "categories": {
         "feedbackExplanation": true,
         "modelBuildingSteps": true,
-        "errorFixingSuggestions": true
+        "errorFixingSuggestions": true,
+        "modelScoping": true,
+        "policyGuidance": true
     }
 }

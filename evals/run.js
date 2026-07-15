@@ -28,6 +28,15 @@ import {
 
 import "dotenv/config";
 
+// Running evals: silence the engines' / agent's internal logger so its debug
+// output doesn't interleave with the progress bar and result tables. The logger
+// reads this at construction, and every engine, category, and agent module is
+// pulled in via the dynamic import()s below — all of which run after this line,
+// so the flag is always set in time. WorkerSpawner forwards the same flag into
+// any sandboxed sub-process it spawns. Set SDAI_TEST_MODE explicitly to opt out
+// (e.g. SDAI_TEST_MODE=false) when you need the agent's logs while debugging.
+process.env.SDAI_TEST_MODE ??= 'true';
+
 const argv = yargs(hideBin(process.argv))
   .option("experiment", {
     alias: "e",
@@ -209,6 +218,13 @@ const printEarlyResults = (r) => {
   )}`;
 };
 
+// Cache of in-flight engine generations, keyed on the engine + generation inputs. Some categories
+// (e.g. policyGuidance) split one engine response into several tests that each grade a different
+// criterion of the same discussion; those sibling tests share identical prompt/model/parameters
+// and so map to one cache entry, meaning the (often expensive) engine runs once and every sibling
+// reuses its result. Storing the promise lets concurrently-scheduled siblings await one call.
+const generationCache = new Map();
+
 const runEngineTests = async ([engineConfigName, engineTests]) => {
   const tokenLimitConfig = {
     tokensPerInterval: engineTests[0].engineConfig.limits.tokensPerMinute,
@@ -314,19 +330,6 @@ const runSingleTest = async (
     if (experiment.verbose === 2)
       console.log(chalk.blue(`Starting test: ${name}. Awaiting rate limit. Requested additional ${additionalTestParametersTokenCount} tokens beyond the baselineTokenUsage (${test.engineConfig.limits.baselineTokenUsage})`));
 
-    await requestLimiter.removeTokens(1);
-    await tokenLimiter.removeTokens(totalTokens);
-
-    const engine = await import(
-      `../engines/${test["engineConfig"]["engine"]}/engine.js`
-    );
-    const instance = new engine.default();
-
-    if (experiment.verbose === 2)
-      console.log(
-        chalk.blue(`Rate limit passed ${name}, awaiting engine response`)
-      );
-
     inProgress.add(name);
     engineBar.update({ inProgress: printProgress(inProgress) });
 
@@ -339,12 +342,48 @@ const runSingleTest = async (
       console.log(additionalParameters)
     }
 
-    const startTime = Date.now();
-    let generateResponse = await instance.generate(
+    // Reuse one engine generation across every test sharing the same engine, prompt, model, and
+    // parameters (see generationCache). Only the first such test reserves rate-limit budget and
+    // calls the engine; siblings await its result. The get/create/set below runs with no await in
+    // between, so two concurrent siblings can never both miss and double-generate.
+    const generationKey = JSON.stringify([
+      test.engineConfigName,
       test.testParams["prompt"],
       test.testParams["currentModel"],
-      additionalParameters
-    );
+      additionalParameters,
+    ]);
+    const startTime = Date.now();
+    let generationPromise = generationCache.get(generationKey);
+    if (!generationPromise) {
+      generationPromise = (async () => {
+        await requestLimiter.removeTokens(1);
+        await tokenLimiter.removeTokens(totalTokens);
+
+        const engine = await import(
+          `../engines/${test["engineConfig"]["engine"]}/engine.js`
+        );
+        const instance = new engine.default();
+
+        if (experiment.verbose === 2)
+          console.log(
+            chalk.blue(`Rate limit passed ${name}, awaiting engine response`)
+          );
+
+        return instance.generate(
+          test.testParams["prompt"],
+          test.testParams["currentModel"],
+          additionalParameters
+        );
+      })();
+      generationCache.set(generationKey, generationPromise);
+    }
+    let generateResponse = await generationPromise;
+
+    // A failed generation must not be cached: drop it so a retry (breakOnError) or a later sibling
+    // regenerates rather than inheriting the failure.
+    if (generateResponse && generateResponse.err) {
+      generationCache.delete(generationKey);
+    }
 
     // Check for errors in the response
     if (experiment.breakOnError && generateResponse && generateResponse.err) {
