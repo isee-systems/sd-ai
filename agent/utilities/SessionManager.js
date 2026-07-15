@@ -339,8 +339,18 @@ export class SessionManager {
         if (model.errors?.length) {
           parts.push(`Errors: ${model.errors.map(e => typeof e === 'string' ? e : JSON.stringify(e)).join('; ')}`);
         }
-        if (model.unitWarnings?.length) {
-          parts.push(`Unit warnings: ${model.unitWarnings.map(w => typeof w === 'string' ? w : JSON.stringify(w)).join('; ')}`);
+        // Unit consistency is decided authoritatively by the client's simulation
+        // engine, not by the LLM. When the engine reports an explicit (possibly
+        // empty) unitWarnings array, surface its verdict as a concrete fact so the
+        // agent has no vacuum to fill with fabricated dimensional inconsistencies.
+        // A present-but-empty array is a positive "units are consistent" signal; an
+        // absent field means the client did not report a unit check, so stay silent.
+        if (Array.isArray(model.unitWarnings)) {
+          if (model.unitWarnings.length) {
+            parts.push(`Unit warnings (reported by the simulation engine's unit checker — authoritative): ${model.unitWarnings.map(w => typeof w === 'string' ? w : JSON.stringify(w)).join('; ')}`);
+          } else {
+            parts.push(`Unit check: the simulation engine's unit checker reported NO unit warnings for this model — its units are consistent. Do not report any unit or dimensional-consistency problems.`);
+          }
         }
         return { ...result, issues: parts.length ? parts.join('\n') : null };
       }

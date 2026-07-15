@@ -523,12 +523,15 @@ Requests the client to execute a model interaction and return results via `tool_
       "dt": 0.25,
       "timeUnits": "Years"
     },
-    "errors": []
+    "errors": [],
+    "unitWarnings": []
   }
 }
 ```
 
 `errors` is an array of strings set by the client to report any simulation or validation errors on the current model state. Pass an empty array if there are no errors.
+
+`unitWarnings` is an array of strings set by the client to report the results of the engine's unit- (dimensional-) consistency check on the current model. This field is **authoritative**: the server never computes unit warnings, and the agent reports a unit/dimensional problem to the user *only* if it appears here. Pass an **empty array** to signal that the engine ran the unit check and found no problems (a positive "units are consistent" signal the agent can rely on); **omit the field entirely** if the client did not run or report a unit check. The agent will never infer or fabricate unit warnings from the human-readable `units` strings when this array is empty or absent.
 
 **`update_model`** — apply model changes, confirm success
 ```json

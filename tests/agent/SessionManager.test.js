@@ -95,6 +95,42 @@ describe('SessionManager', () => {
         sessionManager.updateClientModel('non-existent', {});
       }).not.toThrow();
     });
+
+    // Unit consistency is decided authoritatively by the client's engine and
+    // delivered in the model's unitWarnings field. The agent must never
+    // fabricate warnings, so the issues summary reports exactly what the engine
+    // said — and nothing when the engine did not report a unit check at all.
+    it('reports engine unit warnings verbatim when present', () => {
+      const sessionId = sessionManager.createSession(null);
+      sessionManager.initializeSession(sessionId, 'sfd', {}, [], {}, '');
+
+      const model = { variables: [{ name: 'Stock1', type: 'stock' }], unitWarnings: ['mood_net_flow: smiles/week/Days is inconsistent'] };
+      const { issues } = sessionManager.updateClientModel(sessionId, model);
+
+      expect(issues).toContain('mood_net_flow: smiles/week/Days is inconsistent');
+      expect(issues).toContain("simulation engine's unit checker");
+    });
+
+    it('reports a positive "no unit warnings" signal when the engine array is present but empty', () => {
+      const sessionId = sessionManager.createSession(null);
+      sessionManager.initializeSession(sessionId, 'sfd', {}, [], {}, '');
+
+      const model = { variables: [{ name: 'Stock1', type: 'stock' }], unitWarnings: [] };
+      const { issues } = sessionManager.updateClientModel(sessionId, model);
+
+      expect(issues).toContain('NO unit warnings');
+    });
+
+    it('stays silent about units when the engine reported no unit check (field absent)', () => {
+      const sessionId = sessionManager.createSession(null);
+      sessionManager.initializeSession(sessionId, 'sfd', {}, [], {}, '');
+
+      const model = { variables: [{ name: 'Stock1', type: 'stock' }] };
+      const { issues } = sessionManager.updateClientModel(sessionId, model);
+
+      // No unitWarnings field and no errors => nothing to report.
+      expect(issues).toBeNull();
+    });
   });
 
   describe('conversation history', () => {

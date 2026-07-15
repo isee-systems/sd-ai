@@ -120,10 +120,28 @@ Contains the engines used by [Stella](https://www.iseesystems.com/store/products
             size: <number>, # Positive integer - number of elements in dimension
             elements: Array<string> # Element names - for numeric: auto-generated ['1','2','3'], for labels: user-defined ['North','South','East','West']
         }]
-    }
+    },
+    errors?: Array<string>, # Client-populated diagnostics: validation/simulation errors on the current model state
+    unitWarnings?: Array<string> # Client-populated diagnostics: results of the engine's unit-consistency check
 }
 ```
 ? denotes an optional attribute
+
+### Model diagnostics: `errors` and `unitWarnings`
+`errors` and `unitWarnings` are **client-populated** fields returned on the model (e.g. by `get_current_model`). They are set by the client's simulation engine — the server never computes them — and are the **authoritative** source of truth for a model's validation state:
+
+- **`errors`** — an array of validation/simulation error strings for the current model state.
+- **`unitWarnings`** — an array of the engine's unit- (dimensional-) consistency warnings.
+
+For both fields, distinguish two "clean" cases:
+
+| Value | Meaning |
+| --- | --- |
+| Present, non-empty (`["…"]`) | The engine ran the check and found these problems. Report/fix them. |
+| Present, empty (`[]`) | The engine ran the check and found **no** problems. The model is clean on that dimension. |
+| Absent (field omitted) | The client did not report a check — status unknown. Do not assume a result either way. |
+
+Because these fields are authoritative, the AI agents must **never** infer or fabricate errors or unit warnings from a model's `units` strings, variable names, or equations — a warning is reported to the user only if it appears in these fields. An empty or absent `unitWarnings` array means there are no unit warnings to report, however the human-readable `units` may read.
 
 ### Arrays in SD-JSON
 Variables can be arrayed over one or more dimensions to create multi-dimensional arrays:
