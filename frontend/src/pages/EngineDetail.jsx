@@ -1,269 +1,164 @@
-import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import api from '../services/api';
-import AutoResizeTextarea from '../components/AutoResizeTextarea';
+import enginesData from '../generated/engines.json';
+
+const MODE_LABELS = {
+  cld: 'Causal Loop Diagram',
+  sfd: 'Stock & Flow Diagram',
+  'cld-discuss': 'CLD Discussion',
+  'sfd-discuss': 'SFD Discussion',
+  'ltm-discuss': 'Loops That Matter Narrative',
+  documentation: 'Variable Documentation',
+};
+
+function ParameterRow({ param }) {
+  return (
+    <div className="border border-gray-200 rounded-lg p-4">
+      <div className="flex items-center flex-wrap gap-2 mb-1">
+        <code className="text-sm font-semibold text-gray-800">{param.name}</code>
+        {param.type && (
+          <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{param.type}</span>
+        )}
+        {param.uiElement && (
+          <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded">
+            {param.uiElement}
+          </span>
+        )}
+        {param.required && (
+          <span className="text-xs bg-red-50 text-red-700 px-2 py-0.5 rounded">required</span>
+        )}
+      </div>
+      {param.description && (
+        <p className="text-sm text-gray-700 mb-2 whitespace-pre-wrap">{param.description}</p>
+      )}
+      {param.defaultValue !== undefined && param.defaultValue !== '' && (
+        <p className="text-xs text-gray-500 mb-1">
+          Default: <code className="text-gray-700">{String(param.defaultValue)}</code>
+        </p>
+      )}
+      {Array.isArray(param.options) && param.options.length > 0 && (
+        <div className="text-xs text-gray-500">
+          Options:{' '}
+          <span className="text-gray-700">
+            {param.options
+              .map((o) => (typeof o === 'object' ? o.label ?? o.value : o))
+              .join(', ')}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function EngineDetail() {
   const { engineName } = useParams();
-  const [engine, setEngine] = useState(null);
-  const [parameters, setParameters] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [formData, setFormData] = useState({});
-  const [generating, setGenerating] = useState(false);
-  const [result, setResult] = useState(null);
-  const [generationError, setGenerationError] = useState(null);
-
-  // Fetch engine details when component mounts
-  useEffect(() => {
-    const fetchEngineDetails = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        
-        // Fetch engine parameters directly (this will also validate the engine exists)
-        const parametersResponse = await api.get(`/engines/${engineName}/parameters`);
-        
-        if (!parametersResponse.data.success) {
-          throw new Error(parametersResponse.data.message || `Engine "${engineName}" not found`);
-        }
-        
-        const params = parametersResponse.data.parameters || [];
-        setParameters(params);
-        
-        // Set basic engine info from the name
-        setEngine({ name: engineName });
-        
-        // Initialize form data with default values
-        const initialFormData = {};
-        
-        // Add default values for parameters if they exist
-        params.forEach(param => {
-          if (param.defaultValue !== undefined) {
-            initialFormData[param.name] = param.defaultValue;
-          } else {
-            // Leave field blank if no default value is provided
-            initialFormData[param.name] = '';
-          }
-        });
-        
-        setFormData(initialFormData);
-        
-      } catch (err) {
-        setError(err.response?.data?.message || err.message || 'Failed to fetch engine details');
-        console.error('Error fetching engine details:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (engineName) {
-      fetchEngineDetails();
-    }
-  }, [engineName]);
-
-  // Handle form field changes
-  const handleInputChange = (paramName, value) => {
-    setFormData(prev => ({
-      ...prev,
-      [paramName]: value
-    }));
-  };
-
-  // Handle form submission
-  const handleGenerate = async (e) => {
-    e.preventDefault();
-    setGenerating(true);
-    setGenerationError(null);
-    setResult(null);
-
-    try {
-      // Process form data to handle non-string types 
-      const processedFormData = { ...formData };
-      
-      parameters.forEach(param => {
-        const value = processedFormData[param.name];
-        
-        if (param.type === 'json' || param.type === 'feedbackJSON') {
-          if (value && value.trim() !== '') {
-            try {
-              // Parse JSON string into object
-              processedFormData[param.name] = JSON.parse(value);
-            } catch (err) {
-              throw new Error(`Invalid JSON in field "${param.label || param.name}": ${err.message}`);
-            }
-          } else {
-            // Remove empty JSON fields from the request
-            delete processedFormData[param.name];
-          }
-        } else if (param.type === 'number') {
-          if (value !== '' && value !== undefined && value !== null) {
-            // Convert number strings to actual numbers
-            processedFormData[param.name] = Number(value);
-          } else {
-            // Remove empty number fields from the request
-            delete processedFormData[param.name];
-          }
-        }
-      });
-
-      const response = await api.post(`/engines/${engineName}/generate`, processedFormData);
-      setResult(response.data);
-    } catch (err) {
-      setGenerationError(err.response?.data?.message || err.message || 'Generation failed');
-      console.error('Generation error:', err);
-    } finally {
-      setGenerating(false);
-    }
-  };
-
-  // Render form input based on parameter type
-  const renderFormInput = (param) => {
-    const value = formData[param.name] || '';
-    const baseClassName = "w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent";
-    
-    switch (param.uiElement) {
-      case 'combobox':
-        return (
-          <select
-            id={param.name}
-            value={value}
-            onChange={(e) => handleInputChange(param.name, e.target.value)}
-            className={baseClassName}
-            required={param.required}
-          >
-            <option value="">Select an option</option>
-            {param.options?.map((option, index) => (
-              <option key={index} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        );
-      
-      default:
-        // Default to number input for number types, otherwise fallback to textarea
-        if (param.type === 'number') {
-          return (
-            <input
-              type="number"
-              id={param.name}
-              value={value}
-              onChange={(e) => handleInputChange(param.name, e.target.value)}
-              className={baseClassName}
-              required={param.required}
-            />
-          );
-        }
-        
-        // For all other types (including text, json, textarea, etc.), use textarea
-        return (
-          <AutoResizeTextarea
-            id={param.name}
-            value={value}
-            onChange={(e) => handleInputChange(param.name, e.target.value)}
-            className={baseClassName}
-            required={param.required}
-          />
-        );
-    }
-  };
+  const engine =
+    (enginesData.engines || []).find((e) => e.name === engineName) ||
+    (enginesData.engines || []).find(
+      (e) => e.name.toLowerCase() === (engineName || '').toLowerCase()
+    );
 
   return (
     <div className="engine-detail-page p-5">
-      {/* Breadcrumb */}
       <div className="mb-4">
-        <Link 
-          to="/engines"
-          className="text-blue-600 hover:text-blue-800 no-underline"
-        >
+        <Link to="/engines" className="text-blue-600 hover:text-blue-800 no-underline">
           ← Back to Engines
         </Link>
       </div>
 
-      {loading && (
-        <div className="p-5 text-center text-gray-600">
-          Loading engine details...
+      {!engine ? (
+        <div className="p-4 bg-red-50 border border-red-200 rounded text-red-700">
+          <strong>Not found:</strong> no documentation for engine "{engineName}".
         </div>
-      )}
-      
-      {error && (
-        <div className="p-4 bg-red-50 border border-red-200 rounded text-red-700 mb-4">
-          <strong>Error:</strong> {error}
-        </div>
-      )}
-      
-      {!loading && !error && engine && (
+      ) : (
         <div>
-          {/* Engine Header */}
-          <div className="mb-8">
-            <h1 className="text-4xl font-bold mb-3 text-gray-800">
-              {engine.name} Engine
-            </h1>
+          {/* Header */}
+          <div className="mb-6">
+            <div className="flex items-center flex-wrap gap-3 mb-3">
+              <h1 className="text-4xl font-bold text-gray-800">{engine.name}</h1>
+              {engine.isTest && (
+                <span className="text-xs font-semibold px-2 py-1 rounded bg-purple-100 text-purple-800">
+                  Test engine
+                </span>
+              )}
+              {engine.available === false && (
+                <span className="text-xs font-semibold px-2 py-1 rounded bg-gray-200 text-gray-600">
+                  Requires dependencies
+                </span>
+              )}
+            </div>
+            {engine.description && (
+              <p className="text-lg text-gray-700 leading-relaxed break-words [overflow-wrap:anywhere]">
+                {engine.description}
+              </p>
+            )}
           </div>
 
-          {/* Model Generation Form */}
-          <div className="mb-8 p-5 border-2 border-gray-200 rounded-lg bg-gray-50">
-            <h2 className="mt-0 mb-4 text-xl font-bold text-gray-800">
-              Generate Model
-            </h2>
-            
-            <form onSubmit={handleGenerate} className="space-y-4">
-              {/* Render all parameters dynamically */}
-              {parameters.map((param) => (
-                <div key={param.name}>
-                  <label htmlFor={param.name} className="block text-sm font-medium text-gray-700 mb-1">
-                    <span className={param.required ? "font-bold" : ""}>
-                      {param.name}
-                    </span>
-                    {param.required && <span className="text-red-500 ml-1">*</span>}
-                    {param.description && (
-                      <span className="text-gray-500 font-normal"> - {param.description}</span>
-                    )}
-                  </label>
-                  {renderFormInput(param)}
-                </div>
-              ))}
-
-              {/* Submit button */}
-              <div className="pt-4">
-                <button
-                  type="submit"
-                  disabled={generating}
-                  className="bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white px-6 py-3 rounded font-medium"
-                >
-                  {generating ? 'Generating...' : 'Submit'}
-                </button>
+          {/* Supported modes */}
+          <div className="mb-6">
+            <h2 className="text-sm font-semibold text-gray-500 uppercase mb-2">Supported modes</h2>
+            {engine.supports.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {engine.supports.map((mode) => (
+                  <span
+                    key={mode}
+                    className="bg-blue-50 text-blue-700 px-3 py-1 rounded text-sm"
+                    title={MODE_LABELS[mode] || mode}
+                  >
+                    {mode}
+                    {MODE_LABELS[mode] ? ` — ${MODE_LABELS[mode]}` : ''}
+                  </span>
+                ))}
               </div>
-            </form>
-
-            {/* Generation error */}
-            {generationError && (
-              <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded text-red-700">
-                <strong>Error:</strong> {generationError}
-              </div>
+            ) : (
+              <p className="text-sm text-gray-600">
+                This engine has unmet runtime dependencies in the documentation build, so its
+                supported modes could not be determined. See the source for details.
+              </p>
             )}
+          </div>
 
-            {/* Generation result */}
-            {result && (
-              <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded">
-                <h3 className="font-semibold text-green-800 mb-2">Generation Result:</h3>
-                {result.success ? (
-                  <div>
-                    <div className="bg-white rounded border">
-                      <AutoResizeTextarea
-                        value={JSON.stringify(result, null, 2)}
-                        onChange={() => {}} // Read-only
-                        className="w-full p-3 font-mono text-sm text-gray-800 border-0 bg-transparent focus:ring-0 focus:outline-none"
-                        readOnly
-                        minHeight="4rem"
-                      />
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-red-700">Generation failed: {result.message || 'Unknown error'}</p>
-                )}
+          {/* Links */}
+          <div className="mb-8 flex gap-2 flex-wrap">
+            {engine.link && (
+              <a
+                href={engine.link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="bg-gray-100 hover:bg-gray-200 text-gray-700 hover:text-gray-900 px-4 py-2 rounded text-sm font-medium no-underline"
+              >
+                Learn More
+              </a>
+            )}
+            {engine.source && (
+              <a
+                href={engine.source}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="bg-gray-100 hover:bg-gray-200 text-gray-700 hover:text-gray-900 px-4 py-2 rounded text-sm font-medium no-underline"
+              >
+                View Source
+              </a>
+            )}
+          </div>
+
+          {/* Parameters */}
+          <div className="mb-8">
+            <h2 className="text-xl font-bold text-gray-800 mb-1">Parameters</h2>
+            <p className="text-sm text-gray-600 mb-4">
+              The inputs this engine accepts when generating a model.
+            </p>
+            {Array.isArray(engine.parameters) && engine.parameters.length > 0 ? (
+              <div className="grid gap-3">
+                {engine.parameters.map((param) => (
+                  <ParameterRow key={param.name} param={param} />
+                ))}
               </div>
+            ) : (
+              <p className="text-sm text-gray-600">
+                {engine.paramsError
+                  ? `Parameters unavailable in this build: ${engine.paramsError}`
+                  : 'No parameters documented for this engine.'}
+              </p>
             )}
           </div>
         </div>

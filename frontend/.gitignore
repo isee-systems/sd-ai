@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Generated at build time by scripts/generateData.mjs
+src/generated
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

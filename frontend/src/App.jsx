@@ -1,26 +1,38 @@
+import { lazy, Suspense } from 'react';
 import { HashRouter as Router, Routes, Route } from 'react-router-dom';
 import Layout from './components/Layout';
-import Home from './pages/Home';
-import EvalsList from './pages/EvalsList';
-import EvalDetail from './pages/EvalDetail';
-import EnginesList from './pages/EnginesList';
-import EngineDetail from './pages/EngineDetail';
-import Leaderboard from './pages/Leaderboard';
-import GetInvolved from './pages/GetInvolved';
+
+// Lazy-load pages so heavy dependencies (Plotly on the leaderboard) and the
+// large generated eval data only download when their route is visited.
+const Home = lazy(() => import('./pages/Home'));
+const EnginesList = lazy(() => import('./pages/EnginesList'));
+const EngineDetail = lazy(() => import('./pages/EngineDetail'));
+const Agents = lazy(() => import('./pages/Agents'));
+const AgentDetail = lazy(() => import('./pages/AgentDetail'));
+const EvalsList = lazy(() => import('./pages/EvalsList'));
+const EvalDetail = lazy(() => import('./pages/EvalDetail'));
+const Leaderboard = lazy(() => import('./pages/Leaderboard'));
+const GetInvolved = lazy(() => import('./pages/GetInvolved'));
 
 function App() {
   return (
     <Router basename="/">
       <Layout>
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/evals" element={<EvalsList />} />
-          <Route path="/evals/:category/:group/:testname" element={<EvalDetail />} />
-          <Route path="/engines" element={<EnginesList />} />
-          <Route path="/engines/:engineName" element={<EngineDetail />} />
-          <Route path="/leaderboard/:mode" element={<Leaderboard />} />
-          <Route path="/get-involved" element={<GetInvolved />} />
-        </Routes>
+        <Suspense
+          fallback={<div className="p-8 text-center text-gray-500">Loading…</div>}
+        >
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/engines" element={<EnginesList />} />
+            <Route path="/engines/:engineName" element={<EngineDetail />} />
+            <Route path="/agents" element={<Agents />} />
+            <Route path="/agents/:agentId" element={<AgentDetail />} />
+            <Route path="/evals" element={<EvalsList />} />
+            <Route path="/evals/:category/:group/:testname" element={<EvalDetail />} />
+            <Route path="/leaderboard/:mode" element={<Leaderboard />} />
+            <Route path="/get-involved" element={<GetInvolved />} />
+          </Routes>
+        </Suspense>
       </Layout>
     </Router>
   );
