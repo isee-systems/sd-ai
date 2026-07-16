@@ -58,8 +58,8 @@ const config = {
         },
         moonshotai: { 
             displayName: 'Kimi',     
-            model: 'moonshotai/kimi-k2.6',     
-            summaryModel: 'moonshotai/kimi-k2.6' 
+            model: 'moonshotai/kimi-k3',     
+            summaryModel: 'moonshotai/kimi-k3' 
         },
         zai: { 
             displayName: 'GLM',      
