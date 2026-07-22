@@ -109,10 +109,20 @@ export const gemini = {
     cachedTokens: 0.025,
     outputTokens: 1.50,
   },
+  'gemini-3.5-flash-lite' : {
+    inputTokens: 0.3,
+    cachedTokens: 0.03,
+    outputTokens: 2.50,
+  },
   'gemini-3.5-flash': {
     inputTokens: 1.50,
     cachedTokens: 0.15,
     outputTokens: 9.00,
+  },
+  'gemini-3.6-flash': {
+    inputTokens: 1.50,
+    cachedTokens: 0.15,
+    outputTokens: 7.00,
   },
   // Embedding model used for RAG. Embeddings bill input (prompt) tokens only;
   // there are no output/cached tokens, so those rates are 0.

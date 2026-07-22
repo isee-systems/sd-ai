@@ -23,8 +23,8 @@ const config = {
     /*
     * Defaults for the engines that use LLMWrapper and the agent tools that use those engines
     */
-    "buildDefaultModel": 'gemini-3.5-flash low', //LLMWrapper underlyingModel default for building model tools
-    "nonBuildDefaultModel": 'gemini-3.5-flash low', //LLMWrapper underlyingModel default for non-building model tools
+    "buildDefaultModel": 'gemini-3.6-flash', //LLMWrapper underlyingModel default for building model tools
+    "nonBuildDefaultModel": 'gemini-3.6-flash', //LLMWrapper underlyingModel default for non-building model tools
     
     /*
     * These settings control the operation of the agents
@@ -36,8 +36,8 @@ const config = {
     "agentDefaultProvider": 'anthropic', // Default LLM provider when client does not specify one ('anthropic' | 'google' | 'openrouter')
     "agentAnthropicModel": 'claude-sonnet-5', // Model used for agent conversations MUST BE Anthropic models
     "agentAnthropicSummaryModel": 'claude-haiku-4-5', // Model used for conversation history summarization MUST BE Anthropic models
-    "agentGeminiModel": 'gemini-3.5-flash', // Model used for agent conversations MUST BE gemini models
-    "agentGeminiSummaryModel": 'gemini-3.1-flash-lite', // Model used for conversation history summarization MUST BE gemini models
+    "agentGeminiModel": 'gemini-3.6-flash', // Model used for agent conversations MUST BE gemini models
+    "agentGeminiSummaryModel": 'gemini-3.5-flash-lite', // Model used for conversation history summarization MUST BE gemini models
     // OpenRouter-backed agent providers — the single source of truth for every
     // OpenRouter-routed brand. Add or remove an entry here and the whole agent stack
     // picks it up: the orchestrator's model/summary-model resolution, the context
@@ -49,7 +49,7 @@ const config = {
         qwen: { 
             displayName: 'Qwen',     
             model: 'qwen/qwen3.7-max',         
-            summaryModel: 'qwen/qwen3.6-flash' 
+            summaryModel: 'qwen/qwen3.7-plus' 
         },
         deepseek:   { 
             displayName: 'Deepseek', 
@@ -77,8 +77,8 @@ const config = {
     //   },
     "agentToolModels": {
         default: {
-            build:    { normal: 'gemini-3.5-flash low', hard: 'gemini-3.5-flash high' },
-            nonBuild: { normal: 'gemini-3.5-flash low', hard: 'gemini-3.5-flash high' }
+            build:    { normal: 'gemini-3.6-flash low', hard: 'gemini-3.6-flash high' },
+            nonBuild: { normal: 'gemini-3.6-flash low', hard: 'gemini-3.6-flash high' }
         }
     },
     // Full ordered list of valid agent provider IDs: the two direct-API providers

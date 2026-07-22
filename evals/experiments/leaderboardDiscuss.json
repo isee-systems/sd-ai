@@ -37,10 +37,10 @@
                 "requestsPerMinute": 10
             }
         },
-        "Seldon-gemini-3.5-flash": {
+        "Seldon-gemini-3.6-flash": {
             "engine": "Seldon",
             "additionalParameters": {
-                "underlyingModel": "gemini-3.5-flash"
+                "underlyingModel": "gemini-3.6-flash"
             },
             "limits": {
                 "tokensPerMinute": 90000,
@@ -92,10 +92,10 @@
                 "baselineTokenUsage": 10000
             }
         },
-        "Seldon-kimi-k2.6": {
+        "Seldon-kimi-k3": {
             "engine": "Seldon",
             "additionalParameters": {
-                "underlyingModel": "moonshotai/kimi-k2.6"
+                "underlyingModel": "moonshotai/kimi-k3"
             },
             "limits": {
                 "baselineTokenUsage": 10000

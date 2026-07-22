@@ -37,10 +37,10 @@
                 "requestsPerMinute": 10
             }
         },
-        "quantitative-gemini-3.5-flash": {
+        "quantitative-gemini-3.6-flash": {
             "engine": "quantitative",
             "additionalParameters": {
-                "underlyingModel": "gemini-3.5-flash"
+                "underlyingModel": "gemini-3.6-flash"
             },
             "limits": {
                 "tokensPerMinute": 90000,
@@ -92,10 +92,10 @@
                 "baselineTokenUsage": 10000
             }
         },
-        "quantitative-kimi-k2.6": {
+        "quantitative-kimi-k3": {
             "engine": "quantitative",
             "additionalParameters": {
-                "underlyingModel": "moonshotai/kimi-k2.6"
+                "underlyingModel": "moonshotai/kimi-k3"
             },
             "limits": {
                 "baselineTokenUsage": 10000
