@@ -246,7 +246,7 @@ describe('processAgentResponseAnthropicManual', () => {
 
   // ── max_tokens keeps the loop going ──────────────────────────────────────
 
-  it('returns true to continue the loop when stop_reason is max_tokens', async () => {
+  it('returns true and appends a continuation user turn when stop_reason is max_tokens', async () => {
     const messages = [];
     const response = {
       content: [{ type: 'text', text: 'Partial...' }],
@@ -258,6 +258,27 @@ describe('processAgentResponseAnthropicManual', () => {
     );
 
     expect(continueLoop).toBe(true);
+    // The conversation must end on a user turn — the configured Anthropic model
+    // rejects assistant-message prefill, so the next API call 400s otherwise.
+    expect(messages[messages.length - 1].role).toBe('user');
+    expect(messages[messages.length - 1].content).toMatch(/cut off/i);
+  });
+
+  it('does not append a continuation turn on max_tokens when nothing was committed', async () => {
+    const messages = [{ role: 'user', content: 'question' }];
+    const response = {
+      content: [{ type: 'thinking', thinking: 'hmm' }], // no committable blocks
+      stop_reason: 'max_tokens',
+    };
+
+    const continueLoop = await orc.processAgentResponseAnthropicManual(
+      response, messages, EMPTY_TOOLS, EMPTY_TOOLS
+    );
+
+    expect(continueLoop).toBe(true);
+    // Messages still end on the original user turn; no bridge message needed.
+    expect(messages).toHaveLength(1);
+    expect(messages[0].role).toBe('user');
   });
 });
 

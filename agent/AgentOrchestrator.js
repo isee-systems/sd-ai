@@ -1139,8 +1139,14 @@ export class AgentOrchestrator {
       return true;
     }
 
-    // Continue if stop_reason is max_tokens
+    // Continue if stop_reason is max_tokens. 
     if (response.stop_reason === 'max_tokens') {
+      if (messages[messages.length - 1]?.role === 'assistant') {
+        messages.push({
+          role: 'user',
+          content: 'Your previous response was cut off by the output token limit. Continue exactly where you left off.'
+        });
+      }
       return true;
     }
 
