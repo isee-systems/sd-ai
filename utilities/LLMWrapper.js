@@ -74,14 +74,17 @@ export class ModelCapabilities {
       const n = this.name.toLowerCase();
       if (n.includes('fable') || n.includes('mythos')) return true;
       // Adaptive landed on Sonnet 4.6 and Opus 4.6; assume every later version of
-      // those families keeps it. Parse <family>-<major>-<minor> and compare to the
+      // those families keeps it. Parse <family>-<major>[-<minor>] and compare to the
       // first version that supported it so new releases don't need a code change.
+      // The minor is optional because the 5 generation dropped it (claude-opus-5,
+      // claude-sonnet-5); a missing minor counts as 0, which is fine since those
+      // ids are all major-version bumps past the threshold.
       const thresholds = { sonnet: [4, 6], opus: [4, 6] };
       for (const [family, [minMajor, minMinor]] of Object.entries(thresholds)) {
-          const m = n.match(new RegExp(`${family}-(\\d+)-(\\d+)`));
+          const m = n.match(new RegExp(`${family}-(\\d+)(?:-(\\d+))?`));
           if (m) {
               const major = Number(m[1]);
-              const minor = Number(m[2]);
+              const minor = m[2] === undefined ? 0 : Number(m[2]);
               if (major > minMajor || (major === minMajor && minor >= minMinor)) return true;
           }
       }
@@ -231,9 +234,8 @@ export class LLMWrapper {
       {label: "Gemini 2.5-flash", value: 'gemini-2.5-flash'},
       {label: "Gemini 2.5-pro", value: 'gemini-2.5-pro'},
       {label: "Claude Fable 5", value: 'claude-fable-5'},
-      {label: "Claude Opus 4.8", value: 'claude-opus-4-8'},
+      {label: "Claude Opus 5", value: 'claude-opus-5'},
       {label: "Claude Sonnet 5", value: 'claude-sonnet-5'},
-      {label: "Claude Sonnet 4.6", value: 'claude-sonnet-4-6'},
       {label: "Claude Haiku 4.5", value: 'claude-haiku-4-5'},
       {label: "Qwen3.7 Max", value: 'qwen/qwen3.7-max'},
       {label: "Qwen3.7 Plus", value: 'qwen/qwen3.7-plus'},

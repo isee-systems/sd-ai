@@ -47,10 +47,10 @@
                 "requestsPerMinute": 10
             }
         },
-        "quantitative-claude-opus-4-8": {
+        "quantitative-claude-opus-5": {
             "engine": "quantitative",
             "additionalParameters": {
-                "underlyingModel": "claude-opus-4-8"
+                "underlyingModel": "claude-opus-5"
             },
             "limits": {
                 "baselineTokenUsage": 10000

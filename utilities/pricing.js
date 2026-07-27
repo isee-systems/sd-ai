@@ -23,6 +23,13 @@ export const anthropic = {
     cacheReadInputTokens: 1.0,
     outputTokens: 50.00,
   },
+  'claude-opus-5': {
+    inputTokens: 5.00,
+    cacheCreation5mInputTokens: 6.25,
+    cacheCreation1hInputTokens: 10.00,
+    cacheReadInputTokens: 0.50,
+    outputTokens: 25.00,
+  },
   'claude-opus-4-8': {
     inputTokens: 5.00,
     cacheCreation5mInputTokens: 6.25,

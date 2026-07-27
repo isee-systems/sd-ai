@@ -47,10 +47,10 @@
                 "requestsPerMinute": 10
             }
         },
-        "Seldon-claude-opus-4-8": {
+        "Seldon-claude-opus-5": {
             "engine": "Seldon",
             "additionalParameters": {
-                "underlyingModel": "claude-opus-4-8"
+                "underlyingModel": "claude-opus-5"
             },
             "limits": {
                 "baselineTokenUsage": 10000
