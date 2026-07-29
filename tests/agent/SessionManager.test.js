@@ -168,6 +168,104 @@ describe('SessionManager', () => {
       expect(history[0].content).toBe('First');
       expect(history[1].content).toBe('Second');
     });
+
+    it('trims overflow in place so a running agent loop keeps a live reference', () => {
+      // Manual agent loops capture this array once and use it for every API
+      // call. If truncation swapped in a new array, the loop's copy would go
+      // stale: queued user turns added via addToConversationHistory would never
+      // reach the request, and the loop would re-enter still ending on an
+      // assistant turn.
+      const loopMessages = sessionManager.getConversationContext(testSessionId);
+      const max = sessionManager.maxConversationHistory;
+
+      for (let i = 0; i < max + 5; i++) {
+        sessionManager.addToConversationHistory(testSessionId, { role: 'user', content: `msg ${i}` });
+      }
+
+      expect(sessionManager.getConversationContext(testSessionId)).toBe(loopMessages);
+      expect(loopMessages).toHaveLength(max);
+      expect(loopMessages[loopMessages.length - 1].content).toBe(`msg ${max + 4}`);
+      expect(loopMessages[0].content).toBe('msg 5');
+    });
+
+    // ── safe trim boundaries ────────────────────────────────────────────────
+    //
+    // The trim cuts the head of an array that is usually mid-tool-sequence: a
+    // long or restored session sits pinned at the cap, so every append trims one
+    // message and would otherwise leave the history opening on a dangling
+    // tool_result or an assistant turn — which every provider rejects.
+
+    const toolUseTurn = (id) => ({ role: 'assistant', content: [{ type: 'tool_use', id, name: 't', input: {} }] });
+    const toolResultTurn = (id) => ({ role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: 'r' }] });
+    const addAll = (sessionId, mgr, msgs) => msgs.forEach(m => mgr.addToConversationHistory(sessionId, m));
+
+    it('advances the cut past a dangling tool_result so the history opens on a real user turn', () => {
+      sessionManager.maxConversationHistory = 10;
+      const context = sessionManager.getConversationContext(testSessionId);
+
+      // Cutting exactly the 1-message overflow would leave index 0 = the
+      // assistant tool_use's orphaned tool_result partner.
+      addAll(testSessionId, sessionManager, [
+        { role: 'user', content: 'q' },
+        toolUseTurn('tu_1'),
+        toolResultTurn('tu_1'),
+        ...Array.from({ length: 8 }, (_, i) => ({ role: 'user', content: `filler ${i}` })),
+      ]);
+
+      expect(context).toHaveLength(8);
+      expect(context[0]).toEqual({ role: 'user', content: 'filler 0' });
+      expect(context.some(m => Array.isArray(m.content))).toBe(false);
+    });
+
+    it('advances the cut past a dangling Gemini functionResponse', () => {
+      sessionManager.maxConversationHistory = 10;
+      const context = sessionManager.getConversationContext(testSessionId);
+
+      addAll(testSessionId, sessionManager, [
+        { role: 'user', parts: [{ text: 'q' }] },
+        { role: 'model', parts: [{ functionCall: { name: 't', args: {} } }] },
+        { role: 'user', parts: [{ functionResponse: { name: 't', response: {} } }] },
+        ...Array.from({ length: 8 }, (_, i) => ({ role: 'user', parts: [{ text: `filler ${i}` }] })),
+      ]);
+
+      expect(context).toHaveLength(8);
+      expect(context[0].parts[0].text).toBe('filler 0');
+      expect(context.some(m => m.parts.some(p => p.functionResponse || p.functionCall))).toBe(false);
+    });
+
+    it('skips the trim entirely when no safe boundary exists', () => {
+      sessionManager.maxConversationHistory = 10;
+      const context = sessionManager.getConversationContext(testSessionId);
+
+      // One unbroken tool sequence: every candidate cut point is an assistant
+      // turn or an orphaned tool_result. Holding the extra messages is correct —
+      // the token-based summarizer trims these with pairing intact.
+      addAll(testSessionId, sessionManager, [
+        { role: 'user', content: 'q' },
+        ...Array.from({ length: 10 }, (_, i) =>
+          (i % 2 === 0 ? toolUseTurn(`tu_${i}`) : toolResultTurn(`tu_${i - 1}`))),
+      ]);
+
+      expect(context).toHaveLength(11);
+      expect(context[0]).toEqual({ role: 'user', content: 'q' });
+    });
+
+    it('skips the trim when the nearest safe boundary would gut the history', () => {
+      sessionManager.maxConversationHistory = 10;
+      const context = sessionManager.getConversationContext(testSessionId);
+
+      // First safe start is index 7, which would retain only 4 of 11 messages —
+      // below the half-cap floor, so the soft memory guard stands down.
+      addAll(testSessionId, sessionManager, [
+        { role: 'user', content: 'q' },
+        ...Array.from({ length: 6 }, (_, i) =>
+          (i % 2 === 0 ? toolUseTurn(`tu_${i}`) : toolResultTurn(`tu_${i - 1}`))),
+        ...Array.from({ length: 4 }, (_, i) => ({ role: 'user', content: `filler ${i}` })),
+      ]);
+
+      expect(context).toHaveLength(11);
+      expect(context[0]).toEqual({ role: 'user', content: 'q' });
+    });
   });
 
   describe('deleteSession', () => {

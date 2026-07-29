@@ -264,6 +264,31 @@ describe('processAgentResponseAnthropicManual', () => {
     expect(messages[messages.length - 1].content).toMatch(/cut off/i);
   });
 
+  // ── string-content assistant tail — the shared-context regression ─────────
+
+  it('promotes a trailing string-content assistant turn to block form instead of throwing', async () => {
+    // The session context is shared with the SDK/OpenRouter/Gemini routes and
+    // with restored history, which all write assistant turns as plain strings.
+    const messages = [
+      { role: 'user', content: 'question' },
+      { role: 'assistant', content: 'answer from another route' },
+    ];
+    const response = {
+      content: [{ type: 'text', text: 'continued' }],
+      stop_reason: 'end_turn',
+    };
+
+    await orc.processAgentResponseAnthropicManual(
+      response, messages, EMPTY_TOOLS, EMPTY_TOOLS
+    );
+
+    expect(messages).toHaveLength(2);
+    expect(messages[1].content).toEqual([
+      { type: 'text', text: 'answer from another route' },
+      { type: 'text', text: 'continued' },
+    ]);
+  });
+
   it('does not append a continuation turn on max_tokens when nothing was committed', async () => {
     const messages = [{ role: 'user', content: 'question' }];
     const response = {
@@ -460,6 +485,78 @@ describe('processGeminiManualResponse', () => {
     expect(functionResp.response.result).toBe('Something failed');
 
     expect(orc.executeToolCallGeminiManual).toHaveBeenCalledWith({ name: 'bad_tool', input: {} });
+  });
+});
+
+// ─── processOpenRouterManualResponse ────────────────────────────────────────
+
+function openRouterCompletion(content, toolCalls) {
+  return { choices: [{ message: { content, toolCalls } }] };
+}
+
+describe('processOpenRouterManualResponse', () => {
+  let sessionManager;
+  let sessionId;
+  let orc;
+  let messages;
+
+  beforeEach(() => {
+    sessionManager = new SessionManager();
+    sessionId = sessionManager.createSession(null);
+    sessionManager.initializeSession(sessionId, 'cld', {}, [], {}, 'test-client');
+    orc = makeOrchestrator(sessionManager, sessionId);
+    // The real loop hands the live session context to the processor — the array
+    // and the session's history are the same object, which is exactly what makes
+    // a stray messages.push a duplicate rather than a second bookkeeping copy.
+    messages = sessionManager.getConversationContext(sessionId);
+  });
+
+  afterEach(() => {
+    orc.destroy();
+    sessionManager.shutdown();
+  });
+
+  it('commits a text-only response as exactly one assistant turn', async () => {
+    const continueLoop = await orc.processOpenRouterManualResponse(
+      openRouterCompletion('Hello world', []), messages, EMPTY_TOOLS, EMPTY_TOOLS
+    );
+
+    expect(continueLoop).toBe(false);
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toEqual({ role: 'assistant', content: 'Hello world' });
+  });
+
+  it('carries the text on the toolCalls turn instead of committing it twice', async () => {
+    const completion = openRouterCompletion('Let me check that', [
+      { id: 'tc_1', function: { name: 'my_tool', arguments: '{"x":1}' } },
+    ]);
+
+    const continueLoop = await orc.processOpenRouterManualResponse(
+      completion, messages, EMPTY_TOOLS, EMPTY_TOOLS
+    );
+
+    expect(continueLoop).toBe(true);
+    // One assistant turn (text + toolCalls) then one tool result — no duplicate
+    // text-only assistant turn ahead of it.
+    expect(messages).toHaveLength(2);
+    expect(messages[0].role).toBe('assistant');
+    expect(messages[0].content).toBe('Let me check that');
+    expect(messages[0].toolCalls).toEqual([
+      { id: 'tc_1', type: 'function', function: { name: 'my_tool', arguments: '{"x":1}' } },
+    ]);
+    expect(messages[1]).toEqual({ role: 'tool', toolCallId: 'tc_1', content: 'tool output' });
+    expect(orc.executeToolCallHelper).toHaveBeenCalledWith(
+      { name: 'my_tool', input: { x: 1 } }, EMPTY_TOOLS, EMPTY_TOOLS
+    );
+  });
+
+  it('commits no assistant turn for an empty text-only response', async () => {
+    const continueLoop = await orc.processOpenRouterManualResponse(
+      openRouterCompletion('   ', []), messages, EMPTY_TOOLS, EMPTY_TOOLS
+    );
+
+    expect(continueLoop).toBe(false);
+    expect(messages).toHaveLength(0);
   });
 });
 

@@ -23,6 +23,26 @@ import config from '../../config.js';
 const OPENROUTER_PROVIDERS = new Set(Object.keys(config.openRouterAgentProviders));
 
 /**
+ * Can this message legally be the FIRST message of a conversation? The
+ * count-based trim in addToConversationHistory cuts from the head of an array
+ * that is very often mid-tool-sequence, and every provider rejects a history
+ * that opens on a dangling tool turn:
+ *   - Anthropic and Gemini both require the first message to be a user turn.
+ *   - A user turn carrying tool_result / functionResponse needs the assistant
+ *     tool_use / functionCall turn that preceded it — which the cut removed.
+ *   - Chat-completions `role: 'tool'` turns likewise need their assistant
+ *     toolCalls turn (excluded here by the role check).
+ * Handles all three wire formats since one session's context can hold any of
+ * them (agent switches normalize lazily, at loop entry).
+ */
+const isSafeConversationStart = (message) => {
+  if (!message || message.role !== 'user') return false;
+  if (Array.isArray(message.content) && message.content.some(b => b?.type === 'tool_result')) return false;
+  if (Array.isArray(message.parts) && message.parts.some(p => p?.functionResponse)) return false;
+  return true;
+};
+
+/**
  * SessionManager
  * Manages in-memory WebSocket sessions with session-specific temp folders
  *
@@ -462,11 +482,36 @@ export class SessionManager {
   addToConversationHistory(sessionId, message) {
     const session = this.getSession(sessionId);
     if (session) {
-      session.conversationContext.push(message);
+      const context = session.conversationContext;
+      context.push(message);
 
-      // Limit conversation history size to prevent memory bloat
-      if (session.conversationContext.length > this.maxConversationHistory) {
-        session.conversationContext = session.conversationContext.slice(-this.maxConversationHistory);
+      // Limit conversation history size to prevent memory bloat. Trim in place —
+      // every manual agent loop holds a long-lived reference to this exact array
+      // (getConversationContext), so reassigning it here would orphan the running
+      // conversation: queued user turns and summarization would land on an array
+      // nobody sends to the API.
+      const overflow = context.length - this.maxConversationHistory;
+      if (overflow > 0) {
+        // Advance the cut to the next message that can legally open a
+        // conversation. Cutting exactly `overflow` would routinely behead a live
+        // tool sequence: a long or restored session sits pinned at the cap, so
+        // every append trims one message off the head and can leave the array
+        // starting on a dangling tool_result (or an assistant turn), which the
+        // provider rejects outright.
+        let cut = overflow;
+        while (cut < context.length && !isSafeConversationStart(context[cut])) cut++;
+
+        // Only accept a boundary that still leaves a usable history. When the
+        // nearest safe cut would gut the conversation (one long unbroken tool
+        // sequence), skip the trim: this is a soft memory backstop, while
+        // #summarizeContextIfNeeded is the mechanism that actually has to hold
+        // context in bounds — and it preserves tool_use/tool_result pairing.
+        const minRetained = Math.floor(this.maxConversationHistory / 2);
+        if (cut < context.length && context.length - cut >= minRetained) {
+          context.splice(0, cut);
+        } else {
+          logger.debug(`[${sessionId}] Conversation history over cap (${context.length}) but no safe trim boundary; leaving intact for the summarizer`);
+        }
       }
     }
   }

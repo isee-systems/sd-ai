@@ -1123,8 +1123,17 @@ export class AgentOrchestrator {
     // "tool_use without tool_result" API error that occurs when context summarisation
     // truncates the middle of an interleaved sequence.
     if (assistantContent.length > 0) {
-      if (!messages[messages.length - 1] || messages[messages.length - 1].role !== 'assistant') {
+      const last = messages[messages.length - 1];
+      if (!last || last.role !== 'assistant') {
         messages.push({ role: 'assistant', content: [] });
+      } else if (!Array.isArray(last.content)) {
+        // The context is shared with the SDK/OpenRouter/Gemini routes and with
+        // restored history, all of which write assistant turns as plain strings.
+        // Promote to block form before appending rather than blowing up on
+        // String.push.
+        last.content = (typeof last.content === 'string' && last.content.trim())
+          ? [{ type: 'text', text: last.content }]
+          : [];
       }
       for (const block of assistantContent) {
         messages[messages.length - 1].content.push(block);
@@ -1545,8 +1554,8 @@ ${lines.join('\n')}`;
       }
       const next = this.#pendingMessages.shift();
       logger.log(`Gemini Manual: processing queued message (remaining: ${this.#pendingMessages.length})`);
+      // `messages` IS the live session context — one append, not two.
       this.sessionManager.addToConversationHistory(this.sessionId, { role: 'user', parts: [{ text: next }] });
-      messages.push({ role: 'user', parts: [{ text: next }] });
     }
   }
 
@@ -2317,7 +2326,7 @@ ${lines.join('\n')}`;
 
             if (this.stopRequested) break;
 
-            continueLoop = await this.#processOpenRouterManualResponse(completion, messages, builtInTools, dynamicTools);
+            continueLoop = await this.processOpenRouterManualResponse(completion, messages, builtInTools, dynamicTools);
             if (!continueLoop && !this.stopRequested) completedNaturally = true;
 
             if (this.stopRequested) break;
@@ -2348,8 +2357,8 @@ ${lines.join('\n')}`;
         if (reachedMax) logger.log(`OpenRouter Manual: max iterations (${maxIterations}) hit; draining queued message with fresh budget`);
         const next = this.#pendingMessages.shift();
         logger.log(`OpenRouter Manual: processing queued message (remaining: ${this.#pendingMessages.length})`);
+        // `messages` IS the live session context — one append, not two.
         this.sessionManager.addToConversationHistory(this.sessionId, { role: 'user', content: next });
-        messages.push({ role: 'user', content: next });
       }
     } catch (error) {
       // Catches setup-time failures (resolveModel, cleanupContext, tool conversion,
@@ -2539,7 +2548,7 @@ ${lines.join('\n')}`;
     return tools;
   }
 
-  async #processOpenRouterManualResponse(completion, messages, builtInTools, dynamicTools) {
+  async processOpenRouterManualResponse(completion, messages, builtInTools, dynamicTools) {
     const message = completion.choices?.[0]?.message ?? {};
     const hasText = typeof message.content === 'string' && message.content.trim() !== '';
     const toolCalls = Array.isArray(message.toolCalls) ? message.toolCalls : [];
@@ -2547,16 +2556,22 @@ ${lines.join('\n')}`;
     if (hasText) {
       const html = await marked.parse(message.content);
       await this.sendToClient(createAgentTextMessage(this.sessionId, html, false));
-      this.sessionManager.addToConversationHistory(this.sessionId, { role: 'assistant', content: message.content });
-      messages.push({ role: 'assistant', content: message.content });
     }
 
+    // Commit the assistant turn exactly once. `messages` IS the live session
+    // context, so addToConversationHistory is the whole write — a companion
+    // messages.push would duplicate the turn, and when the response carries both
+    // text and tool calls the text belongs on the toolCalls turn rather than on a
+    // separate text-only turn ahead of it.
     if (toolCalls.length === 0) {
+      if (hasText) {
+        this.sessionManager.addToConversationHistory(this.sessionId, { role: 'assistant', content: message.content });
+      }
       await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'success', 'Task completed successfully'));
       return false;
     }
 
-    messages.push({
+    this.sessionManager.addToConversationHistory(this.sessionId, {
       role: 'assistant',
       content: message.content ?? '',
       toolCalls: toolCalls.map(tc => ({ id: tc.id, type: 'function', function: { name: tc.function?.name, arguments: tc.function?.arguments } }))
