@@ -113,6 +113,14 @@ export class AgentOrchestrator {
   // we see is the authoritative total. Reported once when the loop completes
   // (or aborts) — never per-event, which would double-count.
   #openRouterSdkPendingUsage = null;
+  // Upstream error block from a `response.failed` event on the OpenRouter SDK
+  // stream. The SDK's own handler for that event reads `event.message`, which
+  // does not exist — the detail lives at `event.response.error` — so it throws a
+  // bare "Response failed" with nothing attached (@openrouter/sdk
+  // esm/lib/model-result.js). We consume the same broadcaster, and buffered
+  // events are always drained before the completion error surfaces, so we can
+  // stash the real reason here and attach it when that error reaches the catch.
+  #openRouterSdkFailureDetail = null;
   // Latest usage seen from a the OpenRouter manual pathway. This pathway delivers 
   // cumulative usage per response, so the *last* one
   // we see is the authoritative total. Reported once when the loop completes
@@ -2194,6 +2202,7 @@ ${lines.join('\n')}`;
 
       while (true) {
         if (this.stopRequested) break;
+        this.#openRouterSdkFailureDetail = null;
 
         // Drive everything off the SDK's event broadcaster so we see items
         // from every turn — including the INITIAL response (whose output never
@@ -2251,6 +2260,23 @@ ${lines.join('\n')}`;
               // per-event (that would double-count).
               if (event?.type === 'response.completed' && event.response?.usage) {
                 this.#openRouterSdkPendingUsage = event.response.usage;
+                continue;
+              }
+
+              // The only place the upstream reason is visible. Capture it before
+              // the SDK turns this same event into a detail-free throw. Logged
+              // here too: on a follow-up turn the SDK rejects immediately, and
+              // this is the record of what the provider actually said.
+              if (event?.type === 'response.failed') {
+                const err = event.response?.error;
+                let detail;
+                try {
+                  detail = typeof err === 'string' ? err : JSON.stringify(err);
+                } catch {
+                  detail = String(err);
+                }
+                this.#openRouterSdkFailureDetail = detail ?? 'no error block on the failed response';
+                logger.error(`OpenRouter SDK: response.failed from ${model}: ${this.#openRouterSdkFailureDetail}`);
                 continue;
               }
 
@@ -2357,7 +2383,13 @@ ${lines.join('\n')}`;
         logger.log(`OpenRouter SDK: agent stopped for session ${this.sessionId}`);
         await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'awaiting_user', 'Agent stopped by user request'));
       } else {
-        const detail = this.#describeOpenRouterError(error);
+        // "Response failed" on its own says nothing — the SDK drops the cause on
+        // the floor. Attach whatever the response.failed event carried so the log
+        // line names the provider's actual complaint.
+        const described = this.#describeOpenRouterError(error);
+        const detail = this.#openRouterSdkFailureDetail
+          ? `${described} | upstream=${this.#openRouterSdkFailureDetail}`
+          : described;
         logger.error(`OpenRouter SDK: in conversation loop: ${detail}`);
         await this.sendToClient(createErrorMessage(this.sessionId, `Agent error: ${detail}`, 'AGENT_ERROR'));
         await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'awaiting_user', `Agent error: ${detail}`));
@@ -2369,6 +2401,7 @@ ${lines.join('\n')}`;
         this.#logApiUsage(Provider.OPENROUTER, this.#openRouterSdkPendingUsage, model);
         this.#openRouterSdkPendingUsage = null;
       }
+      this.#openRouterSdkFailureDetail = null;
       this.abortController = null;
     }
   }
