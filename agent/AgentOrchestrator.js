@@ -1747,7 +1747,15 @@ ${lines.join('\n')}`;
       const agent = new LlmAgent({
         name: this.configManager.getAgentName(),
         model: config.agentGeminiModel,
-        instruction: systemPrompt,
+        // A function, not the string itself. ADK runs any *string* instruction
+        // through injectSessionState, which treats every `{IDENTIFIER}` in it as a
+        // session-state lookup and throws "Context variable not found" when the key
+        // is absent. Our prompts are literal text, and an agent config that documents
+        // a placeholder like `${DEPENDENCY_PATH}` killed the turn before the first
+        // model call — the `$` sits outside the braces ADK matches, so shell-style
+        // placeholders are not safe from it. The function form sets
+        // requireStateInjection=false, so the prompt reaches Gemini verbatim.
+        instruction: () => systemPrompt,
         tools: [...builtInAdkTools, ...clientAdkTools],
         generateContentConfig: {
           thinkingConfig: config.agentGeminiThinking
