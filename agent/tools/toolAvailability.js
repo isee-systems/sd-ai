@@ -43,13 +43,20 @@ export function mediaCapability(session) {
  * @param {string} [options.mode]             'sfd' | 'cld'
  * @param {number} [options.modelTokenCount]  Size of the current model, for the token-range gates
  * @param {Object} [options.session]          Session record, for capability gates
+ * @param {boolean} [options.canWriteToLocalSandbox]  The agent's can_write_to_local_sandbox
+ *        frontmatter flag. Only tools marked `requiresSandboxWrite` consult it, and it is
+ *        read as a grant rather than a default — omitting it withholds those tools.
  */
-export function isToolAvailable(toolDef, { mode, modelTokenCount = 0, session = null } = {}) {
+export function isToolAvailable(toolDef, { mode, modelTokenCount = 0, session = null, canWriteToLocalSandbox } = {}) {
   if (!toolDef) return false;
 
   if (mode && toolDef.supportedModes && !toolDef.supportedModes.includes(mode)) return false;
   if (toolDef.maxModelTokens && modelTokenCount > toolDef.maxModelTokens) return false;
   if (toolDef.minModelTokens && modelTokenCount < toolDef.minModelTokens) return false;
+
+  // The agent's own grant to modify the sandbox, absent unless its frontmatter asks
+  // for it. Reading is never gated here — see AgentConfigurationManager.
+  if (toolDef.requiresSandboxWrite && !canWriteToLocalSandbox) return false;
 
   // 'sink' — the tool produces a picture, so it needs somewhere to put one.
   // 'any'  — the tool operates on pictures that already exist, so it needs either

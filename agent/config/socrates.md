@@ -8,6 +8,7 @@ agent_mode: manual
 supported_modes:
   - sfd
   - cld
+can_write_to_local_sandbox: false
 # supported_providers omitted — inherits the full set from config.agentProviders,
 # so OpenRouter brands added in config.js apply to this agent automatically.
 ---

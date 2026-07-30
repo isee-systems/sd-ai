@@ -47,6 +47,13 @@ import {
   createSearchDocumentsTool
 } from './builtin/index.js';
 
+// Builtins the Claude Agent SDK already provides natively, and which therefore must
+// not also be registered on its MCP server — a duplicate pair means the model picks
+// between two tools that do the same thing, and the mcp__builtin__ copy bypasses the
+// SDK's own file tracking. Exported so the orchestrator's allowedTools filter derives
+// its exclusions from the same list rather than repeating the names.
+export const SDK_FILE_TOOL_TWINS = new Set(['read_file', 'write_file', 'edit_file']);
+
 /**
  * BuiltInToolProvider
  * Provides all built-in SD-AI engine tools plus visualization
@@ -80,13 +87,18 @@ export class BuiltInToolProvider {
   // is constructed here instead because nothing outside this provider uses it; media
   // is used everywhere, which is the difference. Required rather than defaulted so
   // there is exactly one construction site to reason about.
-  constructor(sessionManager, sessionId, sendToClient, provider, mediaStore) {
+  // canWriteToLocalSandbox comes from the agent's own frontmatter, not the session:
+  // it is a property of who the agent is, fixed for the provider's whole lifetime,
+  // which is why it is a constructor argument rather than something re-read per pass
+  // the way the media gates read the client's declarations.
+  constructor(sessionManager, sessionId, sendToClient, provider, mediaStore, canWriteToLocalSandbox) {
     this.sessionManager = sessionManager;
     this.sessionId = sessionId;
     this.sendToClient = sendToClient;
     this.provider = provider;
     this.vizEngine = new VisualizationEngine(sessionManager, sessionId);
     this.mediaStore = mediaStore;
+    this.canWriteToLocalSandbox = canWriteToLocalSandbox;
 
     // Images a built-in tool produced on the google-sdk (ADK) route, waiting to be
     // pushed onto the next request. Drained by the orchestrator's
@@ -121,8 +133,12 @@ export class BuiltInToolProvider {
         edit_specs: createEditSpecsTool(this.sessionManager, this.sessionId, this.sendToClient),
         edit_modules: createEditModulesTool(this.sessionManager, this.sessionId, this.sendToClient),
         read_file: createReadFileTool(),
-        //write_file: createWriteFileTool(),
-        //edit_file: createEditFileTool()
+        // Built unconditionally and withdrawn by isToolAvailable unless the agent's
+        // frontmatter grants can_write_to_local_sandbox — the collection is the
+        // catalogue of what exists, the predicate decides what this agent may see.
+        // This is what lets a future manual-mode agent opt in and actually get them.
+        write_file: createWriteFileTool(),
+        edit_file: createEditFileTool(),
         search_documents: createSearchDocumentsTool(this.sessionManager, this.sessionId),
         generate_image: createGenerateImageTool(this.sessionManager, this.sessionId, this.mediaStore, this.provider),
         view_media: createViewMediaTool(this.mediaStore)
@@ -166,14 +182,16 @@ export class BuiltInToolProvider {
 
     for (const [toolName, toolDef] of Object.entries(toolCollection.tools)) {
       if (toolDef.nonSdkOnly) continue;
-      // The Claude Agent SDK — getMcpServer's only caller — provides a native Read
-      // tool, so the builtin read_file is redundant here. It must be excluded at
-      // registration (not just from the query's allowedTools): bypassPermissions
-      // ignores allowedTools, so a registered read_file stays callable alongside
-      // native Read. (read_file can't be flagged nonSdkOnly — the Gemini ADK path
-      // has no native Read and genuinely needs it.)
-      if (toolName === 'read_file') continue;
-      if (!isToolAvailable(toolDef, { mode, modelTokenCount, session })) continue;
+      // The Claude Agent SDK — getMcpServer's only caller — provides native Read,
+      // Write and Edit, so these three builtins are redundant here. They must be
+      // excluded at registration (not just from the query's allowedTools):
+      // bypassPermissions ignores allowedTools, so a registered read_file stays
+      // callable alongside native Read. (They can't be flagged nonSdkOnly — the
+      // Gemini ADK and manual paths have no native equivalents and genuinely need
+      // them; that is the whole point of SDK_FILE_TOOL_TWINS being a route fact
+      // rather than a property of the tools.)
+      if (SDK_FILE_TOOL_TWINS.has(toolName)) continue;
+      if (!isToolAvailable(toolDef, { mode, modelTokenCount, session, canWriteToLocalSandbox: this.canWriteToLocalSandbox })) continue;
 
       // Tools in SDK mode need to throw errors instead of returning error responses
       const sdkHandler = async (args) => {
@@ -213,7 +231,7 @@ export class BuiltInToolProvider {
 
     for (const [toolName, toolDef] of Object.entries(toolCollection.tools)) {
       if (toolDef.nonSdkOnly) continue;
-      if (!isToolAvailable(toolDef, { mode, modelTokenCount, session })) continue;
+      if (!isToolAvailable(toolDef, { mode, modelTokenCount, session, canWriteToLocalSandbox: this.canWriteToLocalSandbox })) continue;
 
       adkTools.push(new FunctionTool({
         name: toolName,

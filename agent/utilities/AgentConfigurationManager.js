@@ -171,7 +171,10 @@ CLDs (Causal Loop Diagrams) are QUALITATIVE ONLY:
         version: metadata.version,
         max_iterations: metadata.max_iterations || 20,
         agent_mode: metadata.agent_mode || 'anthropic-sdk',
-        supported_modes: metadata.supported_modes || []
+        supported_modes: metadata.supported_modes || [],
+        // Opt-in, and strictly so: anything other than a literal `true` is a denial.
+        // An agent that never mentions the field does not get to write.
+        can_write_to_local_sandbox: metadata.can_write_to_local_sandbox === true
       }
     };
     this.baseConfig = this.config.agent;
@@ -221,6 +224,10 @@ CLDs (Causal Loop Diagrams) are QUALITATIVE ONLY:
     for (const line of lines) {
       const trimmed = line.trim();
       if (!trimmed) continue;
+      // A whole-line comment. These used to fall through to the key-value branch and
+      // land under keys like '# supported_providers' — harmless only for as long as no
+      // commented-out example contained a colon, which the docs' own sample does.
+      if (trimmed.startsWith('#')) continue;
 
       // Check for array item
       if (trimmed.startsWith('- ') && currentArray) {
@@ -243,6 +250,11 @@ CLDs (Causal Loop Diagrams) are QUALITATIVE ONLY:
           // Try to parse as number
           if (!isNaN(parsedValue) && parsedValue !== '') {
             parsedValue = Number(parsedValue);
+          } else if (parsedValue === 'true' || parsedValue === 'false') {
+            // Unquoted true/false are YAML booleans. Left as strings, a permission
+            // field asked for strict `=== true` would deny an agent that plainly
+            // wrote `true`, and a `=== false` check would be worse still.
+            parsedValue = parsedValue === 'true';
           }
           metadata[key] = parsedValue;
           currentKey = null;
@@ -324,5 +336,23 @@ CLDs (Causal Loop Diagrams) are QUALITATIVE ONLY:
     const val = this.metadata.agent_mode;
     if (val === 'sdk' || val === 'manual') return val;
     return 'sdk';
+  }
+
+  /**
+   * Whether this agent may write to the worker's local sandbox filesystem.
+   *
+   * Only the Agent SDK route has write tools to grant — the manual, ADK and OpenRouter
+   * routes never build write_file / edit_file at all (see BuiltInToolProvider), so an
+   * `agent_mode: manual` agent cannot write whatever this says.
+   *
+   * Reading is never gated: get_variable_data writes simulation output to disk and the
+   * SFD instructions require the model to read those numbers back before interpreting
+   * them, so Read / Glob / Grep stay with every agent. The field is about what an agent
+   * may change, not what it may see.
+   *
+   * @returns {boolean} true only if the frontmatter explicitly says can_write_to_local_sandbox: true
+   */
+  canWriteToLocalSandbox() {
+    return this.baseConfig.can_write_to_local_sandbox;
   }
 }

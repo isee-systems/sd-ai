@@ -22,7 +22,7 @@ const MEDIA_SESSION = {
   clientTools: [{ name: 'write_interface_media', media: { inputs: ['image'] } }]
 };
 
-function makeProvider(session = {}) {
+function makeProvider(session = {}, canWriteToLocalSandbox = false) {
   const sessionManager = {
     getSession: () => session,
     getSessionTempDir: () => '/tmp/sess_test', // VisualizationEngine requires a temp dir
@@ -32,7 +32,7 @@ function makeProvider(session = {}) {
   // built from it at registration time. Constructed here rather than faked because
   // it is a thin handle over a directory and these tests never read a picture.
   const mediaStore = new MediaStore(sessionManager, 'sess_test');
-  return new BuiltInToolProvider(sessionManager, 'sess_test', sendToClient, 'anthropic', mediaStore);
+  return new BuiltInToolProvider(sessionManager, 'sess_test', sendToClient, 'anthropic', mediaStore, canWriteToLocalSandbox);
 }
 
 // MCP's McpServer stores registered tools keyed by name on _registeredTools.
@@ -61,13 +61,53 @@ describe('BuiltInToolProvider.getMcpServer — mode filtering', () => {
     expect(names.has('generate_qualitative_model')).toBe(false); // cld-only
   });
 
-  it('never registers read_file (the Agent SDK provides a native Read)', async () => {
-    // Excluded at registration, not just allowedTools — bypassPermissions would
-    // otherwise leave it callable alongside native Read in either mode.
-    const sfd = await registeredToolNames(makeProvider(), 'sfd', 0);
-    const cld = await registeredToolNames(makeProvider(), 'cld', 0);
-    expect(sfd.has('read_file')).toBe(false);
-    expect(cld.has('read_file')).toBe(false);
+});
+
+describe('BuiltInToolProvider — sandbox write gating', () => {
+  it('applies the grant to the ADK tool list', async () => {
+    // getAdkTools is where the grant is observable: unlike the SDK route below, ADK
+    // has no native Write/Edit, so these builtins are the only write tools it has.
+    const denied = (await makeProvider({}, false).getAdkTools('sfd', 0)).map(t => t.name);
+    const granted = (await makeProvider({}, true).getAdkTools('sfd', 0)).map(t => t.name);
+    expect(denied).not.toContain('write_file');
+    expect(denied).not.toContain('edit_file');
+    expect(granted).toContain('write_file');
+    expect(granted).toContain('edit_file');
+    // Reading is never gated — get_variable_data's output has to be readable back.
+    expect(denied).toContain('read_file');
+  });
+
+  it('leaves the rest of the toolset alone', async () => {
+    const names = await registeredToolNames(makeProvider({}, false), 'sfd');
+    expect(names.has('get_current_model')).toBe(true);
+    expect(names.has('run_model')).toBe(true);
+  });
+});
+
+describe('BuiltInToolProvider.getMcpServer — tools the Agent SDK provides natively', () => {
+  // read_file, write_file and edit_file all have native SDK equivalents (Read, Write,
+  // Edit), so registering them here would hand the model two tools for one job and
+  // route writes around the SDK's own file tracking. Excluded at registration rather
+  // than via allowedTools, which bypassPermissions ignores.
+  //
+  // The consequence worth pinning: granting can_write_to_local_sandbox must NOT change
+  // what an sdk-mode agent sees on this server. Merlin's grant reaches it through the
+  // native Write/Edit/Bash in the query's tool list, not through here.
+  it('never registers the three file builtins, granted or not', async () => {
+    for (const grant of [true, false]) {
+      for (const mode of ['sfd', 'cld']) {
+        const names = await registeredToolNames(makeProvider({}, grant), mode);
+        expect(names.has('read_file')).toBe(false);
+        expect(names.has('write_file')).toBe(false);
+        expect(names.has('edit_file')).toBe(false);
+      }
+    }
+  });
+
+  it('registers an identical tool set whether or not the agent may write', async () => {
+    const granted = await registeredToolNames(makeProvider({}, true), 'sfd');
+    const denied = await registeredToolNames(makeProvider({}, false), 'sfd');
+    expect([...granted].sort()).toEqual([...denied].sort());
   });
 });
 

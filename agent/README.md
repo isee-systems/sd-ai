@@ -1047,6 +1047,7 @@ agent_mode: manual          # Loop strategy: 'sdk' (managed framework) or 'manua
 supported_modes:
   - sfd
   - cld
+can_write_to_local_sandbox: false   # Opt-in. Omitted means denied.
 # supported_providers omitted — allows the full set (config.agentProviders). The
 # built-in agents omit it so OpenRouter brands added in config.js apply automatically.
 # To restrict, list a subset, e.g.:
@@ -1062,6 +1063,16 @@ supported_modes:
 - `manual` — uses an explicit `while` loop that calls the provider API directly
 
 **`supported_providers`** lists which LLM providers are valid for this agent. The client selects the actual provider at runtime via the `provider` field in `select_agent`. If the list has exactly one entry, that provider is always used. If the field is absent, all providers are allowed (`config.agentProviders`) — the built-in agents omit it for exactly this reason, so a brand added to `config.openRouterAgentProviders` becomes available to every agent with no per-agent edit.
+
+**`can_write_to_local_sandbox`** grants the agent permission to modify the worker's sandbox filesystem. It is an opt-in, and strictly so — anything other than a literal `true` is a denial, including omitting the field. Of the built-in agents only Merlin has it.
+
+The grant covers `write_file` and `edit_file` on every route, plus the Agent SDK's native `Write`, `Edit`, `NotebookEdit` and `Bash`. Bash is in that set because a shell is a write tool — granting `Write` while withholding `bash -c 'echo … > f'` would be an arbitrary line. The flag is authoritative regardless of `agent_mode`: a `manual` agent that opts in gets `write_file` and `edit_file` like any other.
+
+On the SDK route the tools are withheld via the query's `disallowedTools`, **not** by omission from `allowedTools`. `allowedTools` is an auto-approve list, not a whitelist — the SDK's own docs say restricting availability is what the `tools` option is for — and `permissionMode: 'bypassPermissions'` waives the approval it exists to pre-answer. Leaving a name out of `allowedTools` withholds nothing, which is how the native write tools stayed live behind a `/*'Edit', 'Write',*/` that looked like it had removed them.
+
+Reading is never gated. `get_variable_data` writes simulation output to disk and the universal SFD instructions require the model to read those numbers back before interpreting them, so `read_file` and the SDK's native `Read` / `Glob` / `Grep` stay with every agent. The field is about what an agent may change, not what it may see.
+
+Enforcement is in two places. `isToolAvailable` (see `agent/tools/toolAvailability.js`) withholds any tool marked `requiresSandboxWrite` from an agent without the grant, which keeps it out of every route's declaration list; and the manual execute paths refuse the call outright if it arrives anyway. The second guard matters on agent switch, where the previous agent's transcript is replayed into this agent's prompt — an agent without the grant can find itself reading worked examples of the tools Merlin has.
 
 Provider IDs name the actual LLM brand the user is choosing. `anthropic` and `google` reach their vendor APIs directly. The OpenRouter-backed brands are defined entirely in `config.openRouterAgentProviders` (currently `qwen`, `deepseek`, `moonshotai`, `zai`) — the orchestrator shares one code path for all of them and resolves the model slug from each brand's `model` / `summaryModel` entry. Adding or removing a brand is a single edit to that object in `config.js`.
 

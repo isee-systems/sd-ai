@@ -1,6 +1,8 @@
 import { AgentOrchestrator } from '../../agent/AgentOrchestrator.js';
 import { SessionManager } from '../../agent/utilities/SessionManager.js';
 import { jest } from '@jest/globals';
+import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -802,5 +804,130 @@ describe('startConversation — prior-context dispatching (SDK)', () => {
     const callArgs = orc.startConversationWithAnthropicSdk.mock.calls[0];
     expect(callArgs[0]).toBe('next');
     expect(callArgs[1]).toBe(prior);
+  });
+});
+
+// ─── sandbox write gating at execute time ───────────────────────────────────
+
+// The declaration-time filter (isToolAvailable, covered in toolAvailability.test.js)
+// can only decline to *advertise* write_file and edit_file — the tool objects stay in
+// the collection and the manual execute paths reach them by name. This is the second
+// guard, and it earns its keep on agent switch: the previous agent's transcript is
+// replayed into the next agent's prompt, so an agent without the grant can be reading
+// worked examples of the tools Merlin has.
+const SANDBOX_AGENT = grant => ({
+  markdownContent: `---\nname: "SandboxTest"\nagent_mode: manual\nsupported_modes:\n  - cld\n${grant}---\n## Instructions\nDo things.\n`
+});
+
+describe('sandbox write gating — manual execute paths', () => {
+  let sessionManager;
+  let sessionId;
+  let tmpDir;
+  let orcs;
+
+  beforeEach(() => {
+    sessionManager = new SessionManager();
+    sessionId = sessionManager.createSession(null);
+    sessionManager.initializeSession(sessionId, 'cld', {}, [], {}, 'test-client');
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sdai-sandbox-'));
+    orcs = [];
+  });
+
+  afterEach(() => {
+    for (const orc of orcs) orc.destroy();
+    sessionManager.shutdown();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  function makeAgent(grantLine) {
+    process.env.ANTHROPIC_API_KEY = 'dummy';
+    process.env.GEMINI_API_KEY = 'dummy';
+    const orc = new AgentOrchestrator(
+      sessionManager, sessionId, jest.fn().mockResolvedValue(undefined), SANDBOX_AGENT(grantLine)
+    );
+    orcs.push(orc);
+    return orc;
+  }
+
+  it('refuses write_file and leaves the disk alone without the grant', async () => {
+    const orc = makeAgent('');
+    const target = path.join(tmpDir, 'forbidden.txt');
+
+    const result = await orc.executeToolCallHelper(
+      { name: 'write_file', input: { filePath: target, content: 'should never land' } },
+      orc.builtInToolProvider.getTools()
+    );
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/cannot write to the local sandbox/);
+    expect(fs.existsSync(target)).toBe(false);
+  });
+
+  it('refuses edit_file the same way', async () => {
+    const orc = makeAgent('can_write_to_local_sandbox: false\n');
+    const target = path.join(tmpDir, 'existing.txt');
+    fs.writeFileSync(target, 'original', 'utf-8');
+
+    const result = await orc.executeToolCallHelper(
+      { name: 'edit_file', input: { filePath: target, oldString: 'original', newString: 'tampered' } },
+      orc.builtInToolProvider.getTools()
+    );
+
+    expect(result.isError).toBe(true);
+    expect(fs.readFileSync(target, 'utf-8')).toBe('original');
+  });
+
+  it('lets a granted manual-mode agent write — the flag is authoritative off the SDK route too', async () => {
+    const orc = makeAgent('can_write_to_local_sandbox: true\n');
+    const target = path.join(tmpDir, 'allowed.txt');
+
+    const result = await orc.executeToolCallHelper(
+      { name: 'write_file', input: { filePath: target, content: 'landed' } },
+      orc.builtInToolProvider.getTools()
+    );
+
+    expect(result.isError).toBeFalsy();
+    expect(fs.readFileSync(target, 'utf-8')).toBe('landed');
+  });
+
+  it('advertises the write tools to a granted manual-mode agent', async () => {
+    // The refusal guard is the backstop; this is the path the model actually sees.
+    const granted = makeAgent('can_write_to_local_sandbox: true\n');
+    const denied = makeAgent('');
+    const catalogue = orc => orc.builtInToolProvider.getTools().tools;
+
+    expect(await granted.builtInToolProvider.getAdkTools('cld', 0).then(t => t.map(x => x.name)))
+      .toContain('write_file');
+    expect(await denied.builtInToolProvider.getAdkTools('cld', 0).then(t => t.map(x => x.name)))
+      .not.toContain('write_file');
+    // Both still hold the tool object — withholding happens in the filter, not the catalogue.
+    expect(catalogue(granted).write_file).toBeDefined();
+    expect(catalogue(denied).write_file).toBeDefined();
+  });
+
+  it('never refuses a read, whichever way the flag is set', async () => {
+    const target = path.join(tmpDir, 'data.csv');
+    fs.writeFileSync(target, 'time,value\n0,1\n', 'utf-8');
+
+    for (const grant of ['', 'can_write_to_local_sandbox: true\n']) {
+      const orc = makeAgent(grant);
+      const result = await orc.executeToolCallHelper(
+        { name: 'read_file', input: { filePath: target } },
+        orc.builtInToolProvider.getTools()
+      );
+      expect(result.isError).toBeFalsy();
+    }
+  });
+
+  it('applies the same refusal on the Gemini manual path', async () => {
+    const orc = makeAgent('');
+    const target = path.join(tmpDir, 'gemini.txt');
+
+    const result = await orc.executeToolCallGeminiManual(
+      { name: 'write_file', input: { filePath: target, content: 'should never land' } }
+    );
+
+    expect(result.isError).toBe(true);
+    expect(fs.existsSync(target)).toBe(false);
   });
 });

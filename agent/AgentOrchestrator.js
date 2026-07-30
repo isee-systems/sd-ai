@@ -32,7 +32,7 @@ import {
   hydrateContentsForGemini,
   hydrateMessagesForOpenAi
 } from './utilities/ToolResultFormatter.js';
-import { BuiltInToolProvider } from './tools/BuiltInToolProvider.js';
+import { BuiltInToolProvider, SDK_FILE_TOOL_TWINS } from './tools/BuiltInToolProvider.js';
 import { DynamicToolProvider } from './tools/DynamicToolProvider.js';
 import {
   createAgentTextMessage,
@@ -54,6 +54,23 @@ import { join } from 'path';
 // Derived from the shared config registry so adding/removing a brand is a single
 // config.js edit (see config.openRouterAgentProviders).
 const OPENROUTER_PROVIDERS = new Set(Object.keys(config.openRouterAgentProviders));
+
+// The Agent SDK's write half, withheld from any agent that has not opted in via
+// can_write_to_local_sandbox.
+//
+// Withheld through disallowedTools, not by omission from allowedTools. That list
+// reads like a whitelist and is not one — the SDK's own docs call it "tool names
+// that are auto-allowed without prompting" and say outright that restricting
+// availability is what the `tools` option is for. Nothing sets `tools`, so the query
+// gets the default claude_code preset with Write, Edit and Bash in it, and
+// permissionMode 'bypassPermissions' then waives the approval that allowedTools
+// exists to pre-answer. Leaving a name out of allowedTools therefore withholds
+// nothing, which is how these tools stayed live behind a `/*'Edit', 'Write',*/`
+// that looked like it had taken them away.
+//
+// Bash is here because a shell is a write tool: withdrawing Write and Edit while
+// leaving `bash -c 'echo ... > f'` in reach would restrict nothing.
+const SDK_WRITE_TOOLS = ['Write', 'Edit', 'NotebookEdit', 'Bash'];
 
 // Normalize a single message to Gemini format {role:'user'|'model', parts:[{text}]}.
 // Handles Anthropic-format messages ({role, content}) that arrive when switching
@@ -168,7 +185,7 @@ export class AgentOrchestrator {
     this.mediaStore = new MediaStore(sessionManager, sessionId);
 
     // Create tool providers
-    this.builtInToolProvider = new BuiltInToolProvider(sessionManager, sessionId, sendToClient, this.provider, this.mediaStore);
+    this.builtInToolProvider = new BuiltInToolProvider(sessionManager, sessionId, sendToClient, this.provider, this.mediaStore, this.configManager.canWriteToLocalSandbox());
     this.dynamicToolProvider = new DynamicToolProvider(sessionManager, sessionId, sendToClient, this.mediaStore);
 
     // Provider SDK clients are lazy-instantiated via #getX() — see top-of-file
@@ -544,7 +561,10 @@ export class AgentOrchestrator {
 
     try {
       // Build tools list - combine SDK filesystem tools with MCP servers
-      const builtInSdkTools = ['Read', /*'Edit', 'Write',*/ 'Glob', 'Grep'];
+      const canWriteToLocalSandbox = this.configManager.canWriteToLocalSandbox();
+      const builtInSdkTools = canWriteToLocalSandbox
+        ? ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash']
+        : ['Read', 'Glob', 'Grep'];
 
       let mcpServers = {
         builtin: await this.builtInToolProvider.getMcpServer(mode, modelTokenCount)
@@ -565,10 +585,10 @@ export class AgentOrchestrator {
       const toolSession = this.sessionManager.getSession(this.sessionId);
       const builtInToolNames = this.builtInToolProvider.getToolNames()
         .filter(name => {
-          if (name === 'read_file') return false; // SDK provides native Read tool
+          if (SDK_FILE_TOOL_TWINS.has(name)) return false; // SDK provides native Read/Write/Edit
           const toolDef = allBuiltInTools.tools[name];
           if (toolDef?.nonSdkOnly) return false;
-          return isToolAvailable(toolDef, { mode, modelTokenCount, session: toolSession });
+          return isToolAvailable(toolDef, { mode, modelTokenCount, session: toolSession, canWriteToLocalSandbox });
         })
         .map(name => `mcp__builtin__${name}`);
       let allowedTools = [
@@ -594,6 +614,7 @@ export class AgentOrchestrator {
         maxTurns: maxIterations,
         mcpServers: mcpServers,
         allowedTools: allowedTools,
+        ...(canWriteToLocalSandbox ? {} : { disallowedTools: SDK_WRITE_TOOLS }),
         permissionMode: 'bypassPermissions',
         thinking: config.agentAnthropicThinking,
         ...(config.agentAnthropicThinking?.type !== 'disabled' && { effort: config.agentAnthropicEffort }),
@@ -1390,14 +1411,40 @@ ${lines.join('\n')}`;
   }
 
   /**
+   * The sandbox-write grant, enforced where the call actually lands.
+   *
+   * The manual routes filter tools when they build the declaration list, which can only
+   * decline to *advertise* write_file and edit_file — the tool objects stay in the
+   * collection and these execute paths reach them by name. A model that was never shown
+   * a tool still calls it occasionally, and most reliably right after an agent switch:
+   * the previous agent's transcript is replayed into this one's prompt, so an agent
+   * without the grant can be reading a worked example of the tools Merlin has. Filtering
+   * answers that with a real write. This answers it with a refusal.
+   *
+   * @returns {Object|null} An error envelope to return instead of calling the tool, or null to proceed
+   */
+  #refuseSandboxWrite(toolDef, toolName) {
+    if (!toolDef?.requiresSandboxWrite || this.configManager.canWriteToLocalSandbox()) return null;
+
+    logger.warn(`Blocked ${toolName} for session ${this.sessionId} — agent lacks can_write_to_local_sandbox`);
+    return {
+      content: [{ type: 'text', text: `${toolName} is not available to you — this agent cannot write to the local sandbox.` }],
+      isError: true
+    };
+  }
+
+  /**
    * Execute a tool call (built-in or client tool)
    */
   async executeToolCallHelper(toolUse, builtInTools, _dynamicTools) {
     try {
       // Check if it's a built-in tool
       if (builtInTools.tools[toolUse.name]) {
-        const handler = builtInTools.tools[toolUse.name].handler;
-        const result = await handler(toolUse.input);
+        const toolDef = builtInTools.tools[toolUse.name];
+        const refusal = this.#refuseSandboxWrite(toolDef, toolUse.name);
+        if (refusal) return refusal;
+
+        const result = await toolDef.handler(toolUse.input);
         // Handler already returns { content: [...], isError: bool }
         return result;
       }
@@ -1453,7 +1500,7 @@ ${lines.join('\n')}`;
       }
 
       // Skip tools ruled out by mode, model size, or client capability
-      if (!isToolAvailable(toolDef, { mode, modelTokenCount, session })) {
+      if (!isToolAvailable(toolDef, { mode, modelTokenCount, session, canWriteToLocalSandbox: this.configManager.canWriteToLocalSandbox() })) {
         continue;
       }
 
@@ -1984,6 +2031,9 @@ ${lines.join('\n')}`;
     try {
       const builtInTools = this.builtInToolProvider.getTools();
       if (builtInTools.tools[toolUse.name]) {
+        const refusal = this.#refuseSandboxWrite(builtInTools.tools[toolUse.name], toolUse.name);
+        if (refusal) return Promise.resolve(refusal);
+
         return builtInTools.tools[toolUse.name].handler(toolUse.input);
       }
       if (this.dynamicToolProvider.isClientTool(toolUse.name)) {
@@ -2006,7 +2056,7 @@ ${lines.join('\n')}`;
 
     for (const [toolName, toolDef] of Object.entries(builtInTools.tools)) {
       if (toolNames.has(toolName)) continue;
-      if (!isToolAvailable(toolDef, { mode, modelTokenCount, session })) continue;
+      if (!isToolAvailable(toolDef, { mode, modelTokenCount, session, canWriteToLocalSandbox: this.configManager.canWriteToLocalSandbox() })) continue;
 
       toolNames.add(toolName);
       declarations.push({
@@ -2635,7 +2685,7 @@ ${lines.join('\n')}`;
 
     for (const [toolName, toolDef] of Object.entries(builtInTools.tools)) {
       if (seen.has(toolName)) continue;
-      if (!isToolAvailable(toolDef, { mode, modelTokenCount, session })) continue;
+      if (!isToolAvailable(toolDef, { mode, modelTokenCount, session, canWriteToLocalSandbox: this.configManager.canWriteToLocalSandbox() })) continue;
       seen.add(toolName);
 
       tools.push(orTool({
@@ -2681,7 +2731,7 @@ ${lines.join('\n')}`;
     const session = this.sessionManager.getSession(this.sessionId);
     for (const [toolName, toolDef] of Object.entries(builtInTools.tools)) {
       if (seen.has(toolName)) continue;
-      if (!isToolAvailable(toolDef, { mode, modelTokenCount, session })) continue;
+      if (!isToolAvailable(toolDef, { mode, modelTokenCount, session, canWriteToLocalSandbox: this.configManager.canWriteToLocalSandbox() })) continue;
       seen.add(toolName);
       tools.push({
         type: 'function',

@@ -66,6 +66,39 @@ describe('isToolAvailable — media gating', () => {
   });
 });
 
+describe('isToolAvailable — sandbox write gating', () => {
+  const WRITE_FILE = { supportedModes: ['sfd', 'cld'], requiresSandboxWrite: true };
+  const READ_FILE = { supportedModes: ['sfd', 'cld'] };
+
+  it('offers a write tool only to an agent that was granted the sandbox', () => {
+    expect(isToolAvailable(WRITE_FILE, { mode: 'sfd', canWriteToLocalSandbox: true })).toBe(true);
+    expect(isToolAvailable(WRITE_FILE, { mode: 'sfd', canWriteToLocalSandbox: false })).toBe(false);
+  });
+
+  it('treats an omitted grant as no grant', () => {
+    // The predicate has seven call sites. Fail-closed is the failure mode worth
+    // having: a call site that forgets to pass the grant hands the model one tool
+    // fewer, rather than handing an ungranted agent a writable filesystem.
+    expect(isToolAvailable(WRITE_FILE, { mode: 'sfd' })).toBe(false);
+    expect(isToolAvailable(WRITE_FILE, {})).toBe(false);
+  });
+
+  it('leaves reading alone in both directions', () => {
+    // get_variable_data writes simulation output to disk and the SFD instructions
+    // require the model to read those numbers back before interpreting them. An
+    // agent that could neither write nor read would be unable to describe its own
+    // results, which is not what the flag is for.
+    expect(isToolAvailable(READ_FILE, { mode: 'sfd', canWriteToLocalSandbox: false })).toBe(true);
+    expect(isToolAvailable(READ_FILE, { mode: 'sfd' })).toBe(true);
+  });
+
+  it('applies the write gate alongside the others, not instead of them', () => {
+    const sfdOnlyWrite = { supportedModes: ['sfd'], requiresSandboxWrite: true };
+    expect(isToolAvailable(sfdOnlyWrite, { mode: 'cld', canWriteToLocalSandbox: true })).toBe(false);
+    expect(isToolAvailable(sfdOnlyWrite, { mode: 'sfd', canWriteToLocalSandbox: true })).toBe(true);
+  });
+});
+
 describe('isToolAvailable — pre-existing gates still apply', () => {
   const mediaSession = { supportsMedia: true, clientTools: [SINK_TOOL] };
 
