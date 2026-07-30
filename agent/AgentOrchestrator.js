@@ -21,6 +21,17 @@ let _openRouterAgent;
 const loadOpenRouterAgent = async () => _openRouterAgent ??= await import('@openrouter/agent');
 
 import { AgentConfigurationManager } from './utilities/AgentConfigurationManager.js';
+import { MediaStore } from './utilities/MediaStore.js';
+import {
+  toolResultToText,
+  toolResultToBlocks,
+  toOpenRouterAgentOutput,
+  mediaBlocksOf,
+  MediaBudget,
+  hydrateMessagesForAnthropic,
+  hydrateContentsForGemini,
+  hydrateMessagesForOpenAi
+} from './utilities/ToolResultFormatter.js';
 import { BuiltInToolProvider } from './tools/BuiltInToolProvider.js';
 import { DynamicToolProvider } from './tools/DynamicToolProvider.js';
 import {
@@ -34,6 +45,7 @@ import logger from '../utilities/logger.js';
 import config from '../config.js';
 import TokenUsageReporter, { Provider } from '../utilities/TokenUsageReporter.js';
 import { sanitizeSchemaForGemini } from './tools/builtin/toolHelpers.js';
+import { isToolAvailable } from './tools/toolAvailability.js';
 import { join } from 'path';
 
 // External provider ids that name the upstream LLM brand but resolve to the same
@@ -137,9 +149,19 @@ export class AgentOrchestrator {
     // Load configuration
     this.configManager = new AgentConfigurationManager(agentConfig);
 
+    // One media store for the whole worker, injected rather than made per consumer.
+    // Four things inside this process need it -- both tool providers, the built-in
+    // generate_image and view_media tools, and this class's own hydration of image
+    // blocks when it builds a provider call -- so it belongs to the thing that owns
+    // all of them. (The main process cannot share this instance: it lives on the
+    // other side of the worker boundary and makes its own. That is safe rather than
+    // a duplication, because the store caches nothing -- the bind-mounted directory
+    // is the authority, which is exactly why it was built that way.)
+    this.mediaStore = new MediaStore(sessionManager, sessionId);
+
     // Create tool providers
-    this.builtInToolProvider = new BuiltInToolProvider(sessionManager, sessionId, sendToClient, this.provider);
-    this.dynamicToolProvider = new DynamicToolProvider(sessionManager, sessionId, sendToClient);
+    this.builtInToolProvider = new BuiltInToolProvider(sessionManager, sessionId, sendToClient, this.provider, this.mediaStore);
+    this.dynamicToolProvider = new DynamicToolProvider(sessionManager, sessionId, sendToClient, this.mediaStore);
 
     // Provider SDK clients are lazy-instantiated via #getX() — see top-of-file
     // loaders. A single session uses exactly one provider, so eager
@@ -376,7 +398,11 @@ export class AgentOrchestrator {
             model: config.agentAnthropicModel,
             max_tokens: 8192,
             system: systemBlocks,
-            messages: messages,
+            // Image bytes are attached to a copy here and thrown away with the
+            // request. `messages` is the live session context, so hydrating it in
+            // place would put base64 into stored history and into every later
+            // token count.
+            messages: hydrateMessagesForAnthropic(messages, this.mediaStore),
             thinking: config.agentAnthropicThinking,
             ...(thinkingEnabled && { output_config: { effort: config.agentAnthropicEffort } }),
             tools: tools.length > 0 ? tools : undefined
@@ -524,17 +550,17 @@ export class AgentOrchestrator {
         mcpServers.client = clientMcpServer;
       }
 
-      // Build allowed tools list with MCP prefixes, filtered by mode and model token count
+      // Build allowed tools list with MCP prefixes, filtered by mode, model token
+      // count and client capability — the same predicate getMcpServer registers by,
+      // so this list can never name a tool the server did not register.
       const allBuiltInTools = this.builtInToolProvider.getTools();
+      const toolSession = this.sessionManager.getSession(this.sessionId);
       const builtInToolNames = this.builtInToolProvider.getToolNames()
         .filter(name => {
           if (name === 'read_file') return false; // SDK provides native Read tool
           const toolDef = allBuiltInTools.tools[name];
           if (toolDef?.nonSdkOnly) return false;
-          if (toolDef?.supportedModes && !toolDef.supportedModes.includes(mode)) return false;
-          if (toolDef?.maxModelTokens && modelTokenCount > toolDef.maxModelTokens) return false;
-          if (toolDef?.minModelTokens && modelTokenCount < toolDef.minModelTokens) return false;
-          return true;
+          return isToolAvailable(toolDef, { mode, modelTokenCount, session: toolSession });
         })
         .map(name => `mcp__builtin__${name}`);
       let allowedTools = [
@@ -545,6 +571,11 @@ export class AgentOrchestrator {
 
       // Prefix tool names in system prompt
       systemPrompt = this.#anthropicSdkPrefixToolNamesInSystemPrompt(systemPrompt, builtInToolNames, clientToolNames);
+
+      // Then say what the SDK's own filesystem tools are for. Appended after the
+      // prefixing pass on purpose: these names take no mcp__ prefix, and the pass
+      // would not leave `Read` alone if a builtin were ever named that.
+      systemPrompt += this.#anthropicSdkFilesystemToolsNote(builtInSdkTools);
 
       // Build query options with MCP servers
       const queryOptions = {
@@ -936,6 +967,43 @@ export class AgentOrchestrator {
   }
 
   /**
+   * What the Agent SDK's native filesystem tools actually reach, for the system prompt.
+   *
+   * This route is the only one that offers them, and it offers them from here rather
+   * than from any agent's prompt — so no agent prompt describes them, and the model is
+   * left to infer their scope from their names. It infers wrongly, and always in the
+   * same direction: asked about a file that belongs to the user, it reads `app.css` or
+   * `index.html` as a path and reaches for `Grep`, which searches this server's own
+   * source tree instead and answers "path does not exist". The user's model and their
+   * interface are on their machine, behind the mcp__ tools, and nothing about the tool
+   * names says so.
+   *
+   * Ends the model.sdjson prohibition that the builtin `read_file` carries in its own
+   * description. read_file is not registered on this route (native `Read` shadows it),
+   * so without this the prohibition is simply absent here — and native `Read` has no
+   * guard of its own.
+   */
+  #anthropicSdkFilesystemToolsNote(builtInSdkTools) {
+    if (!builtInSdkTools?.length) return '';
+
+    const names = builtInSdkTools.map(name => `\`${name}\``).join(', ');
+
+    return `
+
+# ${builtInSdkTools.join(', ')}
+
+${names} act on this server's own filesystem, and they take absolute paths. What is on it \
+is the scratch files the tools here wrote — nothing that belongs to the user. Their model, \
+and their interface if they have one, live on their machine and are reachable only through \
+the mcp__ tools; no amount of looking will find them here. So a bare or relative path like \
+\`app.css\` or \`index.html\` is not a path you can read — it names something on the other \
+side of a tool call, and the tool whose name matches what you want is the way to it.
+
+Never read model.sdjson from disk. The model is inspected and changed only through the \
+model tools.`;
+  }
+
+  /**
    * Prefix tool names in system prompt for SDK mode
    * Scans the system prompt and adds mcp__ prefixes to tool names
    */
@@ -1108,12 +1176,13 @@ export class AgentOrchestrator {
           responseType
         ));
 
-        const resultText = Array.isArray(toolResult.content)
-          ? toolResult.content.filter(b => b.type === 'text').map(b => b.text).join('\n')
-          : typeof toolResult.content === 'string' ? toolResult.content : JSON.stringify(toolResult.content);
+        // Blocks rather than flat text when the tool answered with a picture. What
+        // lands in `messages` is a handle block, never base64 -- the bytes are
+        // attached to a transient copy when the API call is built.
+        const resultContent = toolResultToBlocks(toolResult);
 
         assistantContent.push({ type: 'tool_use', id: block.id, name: block.name, input: block.input });
-        toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: resultText, is_error: toolResult.isError || false });
+        toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: resultContent, is_error: toolResult.isError || false });
       }
     }
 
@@ -1327,27 +1396,34 @@ ${lines.join('\n')}`;
 
       // Check if it's a client tool
       if (this.dynamicToolProvider.isClientTool(toolUse.name)) {
-        const unprefixedName = toolUse.name.replace(/^client_/, '');
-        const result = await this.dynamicToolProvider.requestClientExecution(
-          unprefixedName,
-          toolUse.input
-        );
-        return {
-          content: result,
-          isError: false
-        };
+        // Through the registered handler, exactly as the built-in branch above does,
+        // rather than calling requestClientExecution directly.
+        //
+        // The handler closes over the client's own tool definition, and calling
+        // around it dropped two things on the floor. The declared `timeout` was one:
+        // request_interface_media asks for eight hours because it waits for a person
+        // to go and find a photograph, and this route gave it the 30-second default
+        // and abandoned the call. The media contract was the other: without the
+        // definition there is nothing to tell the transport which argument holds an
+        // image handle, so a tool expecting bytes was sent the handle alone.
+        //
+        // It already answers with the envelope — wrapping that again put the tool's
+        // result inside a content field the model then read as a JSON string, and
+        // forced isError to false so a failed client tool looked like a successful
+        // one that happened to mention an error.
+        return await this.dynamicToolProvider.getTools().tools[toolUse.name].handler(toolUse.input);
       }
 
       // Tool not found
       return {
-        content: `Tool not found: ${toolUse.name}`,
+        content: [{ type: 'text', text: `Tool not found: ${toolUse.name}` }],
         isError: true
       };
 
     } catch (error) {
       logger.error(`Anthropic Manual: Error executing tool ${toolUse.name}:`, error);
       return {
-        content: error.message,
+        content: [{ type: 'text', text: error.message }],
         isError: true
       };
     }
@@ -1359,6 +1435,7 @@ ${lines.join('\n')}`;
   #anthropicManualConvertTools(builtInTools, dynamicTools, modelTokenCount = 0, mode = null) {
     const tools = [];
     const toolNames = new Set();
+    const session = this.sessionManager.getSession(this.sessionId);
 
     // Convert built-in tools
     for (const [toolName, toolDef] of Object.entries(builtInTools.tools)) {
@@ -1367,16 +1444,8 @@ ${lines.join('\n')}`;
         continue;
       }
 
-      // Skip tools that don't support the current mode
-      if (mode && toolDef.supportedModes && !toolDef.supportedModes.includes(mode)) {
-        continue;
-      }
-
-      // Skip tools whose model token constraints aren't met
-      if (toolDef.maxModelTokens && modelTokenCount > toolDef.maxModelTokens) {
-        continue;
-      }
-      if (toolDef.minModelTokens && modelTokenCount < toolDef.minModelTokens) {
+      // Skip tools ruled out by mode, model size, or client capability
+      if (!isToolAvailable(toolDef, { mode, modelTokenCount, session })) {
         continue;
       }
 
@@ -1480,7 +1549,9 @@ ${lines.join('\n')}`;
         try {
           const response = await gemini.models.generateContent({
             model: config.agentGeminiModel,
-            contents: messages,
+            // Transient copy — see the anthropic-manual call for why history must
+            // never hold the bytes.
+            contents: hydrateContentsForGemini(messages, this.mediaStore),
             config: geminiConfig
           });
 
@@ -1612,13 +1683,20 @@ ${lines.join('\n')}`;
         this.sessionId, callId, name, toolResult.content, toolResult.isError, responseType
       ));
 
-      const resultText = Array.isArray(toolResult.content)
-        ? toolResult.content.filter(b => b.type === 'text').map(b => b.text).join('\n')
-        : String(toolResult.content);
+      const resultText = toolResultToText(toolResult);
 
       functionResponseParts.push({
         functionResponse: { name, response: { result: resultText } }
       });
+
+      // Pictures ride as sibling parts of the same user turn rather than inside
+      // functionResponse.parts. The SDK types do support the latter, but a sibling
+      // inlineData part is the long-established form that every model version
+      // accepts, and isSafeConversationStart still classifies the turn correctly
+      // because it looks for a part with a functionResponse, which this still has.
+      for (const media of mediaBlocksOf(toolResult)) {
+        functionResponseParts.push({ media });
+      }
     }
 
     messages.push({ role: 'user', parts: functionResponseParts });
@@ -1673,6 +1751,41 @@ ${lines.join('\n')}`;
         tools: [...builtInAdkTools, ...clientAdkTools],
         generateContentConfig: {
           thinkingConfig: config.agentGeminiThinking
+        },
+        // The only way to get a picture in front of the model on this route. ADK
+        // drops anything but the returned value from a tool response, so the tools
+        // queue their images and this drains the queue onto the request just before
+        // it goes out. Returning undefined is the documented "carry on with the
+        // request as modified" contract.
+        beforeModelCallback: async ({ request }) => {
+          // Both providers queue: a picture can come from a client tool or from a
+          // built-in (generate_image, view_media), and either way ADK cannot carry
+          // it back as a tool result.
+          const pending = [
+            ...this.builtInToolProvider.pendingAdkMedia.splice(0),
+            ...this.dynamicToolProvider.pendingAdkMedia.splice(0)
+          ];
+          if (pending.length === 0 || !Array.isArray(request?.contents)) return undefined;
+
+          const budget = new MediaBudget();
+          for (const media of pending) {
+            const parts = [{ text: `Image ${media.mediaId} returned by a tool:` }];
+
+            let data = null;
+            if (budget.take(media)) {
+              try { data = this.mediaStore.readBase64(media.mediaId); } catch { data = null; }
+            }
+
+            if (data) {
+              parts.push({ inlineData: { mimeType: media.mimeType, data } });
+            } else {
+              parts[0].text = this.mediaStore.describeForModel(media);
+            }
+
+            request.contents.push({ role: 'user', parts });
+          }
+
+          return undefined;
         },
         beforeToolCallback: async ({ tool, args }) => {
           const callId = `adk_${Date.now()}_${Math.random().toString(36).substr(2, 7)}`;
@@ -1858,9 +1971,10 @@ ${lines.join('\n')}`;
         return builtInTools.tools[toolUse.name].handler(toolUse.input);
       }
       if (this.dynamicToolProvider.isClientTool(toolUse.name)) {
-        const unprefixedName = toolUse.name.replace(/^client_/, '');
-        return this.dynamicToolProvider.requestClientExecution(unprefixedName, toolUse.input)
-          .then(result => ({ content: result, isError: false }));
+        // Through the registered handler, so the tool's declared timeout and media
+        // contract are honoured — see executeToolCallHelper for what calling around
+        // it cost. Already an envelope; do not re-wrap it.
+        return this.dynamicToolProvider.getTools().tools[toolUse.name].handler(toolUse.input);
       }
       return Promise.resolve({ content: [{ type: 'text', text: `Tool not found: ${toolUse.name}` }], isError: true });
     } catch (error) {
@@ -1872,12 +1986,11 @@ ${lines.join('\n')}`;
   #geminiManualConvertTools(builtInTools, dynamicTools, modelTokenCount = 0, mode = null) {
     const declarations = [];
     const toolNames = new Set();
+    const session = this.sessionManager.getSession(this.sessionId);
 
     for (const [toolName, toolDef] of Object.entries(builtInTools.tools)) {
       if (toolNames.has(toolName)) continue;
-      if (mode && toolDef.supportedModes && !toolDef.supportedModes.includes(mode)) continue;
-      if (toolDef.maxModelTokens && modelTokenCount > toolDef.maxModelTokens) continue;
-      if (toolDef.minModelTokens && modelTokenCount < toolDef.minModelTokens) continue;
+      if (!isToolAvailable(toolDef, { mode, modelTokenCount, session })) continue;
 
       toolNames.add(toolName);
       declarations.push({
@@ -2316,7 +2429,12 @@ ${lines.join('\n')}`;
             const completion = await openRouterClient.chat.send({
               chatRequest: {
                 model,
-                messages: [{ role: 'system', content: systemPrompt }, ...messages],
+                // Transient copy — see the anthropic-manual call for why history
+                // must never hold the bytes.
+                messages: [
+                  { role: 'system', content: systemPrompt },
+                  ...hydrateMessagesForOpenAi(messages, this.mediaStore)
+                ],
                 tools: chatTools.length > 0 ? chatTools : undefined,
               }
             });
@@ -2470,26 +2588,20 @@ ${lines.join('\n')}`;
     const { tool: orTool } = await loadOpenRouterAgent();
     const builtInTools = this.builtInToolProvider.getTools();
     const dynamicTools = this.dynamicToolProvider.getTools();
+    const session = this.sessionManager.getSession(this.sessionId);
     const tools = [];
     const seen = new Set();
 
     for (const [toolName, toolDef] of Object.entries(builtInTools.tools)) {
       if (seen.has(toolName)) continue;
-      if (mode && toolDef.supportedModes && !toolDef.supportedModes.includes(mode)) continue;
-      if (toolDef.maxModelTokens && modelTokenCount > toolDef.maxModelTokens) continue;
-      if (toolDef.minModelTokens && modelTokenCount < toolDef.minModelTokens) continue;
+      if (!isToolAvailable(toolDef, { mode, modelTokenCount, session })) continue;
       seen.add(toolName);
 
       tools.push(orTool({
         name: toolName,
         description: toolDef.description,
         inputSchema: toolDef.inputSchema,
-        execute: async (input) => {
-          const result = await toolDef.handler(input);
-          return Array.isArray(result?.content)
-            ? result.content.filter(b => b.type === 'text').map(b => b.text).join('\n')
-            : typeof result === 'string' ? result : JSON.stringify(result);
-        }
+        execute: async (input) => toOpenRouterAgentOutput(await toolDef.handler(input), this.mediaStore)
       }));
     }
 
@@ -2502,9 +2614,18 @@ ${lines.join('\n')}`;
           description: toolDef.description,
           inputSchema: toolDef.inputSchema,
           execute: async (input) => {
-            const unprefixedName = toolName.replace(/^client_/, '');
-            const result = await this.dynamicToolProvider.requestClientExecution(unprefixedName, input);
-            return typeof result === 'string' ? result : JSON.stringify(result);
+            // Through the registered handler, exactly as the built-in branch above.
+            // `toolDef` here is the *collection entry* — description, inputSchema,
+            // handler, timeout — and not the client's own definition, so it has no
+            // media contract on it: passing it to requestClientExecution looked right
+            // and resolved nothing. Only the handler closes over the real definition.
+            //
+            // JSON.stringify used to be applied to the whole envelope here, so this
+            // route showed the model `{"content":[...],"isError":false}` where every
+            // other route showed it the text. @openrouter/agent preserves a
+            // multimodal array verbatim, so a picture goes straight out with no
+            // history hydration on this route.
+            return toOpenRouterAgentOutput(await toolDef.handler(input), this.mediaStore);
           }
         }));
       }
@@ -2516,11 +2637,10 @@ ${lines.join('\n')}`;
   #openRouterManualConvertTools(builtInTools, dynamicTools, modelTokenCount, mode) {
     const tools = [];
     const seen = new Set();
+    const session = this.sessionManager.getSession(this.sessionId);
     for (const [toolName, toolDef] of Object.entries(builtInTools.tools)) {
       if (seen.has(toolName)) continue;
-      if (mode && toolDef.supportedModes && !toolDef.supportedModes.includes(mode)) continue;
-      if (toolDef.maxModelTokens && modelTokenCount > toolDef.maxModelTokens) continue;
-      if (toolDef.minModelTokens && modelTokenCount < toolDef.minModelTokens) continue;
+      if (!isToolAvailable(toolDef, { mode, modelTokenCount, session })) continue;
       seen.add(toolName);
       tools.push({
         type: 'function',
@@ -2577,6 +2697,8 @@ ${lines.join('\n')}`;
       toolCalls: toolCalls.map(tc => ({ id: tc.id, type: 'function', function: { name: tc.function?.name, arguments: tc.function?.arguments } }))
     });
 
+    const pendingMedia = [];
+
     for (const tc of toolCalls) {
       if (this.stopRequested) return false;
 
@@ -2590,9 +2712,7 @@ ${lines.join('\n')}`;
       const toolResult = await this.executeToolCallHelper({ name, input: args }, builtInTools, dynamicTools);
       if (this.stopRequested) return false;
 
-      const resultText = Array.isArray(toolResult.content)
-        ? toolResult.content.filter(b => b.type === 'text').map(b => b.text).join('\n')
-        : typeof toolResult.content === 'string' ? toolResult.content : JSON.stringify(toolResult.content);
+      const resultText = toolResultToText(toolResult);
 
       logger.log(`OpenRouter Manual: tool call completed: ${name}`);
       const responseType = this.#getResponseType(name);
@@ -2600,7 +2720,31 @@ ${lines.join('\n')}`;
         this.sessionId, tc.id, name, toolResult.content, toolResult.isError, responseType
       ));
 
+      // The tool message stays text-only: ChatToolMessage.content permits an array
+      // in the SDK's types, but upstream support for a non-text tool result is
+      // inconsistent and OpenAI rejects it outright. Pictures go in a user turn
+      // after the loop instead.
       messages.push({ role: 'tool', toolCallId: tc.id, content: resultText });
+
+      for (const media of mediaBlocksOf(toolResult)) {
+        pendingMedia.push({ toolName: name, media });
+      }
+    }
+
+    // After the loop, never inside it: every entry in toolCalls has to be answered
+    // by a tool message before any other role appears, or the API 400s the whole
+    // request. So one trailing turn carries whatever pictures this round produced.
+    if (pendingMedia.length > 0) {
+      messages.push({
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: `Images returned by ${[...new Set(pendingMedia.map(p => p.toolName))].join(', ')}:`
+          },
+          ...pendingMedia.map(p => p.media)
+        ]
+      });
     }
 
     return true;

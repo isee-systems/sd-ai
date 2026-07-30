@@ -23,6 +23,18 @@ export function selectEngineModel(provider, difficulty, kind) {
 }
 
 /**
+ * Picks the image-generation model for a chat provider.
+ *
+ * Same `default`-lane pattern as selectEngineModel, and for the same reason: a
+ * newly added agent provider generates images with no config edit. Image
+ * generation is decoupled from the chat provider anyway — the session may be
+ * talking to Claude and still draw with Gemini.
+ */
+export function selectImageModel(provider) {
+  return config.mediaImageModels?.[provider] ?? config.mediaImageModels?.default;
+}
+
+/**
  * Wrapper for the SDK tool() function for use with Claude Agent SDK
  * Note: inputSchema should be a Zod schema
  * @param {Object} config - Tool configuration

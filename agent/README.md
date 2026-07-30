@@ -135,8 +135,25 @@ Establishes a session with authentication, model type, initial model, and option
         },
         "required": ["variableName"]
       }
+    },
+    {
+      "name": "write_interface_media",
+      "description": "Write a generated image into the interface's assets folder",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "image": { "type": "string", "description": "Media handle from generate_image" }
+        },
+        "required": ["name", "image"]
+      },
+      "media": { "inputs": ["image"], "maxItems": 1 }
     }
   ],
+  "supportsArrays": true,
+  "supportsModules": true,
+  "supportsSubTypes": false,
+  "supportsMedia": true,
   "historicalMessages": [
     {
       "type": "user_text",
@@ -164,6 +181,19 @@ Establishes a session with authentication, model type, initial model, and option
 - `tools` — Optional array of custom client tool definitions (see Client Tool Registration below). Core model operations are all built-in and do not need to be registered here.
 - `historicalMessages` — Optional array of previous messages to seed conversation context
 - `context` — Optional contextual information for the agent
+
+**Capability flags** — all optional, all defaulting to `false`, so a client that omits them behaves
+as it did before the flag existed:
+- `supportsArrays` — client can render arrayed models
+- `supportsModules` — client can render modular models
+- `supportsSubTypes` — client can render queues, conveyors and ovens
+- `supportsMedia` — client can decode and display images. Gates the built-in `generate_image` and
+  `view_media` tools, which are *additionally* withheld unless at least one entry in `tools`
+  declares a `media` contract (see Client Tool Registration). Both conditions must hold: the flag
+  says the client could show a picture, the tool contracts say there is somewhere to put one.
+  The example above sends both halves — `supportsMedia: true` plus a `write_interface_media` tool
+  whose `media.inputs` names the argument a generated image lands in. Send the flag on its own and
+  neither built-in is offered, because a generated picture would have nowhere to go.
 
 ### Historical Messages
 
@@ -275,6 +305,37 @@ Responds to any `tool_call_request` or `feedback_request` from the server.
 ```
 
 The `result` shape depends on which request is being answered — see the Server → Client messages below for the expected format per tool.
+
+**Answering with an image.** A tool can hand the agent a picture to actually look at by adding a
+`media` array alongside `result`. The bytes are written to the session's media store, given an opaque
+handle, and turned into a native image content block for whichever provider the session is using —
+so the model sees the picture rather than a description of it.
+
+```json
+{
+  "type": "tool_call_response",
+  "sessionId": "sess_abc123",
+  "callId": "req_abc123",
+  "result": { "path": "assets/hero.png" },
+  "media": [
+    {
+      "name": "preview.png",
+      "mimeType": "image/png",
+      "encoding": "base64",
+      "content": "<base64>",
+      "description": "Screenshot of the interface preview"
+    }
+  ],
+  "isError": false
+}
+```
+
+Field names deliberately match `add_file`, so a client reuses the same encode path. Limits are
+`config.mediaMaxItemBytes` per image (20 MiB), `config.mediaMaxItemsPerCall` images per response (4)
+and `config.mediaAllowedMimeTypes` (`image/png`, `image/jpeg`, `image/gif`) — the intersection of
+what every provider route can render and what the desktop client can decode. An image that breaks a
+limit is answered as a tool error rather than dropped silently. Declare the intent with
+`media.returnsMedia` on the tool definition; the caps, not the declaration, are what enforce it.
 
 #### 5. Model Updated Notification
 
@@ -484,6 +545,37 @@ Requests the client to execute a model interaction and return results via `tool_
   "timestamp": "2025-01-15T10:30:03.000Z"
 }
 ```
+
+**Calls that carry an image.** When a tool declares `media.inputs`, any argument named there holds an
+opaque media handle (`med_<16 hex>`) and the bytes travel beside the call in a `media` array. The
+handle stays in `arguments` exactly as the model wrote it — the model never sees base64, and never
+handles bytes — and `media[].argument` says which argument the bytes are the real value of:
+
+```json
+{
+  "type": "tool_call_request",
+  "sessionId": "sess_abc123",
+  "callId": "req_abc123",
+  "toolName": "write_interface_media",
+  "arguments": { "name": "hero.png", "image": "med_9f2c1b0a5d3e4711", "description": "A red square" },
+  "media": [
+    {
+      "mediaId": "med_9f2c1b0a5d3e4711",
+      "argument": "image",
+      "name": "hero.png",
+      "mimeType": "image/png",
+      "bytes": 184320,
+      "encoding": "base64",
+      "content": "<base64>"
+    }
+  ],
+  "timeout": 60000
+}
+```
+
+`arguments` still validates against the tool's own `inputSchema` unchanged, because a handle is
+declared there as a plain string. A handle the server does not recognise fails the call before it is
+sent, so the client is never asked to act on a meaningless value.
 
 **Built-in tool names and expected `result` shapes:**
 
@@ -735,6 +827,10 @@ Reports errors during processing.
 | `FILE_TOO_LARGE` | An `add_file` decoded to more than `config.ragMaxFileBytes` bytes. |
 | `FILE_LIMIT_EXCEEDED` | An `add_file` would exceed `config.ragMaxFilesPerSession`. |
 | `ADD_FILE_ERROR` / `REMOVE_FILE_ERROR` | An attach/remove operation failed server-side. |
+| `MEDIA_TOO_LARGE` | An image on a `tool_call_response` decoded to more than `config.mediaMaxItemBytes` bytes. |
+| `MEDIA_TYPE_UNSUPPORTED` | An image's `mimeType` is not in `config.mediaAllowedMimeTypes`. |
+| `MEDIA_LIMIT_EXCEEDED` | A response carried more images than `config.mediaMaxItemsPerCall`. |
+| `MEDIA_ID_INVALID` / `MEDIA_MISSING` | A media handle was malformed, or its bytes are no longer held (the session prunes the oldest past `config.mediaMaxItemsPerSession`). |
 
 Note that receiving an `error` message does not mean the agent has stopped — the agent may still continue iterating. Wait for `agent_complete` before treating the agent as idle.
 
@@ -796,7 +892,12 @@ Core model operations (`get_current_model`, `update_model`, `run_model`, `get_ru
     },
     required?: string[]
   },
-  timeout?: number           // Milliseconds to wait for client response (default: 30000)
+  timeout?: number,          // Milliseconds to wait for client response (default: 30000)
+  media?: {                  // Optional — only for a tool that exchanges images
+    inputs?: string[],       // inputSchema properties whose value is a media handle
+    returnsMedia?: boolean,  // whether this tool may answer with a `media` array
+    maxItems?: number        // how many images it expects to return
+  }
 }
 ```
 
@@ -810,6 +911,42 @@ The `timeout` field controls how long the server waits for the client's `tool_ca
   "timeout": 120000
 }
 ```
+
+### Tools that exchange images
+
+A custom tool can be handed an image, or answer with one, by declaring a `media` contract beside its
+`inputSchema`. Omit `media` and nothing changes — the tool behaves exactly as it always did.
+
+```json
+{
+  "name": "write_interface_media",
+  "description": "Write a generated image into the interface's assets folder",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "name":        { "type": "string", "description": "File name, e.g. hero.png" },
+      "image":       { "type": "string", "description": "Media handle from generate_image" },
+      "description": { "type": "string", "description": "What the picture shows" }
+    },
+    "required": ["name", "image", "description"]
+  },
+  "media": { "inputs": ["image"], "maxItems": 1 }
+}
+```
+
+A handle parameter is declared as an ordinary `{"type": "string"}`, which is exactly what the model
+sees and sends — it never handles base64. The server swaps the handle for the bytes on the way out
+(see the `tool_call_request` shape above) and captures any bytes coming back into a handle of its own.
+Handles come from the built-in `generate_image` tool; `view_media` shows one to the model again, which
+is how a picture survives an agent switch or a summarised conversation.
+
+Those two built-ins are only offered when the client can actually use them, which takes two things:
+`supportsMedia: true` on `initialize_session`, **and** at least one declared tool with a media
+contract. The flag alone is not enough — a client that can display images but registers nowhere to
+put one would get an image generator whose output is a dead end. This is why no agent needs to know
+about media: a client that registers its media tools conditionally (Stella registers them only for
+interface authoring) automatically withholds `generate_image` from a plain modeling session with
+Merlin or Socrates, and offers it during interface work, without either side naming an agent.
 
 When the agent calls a custom tool, the server sends a `tool_call_request` and the client must respond with `tool_call_response`.
 
@@ -834,7 +971,12 @@ Each built-in tool is a plain object returned by a factory function. The fields 
 |---|---|---|
 | `maxModelTokens` | `number` | If the current model's token count exceeds this value, the tool is excluded from the agent's tool list. Used for tools that receive the full model (e.g., `generate_quantitative_model`). |
 | `minModelTokens` | `number` | If the current model's token count is below this value, the tool is excluded. Used for tools that only make sense for large models (e.g., `read_model_section`, `edit_variables`). |
+| `requiresMedia` | `'sink' \| 'any'` | Excludes the tool unless the client declared `supportsMedia` at session init **and** its tool list backs that up. `'sink'` needs a client tool with a non-empty `media.inputs` — somewhere a generated picture can go (`generate_image`). `'any'` needs a sink *or* a client tool with `media.returnsMedia` — some way for a handle to exist at all (`view_media`). |
 | `nonSdkOnly` | `boolean` | If `true`, the tool is excluded from the Anthropic SDK (`sdk`) mode's MCP server and the Google ADK tool list. It is only available in `manual` loop mode. Use this for tools that duplicate functionality already provided natively by the SDK (e.g. file system tools). |
+
+All of these are evaluated by one predicate, `isToolAvailable` in [`tools/toolAvailability.js`](tools/toolAvailability.js).
+Every provider route (SDK/MCP, ADK, both manual loops, OpenRouter) filters through it, so a new
+condition added there takes effect everywhere rather than on the routes someone remembered.
 
 Token counting runs on every conversation turn for all sessions. The token thresholds use `agentMaxTokensForEngines` from `config.js` (default: 100,000).
 

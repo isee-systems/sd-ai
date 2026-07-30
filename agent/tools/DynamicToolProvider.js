@@ -1,6 +1,9 @@
 import { StructuredOutputToZodConverter } from '../../utilities/StructuredOutputToZodConverter.js';
+import { toolResultToText, mediaBlock, mediaBlocksOf, toMcpContentResult } from '../utilities/ToolResultFormatter.js';
+import { MediaStore } from '../utilities/MediaStore.js';
 import { sanitizeSchemaForGemini } from './builtin/toolHelpers.js';
 import logger from '../../utilities/logger.js';
+import config from '../../config.js';
 
 // Provider SDK symbols are lazy-loaded — see BuiltInToolProvider for the same pattern.
 // Use MCP's own McpServer instead of the Claude Agent SDK's tool()/createSdkMcpServer:
@@ -24,11 +27,22 @@ const loadFunctionTool = async () =>
  * - Special handling for get_current_model and update_model
  */
 export class DynamicToolProvider {
-  constructor(sessionManager, sessionId, sendToClient) {
+  // mediaStore is required, and injected by AgentOrchestrator, which shares one
+  // instance across every consumer in the worker. Required rather than defaulted so
+  // there is exactly one construction site to reason about: the store is a handle
+  // over a directory and a second instance would work, but "who owns this" having a
+  // single answer is worth more than the convenience of not passing it.
+  constructor(sessionManager, sessionId, sendToClient, mediaStore) {
     this.sessionManager = sessionManager;
     this.sessionId = sessionId;
     this.sendToClient = sendToClient;
     this.schemaConverter = new StructuredOutputToZodConverter();
+    this.mediaStore = mediaStore;
+
+    // Images a client tool returned on the google-sdk (ADK) route, waiting to be
+    // pushed onto the next request. See getAdkTools for why they cannot simply be
+    // returned. Drained by the orchestrator's beforeModelCallback.
+    this.pendingAdkMedia = [];
 
     const session = sessionManager.getSession(sessionId);
     const clientTools = session?.clientTools || [];
@@ -65,10 +79,10 @@ export class DynamicToolProvider {
   #createToolHandler(toolDef) {
     return async (args) => {
       try {
-        // Use unprefixed name when communicating with client
-        const clientToolName = toolDef.name;
-        const timeout = toolDef.timeout;
-        return await this.requestClientExecution(clientToolName, args, timeout);
+        // Unprefixed name when communicating with the client. The timeout and the
+        // media contract are read from the client's own definition inside
+        // requestClientExecution, so there is nothing to pass and nothing to drop.
+        return await this.requestClientExecution(toolDef.name, args);
 
       } catch (error) {
         logger.log(`Error executing client tool ${toolDef.name}:`, error);
@@ -83,9 +97,76 @@ export class DynamicToolProvider {
   /**
    * Request client to execute a tool
    */
+  /**
+   * Resolve this tool's declared media handles to the metadata the client needs.
+   *
+   * Metadata only — no `content`. The base64 is injected by the main-process relay
+   * on the way out, not here, because the worker IPC channel is newline-delimited
+   * JSON accumulated with `buf += chunk`: a 27 MiB line is quadratic to reassemble
+   * *and* head-of-line-blocks every streaming agent_text queued behind it.
+   *
+   * An unknown handle fails the call here, with no client round trip at all, so the
+   * model gets a useful error instead of the client getting a meaningless string.
+   */
+  #resolveMediaArguments(toolDef, args) {
+    const declared = toolDef?.media?.inputs;
+    if (!declared?.length) return { media: [] };
+
+    const media = [];
+
+    for (const argument of declared) {
+      const mediaId = args?.[argument];
+      if (mediaId === undefined || mediaId === null || mediaId === '') continue;
+
+      if (!MediaStore.isValidMediaId(mediaId) || !this.mediaStore.exists(mediaId)) {
+        return {
+          error: `'${mediaId}' is not an image I have. The '${argument}' argument takes a media `
+               + `handle like med_0123456789abcdef, as returned by generate_image — not a file name `
+               + `or a description. Generate the image first, then pass the handle it gives you.`
+        };
+      }
+
+      const meta = this.mediaStore.meta(mediaId);
+      media.push({
+        mediaId: meta.mediaId,
+        argument,
+        name: meta.name,
+        mimeType: meta.mimeType,
+        bytes: meta.bytes
+      });
+    }
+
+    if (media.length > config.mediaMaxItemsPerCall) {
+      return { error: `That call carries ${media.length} images, over the limit of ${config.mediaMaxItemsPerCall}.` };
+    }
+
+    return { media };
+  }
+
+  /**
+   * The client's own definition of a tool, by its unprefixed name.
+   *
+   * Looked up rather than passed in, because passing it was got wrong three times:
+   * once on each manual route, and once on the openrouter-sdk route where the value
+   * to hand was a *collection entry* that looks near-identical but carries no media
+   * contract. Every one of those failed silently — a tool expecting bytes was sent a
+   * bare handle, and a tool asking for an eight-hour timeout got thirty seconds.
+   * There is now no parameter to forget.
+   */
+  #clientToolDef(toolName) {
+    const session = this.sessionManager.getSession(this.sessionId);
+    return (session?.clientTools || []).find(tool => tool.name === toolName) ?? null;
+  }
+
   async requestClientExecution(toolName, args, timeout) {
-    timeout = timeout ?? 30000;
+    const toolDef = this.#clientToolDef(toolName);
+    timeout = timeout ?? toolDef?.timeout ?? 30000;
     const callId = this.#generateCallId();
+
+    const resolved = this.#resolveMediaArguments(toolDef, args);
+    if (resolved.error) {
+      return { content: [{ type: 'text', text: resolved.error }], isError: true };
+    }
 
     // Create pending call that will be resolved when client responds
     const resultPromise = this.sessionManager.addPendingToolCall(
@@ -102,22 +183,40 @@ export class DynamicToolProvider {
       sessionId: this.sessionId,
       callId,
       toolName,
+      // The handle stays in `arguments` exactly as the model wrote it — the model's
+      // view of its own call is never rewritten — and the bytes arrive beside it,
+      // keyed by the argument they are the real value of.
       arguments: args,
+      ...(resolved.media.length ? { media: resolved.media } : {}),
       timeout
     });
 
-    // Wait for client response with timeout
+    // Wait for client response with timeout. The timer is cleared in the finally
+    // below: left uncleared it held itself and its closure alive for the full
+    // timeout after every fast resolution, which is cheap at 30s and much less so
+    // for a media tool asking for minutes.
+    let timer;
     const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => {
+      timer = setTimeout(() => {
         reject(new Error(`Tool call timeout: ${toolName} did not respond within ${timeout}ms`));
       }, timeout);
     });
 
     try {
-      const result = await Promise.race([resultPromise, timeoutPromise]);
+      const { result, media = [] } = await Promise.race([resultPromise, timeoutPromise]);
       const text = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+
+      // The handles go in the text as well as in their own blocks, for two
+      // reasons: the model learns what to call the picture so it can pass it to
+      // another tool, and a provider route that cannot render an image still gets
+      // a coherent account of what came back instead of a silent hole.
+      const notes = media.map(meta => this.mediaStore.describeForModel(meta));
+
       return {
-        content: [{ type: 'text', text}],
+        content: [
+          { type: 'text', text: notes.length ? `${text}\n\nAttached: ${notes.join('; ')}` : text },
+          ...media.map(mediaBlock)
+        ],
         isError: false
       };
     } catch (error) {
@@ -127,6 +226,8 @@ export class DynamicToolProvider {
         this.sessionManager.resolvePendingToolCall(this.sessionId, callId, { error: error.message }, true);
       }
       throw error;
+    } finally {
+      clearTimeout(timer);
     }
   }
 
@@ -180,10 +281,16 @@ export class DynamicToolProvider {
       // inputSchema is a zod object (built by StructuredOutputToZodConverter);
       // registerTool takes the raw shape. Fall back to an empty shape for a
       // parameterless tool whose schema isn't a zod object.
+      // Wrapped rather than registered raw: MCP must be handed its own image
+      // content block, not our internal handle block. This is the one route where
+      // bytes are attached at the tool-return boundary instead of at
+      // request-build time, because the Agent SDK constructs the request itself --
+      // so the base64 travels worker -> claude CLI stdio here. Unavoidable on this
+      // route.
       server.registerTool(unprefixedName, {
         description: toolDef.description,
         inputSchema: toolDef.inputSchema?.shape ?? {}
-      }, toolDef.handler);
+      }, async (args) => toMcpContentResult(await toolDef.handler(args), this.mediaStore));
       count++;
     }
 
@@ -211,8 +318,21 @@ export class DynamicToolProvider {
         parameters: sanitizeSchemaForGemini(toolDef.inputSchema.toJSONSchema()),
         execute: async (args) => {
           const result = await toolDef.handler(args);
-          if (result.isError) throw new Error(result.content[0].text);
-          return result.content.map(b => b.text).join('\n');
+          if (result.isError) throw new Error(toolResultToText(result));
+
+          // ADK has no way to return an image from a tool at all: its
+          // buildResponseEvent puts the returned value in functionResponse.response
+          // and never populates parts, and LOAD_ARTIFACTS is not exported from the
+          // package. So pictures are queued here and pushed onto the request by the
+          // orchestrator's beforeModelCallback instead.
+          //
+          // `.map(b => b.text)` here used to emit the literal string "undefined"
+          // for any block that was not text.
+          for (const media of mediaBlocksOf(result)) {
+            this.pendingAdkMedia.push(media);
+          }
+
+          return toolResultToText(result);
         }
       }));
     }

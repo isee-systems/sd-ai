@@ -1,5 +1,6 @@
 import { WorkerSpawner, SandboxUnavailableError } from './WorkerSpawner.js';
 import { AgentConfigurationManager } from './utilities/AgentConfigurationManager.js';
+import { MediaStore } from './utilities/MediaStore.js';
 import {
   validateClientMessage,
   createSessionCreatedMessage,
@@ -265,13 +266,16 @@ export class WebSocketHandler {
       const capabilities = {
         supportsArrays: message?.supportsArrays,
         supportsModules: message?.supportsModules,
-        supportsSubTypes: message?.supportsSubTypes
+        supportsSubTypes: message?.supportsSubTypes,
+        supportsMedia: message?.supportsMedia
       };
 
       if (message.clientProduct === 'Stella Architect Beta' && message.clientVersion === '4.3') {
         capabilities.supportsArrays = true;
         capabilities.supportsModules = true;
         capabilities.supportsSubTypes = false;
+        // supportsMedia deliberately left alone: 4.3 predates the media protocol
+        // entirely, so it falls through to the default of false.
       }
       this.#sessionManager.initializeSession(this.#sessionId, message.mode, message.model, message.tools, message.context, message.clientId, capabilities);
 
@@ -437,6 +441,7 @@ export class WebSocketHandler {
         supportsArrays: session.supportsArrays,
         supportsModules: session.supportsModules,
         supportsSubTypes: session.supportsSubTypes,
+        supportsMedia: session.supportsMedia,
       });
 
       const supportedProviders = selectedAgent.supportedProviders; // [{id, name}]
@@ -495,11 +500,44 @@ export class WebSocketHandler {
         logger.warn(`Received tool_call_response for ${message.callId} but no worker is running`);
         return;
       }
+
+      // Images the tool answered with. Decoded and written to disk here, in the
+      // main process, mirroring #handleAddFile — and for the same two reasons: the
+      // decoded byte size can only be checked after decoding and must not be
+      // decoded twice, and the main process stays the single owner of the
+      // bytes-to-WebSocket boundary in both directions. Only the resulting
+      // handles cross the IPC channel.
+      let media = [];
+      if (message.media?.length) {
+        const store = new MediaStore(this.#sessionManager, this.#sessionId);
+        try {
+          media = message.media.map(item => store.captureBase64(item.content, {
+            name: item.name,
+            mimeType: item.mimeType,
+            description: item.description,
+            source: 'client'
+          }));
+        } catch (error) {
+          // Answered as a tool error rather than dropped, so the model learns the
+          // picture did not arrive instead of waiting out the tool's timeout.
+          this.#worker.send({
+            type: 'tool_response',
+            callId: message.callId,
+            result: `The image this tool returned was rejected: ${error.message}`,
+            isError: true,
+          });
+          await this.#sendToClient(createErrorMessage(this.#sessionId, error.message,
+            error.code || 'MEDIA_REJECTED'));
+          return;
+        }
+      }
+
       this.#worker.send({
         type: 'tool_response',
         callId: message.callId,
         result: message.result,
         isError: message.isError,
+        media,
       });
     } catch (error) {
       logger.error(`Error forwarding tool response for session ${this.#sessionId}:`, error);
@@ -669,6 +707,26 @@ export class WebSocketHandler {
   }
 
   /**
+   * Swap the handles on an outbound tool_call_request for the bytes they name.
+   *
+   * Returns a new message rather than mutating the worker's: the original is
+   * handle-only and there is no reason to leave a megabyte of base64 reachable
+   * from it after the frame has been written.
+   */
+  #hydrateOutboundMedia(message) {
+    const store = new MediaStore(this.#sessionManager, this.#sessionId);
+
+    return {
+      ...message,
+      media: message.media.map(item => ({
+        ...item,
+        encoding: 'base64',
+        content: store.readBase64(item.mediaId)
+      }))
+    };
+  }
+
+  /**
    * Wire up the IPC relay for a freshly spawned worker.
    * - Forwards all to_client messages to the WebSocket.
    * - Logs worker stdout/stderr.
@@ -680,7 +738,38 @@ export class WebSocketHandler {
         // Only forward if this is still the active worker; drop stale messages
         // from a worker that has been replaced or is in its shutdown grace period.
         if (this.#worker === w && this.#ws.readyState === 1) {
-          this.#ws.send(JSON.stringify(msg.message));
+          let out = msg.message;
+
+          // Image bytes are attached here, on their way out, rather than by the
+          // worker that built the message. The worker sent handles and metadata;
+          // this is where they become base64.
+          //
+          // Here because the IPC channel is newline-delimited JSON reassembled
+          // with `buf += chunk`, so one 27 MiB line is quadratic to parse *and*
+          // blocks every streaming agent_text queued behind it — and because it
+          // keeps the main process the sole owner of the bytes-to-frame boundary
+          // in both directions, which is the invariant #handleAddFile already
+          // establishes. `w` is in scope, so the failure path can answer the
+          // worker directly with no new IPC message type and no round trip.
+          if (out.type === 'tool_call_request' && out.media?.length) {
+            try {
+              out = this.#hydrateOutboundMedia(out);
+            } catch (error) {
+              // Should be unreachable: the worker checked the handles existed
+              // before sending. Fail the call back rather than handing the client
+              // a request whose bytes are missing.
+              logger.error(`Could not attach media for tool call ${out.callId}:`, error);
+              w.send({
+                type: 'tool_response',
+                callId: out.callId,
+                result: `The image could not be read from the session store: ${error.message}`,
+                isError: true,
+              });
+              return;
+            }
+          }
+
+          this.#ws.send(JSON.stringify(out));
         }
       } else if (msg.type === 'worker_error') {
         logger.error(`[worker:${this.#sessionId}] ${msg.error}`);

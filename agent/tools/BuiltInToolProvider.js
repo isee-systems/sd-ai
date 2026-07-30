@@ -1,5 +1,8 @@
 import { VisualizationEngine } from '../utilities/VisualizationEngine.js';
+import { MediaStore } from '../utilities/MediaStore.js';
+import { toolResultToText, toMcpContentResult, mediaBlocksOf } from '../utilities/ToolResultFormatter.js';
 import { sanitizeSchemaForGemini } from './builtin/toolHelpers.js';
+import { isToolAvailable } from './toolAvailability.js';
 
 // Lazy-loaded provider SDK symbols. Each tool provider serves multiple agent
 // loops (SDK, ADK, manual) but only one is selected per session — eagerly
@@ -36,6 +39,8 @@ import {
   createEditRelationshipsTool,
   createEditSpecsTool,
   createEditModulesTool,
+  createGenerateImageTool,
+  createViewMediaTool,
   createReadFileTool,
   createWriteFileTool,
   createEditFileTool,
@@ -70,12 +75,23 @@ import {
  * - edit_variables, edit_relationships, edit_specs, edit_modules (for editing parts of large models)
  */
 export class BuiltInToolProvider {
-  constructor(sessionManager, sessionId, sendToClient, provider) {
+  // mediaStore is required, and injected by AgentOrchestrator, which shares one
+  // instance across both tool providers and its own image-block hydration. vizEngine
+  // is constructed here instead because nothing outside this provider uses it; media
+  // is used everywhere, which is the difference. Required rather than defaulted so
+  // there is exactly one construction site to reason about.
+  constructor(sessionManager, sessionId, sendToClient, provider, mediaStore) {
     this.sessionManager = sessionManager;
     this.sessionId = sessionId;
     this.sendToClient = sendToClient;
     this.provider = provider;
     this.vizEngine = new VisualizationEngine(sessionManager, sessionId);
+    this.mediaStore = mediaStore;
+
+    // Images a built-in tool produced on the google-sdk (ADK) route, waiting to be
+    // pushed onto the next request. Drained by the orchestrator's
+    // beforeModelCallback, which drains both providers' queues.
+    this.pendingAdkMedia = [];
   }
 
   /**
@@ -107,7 +123,9 @@ export class BuiltInToolProvider {
         read_file: createReadFileTool(),
         //write_file: createWriteFileTool(),
         //edit_file: createEditFileTool()
-        search_documents: createSearchDocumentsTool(this.sessionManager, this.sessionId)
+        search_documents: createSearchDocumentsTool(this.sessionManager, this.sessionId),
+        generate_image: createGenerateImageTool(this.sessionManager, this.sessionId, this.mediaStore, this.provider),
+        view_media: createViewMediaTool(this.mediaStore)
       }
     };
   }
@@ -117,6 +135,13 @@ export class BuiltInToolProvider {
    */
   getTools() {
     return this.#createToolCollection();
+  }
+
+  // Read fresh on each filtering pass rather than cached in the constructor: the
+  // provider outlives initialize_session, and the client's tool list is what the
+  // media gates are derived from.
+  #session() {
+    return this.sessionManager.getSession(this.sessionId);
   }
 
   /**
@@ -136,6 +161,7 @@ export class BuiltInToolProvider {
     const McpServer = await loadMcpServer();
     const toolCollection = this.#createToolCollection();
     const server = new McpServer({ name: 'builtin', version: '1.0.0' });
+    const session = this.#session();
     let count = 0;
 
     for (const [toolName, toolDef] of Object.entries(toolCollection.tools)) {
@@ -147,17 +173,20 @@ export class BuiltInToolProvider {
       // native Read. (read_file can't be flagged nonSdkOnly — the Gemini ADK path
       // has no native Read and genuinely needs it.)
       if (toolName === 'read_file') continue;
-      if (mode && toolDef.supportedModes && !toolDef.supportedModes.includes(mode)) continue;
-      if (toolDef.maxModelTokens && modelTokenCount > toolDef.maxModelTokens) continue;
-      if (toolDef.minModelTokens && modelTokenCount < toolDef.minModelTokens) continue;
+      if (!isToolAvailable(toolDef, { mode, modelTokenCount, session })) continue;
 
       // Tools in SDK mode need to throw errors instead of returning error responses
       const sdkHandler = async (args) => {
         const result = await toolDef.handler(args);
         if (result.isError) {
-          throw new Error(result.content[0].text);
+          throw new Error(toolResultToText(result));
         }
-        return result;
+        // Converted, not returned raw. MCP validates the content array against its
+        // own union — text | image | audio | resource_link | resource — and our
+        // internal media handle block is none of those, so returning it unconverted
+        // makes MCP reject the whole call with an invalid_union error. This is where
+        // a generated picture becomes an MCP image block the model can see.
+        return toMcpContentResult(result, this.mediaStore);
       };
 
       // Register via MCP's own registerTool so MCP 1.29's zod-v4-aware converter
@@ -179,13 +208,12 @@ export class BuiltInToolProvider {
   async getAdkTools(mode, modelTokenCount) {
     const FunctionTool = await loadFunctionTool();
     const toolCollection = this.getTools();
+    const session = this.#session();
     const adkTools = [];
 
     for (const [toolName, toolDef] of Object.entries(toolCollection.tools)) {
       if (toolDef.nonSdkOnly) continue;
-      if (mode && toolDef.supportedModes && !toolDef.supportedModes.includes(mode)) continue;
-      if (toolDef.maxModelTokens && modelTokenCount > toolDef.maxModelTokens) continue;
-      if (toolDef.minModelTokens && modelTokenCount < toolDef.minModelTokens) continue;
+      if (!isToolAvailable(toolDef, { mode, modelTokenCount, session })) continue;
 
       adkTools.push(new FunctionTool({
         name: toolName,
@@ -193,8 +221,17 @@ export class BuiltInToolProvider {
         parameters: sanitizeSchemaForGemini(toolDef.inputSchema.toJSONSchema()),
         execute: async (args) => {
           const result = await toolDef.handler(args);
-          if (result.isError) throw new Error(result.content[0].text);
-          return result.content.map(b => b.text).join('\n');
+          if (result.isError) throw new Error(toolResultToText(result));
+
+          // ADK has no way to return an image from a tool at all — see
+          // DynamicToolProvider.getAdkTools. Without queueing it here, a picture
+          // from generate_image or view_media would be silently dropped and the
+          // model would never see anything it drew on this route.
+          for (const media of mediaBlocksOf(result)) {
+            this.pendingAdkMedia.push(media);
+          }
+
+          return toolResultToText(result);
         }
       }));
     }

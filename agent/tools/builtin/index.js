@@ -29,6 +29,8 @@ export {
 } from './largeModelTools.js';
 export { createReadFileTool, createWriteFileTool, createEditFileTool } from './fileTools.js';
 export { createSearchDocumentsTool } from './searchDocuments.js';
+export { createGenerateImageTool } from './generateImage.js';
+export { createViewMediaTool } from './mediaTools.js';
 
 // Helper utilities
 export { generateRequestId, createErrorResponse } from './toolHelpers.js';

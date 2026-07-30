@@ -70,9 +70,21 @@ class TokenUsageReporter {
         reasoningTokens: usage.completion_tokens_details?.reasoning_tokens ?? 0,
       };
     } else if (isGemini) {
+      // candidatesTokenCount is the whole output, text and generated image alike,
+      // and the two bill at very different rates ($12 vs $120 per 1M for
+      // gemini-3-pro-image). candidatesTokensDetails breaks it down by modality, so
+      // the image share is pulled out and the remainder billed as text. A text-only
+      // response has no IMAGE entry and reduces to exactly the previous behaviour.
+      const outputTotal = usage.candidatesTokenCount ?? 0;
+      const imageDetail = (usage.candidatesTokensDetails ?? [])
+        .filter(detail => detail?.modality === 'IMAGE')
+        .reduce((sum, detail) => sum + (detail.tokenCount ?? 0), 0);
+      const outputImageTokens = Math.min(imageDetail, outputTotal);
+
       tokens = {
         inputTokens: usage.promptTokenCount ?? 0,
-        outputTokens: usage.candidatesTokenCount ?? 0,
+        outputTokens: outputTotal - outputImageTokens,
+        outputImageTokens,
         cachedTokens: usage.cachedContentTokenCount ?? 0,
         thoughtsTokens: usage.thoughtsTokenCount ?? 0,
       };
@@ -146,6 +158,11 @@ class TokenUsageReporter {
         ` output=${fmt(tokens.outputTokens, costs?.outputTokens)}` +
         ` cached=${fmt(tokens.cachedTokens, costs?.cachedTokens)}` +
         ` thoughts=${fmt(tokens.thoughtsTokens, costs?.thoughtsTokens)}` +
+        // Only for a generation that actually produced a picture, so an ordinary
+        // text turn's log line is unchanged.
+        (tokens.outputImageTokens
+          ? ` output_image=${fmt(tokens.outputImageTokens, costs?.outputImageTokens)}`
+          : '') +
         (costs ? ` total=$${costs.total.toFixed(6)}` : '')
       );
     }
@@ -219,12 +236,17 @@ class TokenUsageReporter {
       const cachedTokens = per(tokens.cachedTokens, pricing.cachedTokens);
       const outputTokens = per(tokens.outputTokens, pricing.outputTokens);
       const thoughtsTokens = per(tokens.thoughtsTokens, pricing.outputTokens);
+      // Generated image output, at its own much higher rate. A text-only model has
+      // no outputImageTokens rate and reports no image tokens, so this is 0 and the
+      // arithmetic is unchanged.
+      const outputImageTokens = per(tokens.outputImageTokens ?? 0, pricing.outputImageTokens ?? 0);
       return {
         inputTokens,
         cachedTokens,
         outputTokens,
         thoughtsTokens,
-        total: inputTokens + cachedTokens + outputTokens + thoughtsTokens,
+        outputImageTokens,
+        total: inputTokens + cachedTokens + outputTokens + thoughtsTokens + outputImageTokens,
       };
     }
 

@@ -297,6 +297,17 @@ Clients can attach reference documents (text, Markdown, CSV, JSON, source code, 
 - **Relevant config keys** (`config.js`): `websocketMaxPayloadBytes`, `ragMaxFileBytes`, `ragMaxFilesPerSession`, `ragEmbeddingModel`, `ragEmbeddingDimensions`, `ragManifestMaxTokens`, `ragChunkTokens`, `ragChunkOverlap`, `ragSearchTopK`.
 - **Extraction dependencies:** `pdfjs-dist` (PDF), `mammoth` (DOCX), `xlsx` (XLSX).
 
+## Images
+
+The agent can generate a picture, hand it to a client tool, and look at one a client tool returns.
+
+- **`generate_image`** draws an image with an image-generation model (`config.mediaImageModels`) and returns an opaque **handle**, never bytes. **`view_media`** shows a handle to the model again — which is how a picture survives an agent switch, a summarised conversation, or the per-call hydration budget.
+- **Client tools** declare a `media` contract beside their `inputSchema`: `inputs` names the arguments that take a handle, `returnsMedia` says the tool may answer with a picture. The server swaps handles for bytes on the way out and captures returned bytes into handles on the way back, so **the model never sees base64** — and neither does conversation history, the token count, the summariser, the worker IPC channel or the client's tool log.
+- **Both built-ins are opt-in, twice over.** The client sets `supportsMedia: true` on `initialize_session` (it can display a picture) *and* registers at least one tool with a `media` contract (there is somewhere for a picture to go). `generate_image` needs a tool with `media.inputs`; `view_media` needs that or a `returnsMedia` tool. Neither condition mentions an agent, which is the point: Stella registers its media tools only for interface authoring, so a modeling session with Merlin or Socrates is never offered an image generator whose handle has no destination. The predicate is `isToolAvailable` in `agent/tools/toolAvailability.js`, shared by every provider route.
+- **Every provider route renders it natively**: Anthropic image blocks, Gemini `inlineData`, OpenAI-style `image_url` data URIs, MCP image content, and the ADK route via `beforeModelCallback`. Bytes are attached to a transient copy at the moment a request is built and thrown away with it.
+- **Relevant config keys** (`config.js`): `mediaMaxItemBytes`, `mediaMaxItemsPerCall`, `mediaMaxItemsPerSession`, `mediaAllowedMimeTypes`, `mediaMaxImagesInContext`, `mediaMaxHydratedBytes`, `mediaImageModels`, `mediaImageMaxCount`.
+- **Cost:** an image model bills output at two rates — text/thinking, and the generated image at up to 10× that. `TokenUsageReporter` splits `candidatesTokenCount` by modality so a generation is not under-reported tenfold; the image rate is `outputImageTokens` in `utilities/pricing.js`.
+
 See [agent/README.md](agent/README.md) for the full WebSocket protocol, all message types, tool call request/response formats, and example client implementation.
 
 # Setup

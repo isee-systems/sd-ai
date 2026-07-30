@@ -10,20 +10,21 @@ const CONFIG = { path: path.join(__dirname, '../../agent/config/socrates.md') };
 // Minimal tool bag accepted by #isBuiltInTool and execute helpers
 const EMPTY_TOOLS = { tools: {} };
 
-function makeOrchestrator(sessionManager, sessionId) {
+// The block-array envelope every tool actually answers with. The stubs used to
+// return `{ content: 'tool output' }` -- a bare string -- which is why the array
+// branch of the flattener went unexercised for as long as it did. Bare strings
+// are still a live path (the not-found and thrown-error returns), so they get
+// their own explicit tests rather than being the default here.
+const BLOCK_RESULT = { content: [{ type: 'text', text: 'tool output' }], isError: false };
+
+function makeOrchestrator(sessionManager, sessionId, toolResult = BLOCK_RESULT) {
   process.env.ANTHROPIC_API_KEY = 'dummy';
   process.env.GEMINI_API_KEY = 'dummy';
   const sendToClient = jest.fn().mockResolvedValue(undefined);
   const orc = new AgentOrchestrator(sessionManager, sessionId, sendToClient, CONFIG);
   // Stub both execute methods so no real API calls happen
-  orc.executeToolCallHelper = jest.fn().mockResolvedValue({
-    content: 'tool output',
-    isError: false,
-  });
-  orc.executeToolCallGeminiManual = jest.fn().mockResolvedValue({
-    content: 'tool output',
-    isError: false,
-  });
+  orc.executeToolCallHelper = jest.fn().mockResolvedValue(toolResult);
+  orc.executeToolCallGeminiManual = jest.fn().mockResolvedValue(toolResult);
   return orc;
 }
 
@@ -557,6 +558,115 @@ describe('processOpenRouterManualResponse', () => {
 
     expect(continueLoop).toBe(false);
     expect(messages).toHaveLength(0);
+  });
+});
+
+// ─── tool result flattening, shared across the three manual routes ───────────
+//
+// All three used to carry their own copy of the filter/map/join, and they
+// disagreed about the non-array cases -- one used String(), one JSON.stringify(),
+// one checked for a string first. These pin the shared helper's behaviour on
+// every route so a future edit cannot quietly reintroduce the divergence.
+
+describe('tool result flattening (all manual routes)', () => {
+  let sessionManager;
+  let sessionId;
+  let orc;
+
+  beforeEach(() => {
+    sessionManager = new SessionManager();
+    sessionId = sessionManager.createSession(null);
+    sessionManager.initializeSession(sessionId, 'cld', {}, [], {}, 'test-client');
+  });
+
+  afterEach(() => {
+    orc?.destroy();
+    sessionManager.shutdown();
+  });
+
+  // Each case stubs the tool result, then reads back what the route put in front
+  // of the model. `sessionManager.getConversationContext` rather than a fresh
+  // array because the openrouter route commits its assistant turn through
+  // addToConversationHistory -- the live context and `messages` are one object.
+  function route(toolResult) {
+    orc = makeOrchestrator(sessionManager, sessionId, toolResult);
+    return { orc, messages: sessionManager.getConversationContext(sessionId) };
+  }
+
+  const TEXT_BLOCKS = { content: [{ type: 'text', text: 'tool output' }], isError: false };
+  const BARE_STRING = { content: 'tool output', isError: false };
+
+  const anthropicToolUse = {
+    content: [{ type: 'tool_use', id: 'tu_1', name: 'my_tool', input: {} }],
+    stop_reason: 'tool_use',
+  };
+
+  it.each([
+    ['a block array', TEXT_BLOCKS],
+    ['a bare string', BARE_STRING],
+  ])('anthropic-manual renders %s into tool_result content', async (_label, toolResult) => {
+    const { orc, messages } = route(toolResult);
+    messages.push({ role: 'user', content: 'go' });
+
+    await orc.processAgentResponseAnthropicManual(anthropicToolUse, messages, EMPTY_TOOLS, EMPTY_TOOLS);
+
+    expect(messages[2].content[0].content).toBe('tool output');
+  });
+
+  it('joins multiple text blocks with newlines rather than dropping any', async () => {
+    const { orc, messages } = route({
+      content: [{ type: 'text', text: 'first' }, { type: 'text', text: 'second' }],
+      isError: false,
+    });
+    messages.push({ role: 'user', content: 'go' });
+
+    await orc.processAgentResponseAnthropicManual(anthropicToolUse, messages, EMPTY_TOOLS, EMPTY_TOOLS);
+
+    expect(messages[2].content[0].content).toBe('first\nsecond');
+  });
+
+  it.each([
+    ['a block array', TEXT_BLOCKS],
+    ['a bare string', BARE_STRING],
+  ])('gemini-manual renders %s into the functionResponse result', async (_label, toolResult) => {
+    const { orc, messages } = route(toolResult);
+
+    await orc.processGeminiManualResponse(
+      geminiFunctionCalls({ name: 'my_tool' }), messages, EMPTY_TOOLS, EMPTY_TOOLS
+    );
+
+    expect(messages[1].parts[0].functionResponse.response.result).toBe('tool output');
+  });
+
+  it.each([
+    ['a block array', TEXT_BLOCKS],
+    ['a bare string', BARE_STRING],
+  ])('openrouter-manual renders %s into the tool message', async (_label, toolResult) => {
+    const { orc, messages } = route(toolResult);
+
+    await orc.processOpenRouterManualResponse(
+      openRouterCompletion('Let me check', [
+        { id: 'tc_1', type: 'function', function: { name: 'my_tool', arguments: '{}' } },
+      ]),
+      messages, EMPTY_TOOLS, EMPTY_TOOLS
+    );
+
+    expect(messages[1]).toEqual({ role: 'tool', toolCallId: 'tc_1', content: 'tool output' });
+  });
+
+  // The bug this whole pass exists to kill: a client tool's envelope used to be
+  // wrapped a second time, so the model was shown the JSON of the envelope
+  // rather than what the tool said.
+  it('never shows the model a stringified envelope', async () => {
+    const { orc, messages } = route(TEXT_BLOCKS);
+    messages.push({ role: 'user', content: 'go' });
+
+    await orc.processAgentResponseAnthropicManual(anthropicToolUse, messages, EMPTY_TOOLS, EMPTY_TOOLS);
+
+    const rendered = messages[2].content[0].content;
+    expect(rendered).toBe('tool output');
+    expect(rendered).not.toContain('isError');
+    expect(rendered).not.toContain('"type"');
   });
 });
 

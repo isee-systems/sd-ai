@@ -311,7 +311,13 @@ export class SessionManager {
   }
 
   /**
-   * Initialize a session with model and tools
+   * Initialize a session with model and tools.
+   *
+   * `capabilities` carries the client's optional `supports*` flags from `initialize_session`.
+   * Every one defaults to false when absent, so a client that predates a flag keeps its old
+   * behaviour. `supportsMedia` says the client can decode and display images; it is a necessary
+   * but not sufficient condition for the `generate_image` / `view_media` built-ins, which also
+   * require the client's tool list to declare a media contract (see `tools/toolAvailability.js`).
    */
   initializeSession(sessionId, mode, model, tools, context, clientId, capabilities = {}) {
     const session = this.getSession(sessionId);
@@ -340,6 +346,7 @@ export class SessionManager {
     session.supportsArrays = capabilities.supportsArrays ?? false;
     session.supportsModules = capabilities.supportsModules ?? false;
     session.supportsSubTypes = capabilities.supportsSubTypes ?? false;
+    session.supportsMedia = capabilities.supportsMedia ?? false;
     this.updateClientModel(sessionId, model);
 
     logger.log(`Session initialized: ${sessionId} with mode=${mode} and ${tools.length} client tools`);
@@ -767,7 +774,13 @@ ${conversationText}`;
   /**
    * Resolve a pending tool call
    */
-  resolvePendingToolCall(sessionId, callId, result, isError = false) {
+  // `media` is the metadata of any images the client answered with — handles, not
+  // bytes, which the main process has already written to the media store. Resolves
+  // with { result, media } rather than a bare result; safe because this promise has
+  // exactly one consumer (DynamicToolProvider.requestClientExecution), while the
+  // pendingModelRequests and pendingFeedbackRequests paths resolve separately and
+  // still hand back a bare result.
+  resolvePendingToolCall(sessionId, callId, result, isError = false, media = []) {
     const session = this.getSession(sessionId);
     if (session) {
       const pendingCall = session.pendingToolCalls.get(callId);
@@ -775,7 +788,7 @@ ${conversationText}`;
         if (isError) {
           pendingCall.reject(new Error(typeof result === 'string' ? result : (result?.error || 'Tool call failed')));
         } else {
-          pendingCall.resolve(result);
+          pendingCall.resolve({ result, media });
         }
         session.pendingToolCalls.delete(callId);
         return true;

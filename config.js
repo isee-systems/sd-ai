@@ -105,8 +105,25 @@ const config = {
     "ragManifestMaxTokens": 4000, // Files at/under this token count are read in full; larger files are chunked + embedded
     "ragChunkTokens": 600, // Target tokens per chunk for vector-tier files
     "ragChunkOverlap": 80, // Token overlap between adjacent chunks
-    "ragSearchTopK": 8 // Default number of chunks returned by search_documents
-    
+    "ragSearchTopK": 8, // Default number of chunks returned by search_documents
+    /*
+    * Binary media (images) exchanged with client tools and produced by generate_image.
+    * Bytes live under <sessionTempDir>/media/<mediaId>/; the model, the IPC channel and
+    * conversation history all carry only the opaque handle, never base64.
+    *
+    * mediaAllowedMimeTypes is the intersection of what every provider route can render
+    * AND what the desktop client can decode, so a handle that exists is renderable
+    * everywhere rather than only on the route that produced it.
+    */
+    "mediaMaxItemBytes": Number(process.env.MEDIA_MAX_ITEM_BYTES) || 20 * 1024 * 1024, // Per-image cap (decoded bytes)
+    "mediaMaxItemsPerCall": 4, // Max images attached to one tool call or result
+    "mediaMaxItemsPerSession": Number(process.env.MEDIA_MAX_ITEMS_PER_SESSION) || 50, // Oldest are pruned past this
+    "mediaAllowedMimeTypes": ['image/png', 'image/jpeg', 'image/gif'],
+    "mediaMaxImagesInContext": 4, // Images hydrated into any one provider call (newest first)
+    "mediaMaxHydratedBytes": 8 * 1024 * 1024, // Total image bytes hydrated into any one provider call
+    "mediaImageModels": { default: 'gemini-3.1-flash-image' }, // Per-provider override lane, like selectEngineModel's
+    "mediaImageMaxCount": 1 // Images returned by one generate_image call
+
 };
 
 export default config

@@ -92,6 +92,9 @@ export const anthropic = {
 // Source: https://ai.google.dev/gemini-api/docs/pricing
 // Thinking/reasoning tokens are billed at the output token rate.
 // cachedTokens are a subset of inputTokens and billed at the cached rate instead.
+// outputImageTokens, where present, is the rate for generated image output — a
+// separate and much higher rate than text output. Absent for a text-only model,
+// where it costs nothing because no image tokens are ever reported.
 export const gemini = {
   'gemini-3.1-pro-preview': [
     { maxInputTokens: 200000, inputTokens: 2.00, cachedTokens: 0.20, outputTokens: 12.00 },
@@ -137,6 +140,35 @@ export const gemini = {
     inputTokens: 0.15,
     cachedTokens: 0.00,
     outputTokens: 0.00,
+  },
+  // ── Image generation ──────────────────────────────────────────────────────
+  // These are the only models here that bill output at two different rates:
+  // text and thinking at outputTokens, and the generated image itself at
+  // outputImageTokens — ten times higher for gemini-3-pro-image. Billing an
+  // image at the text rate would under-report a generation by ~10x, which is why
+  // TokenUsageReporter splits candidatesTokenCount by modality rather than
+  // charging it all at one rate.
+  //
+  // The per-image figures below are Google's own and are a useful sanity check on
+  // the arithmetic: an image is a fixed token count by resolution, so
+  // 1120 tokens x $120/1M = $0.134 and 2000 x $120/1M = $0.24.
+  'gemini-3-pro-image': {
+    inputTokens: 2.00,
+    cachedTokens: 0.20,
+    outputTokens: 12.00,       // text and thinking
+    outputImageTokens: 120.00, // 1120 tokens => $0.134/image at 1K-2K; 2000 => $0.24 at 4K
+  },
+  'gemini-3.1-flash-image': {
+    inputTokens: 0.50,
+    cachedTokens: 0.05,
+    outputTokens: 3.00,
+    outputImageTokens: 60.00,  // $0.045-$0.151 per image depending on resolution
+  },
+  'gemini-2.5-flash-image': {
+    inputTokens: 0.30,
+    cachedTokens: 0.03,
+    outputTokens: 2.50,
+    outputImageTokens: 30.00,  // ~$0.039 per image
   },
   default: {
     inputTokens: 4.00,

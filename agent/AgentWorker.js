@@ -165,6 +165,7 @@ class AgentWorker {
             supportsArrays: msg.supportsArrays,
             supportsModules: msg.supportsModules,
             supportsSubTypes: msg.supportsSubTypes,
+            supportsMedia: msg.supportsMedia,
           };
           this.#sessionManager.initializeSession(SESSION_ID, msg.mode, msg.model, msg.tools, msg.context, msg.clientId, capabilities);
           for (const h of (msg.conversationHistory || [])) {
@@ -222,12 +223,15 @@ class AgentWorker {
         }
 
         case 'tool_response': {
-          const { callId, result, isError } = msg;
+          // `media` carries only metadata: the main process decoded the base64 and
+          // wrote the bytes into the media store before sending this, so nothing
+          // large crosses the IPC channel here.
+          const { callId, result, isError, media = [] } = msg;
           const session = this.#sessionManager.getSession(SESSION_ID);
           if (!session) break;
 
           // Try the standard pending tool calls (DynamicToolProvider)
-          if (!this.#sessionManager.resolvePendingToolCall(SESSION_ID, callId, result, isError)) {
+          if (!this.#sessionManager.resolvePendingToolCall(SESSION_ID, callId, result, isError, media)) {
             // Try feedback requests (discussModelWithSeldon, discussModelAcrossRuns, getFeedbackInformation)
             if (session.pendingFeedbackRequests?.has(callId)) {
               const pending = session.pendingFeedbackRequests.get(callId);

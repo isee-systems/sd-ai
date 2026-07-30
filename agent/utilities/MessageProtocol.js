@@ -1,6 +1,7 @@
 import { timeout } from 'async';
 import { z } from 'zod';
 import config from '../../config.js';
+import { scrubMediaForClient } from './ToolResultFormatter.js';
 
 /**
  * Message Protocol Schemas
@@ -89,6 +90,28 @@ export const RunModelResponseSchema = z.object({
 // CLIENT → SERVER MESSAGES
 // ============================================================================
 
+// What a client tool says about the binary media it takes and returns.
+//
+// A sibling of inputSchema rather than a marker inside its properties, for two
+// reasons. Zod strips unknown keys, and inputSchema.properties survives that as
+// z.record(z.any()) — but the StructuredOutputToZodConverter -> toJSONSchema
+// round trip does not preserve an unknown key, so a marker buried in there would
+// be unrecoverable by the time the arguments need resolving. And out here it
+// costs the converter nothing: a handle parameter is declared as a plain
+// {"type":"string"} and reaches the model, MCP and ADK as one automatically.
+const ToolMediaContractSchema = z.object({
+  inputs: z.array(z.string()).optional().describe(
+    'Names of top-level inputSchema properties whose value is an opaque media handle (med_<16 hex>). '
+    + 'For each one present in a call, the server attaches the raw bytes to the tool_call_request in '
+    + 'the sibling `media` array. The model only ever sees the handle string.'),
+  returnsMedia: z.boolean().optional().describe(
+    'True if this tool may answer with a `media` array on tool_call_response. Advisory: the server '
+    + 'accepts inbound media regardless, since the caps rather than the declaration are what protect '
+    + 'it, but declaring it documents the intent.'),
+  maxItems: z.number().optional().describe(
+    'How many media items this tool expects to return. Clamped to config.mediaMaxItemsPerCall.')
+}).describe('Declares which parameters carry binary media handles and whether results may carry media.');
+
 const ToolDefinitionSchema = z.object({
   name: z.string().describe('Unique name identifier for the tool'),
   description: z.string().describe('Human-readable description of what the tool does'),
@@ -97,7 +120,10 @@ const ToolDefinitionSchema = z.object({
     type: z.literal('object').describe('Schema type, must be "object"'),
     properties: z.record(z.string(), z.any()).describe('Map of parameter names to their schema definitions'),
     required: z.array(z.string()).optional().describe('Array of required parameter names')
-  }).describe('JSON Schema defining the tool input parameters')
+  }).describe('JSON Schema defining the tool input parameters'),
+  // Optional, so a client that predates media — or one talking to a server that
+  // does — behaves exactly as before.
+  media: ToolMediaContractSchema.optional()
 });
 
 const HistoricalMessageSchema = z.object({
@@ -124,6 +150,7 @@ export const InitializeSessionMessageSchema = z.object({
   supportsArrays: z.boolean().optional().describe('Whether the client supports arrayed models'),
   supportsModules: z.boolean().optional().describe('Whether the client supports modular models'),
   supportsSubTypes: z.boolean().optional().describe('Whether the client supports queues, conveyors, and ovens'),
+  supportsMedia: z.boolean().optional().describe('Whether the client can decode and display binary media (images). Gates the built-in generate_image and view_media tools, which are additionally withheld unless at least one tool in `tools` declares a media contract — a client that can show images but registers nowhere to put them still gets neither tool.'),
   historicalMessages: z.array(HistoricalMessageSchema).optional().describe('Optional array of historical messages from a previous session to provide context'),
   context: z.record(z.string(), z.any()).optional().describe('Optional context information (metadata, user preferences, etc.)'),
   timestamp: z.string().optional().describe('ISO 8601 timestamp of when the message was created')
@@ -147,11 +174,31 @@ export const ChatMessageSchema = z.object({
   timestamp: z.string().optional().describe('ISO 8601 timestamp of when the message was created')
 });
 
+// Pictures a client tool answered with, alongside its JSON result rather than
+// inside it. A sidecar keeps `result` meaning exactly what it always meant, so
+// every existing client and every existing tool is unaffected — and it means a
+// tool returning two images does not have to invent a shape for them.
+//
+// Field names are lifted verbatim from AddFileMessageSchema so a client reuses
+// the encode half of the path that already works.
+const ToolCallResponseMediaSchema = z.object({
+  mediaId: z.string().optional().describe('Optional client-supplied id; the server assigns one if omitted'),
+  name: z.string().describe('File name of the image, including its extension'),
+  mimeType: z.string().describe('MIME type of the image (e.g. "image/png")'),
+  encoding: z.literal('base64').describe('Encoding of the content field'),
+  // Coarse guard against an absurd frame; the decoded byte size is validated
+  // against config.mediaMaxItemBytes when the message is handled.
+  content: z.string().max(config.websocketMaxPayloadBytes).describe('The image bytes, base64 encoded'),
+  description: z.string().optional().describe('Short caption shown to the model alongside the image')
+});
+
 const ToolCallResponseMessageSchema = z.object({
   type: z.literal('tool_call_response').describe('Message type identifier'),
   sessionId: z.string().describe('Unique session identifier'),
   callId: z.string().describe('The call ID from the tool_call_request being responded to'),
   result: z.any().describe('The result data from executing the tool, or error message if isError is true'),
+  media: z.array(ToolCallResponseMediaSchema).max(config.mediaMaxItemsPerCall).optional()
+    .describe('Images this tool is answering with, for the model to actually look at'),
   isError: z.boolean().optional().default(false).describe('Whether the tool execution resulted in an error'),
   timestamp: z.string().optional().describe('ISO 8601 timestamp of when the message was created')
 });
@@ -282,13 +329,19 @@ export function createToolCallNotificationMessage(sessionId, callId, toolName, a
   };
 }
 
+// The scrub is here rather than at the eight call sites on purpose: this function
+// forwards tool-result content verbatim, including raw Agent-SDK blocks from the
+// MCP route, so once a tool answers with an image this is where its base64 would
+// otherwise travel back down the WebSocket in the tool log. Guarding the builder
+// covers every current caller and every future one. The client still gets enough
+// to label the entry — handle, type and size — just not the bytes.
 export function createToolCallCompletedMessage(sessionId, callId, toolName, result, isError = false, responseType = null) {
   return {
     type: 'tool_call_completed',
     sessionId,
     callId,
     toolName,
-    result,
+    result: scrubMediaForClient(result),
     isError,
     ...(responseType && { responseType }),
     timestamp: new Date().toISOString()
