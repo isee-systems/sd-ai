@@ -191,6 +191,7 @@ export const openaiAliases = {
 
 export const openai = {
   // GPT-5.6 family (GA 2026-07-09): three flagship tiers — Sol/Terra/Luna.
+  // Repriced 2026-07-30: Terra cut ~20% and Luna ~80%; Sol unchanged.
   // Like gpt-5.5, prompts over 272K input tokens are billed at the higher
   // "long context" rate for the ENTIRE request (not just the overflow tokens),
   // so the tier is selected on total inputTokens. Cached (read) input bills at
@@ -200,12 +201,12 @@ export const openai = {
     {                         inputTokens: 10.00, cachedTokens: 1.00, cacheWriteTokens: 12.50, outputTokens: 45.00 },
   ],
   'gpt-5.6-terra': [
-    { maxInputTokens: 272000, inputTokens: 2.50, cachedTokens: 0.25, cacheWriteTokens: 3.125, outputTokens: 15.00 },
-    {                         inputTokens: 5.00, cachedTokens: 0.50, cacheWriteTokens: 6.25, outputTokens: 22.50 },
+    { maxInputTokens: 272000, inputTokens: 2.00, cachedTokens: 0.20, cacheWriteTokens: 2.50, outputTokens: 12.00 },
+    {                         inputTokens: 4.00, cachedTokens: 0.40, cacheWriteTokens: 5.00, outputTokens: 18.00 },
   ],
   'gpt-5.6-luna': [
-    { maxInputTokens: 272000, inputTokens: 1.00, cachedTokens: 0.10, cacheWriteTokens: 1.25, outputTokens: 6.00 },
-    {                         inputTokens: 2.00, cachedTokens: 0.20, cacheWriteTokens: 2.50, outputTokens: 9.00 },
+    { maxInputTokens: 272000, inputTokens: 0.20, cachedTokens: 0.02, cacheWriteTokens: 0.25, outputTokens: 1.20 },
+    {                         inputTokens: 0.40, cachedTokens: 0.04, cacheWriteTokens: 0.50, outputTokens: 1.80 },
   ],
   'gpt-5.5': [
     { maxInputTokens: 272000, inputTokens: 5.00, cachedTokens: 0.50, outputTokens: 30.00 },
