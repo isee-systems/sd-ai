@@ -807,6 +807,46 @@ describe('startConversation — prior-context dispatching (SDK)', () => {
   });
 });
 
+// ─── startConversation clears stale stop state ──────────────────────────────
+
+// Routes clear stopRequested when their run ends, but a stop that arrives while
+// nothing is running has no run to clear it. Left set, it makes the next run
+// skip its queued messages and report itself as stopped.
+
+describe('startConversation — stale stopRequested', () => {
+  let sessionManager;
+  let sessionId;
+  let orc;
+
+  beforeEach(() => {
+    sessionManager = new SessionManager();
+    sessionId = sessionManager.createSession(null);
+    sessionManager.initializeSession(sessionId, 'cld', {}, [], {}, 'test-client');
+    orc = makeStubbedOrchestrator(sessionManager, sessionId);
+  });
+
+  afterEach(() => {
+    orc.destroy();
+    sessionManager.shutdown();
+  });
+
+  it('clears a stop that arrived while no run was in flight', async () => {
+    let flagSeenByRoute;
+    orc.startConversationAnthropicManual = jest.fn().mockImplementation(async () => {
+      flagSeenByRoute = orc.stopRequested;
+    });
+
+    orc.stopIteration();
+    expect(orc.stopRequested).toBe(true);
+
+    await orc.startConversation('next question', null);
+
+    // The route must see it already cleared — it reads the flag on every turn.
+    expect(flagSeenByRoute).toBe(false);
+    expect(orc.stopRequested).toBe(false);
+  });
+});
+
 // ─── sandbox write gating at execute time ───────────────────────────────────
 
 // The declaration-time filter (isToolAvailable, covered in toolAvailability.test.js)

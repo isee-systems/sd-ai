@@ -261,6 +261,13 @@ export class AgentOrchestrator {
       const loopStyle = this.configManager.getAgentMode(); // 'sdk' | 'manual'
       logger.log(`Starting conversation for session ${this.sessionId} (loop: ${loopStyle}, provider: ${this.provider})`);
 
+      // Every route clears stopRequested when its run ends, but a stop that
+      // arrives while no run is in flight has nothing to clear it — and a stale
+      // flag makes the next run skip its queued messages and report itself as
+      // stopped. Starting a run is the one moment the flag is unambiguously
+      // stale, so clear it here for all routes rather than in each of them.
+      this.stopRequested = false;
+
       await this.#fetchCurrentModel();
 
       const isManual = loopStyle === 'manual';
@@ -663,8 +670,19 @@ export class AgentOrchestrator {
         }
       }
 
-      // Normal completion (or max turns reached)
-      if (this.maxTurnsReached) {
+      // Stopped mid-run — either the user pressed stop or our AskUserQuestion
+      // intercept aborted the query. Clear the flag here (as every other route
+      // does): it is per-run state, and leaving it set would make the drain
+      // loop above skip every message queued during all later runs.
+      if (this.stopRequested) {
+        this.stopRequested = false;
+        logger.log(`Anthropic SDK: Agent iteration stopped for session ${this.sessionId}`);
+        await this.sendToClient(createAgentCompleteMessage(
+          this.sessionId,
+          'awaiting_user',
+          'Agent stopped by user request'
+        ));
+      } else if (this.maxTurnsReached) {
         logger.log(`Anthropic SDK: Agent reached max iterations for session ${this.sessionId}`);
         await this.sendToClient(createAgentCompleteMessage(
           this.sessionId,
@@ -682,6 +700,7 @@ export class AgentOrchestrator {
 
     } catch (error) {
       if (error.name === 'AbortError' || this.stopRequested) {
+        this.stopRequested = false;
         logger.log(`Anthropic SDK: Agent iteration stopped by user request for session ${this.sessionId}`);
         await this.sendToClient(createAgentCompleteMessage(
           this.sessionId,
