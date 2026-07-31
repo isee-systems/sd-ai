@@ -81,7 +81,7 @@ Enforce strict validation:
 2. Generate the model (generate_qualitative_model, generate_quantitative_model)
 3. **VALIDATE** — do all of the following before continuing:
    a. Call get_current_model, fix all errors and warnings
-   b. *(SFD only)* Inspect equations structurally: do physical-quantity stocks have first-order control on outflows to prevent going negative? Are graphical functions normalized? Do equations have embedded constants?
+   b. *(SFD only)* Inspect equations structurally: do physical-quantity stocks have first-order control on outflows to prevent going negative? Are graphical functions normalized? Do equations have embedded constants other than the literals 0 and 1 (which are fine inline)?
    c. *(SFD only)* Run the model (run_model), then get_variable_data for key stocks — check whether anything goes negative that physically cannot, whether conservation laws hold, and whether behavior matches the reference mode. Fix any structural violations before proceeding (do NOT use MIN/MAX clamps — fix the structure).
 4. STOP — ask the user what they want to do next. Do NOT auto-visualize or auto-analyze feedback.
 

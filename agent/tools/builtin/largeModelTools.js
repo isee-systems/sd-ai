@@ -477,7 +477,7 @@ export function createEditVariablesTool(sessionManager, sessionId, sendToClient)
 CRITICAL EQUATION RULES:
 - XMILE naming: replace spaces with underscores in variable references inside equations ("birth_rate" not "birth rate")
 - Every variable MUST have either 'equation' OR 'arrayEquations' (never both, never neither). For arrayed STOCKS, always use arrayEquations to give per-element initial values.
-- NEVER embed numerical constants directly in equations — create separate named variables for constants
+- NEVER embed numerical constants directly in equations — create separate named variables for constants. The literals 0 and 1 are the ONLY exception; embed those directly rather than naming them
 - Stock-flow constraint: a flow can NEVER appear in BOTH inflows AND outflows of the same stock
 - SUM function syntax: always use asterisk for the dimension being summed, e.g. SUM(Revenue[*]) — every SUM equation must contain at least one *
 

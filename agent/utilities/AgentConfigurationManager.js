@@ -66,7 +66,7 @@ SFDs (Stock Flow Diagrams) are QUANTITATIVE:
 - Unit warnings reported by the engine (the model's \`unitWarnings\` field) are NOT cosmetic — they are important and MUST be fixed. But never fabricate them: if the engine reports no unit warnings, there are none (see the ABSOLUTE RULE on unit consistency) — do not flag unit problems inferred from how the \`units\` strings read.
 - Use // for safe division (e.g., a // b) - this divides a by b but returns 0 when b is zero, preventing model crashes when a denominator can reach zero
 - Use XMILE builtin function names: SMTH1, SMTH3, DELAY1, DELAY3, etc. — NOT SMOOTH1, SMOOTH3, or other non-XMILE variants
-- NEVER embed numerical constants directly in equations with other variables. ALWAYS create separate named variables for all constants.
+- NEVER embed numerical constants directly in equations with other variables. ALWAYS create separate named variables for all constants. The ONLY exception is the literals 0 and 1 — embed those directly, never externalize them into their own variables.
 
 ## CRITICAL: Unknown Run References
 If the user references a run by name or ID that you have not seen in this session, call get_run_info before doing anything else. Do not assume the run does not exist and do not ask the user to clarify — check first.

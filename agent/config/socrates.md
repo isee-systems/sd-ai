@@ -73,7 +73,7 @@ When modifying existing models:
 ## Validation Rules
 Focus on educational validation:
 - All stocks must have clear, understandable initial values
-- All equations should be simple enough to explain in plain language and not use embedded constants
+- All equations should be simple enough to explain in plain language and not use embedded constants other than the literals 0 and 1, which belong inline rather than in their own variables
 - Check that the model makes intuitive sense
 - Ensure model boundaries are appropriate for learning purposes
 - Keep variable count reasonable (default 5-10 variables for learning models)

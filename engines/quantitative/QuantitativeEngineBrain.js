@@ -159,7 +159,7 @@ Provide equations for every variable:
 - Example: If a variable is named "birth rate", reference it in equations as "birth_rate"
 - Example: If a variable is named "total population", reference it in equations as "total_population"
 - This is the XMILE standard and is NON-NEGOTIABLE - equations with spaces in variable names will FAIL
-- CONSTANT HANDLING: NEVER embed numerical constants directly in equations with other variables. ALWAYS create separate named variables for all constants.
+- CONSTANT HANDLING: NEVER embed numerical constants directly in equations with other variables. ALWAYS create separate named variables for all constants. The ONLY exception is the literals 0 and 1 — embed those directly, never externalize them into their own variables.
 - Every variable referenced in an equation MUST have its own equation, type, and appear in the relationships list
 - UNIFLOW CONSTRAINT FOR FLOWS:
   * Mark a flow as uniflow=true when it represents a one-directional process that should never be negative
