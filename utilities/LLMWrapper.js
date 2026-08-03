@@ -231,8 +231,6 @@ export class LLMWrapper {
       {label: "Gemini 3.6-flash medium", value: 'gemini-3.6-flash medium'},
       {label: "Gemini 3.6-flash low", value: 'gemini-3.6-flash low'},
       {label: "Gemini 3.5-flash", value: 'gemini-3.5-flash'},
-      {label: "Gemini 2.5-flash", value: 'gemini-2.5-flash'},
-      {label: "Gemini 2.5-pro", value: 'gemini-2.5-pro'},
       {label: "Claude Fable 5", value: 'claude-fable-5'},
       {label: "Claude Opus 5", value: 'claude-opus-5'},
       {label: "Claude Sonnet 5", value: 'claude-sonnet-5'},
@@ -247,7 +245,7 @@ export class LLMWrapper {
 
   static BUILD_DEFAULT_MODEL = config.buildDefaultModel;
   static NON_BUILD_DEFAULT_MODEL = config.nonBuildDefaultModel;
-  static EVAL_MODEL = process.env.EVAL_MODEL ?? 'gemini-2.5-flash';
+  static EVAL_MODEL = process.env.EVAL_MODEL ?? 'gemini-3.6-flash';
   
   static SCHEMA_STRINGS = {
     "from": "This is a variable which causes the to variable in this relationship that is between two variables, from and to.  The from variable is the equivalent of a cause.  The to variable is the equivalent of an effect",
