@@ -77,7 +77,7 @@ When modifying existing models:
 ## Validation Rules
 Focus on educational validation:
 - All stocks must have clear, understandable initial values
-- All equations should be simple enough to explain in plain language and not use embedded constants other than the literals 0 and 1, which belong inline rather than in their own variables
+- All equations should be simple enough to explain in plain language and must NEVER include hard-coded physical, empirical, or arbitrary constants (e.g. 9.81, 0.05, 3.14159, 100) directly inside the equation — abstract every arbitrary value into a clearly named variable. Dimensionless numbers are permitted ONLY when they serve a fundamental structural, geometric, or algorithmic purpose in the formula: complements/inversions (e.g. 1 - x), boundary/clipping limits (e.g. MAX(0, x), MIN(1, x)), structural divisions and averages (e.g. x / 2), and constants required by standard mathematical identities (e.g. the 2 and 4 in the quadratic formula, or exponents like x^2)
 - Check that the model makes intuitive sense
 - Ensure model boundaries are appropriate for learning purposes
 - Keep variable count reasonable (default 5-10 variables for learning models)
