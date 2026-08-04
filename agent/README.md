@@ -950,6 +950,30 @@ Merlin or Socrates, and offers it during interface work, without either side nam
 
 When the agent calls a custom tool, the server sends a `tool_call_request` and the client must respond with `tool_call_response`.
 
+### Large tool catalogues are searched, not listed
+
+Registered tools are advertised to the model with their full schemas up to
+`agentClientToolSearchThreshold` in [`config.js`](../config.js) (default 5, overridable with
+`AGENT_CLIENT_TOOL_SEARCH_THRESHOLD`). Register more than that and the schemas are withheld: the model
+is given their **names** plus two tools in their place, defined in
+[`tools/clientToolSearch.js`](tools/clientToolSearch.js).
+
+- **`search_tools`** — takes a `query` and returns the matching tools' descriptions, full input
+  schemas, declared timeouts and media contracts. Three query forms: `select:name_a,name_b` for exact
+  names, `+term rest` to require a term, or plain keywords matched against names and descriptions.
+- **`call_tool`** — takes `{ name, arguments }`, where `arguments` is the tool's argument object
+  encoded as a JSON string (an object is accepted too). Arguments are validated against the client's
+  own schema before the call leaves the server; a mismatch comes back with the schema attached and no
+  round trip to the client.
+
+A dispatched call is indistinguishable from a direct one everywhere it matters: the client still
+receives an ordinary `tool_call_request` naming the real tool, with the declared `timeout` and the
+resolved `media` sidecar, and the `tool_call_notification`/`tool_call_completed` messages still name
+the tool the user actually asked for rather than `call_tool`.
+
+Nothing about a tool definition changes — the threshold is a server-side decision about how to spend
+the context window, and a client registering three tools sees exactly the behaviour it always did.
+
 ---
 
 ## Built-In Tool Interface

@@ -448,3 +448,255 @@ describe('the registered handler carries the tool definition', () => {
     expect(result.content[0].type).toBe('text');
   });
 });
+
+// ─── Deferred client tools (the search/dispatch pair) ────────────────────────
+//
+// Past config.agentClientToolSearchThreshold the schemas are withheld and the
+// model gets two tools instead: one that hands back a schema, one that runs a
+// tool by name. What matters is that a withheld tool is still reachable, is
+// still called with its declared timeout and media contract, and still shows the
+// user its own name rather than the dispatcher's.
+
+describe('deferred client tools', () => {
+  let sessionManager;
+  let sessionId;
+  let sendToClient;
+  let store;
+  let provider;
+
+  // Seven — one over the default threshold of five.
+  const MANY_TOOLS = [
+    TEXT_TOOL,
+    WRITE_MEDIA_TOOL,
+    CAPTURE_TOOL,
+    { name: 'export_model_to_csv', description: 'Export the model to a CSV file', inputSchema: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] } },
+    { name: 'open_panel', description: 'Open a panel in the user interface', inputSchema: { type: 'object', properties: { panel: { type: 'string' } }, required: ['panel'] } },
+    { name: 'set_units', description: 'Set the units on a variable', inputSchema: { type: 'object', properties: { variable: { type: 'string' }, units: { type: 'string' } }, required: ['variable', 'units'] } },
+    { name: 'slow_report', description: 'Run a long report', inputSchema: { type: 'object', properties: {} }, timeout: 600000 }
+  ];
+
+  beforeEach(() => {
+    const base = join(tmpdir(), `deferred-test-${Date.now()}-${randomBytes(4).toString('hex')}`);
+    sessionManager = new SessionManager({ tempBasePath: base, disableCleanup: true });
+    sessionId = sessionManager.createSession(null);
+    sessionManager.initializeSession(sessionId, 'sfd', {}, MANY_TOOLS, {}, 'test-client');
+    sendToClient = jest.fn().mockResolvedValue(undefined);
+    store = new MediaStore(sessionManager, sessionId);
+    provider = new DynamicToolProvider(sessionManager, sessionId, sendToClient, store);
+  });
+
+  afterEach(() => sessionManager.shutdown());
+
+  const search = (input) => provider.getTools().tools.client_search_tools.handler(input);
+  const call = (input) => provider.getTools().tools.client_call_tool.handler(input);
+  const parse = (result) => JSON.parse(result.content[0].text);
+
+  describe('what the model is advertised', () => {
+    it('withholds every schema and offers the pair instead', () => {
+      expect(provider.deferred).toBe(true);
+      expect(provider.getToolNames().sort()).toEqual(['client_call_tool', 'client_search_tools']);
+      expect(provider.isClientTool('client_write_interface_media')).toBe(false);
+    });
+
+    it('names every tool in the search description, and no schemas', () => {
+      const { description } = provider.getTools().tools.client_search_tools;
+
+      for (const tool of MANY_TOOLS) expect(description).toContain(tool.name);
+      // The point of the exercise: the catalogue is names, not schemas.
+      expect(description).not.toContain('inputSchema');
+      expect(description).not.toContain('"properties"');
+    });
+
+    it('registers directly, as before, when there are few enough tools', () => {
+      const base = join(tmpdir(), `few-test-${Date.now()}-${randomBytes(4).toString('hex')}`);
+      const manager = new SessionManager({ tempBasePath: base, disableCleanup: true });
+      const id = manager.createSession(null);
+      manager.initializeSession(id, 'sfd', {}, [TEXT_TOOL, WRITE_MEDIA_TOOL], {}, 'test-client');
+      const few = new DynamicToolProvider(manager, id, sendToClient, new MediaStore(manager, id));
+
+      expect(few.deferred).toBe(false);
+      expect(few.getToolNames().sort()).toEqual(['client_get_variable_tags', 'client_write_interface_media']);
+      manager.shutdown();
+    });
+  });
+
+  describe('search', () => {
+    it('returns the full schema, and the media contract with it', async () => {
+      const found = parse(await search({ query: 'write an image into the interface' }));
+      const media = found.matches.find(match => match.name === 'write_interface_media');
+
+      expect(media.inputSchema).toEqual(WRITE_MEDIA_TOOL.inputSchema);
+      // Without this the model has a `string` argument and no way to learn that
+      // only a handle will do.
+      expect(media.note).toMatch(/media handle/);
+    });
+
+    it('fetches exact names with select:, and says which it did not know', async () => {
+      const found = parse(await search({ query: 'select:open_panel,not_a_tool' }));
+
+      expect(found.matches.map(match => match.name)).toEqual(['open_panel']);
+      expect(found.unknown).toEqual(['not_a_tool']);
+    });
+
+    it('ranks a name hit above a description-only hit', async () => {
+      const found = parse(await search({ query: 'panel' }));
+      expect(found.matches[0].name).toBe('open_panel');
+    });
+
+    it('honours a required term', async () => {
+      const found = parse(await search({ query: '+units set' }));
+      expect(found.matches.map(match => match.name)).toEqual(['set_units']);
+    });
+
+    it('caps the result count', async () => {
+      const found = parse(await search({ query: 'the', maxResults: 2 }));
+      expect(found.matches.length).toBeLessThanOrEqual(2);
+    });
+
+    it('falls back to the catalogue when nothing matches, so the model is not stuck', async () => {
+      const found = parse(await search({ query: 'zzzz_nothing_like_this' }));
+
+      expect(found.matches).toEqual([]);
+      expect(found.available).toEqual(MANY_TOOLS.map(tool => tool.name));
+    });
+
+    it('reports a tool\'s declared timeout so a long wait is expected', async () => {
+      const found = parse(await search({ query: 'select:slow_report' }));
+      expect(found.matches[0].timeoutMs).toBe(600000);
+    });
+  });
+
+  describe('dispatch', () => {
+    it('runs the withheld tool under its own name', async () => {
+      const pending = call({ name: 'open_panel', arguments: '{"panel":"equations"}' });
+      const request = sendToClient.mock.calls.at(-1)[0];
+
+      expect(request.type).toBe('tool_call_request');
+      // The client is asked for the real tool, never for the dispatcher.
+      expect(request.toolName).toBe('open_panel');
+      expect(request.arguments).toEqual({ panel: 'equations' });
+
+      sessionManager.resolvePendingToolCall(sessionId, request.callId, { opened: true });
+      expect((await pending).isError).toBe(false);
+    });
+
+    it('accepts arguments as an object as well as a string', async () => {
+      const pending = call({ name: 'open_panel', arguments: { panel: 'equations' } });
+      const request = sendToClient.mock.calls.at(-1)[0];
+
+      expect(request.arguments).toEqual({ panel: 'equations' });
+      sessionManager.resolvePendingToolCall(sessionId, request.callId, { opened: true });
+      await pending;
+    });
+
+    it('runs a no-argument tool with arguments omitted', async () => {
+      const pending = call({ name: 'get_variable_tags' });
+      const request = sendToClient.mock.calls.at(-1)[0];
+
+      expect(request.toolName).toBe('get_variable_tags');
+      sessionManager.resolvePendingToolCall(sessionId, request.callId, { tags: [] });
+      await pending;
+    });
+
+    it('carries the declared timeout and the media contract through', async () => {
+      const meta = store.put(PNG_1x1, { name: 'hero.png', mimeType: 'image/png' });
+      const pending = call({
+        name: 'write_interface_media',
+        arguments: JSON.stringify({ name: 'hero.png', image: meta.mediaId, description: 'a red square' })
+      });
+      const request = sendToClient.mock.calls.at(-1)[0];
+
+      // Both are read from the client's own definition inside
+      // requestClientExecution — dispatching must not lose them.
+      expect(request.media).toEqual([expect.objectContaining({ mediaId: meta.mediaId, argument: 'image' })]);
+      expect(request.timeout).toBe(30000);
+
+      sessionManager.resolvePendingToolCall(sessionId, request.callId, { path: 'assets/hero.png' });
+      await pending;
+    });
+
+    it('hands back a picture the tool returned', async () => {
+      const meta = store.put(PNG_1x1, { name: 'preview.png', mimeType: 'image/png' });
+      const pending = call({ name: 'capture_interface_preview' });
+      const request = sendToClient.mock.calls.at(-1)[0];
+      sessionManager.resolvePendingToolCall(sessionId, request.callId, { ok: true }, false, [meta]);
+
+      const result = await pending;
+      expect(result.content[1]).toMatchObject({ type: 'media', mediaId: meta.mediaId });
+    });
+
+    it('rejects a name nothing registered, and lists what there is', async () => {
+      const result = await call({ name: 'no_such_tool', arguments: '{}' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('open_panel');
+      expect(sendToClient).not.toHaveBeenCalled();
+    });
+
+    it('rejects malformed JSON arguments without a round trip', async () => {
+      const result = await call({ name: 'open_panel', arguments: '{panel: equations' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toMatch(/not valid JSON/);
+      expect(sendToClient).not.toHaveBeenCalled();
+    });
+
+    it('rejects arguments the schema does not allow, and returns the schema', async () => {
+      const result = await call({ name: 'set_units', arguments: '{"variable":"population"}' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('units');
+      // The retry should be informed rather than another guess.
+      expect(result.content[0].text).toContain(JSON.stringify(MANY_TOOLS.find(t => t.name === 'set_units').inputSchema));
+      expect(sendToClient).not.toHaveBeenCalled();
+    });
+
+    it('passes through a key the client did not declare rather than dropping it', async () => {
+      // Zod strips undeclared keys; a client whose schema is looser than its
+      // implementation would lose them silently, so the raw arguments are sent.
+      const pending = call({ name: 'open_panel', arguments: '{"panel":"equations","focus":"stocks"}' });
+      const request = sendToClient.mock.calls.at(-1)[0];
+
+      expect(request.arguments).toEqual({ panel: 'equations', focus: 'stocks' });
+      sessionManager.resolvePendingToolCall(sessionId, request.callId, { opened: true });
+      await pending;
+    });
+
+    it('turns a timeout into an error envelope, as a registered handler would', async () => {
+      const pending = call({ name: 'open_panel', arguments: '{"panel":"equations"}' });
+      const request = sendToClient.mock.calls.at(-1)[0];
+      sessionManager.resolvePendingToolCall(sessionId, request.callId, { error: 'boom' }, true);
+
+      await expect(pending).resolves.toHaveProperty('isError');
+    });
+  });
+
+  describe('what the user is shown', () => {
+    it.each([
+      ['client_call_tool', 'the manual routes'],
+      ['mcp__client__call_tool', 'the Agent SDK'],
+      ['call_tool', 'ADK']
+    ])('unwraps %s (%s) to the tool actually being run', (name) => {
+      const displayed = provider.describeCall(name, { name: 'open_panel', arguments: '{"panel":"equations"}' });
+
+      expect(displayed).toEqual({ name: 'open_panel', input: { panel: 'equations' } });
+    });
+
+    it('leaves anything that is not a dispatch alone', () => {
+      expect(provider.describeCall('run_model', { a: 1 })).toEqual({ name: 'run_model', input: { a: 1 } });
+      // A dispatch with no name to unwrap is not a dispatch worth rewriting.
+      expect(provider.describeCall('client_call_tool', {})).toEqual({ name: 'client_call_tool', input: {} });
+    });
+
+    it('points a direct call at the dispatcher instead of failing flat', () => {
+      const message = provider.toolNotFoundMessage('client_open_panel');
+
+      expect(message).toContain('open_panel');
+      expect(message).toContain('call_tool');
+    });
+
+    it('says only what it knows for a name that is nobody\'s tool', () => {
+      expect(provider.toolNotFoundMessage('invented_tool')).toBe('Tool not found: invented_tool');
+    });
+  });
+});

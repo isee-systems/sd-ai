@@ -33,6 +33,13 @@ const config = {
     "agentMaxTokensForEngines": 32_000, // Maximum tokens before force switching to file-based editing
     "agentMaxContextTokens": 32_000, // Maximum tokens for conversation history sent to Claude API
     "agentTargetedEditingMinimum": 250, //Above this size, models can be edited without quantitative/qualitative engine
+    // Client tools are advertised with their full schemas up to this many; past it
+    // they are withheld behind the search/dispatch pair (see agent/tools/clientToolSearch.js)
+    // so a client with a large catalogue does not spend the context budget on schemas
+    // the model may never call. Below the threshold the schemas cost less than the
+    // extra round trip a search would add, which is why this is a threshold and not a
+    // switch.
+    "agentClientToolSearchThreshold": Number(process.env.AGENT_CLIENT_TOOL_SEARCH_THRESHOLD) || 5,
     "agentDefaultProvider": 'anthropic', // Default LLM provider when client does not specify one ('anthropic' | 'google' | 'openrouter')
     "agentAnthropicModel": 'claude-sonnet-5', // Model used for agent conversations MUST BE Anthropic models
     "agentAnthropicSummaryModel": 'claude-haiku-4-5', // Model used for conversation history summarization MUST BE Anthropic models

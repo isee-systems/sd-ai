@@ -2,6 +2,13 @@ import { StructuredOutputToZodConverter } from '../../utilities/StructuredOutput
 import { toolResultToText, mediaBlock, mediaBlocksOf, toMcpContentResult } from '../utilities/ToolResultFormatter.js';
 import { MediaStore } from '../utilities/MediaStore.js';
 import { sanitizeSchemaForGemini } from './builtin/toolHelpers.js';
+import {
+  SEARCH_TOOL_NAME,
+  CALL_TOOL_NAME,
+  createSearchClientToolsTool,
+  createCallClientToolTool,
+  unwrapDispatchCall
+} from './clientToolSearch.js';
 import logger from '../../utilities/logger.js';
 import config from '../../config.js';
 
@@ -27,6 +34,11 @@ const loadFunctionTool = async () =>
  * - Special handling for get_current_model and update_model
  */
 export class DynamicToolProvider {
+  // Zod schemas for every client tool, by unprefixed name — built once here
+  // whether or not the tools are advertised directly, because the deferred route
+  // validates against them too.
+  #zodSchemas = new Map();
+
   // mediaStore is required, and injected by AgentOrchestrator, which shares one
   // instance across every consumer in the worker. Required rather than defaulted so
   // there is exactly one construction site to reason about: the store is a handle
@@ -46,8 +58,22 @@ export class DynamicToolProvider {
 
     const session = sessionManager.getSession(sessionId);
     const clientTools = session?.clientTools || [];
-    this.toolCollection = this.#createToolCollectionFromClientTools(clientTools);
-    logger.log(`DynamicToolProvider initialized for session ${sessionId} with ${clientTools.length} client tools`);
+
+    for (const toolDef of clientTools) {
+      this.#zodSchemas.set(toolDef.name, this.schemaConverter.convert(toolDef.inputSchema));
+    }
+
+    // Past the threshold the schemas are withheld and the model gets the
+    // search/dispatch pair instead — see clientToolSearch.js. Decided once, here:
+    // the client declares its tools at session init and they do not change, so a
+    // per-pass decision would only be the same answer computed repeatedly.
+    this.deferred = clientTools.length > config.agentClientToolSearchThreshold;
+    this.toolCollection = this.deferred
+      ? this.#createDeferredToolCollection()
+      : this.#createToolCollectionFromClientTools(clientTools);
+
+    logger.log(`DynamicToolProvider initialized for session ${sessionId} with ${clientTools.length} client tools`
+      + `${this.deferred ? ` (deferred behind ${SEARCH_TOOL_NAME}/${CALL_TOOL_NAME}, threshold ${config.agentClientToolSearchThreshold})` : ''}`);
   }
 
   /**
@@ -60,7 +86,7 @@ export class DynamicToolProvider {
       const toolName = `client_${toolDef.name}`;
       tools[toolName] = {
         description: toolDef.description,
-        inputSchema: this.schemaConverter.convert(toolDef.inputSchema),
+        inputSchema: this.#zodSchemas.get(toolDef.name),
         handler: this.#createToolHandler(toolDef),
         timeout: toolDef.timeout ?? 30000
       };
@@ -73,25 +99,56 @@ export class DynamicToolProvider {
   }
 
   /**
+   * The two-tool stand-in for a large client catalogue: one tool that returns a
+   * schema, one that runs a tool by name.
+   *
+   * Prefixed like any other client tool so every route treats them the same way —
+   * the manual routes advertise them as `client_*`, the SDK and ADK routes strip
+   * the prefix back off, and execution reaches them through the same
+   * isClientTool/handler path as a directly-registered tool.
+   */
+  #createDeferredToolCollection() {
+    const listClientTools = () => this.sessionManager.getSession(this.sessionId)?.clientTools || [];
+
+    return {
+      name: 'client_tools',
+      tools: {
+        [`client_${SEARCH_TOOL_NAME}`]: createSearchClientToolsTool(listClientTools),
+        [`client_${CALL_TOOL_NAME}`]: createCallClientToolTool(
+          listClientTools,
+          name => this.#zodSchemas.get(name),
+          (name, args) => this.#invokeClientTool(name, args)
+        )
+      }
+    };
+  }
+
+  /**
    * Create a tool handler that proxies to the client
    * Note: toolDef.name is the UNPREFIXED name (e.g., 'get_current_model')
    */
   #createToolHandler(toolDef) {
-    return async (args) => {
-      try {
-        // Unprefixed name when communicating with the client. The timeout and the
-        // media contract are read from the client's own definition inside
-        // requestClientExecution, so there is nothing to pass and nothing to drop.
-        return await this.requestClientExecution(toolDef.name, args);
+    return async (args) => this.#invokeClientTool(toolDef.name, args);
+  }
 
-      } catch (error) {
-        logger.log(`Error executing client tool ${toolDef.name}:`, error);
-        return {
-          content: [{ type: 'text', text: `Error: ${error.message}` }],
-          isError: true
-        };
-      }
-    };
+  /**
+   * Run a client tool by its unprefixed name and answer with an envelope.
+   *
+   * The one place a thrown timeout becomes a tool error, shared by the directly
+   * registered handlers and by the dispatcher, so both fail the same way. The
+   * timeout and the media contract are read from the client's own definition
+   * inside requestClientExecution, so there is nothing to pass and nothing to drop.
+   */
+  async #invokeClientTool(toolName, args) {
+    try {
+      return await this.requestClientExecution(toolName, args);
+    } catch (error) {
+      logger.log(`Error executing client tool ${toolName}:`, error);
+      return {
+        content: [{ type: 'text', text: `Error: ${error.message}` }],
+        isError: true
+      };
+    }
   }
 
   /**
@@ -257,6 +314,41 @@ export class DynamicToolProvider {
    */
   isClientTool(toolName) {
     return this.getToolNames().includes(toolName);
+  }
+
+  /**
+   * The call to show the user for a tool_use the model just emitted.
+   *
+   * A dispatched call is `call_tool` on the wire and (say) write_interface_media
+   * in fact, and the client's UI cares about the second one: it labels the entry
+   * with the name and reads the arguments. Without this every client tool in a
+   * deferred session would appear as the same anonymous `call_tool`.
+   *
+   * Anything that is not a dispatch comes back untouched.
+   */
+  describeCall(toolName, input) {
+    return unwrapDispatchCall(toolName, input) ?? { name: toolName, input };
+  }
+
+  /**
+   * What to tell the model when it calls a tool nothing has registered.
+   *
+   * In a deferred session the likeliest miss is a real client tool called
+   * directly by name — the model read the name out of a search result and used
+   * it as though it were advertised. That deserves the route to it rather than a
+   * flat "not found" it can only respond to by guessing again.
+   */
+  toolNotFoundMessage(toolName) {
+    const bare = String(toolName ?? '').replace(/^mcp__client__/, '').replace(/^client_/, '');
+    const isWithheld = this.deferred
+      && (this.sessionManager.getSession(this.sessionId)?.clientTools || []).some(tool => tool.name === bare);
+
+    if (isWithheld) {
+      return `Tool not found: ${toolName}. '${bare}' is one of this application's own tools — run it with `
+        + `${CALL_TOOL_NAME}: { "name": "${bare}", "arguments": "<JSON object as a string>" }.`;
+    }
+
+    return `Tool not found: ${toolName}`;
   }
 
   /**

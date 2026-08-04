@@ -884,19 +884,23 @@ export class AgentOrchestrator {
             return;
           }
 
-          this.anthropicSdkPendingToolCalls.set(block.id, block.name);
-
           const isFilesystemTool = ['Read', 'Edit', 'Write', 'Glob', 'Grep'].includes(block.name);
           const isBuiltInMcpTool = block.name.startsWith('mcp__builtin__');
           const isBuiltIn = isFilesystemTool || isBuiltInMcpTool;
 
-          const displayName = this.#stripMcpPrefix(block.name);
+          // A dispatched client tool reports itself rather than the dispatcher it
+          // arrived through — see DynamicToolProvider.describeCall.
+          const displayed = this.dynamicToolProvider.describeCall(this.#stripMcpPrefix(block.name), block.input || {});
+
+          // The resolved name, not the raw one: this map is display-only, and the
+          // tool_result that closes the call carries no name of its own.
+          this.anthropicSdkPendingToolCalls.set(block.id, displayed.name);
 
           await this.sendToClient(createToolCallNotificationMessage(
             this.sessionId,
             block.id,
-            displayName,
-            block.input || {},
+            displayed.name,
+            displayed.input,
             isBuiltIn
           ));
         }
@@ -1131,13 +1135,16 @@ model tools.`;
       } else if (block.type === 'tool_use') {
         hasToolCalls = true;
 
-        // Notify client that tool call is happening (for UI display)
+        // Notify client that tool call is happening (for UI display). A dispatched
+        // client tool reports itself, not the dispatcher — the conversation still
+        // records the call the model actually made, further down.
         const isBuiltIn = this.#isBuiltInTool(block.name, builtInTools);
+        const displayed = this.dynamicToolProvider.describeCall(block.name, block.input);
         await this.sendToClient(createToolCallNotificationMessage(
           this.sessionId,
           block.id,
-          block.name,
-          block.input,
+          displayed.name,
+          displayed.input,
           isBuiltIn
         ));
 
@@ -1207,18 +1214,18 @@ model tools.`;
         }
 
         if (toolResult.isError) {
-          logger.log(`Anthropic Manual: Tool error for ${block.name}:`, toolResult.content);
+          logger.log(`Anthropic Manual: Tool error for ${displayed.name}:`, toolResult.content);
         } else {
-          logger.log(`Anthropic Manual: Tool call completed: ${block.name}`);
+          logger.log(`Anthropic Manual: Tool call completed: ${displayed.name}`);
         }
 
-        const responseType = this.#getResponseType(block.name);
+        const responseType = this.#getResponseType(displayed.name);
 
         // Notify client of completion
         await this.sendToClient(createToolCallCompletedMessage(
           this.sessionId,
           block.id,
-          block.name,
+          displayed.name,
           toolResult.content,
           toolResult.isError,
           responseType
@@ -1488,9 +1495,11 @@ ${lines.join('\n')}`;
         return await this.dynamicToolProvider.getTools().tools[toolUse.name].handler(toolUse.input);
       }
 
-      // Tool not found
+      // Tool not found. The message comes from the client-tool provider, which is
+      // the only thing that knows whether the name belongs to a tool it withheld
+      // behind the dispatcher rather than to nothing at all.
       return {
-        content: [{ type: 'text', text: `Tool not found: ${toolUse.name}` }],
+        content: [{ type: 'text', text: this.dynamicToolProvider.toolNotFoundMessage(toolUse.name) }],
         isError: true
       };
 
@@ -1738,23 +1747,27 @@ ${lines.join('\n')}`;
       const { name, args } = part.functionCall;
       const callId = `fc_${Date.now()}_${Math.random().toString(36).substr(2, 7)}`;
       const isBuiltIn = this.#isBuiltInTool(name, builtInTools);
+      // For display only. `name` stays as the model wrote it everywhere else in
+      // this loop — it is what gets executed and what the functionResponse must
+      // be keyed by.
+      const displayed = this.dynamicToolProvider.describeCall(name, args);
 
       await this.#sendSlowToolMessageHelper(name, args);
-      await this.sendToClient(createToolCallNotificationMessage(this.sessionId, callId, name, args, isBuiltIn));
+      await this.sendToClient(createToolCallNotificationMessage(this.sessionId, callId, displayed.name, displayed.input, isBuiltIn));
 
       const toolResult = await this.executeToolCallGeminiManual({ name, input: args });
 
       if (this.stopRequested) return false;
 
       if (toolResult.isError) {
-        logger.log(`Gemini Manual: Tool error for ${name}:`, toolResult.content);
+        logger.log(`Gemini Manual: Tool error for ${displayed.name}:`, toolResult.content);
       } else {
-        logger.log(`Gemini Manual: Tool call completed: ${name}`);
+        logger.log(`Gemini Manual: Tool call completed: ${displayed.name}`);
       }
 
-      const responseType = this.#getResponseType(name);
+      const responseType = this.#getResponseType(displayed.name);
       await this.sendToClient(createToolCallCompletedMessage(
-        this.sessionId, callId, name, toolResult.content, toolResult.isError, responseType
+        this.sessionId, callId, displayed.name, toolResult.content, toolResult.isError, responseType
       ));
 
       const resultText = toolResultToText(toolResult);
@@ -1874,20 +1887,24 @@ ${lines.join('\n')}`;
           const key = `${tool.name}::${JSON.stringify(args)}`;
           pendingCallIds.set(key, callId);
           const isBuiltIn = builtInAdkTools.some(t => t.name === tool.name);
+          // Display only — the key that pairs this with afterToolCallback is still
+          // built from what ADK actually called.
+          const displayed = this.dynamicToolProvider.describeCall(tool.name, args);
           await this.#sendSlowToolMessageHelper(tool.name, args);
           await this.sendToClient(createToolCallNotificationMessage(
-            this.sessionId, callId, tool.name, args, isBuiltIn
+            this.sessionId, callId, displayed.name, displayed.input, isBuiltIn
           ));
         },
         afterToolCallback: async ({ tool, args, toolResponse }) => {
           const key = `${tool.name}::${JSON.stringify(args)}`;
           const callId = pendingCallIds.get(key) || `adk_${Date.now()}`;
           pendingCallIds.delete(key);
-          logger.log(`Gemini ADK: Tool call completed: ${tool.name}`);
-          const responseType = this.#getResponseType(tool.name);
+          const displayed = this.dynamicToolProvider.describeCall(tool.name, args);
+          logger.log(`Gemini ADK: Tool call completed: ${displayed.name}`);
+          const responseType = this.#getResponseType(displayed.name);
           const content = [{ type: 'text', text: String(toolResponse ?? '') }];
           await this.sendToClient(createToolCallCompletedMessage(
-            this.sessionId, callId, tool.name, content, false, responseType
+            this.sessionId, callId, displayed.name, content, false, responseType
           ));
         }
       });
@@ -2061,7 +2078,10 @@ ${lines.join('\n')}`;
         // it cost. Already an envelope; do not re-wrap it.
         return this.dynamicToolProvider.getTools().tools[toolUse.name].handler(toolUse.input);
       }
-      return Promise.resolve({ content: [{ type: 'text', text: `Tool not found: ${toolUse.name}` }], isError: true });
+      return Promise.resolve({
+        content: [{ type: 'text', text: this.dynamicToolProvider.toolNotFoundMessage(toolUse.name) }],
+        isError: true
+      });
     } catch (error) {
       logger.error(`Gemini Manual: Error executing tool ${toolUse.name}:`, error);
       return Promise.resolve({ content: [{ type: 'text', text: error.message }], isError: true });
@@ -2302,12 +2322,16 @@ ${lines.join('\n')}`;
               if (!toolCall?.id || !toolCall?.name) continue;
               if (notifiedToolCallIds.has(toolCall.id)) continue;
               notifiedToolCallIds.add(toolCall.id);
-              toolCallNames.set(toolCall.id, toolCall.name);
               const isBuiltIn = !!builtInToolMap[toolCall.name] || sdkFsTools.includes(toolCall.name);
               const args = (toolCall.arguments && typeof toolCall.arguments === 'object') ? toolCall.arguments : {};
+              // The resolved name goes in the map too: the completion side reads
+              // it from there, and a dispatched client tool should be labelled
+              // with itself at both ends.
+              const displayed = this.dynamicToolProvider.describeCall(toolCall.name, args);
+              toolCallNames.set(toolCall.id, displayed.name);
               await this.#sendSlowToolMessageHelper(toolCall.name, args);
               await this.sendToClient(createToolCallNotificationMessage(
-                this.sessionId, toolCall.id, toolCall.name, args, isBuiltIn
+                this.sessionId, toolCall.id, displayed.name, displayed.input, isBuiltIn
               ));
             }
           } catch (err) {
@@ -2381,7 +2405,9 @@ ${lines.join('\n')}`;
                 // up to label the completion message. function_call always
                 // arrives here before its corresponding tool.call_output.
                 if (item.type === 'function_call' && item.callId && item.name) {
-                  toolCallNames.set(item.callId, item.name);
+                  let parsedInput = {};
+                  try { parsedInput = item.arguments ? JSON.parse(item.arguments) : {}; } catch { /* leave empty */ }
+                  toolCallNames.set(item.callId, this.dynamicToolProvider.describeCall(item.name, parsedInput).name);
                 }
                 // Dedup by item id when the SDK supplies one — output_item.done
                 // can fire more than once for a logical item across reissues.
@@ -2654,8 +2680,9 @@ ${lines.join('\n')}`;
       const isBuiltIn = !!this.builtInToolProvider.getTools().tools[item.name] || ['Read', 'Edit', 'Write', 'Glob', 'Grep'].includes(item.name);
       let parsedInput = {};
       try { parsedInput = item.arguments ? JSON.parse(item.arguments) : {}; } catch { /* leave empty */ }
+      const displayed = this.dynamicToolProvider.describeCall(item.name, parsedInput);
       await this.#sendSlowToolMessageHelper(item.name, parsedInput);
-      await this.sendToClient(createToolCallNotificationMessage(this.sessionId, item.callId, item.name, parsedInput, isBuiltIn));
+      await this.sendToClient(createToolCallNotificationMessage(this.sessionId, item.callId, displayed.name, displayed.input, isBuiltIn));
       notifiedToolCallIds?.add(item.callId);
       return;
     }
@@ -2816,18 +2843,21 @@ ${lines.join('\n')}`;
       let args = {};
       try { args = tc.function?.arguments ? JSON.parse(tc.function.arguments) : {}; } catch { /* leave empty */ }
       const isBuiltIn = this.#isBuiltInTool(name, builtInTools);
+      // Display only — `name` is what gets executed and what the tool message
+      // below has to be keyed by.
+      const displayed = this.dynamicToolProvider.describeCall(name, args);
       await this.#sendSlowToolMessageHelper(name, args);
-      await this.sendToClient(createToolCallNotificationMessage(this.sessionId, tc.id, name, args, isBuiltIn));
+      await this.sendToClient(createToolCallNotificationMessage(this.sessionId, tc.id, displayed.name, displayed.input, isBuiltIn));
 
       const toolResult = await this.executeToolCallHelper({ name, input: args }, builtInTools, dynamicTools);
       if (this.stopRequested) return false;
 
       const resultText = toolResultToText(toolResult);
 
-      logger.log(`OpenRouter Manual: tool call completed: ${name}`);
-      const responseType = this.#getResponseType(name);
+      logger.log(`OpenRouter Manual: tool call completed: ${displayed.name}`);
+      const responseType = this.#getResponseType(displayed.name);
       await this.sendToClient(createToolCallCompletedMessage(
-        this.sessionId, tc.id, name, toolResult.content, toolResult.isError, responseType
+        this.sessionId, tc.id, displayed.name, toolResult.content, toolResult.isError, responseType
       ));
 
       // The tool message stays text-only: ChatToolMessage.content permits an array
@@ -2837,7 +2867,7 @@ ${lines.join('\n')}`;
       messages.push({ role: 'tool', toolCallId: tc.id, content: resultText });
 
       for (const media of mediaBlocksOf(toolResult)) {
-        pendingMedia.push({ toolName: name, media });
+        pendingMedia.push({ toolName: displayed.name, media });
       }
     }
 
