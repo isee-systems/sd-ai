@@ -1,22 +1,36 @@
-import {
+import { Provider } from '../../utilities/TokenUsageReporter.js';
+import config from '../../config.js';
+import { TEST_NATIVE_PROVIDERS, installTestNativeProviders } from './nativeProviderFixture.js';
+
+// Every per-vendor difference between the OpenAI-compatible native providers is derived
+// here from the provider id, so these are the assertions that catch a new registry entry
+// silently inheriting another vendor's key, host or request shape.
+//
+// The fixture entries stand in for whichever vendors the deployed config enables: the
+// derivation is what is under test, and it must stay covered whether or not a given
+// provider is currently switched on in config.js. OPENAI_COMPATIBLE_PROVIDERS is built at
+// module evaluation, so the module comes in dynamically after the fixtures are installed.
+installTestNativeProviders();
+
+const {
   OPENAI_COMPATIBLE_PROVIDERS,
   openAiCompatibleClientOptions,
   maxOutputTokensParam,
   reasoningParams,
   usageProviderFor
-} from '../../agent/utilities/nativeProviders.js';
-import { Provider } from '../../utilities/TokenUsageReporter.js';
-import config from '../../config.js';
-
-// Every per-vendor difference between the OpenAI-compatible native providers is derived
-// here from the provider id, so these are the assertions that catch a new registry entry
-// silently inheriting another vendor's key, host or request shape.
+} = await import('../../agent/utilities/nativeProviders.js');
 
 describe('OPENAI_COMPATIBLE_PROVIDERS', () => {
   it('is every native provider except the two with their own vendor SDKs', () => {
     const expected = Object.keys(config.nativeAgentProviders)
       .filter(id => id !== 'anthropic' && id !== 'google');
     expect([...OPENAI_COMPATIBLE_PROVIDERS].sort()).toEqual(expected.sort());
+  });
+
+  it('covers every OpenAI-compatible entry in the registry', () => {
+    for (const id of Object.keys(TEST_NATIVE_PROVIDERS)) {
+      expect(OPENAI_COMPATIBLE_PROVIDERS.has(id)).toBe(true);
+    }
   });
 
   it('excludes anthropic and google, which are dispatched by id', () => {
@@ -49,14 +63,14 @@ describe('openAiCompatibleClientOptions', () => {
 
   it('leaves the host unset when the registry entry has none, so the SDK uses its own default', () => {
     process.env.OPENAI_API_KEY = 'oa-key';
-    expect(config.nativeAgentProviders.openai.baseURL).toBeNull();
+    expect(TEST_NATIVE_PROVIDERS.openai.baseURL).toBeNull();
     expect(openAiCompatibleClientOptions('openai')).toEqual({ apiKey: 'oa-key' });
   });
 
   it('takes the host from the registry entry rather than guessing at the vendor domain', () => {
     process.env.DEEPSEEK_API_KEY = 'ds-key';
     expect(openAiCompatibleClientOptions('deepseek').baseURL)
-      .toBe(config.nativeAgentProviders.deepseek.baseURL);
+      .toBe(TEST_NATIVE_PROVIDERS.deepseek.baseURL);
   });
 
   it('honours a <PROVIDER>_BASE_URL override', () => {

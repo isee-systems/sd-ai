@@ -1,10 +1,18 @@
-import { SessionManager } from '../../agent/utilities/SessionManager.js';
-import { AgentOrchestrator } from '../../agent/AgentOrchestrator.js';
-import { OPENAI_COMPATIBLE_PROVIDERS } from '../../agent/utilities/nativeProviders.js';
 import config from '../../config.js';
 import { jest } from '@jest/globals';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { installTestNativeProviders } from './nativeProviderFixture.js';
+
+// The native OpenAI-compatible summarization suite is parameterized over the registry, so
+// it would silently shrink to nothing whenever a deployment comments those providers out.
+// The fixtures keep the route covered either way, and go in before SessionManager loads —
+// OPENAI_COMPATIBLE_PROVIDERS is derived from the registry keys at module evaluation.
+installTestNativeProviders();
+
+const { SessionManager } = await import('../../agent/utilities/SessionManager.js');
+const { AgentOrchestrator } = await import('../../agent/AgentOrchestrator.js');
+const { OPENAI_COMPATIBLE_PROVIDERS } = await import('../../agent/utilities/nativeProviders.js');
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

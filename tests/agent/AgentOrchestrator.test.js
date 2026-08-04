@@ -1,11 +1,18 @@
-import { AgentOrchestrator } from '../../agent/AgentOrchestrator.js';
-import { SessionManager } from '../../agent/utilities/SessionManager.js';
 import { jest } from '@jest/globals';
-import config from '../../config.js';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { TEST_NATIVE_PROVIDERS, installTestNativeProviders } from './nativeProviderFixture.js';
+
+// The native OpenAI-compatible suite at the bottom of this file needs registry entries for
+// the providers it drives, and whether config.js ships them is a deployment decision — so
+// the fixtures go in before the orchestrator is loaded, which is when the module derives
+// OPENAI_COMPATIBLE_PROVIDERS from the registry keys.
+installTestNativeProviders();
+
+const { AgentOrchestrator } = await import('../../agent/AgentOrchestrator.js');
+const { SessionManager } = await import('../../agent/utilities/SessionManager.js');
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CONFIG = { path: path.join(__dirname, '../../agent/config/socrates.md') };
@@ -1164,7 +1171,7 @@ describe('startConversationOpenAiCompatibleManual — request shape', () => {
     await orc.startConversationOpenAiCompatibleManual('build me a model');
 
     const firstRequest = create.mock.calls[0][0];
-    expect(firstRequest.model).toBe(config.nativeAgentProviders.openai.model);
+    expect(firstRequest.model).toBe(TEST_NATIVE_PROVIDERS.openai.model);
     expect(firstRequest.reasoning_effort).toBe('none');
     expect(firstRequest.messages[0].role).toBe('system');
   });
@@ -1175,7 +1182,7 @@ describe('startConversationOpenAiCompatibleManual — request shape', () => {
     await orc.startConversationOpenAiCompatibleManual('build me a model');
 
     const firstRequest = create.mock.calls[0][0];
-    expect(firstRequest.model).toBe(config.nativeAgentProviders.deepseek.model);
+    expect(firstRequest.model).toBe(TEST_NATIVE_PROVIDERS.deepseek.model);
     expect(firstRequest.reasoning_effort).toBeUndefined();
   });
 });
