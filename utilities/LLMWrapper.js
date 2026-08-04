@@ -772,6 +772,15 @@ export class LLMWrapper {
       }))
     };
 
+    // DeepSeek's pretokenizer merges punctuation+line-break tokens, so multi-line
+    // system prompts WITHOUT a terminal newline measurably degrade format
+    // following (documented in the DeepSeek-V3 technical report). Normalize the
+    // system message to end with a newline — one fix covers every engine.
+    const sys = chatRequest.messages.find(m => m.role === 'system');
+    if (sys && typeof sys.content === 'string' && !sys.content.endsWith('\n')) {
+      sys.content += '\n';
+    }
+
     // DeepSeek's API supports only the json_object response_format (no
     // json_schema), so structured outputs degrade to json_object. JSON mode also
     // requires the word 'json' to appear in some message, otherwise the model
@@ -795,6 +804,11 @@ export class LLMWrapper {
 
     if (temperature !== null && temperature !== undefined) {
       chatRequest.temperature = temperature;
+    } else {
+      // DeepSeek's own evaluation recipes use temperature 0.7 (V3 tech report:
+      // math olympiad 16-run averaging at 0.7; maj@6 voting). Engines that pass no
+      // temperature get this deterministic-leaning default instead of the API's 1.0.
+      chatRequest.temperature = 0.7;
     }
     if (this.#topP !== null && this.#topP !== undefined) {
       chatRequest.topP = this.#topP;

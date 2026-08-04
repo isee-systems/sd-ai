@@ -84,7 +84,13 @@ Example 6 of a user input:
 Corresponding JSON response:
 {}`
 
-    static DEFAULT_SYSTEM_PROMPT = 
+    static DEEPSEEK_NAMING_ADDITION =
+`CRITICAL NAMING RULE: When the user's text names a variable, you MUST reuse that exact name verbatim. Do not add qualifiers or suffixes (e.g. "growth", "rate", "pressure", "level"), do not change singular to plural or vice versa, do not rename or paraphrase. Only introduce a new variable name when the concept is not already named in the text. Names are compared exactly, so any modification will be marked wrong.`;
+
+    static DEEPSEEK_ITERATION_ADDITION =
+`CRITICAL ITERATION RULE: The existing model (the JSON relationships shown to you) must be preserved ENTIRELY. Your response MUST include every relationship from the existing model unchanged, PLUS the new relationships the user requested. Never omit, rename, or drop existing relationships — they are part of the model and your answer must contain the complete union of old and new.`;
+
+    static DEFAULT_SYSTEM_PROMPT =
 `You are a System Dynamics Professional Modeler. Users will give you text, and it is your job to generate causal relationships from that text.
 
 You will conduct a multistep process:
@@ -197,6 +203,18 @@ You will conduct a multistep process:
         if (!this.#llmWrapper.model.hasStructuredOutput) {
             systemPrompt += "\n" + QualitativeEngineBrain.NON_STRUCTURED_OUTPUT_SYSTEM_PROMPT_ADDITION;
             responseFormat = undefined;
+        }
+
+        // Native DeepSeek models tend to embellish variable names from the source
+        // text (e.g. "frimbulators" → "frimbulators growth"), and in iteration mode
+        // they sometimes return only the new relationships, dropping the existing
+        // model. Evaluations compare names and existing edges exactly, so
+        // DeepSeek-specific constraints are worth it.
+        if (this.#llmWrapper.model.kind === LLMWrapper.ModelType.DEEPSEEK) {
+            systemPrompt += "\n" + QualitativeEngineBrain.DEEPSEEK_NAMING_ADDITION;
+            if (lastModel && lastModel.relationships && lastModel.relationships.length > 0) {
+                systemPrompt += "\n" + QualitativeEngineBrain.DEEPSEEK_ITERATION_ADDITION;
+            }
         }
 
         let messages = [{
