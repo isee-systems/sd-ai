@@ -20,7 +20,7 @@ import {
   toolResultToBlocks,
   hydrateMessagesForAnthropic,
   hydrateContentsForGemini,
-  hydrateMessagesForOpenAi,
+  hydrateMessagesForOpenRouter,
   mediaBlocksOf
 } from '../../../agent/utilities/ToolResultFormatter.js';
 
@@ -295,7 +295,7 @@ describe('media round trip through every provider route', () => {
     ];
     expect(JSON.stringify(messages)).not.toContain(PNG_B64);
 
-    const hydrated = hydrateMessagesForOpenAi(messages, store);
+    const hydrated = hydrateMessagesForOpenRouter(messages, store);
     expect(hydrated[0]).toEqual(messages[0]); // the tool message stays text-only
     expect(hydrated[1].content[1]).toEqual({
       type: 'image_url',

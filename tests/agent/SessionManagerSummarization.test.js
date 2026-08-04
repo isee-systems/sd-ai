@@ -1,8 +1,18 @@
-import { SessionManager } from '../../agent/utilities/SessionManager.js';
-import { AgentOrchestrator } from '../../agent/AgentOrchestrator.js';
+import config from '../../config.js';
 import { jest } from '@jest/globals';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { installTestNativeProviders } from './nativeProviderFixture.js';
+
+// The native OpenAI-compatible summarization suite is parameterized over the registry, so
+// it would silently shrink to nothing whenever a deployment comments those providers out.
+// The fixtures keep the route covered either way, and go in before SessionManager loads —
+// OPENAI_COMPATIBLE_PROVIDERS is derived from the registry keys at module evaluation.
+installTestNativeProviders();
+
+const { SessionManager } = await import('../../agent/utilities/SessionManager.js');
+const { AgentOrchestrator } = await import('../../agent/AgentOrchestrator.js');
+const { OPENAI_COMPATIBLE_PROVIDERS } = await import('../../agent/utilities/nativeProviders.js');
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -42,6 +52,19 @@ function makeOpenRouterMock(summaryText = 'Mocked summary.') {
   };
 }
 
+function makeChatCompletionsMock(summaryText = 'Mocked summary.') {
+  return {
+    chat: {
+      completions: {
+        create: jest.fn().mockResolvedValue({
+          choices: [{ message: { content: summaryText } }],
+          usage: { prompt_tokens: 10, completion_tokens: 20 }
+        })
+      }
+    }
+  };
+}
+
 // Pre-populate every SDK instance property with a throw-on-call guard so a test
 // that triggers summarization without first wiring the provider it exercises
 // fails loudly instead of attempting a real LLM call. The lazy loaders in
@@ -59,6 +82,14 @@ function installSdkGuards(sessionManager) {
   sessionManager.anthropic = { messages: { create: guard('anthropic') } };
   sessionManager.gemini = { models: { generateContent: guard('gemini') } };
   sessionManager.openRouter = { chat: { send: guard('openRouter') } };
+  // The OpenAI-compatible providers are keyed by provider id, so every registered one
+  // gets its own guard — a new entry in config.nativeAgentProviders is covered here
+  // without an edit.
+  for (const provider of OPENAI_COMPATIBLE_PROVIDERS) {
+    sessionManager.openAiCompatibleClients[provider] = {
+      chat: { completions: { create: guard(`openAiCompatibleClients.${provider}`) } }
+    };
+  }
 }
 
 function userTextMsg(text) {
@@ -402,7 +433,7 @@ describe('SessionManager.cleanupContext (OpenRouter)', () => {
 
   afterEach(() => { sessionManager.shutdown(); });
 
-  it.each(['qwen', 'deepseek', 'moonshotai'])(
+  it.each(['qwen', 'moonshotai'])(
     'routes %s provider through the OpenRouter SDK', async (provider) => {
       for (let i = 0; i < 10; i++) {
         sessionManager.addToConversationHistory(sessionId, userTextMsg(`Message ${i}`));
@@ -472,6 +503,102 @@ describe('SessionManager.cleanupContext (OpenRouter)', () => {
   });
 });
 
+// ─── SessionManager.cleanupContext (OpenAI-compatible native providers) ─────
+// Run for every provider in the registry that reaches its vendor's own
+// OpenAI-compatible API, so adding one to config.nativeAgentProviders extends this
+// suite rather than leaving the new route untested.
+
+describe.each([...OPENAI_COMPATIBLE_PROVIDERS])('SessionManager.cleanupContext (native %s)', (provider) => {
+  let sessionManager;
+  let sessionId;
+
+  beforeEach(() => {
+    sessionManager = new SessionManager();
+    sessionId = sessionManager.createSession(null);
+    sessionManager.initializeSession(sessionId, 'cld', {}, [], {}, 'test-client');
+    installSdkGuards(sessionManager);
+    sessionManager.openAiCompatibleClients[provider] = makeChatCompletionsMock();
+  });
+
+  afterEach(() => { sessionManager.shutdown(); });
+
+  const createMock = () => sessionManager.openAiCompatibleClients[provider].chat.completions.create;
+
+  it('routes the provider through its own native API client', async () => {
+    for (let i = 0; i < 10; i++) {
+      sessionManager.addToConversationHistory(sessionId, userTextMsg(`Message ${i}`));
+      sessionManager.addToConversationHistory(sessionId, assistantTextMsg(`Response ${i}`));
+    }
+
+    await sessionManager.cleanupContext(sessionId, 1, provider);
+
+    expect(createMock()).toHaveBeenCalled();
+    // Every other provider's client must stay untouched — one shared client would
+    // send this vendor's traffic to whichever host was constructed first.
+    for (const other of OPENAI_COMPATIBLE_PROVIDERS) {
+      if (other === provider) continue;
+      expect(sessionManager.openAiCompatibleClients[other].chat.completions.create).not.toHaveBeenCalled();
+    }
+    const context = sessionManager.getConversationContext(sessionId);
+    expect(context[0].role).toBe('user');
+    expect(typeof context[0].content).toBe('string');
+    expect(context[0].content).toMatch(/\[Previous conversation summary\]/);
+  });
+
+  it('passes the native summary model to the API', async () => {
+    for (let i = 0; i < 10; i++) {
+      sessionManager.addToConversationHistory(sessionId, userTextMsg(`Message ${i}`));
+      sessionManager.addToConversationHistory(sessionId, assistantTextMsg(`Response ${i}`));
+    }
+
+    await sessionManager.cleanupContext(sessionId, 1, provider);
+
+    const callArgs = createMock().mock.calls[0][0];
+    expect(callArgs.model).toBe(config.nativeAgentProviders[provider].summaryModel);
+    expect(callArgs.messages[0].role).toBe('user');
+  });
+
+  it('sends the output cap under the parameter name this vendor accepts', async () => {
+    for (let i = 0; i < 10; i++) {
+      sessionManager.addToConversationHistory(sessionId, userTextMsg(`Message ${i}`));
+      sessionManager.addToConversationHistory(sessionId, assistantTextMsg(`Response ${i}`));
+    }
+
+    await sessionManager.cleanupContext(sessionId, 1, provider);
+
+    // OpenAI's own API rejects max_tokens for the GPT-5 family; the others take it.
+    const callArgs = createMock().mock.calls[0][0];
+    if (provider === 'openai') {
+      expect(callArgs.max_completion_tokens).toBe(1024);
+      expect(callArgs.max_tokens).toBeUndefined();
+    } else {
+      expect(callArgs.max_tokens).toBe(1024);
+      expect(callArgs.max_completion_tokens).toBeUndefined();
+    }
+  });
+
+  it('falls back to a condensed summary when the provider API key is missing', async () => {
+    const keyEnvVar = `${provider.toUpperCase()}_API_KEY`;
+    const savedKey = process.env[keyEnvVar];
+    delete process.env[keyEnvVar];
+    sessionManager.openAiCompatibleClients[provider] = null;
+    for (let i = 0; i < 5; i++) {
+      sessionManager.addToConversationHistory(sessionId, userTextMsg(`Message ${i}`));
+      sessionManager.addToConversationHistory(sessionId, assistantTextMsg(`Response ${i}`));
+    }
+
+    // The missing-key throw is caught inside #summarizeMessages and converted to
+    // a fallback summary; the error must not escape cleanupContext.
+    await sessionManager.cleanupContext(sessionId, 1, provider);
+
+    const context = sessionManager.getConversationContext(sessionId);
+    const summaryText = context[0].content;
+    expect(summaryText).toMatch(/condensed/);
+
+    if (savedKey !== undefined) process.env[keyEnvVar] = savedKey;
+  });
+});
+
 // ─── SDK guards ──────────────────────────────────────────────────────────────
 // Guards short-circuit the lazy SDK loader path: when a test triggers
 // summarization without first mocking the provider it routes to, the guard
@@ -497,7 +624,8 @@ describe('SessionManager.cleanupContext SDK guards', () => {
     ['google', 'gemini', sm => sm.gemini.models.generateContent],
     ['anthropic', 'anthropic', sm => sm.anthropic.messages.create],
     ['qwen', 'openRouter', sm => sm.openRouter.chat.send],
-    ['deepseek', 'openRouter', sm => sm.openRouter.chat.send],
+    ['deepseek', 'openAiCompatibleClients.deepseek', sm => sm.openAiCompatibleClients.deepseek.chat.completions.create],
+    ['openai', 'openAiCompatibleClients.openai', sm => sm.openAiCompatibleClients.openai.chat.completions.create],
     ['moonshotai', 'openRouter', sm => sm.openRouter.chat.send],
   ])('guard for %s fires when no working mock is installed', async (provider, _instance, getMockFn) => {
     for (let i = 0; i < 5; i++) {

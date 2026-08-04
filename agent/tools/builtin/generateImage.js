@@ -103,7 +103,7 @@ export function createOpenRouterImageGenerator(clientId) {
         client = new OpenRouter({ apiKey: process.env.OPEN_ROUTER_API_KEY });
       }
 
-      // `imageUrl`, not `image_url` — see hydrateMessagesForOpenAi. The SDK validates
+      // `imageUrl`, not `image_url` — see hydrateMessagesForOpenRouter. The SDK validates
       // the request before remapping the key, so snake_case fails the content-part
       // union rather than reaching the API. Only reachable with referenceMediaIds; a
       // prompt-only call is text parts and would never have shown this up.

@@ -19,6 +19,8 @@ let _openRouterSdk;
 const loadOpenRouterSdk = async () => _openRouterSdk ??= await import('@openrouter/sdk');
 let _openRouterAgent;
 const loadOpenRouterAgent = async () => _openRouterAgent ??= await import('@openrouter/agent');
+let _openAiSdk;
+const loadOpenAiSdk = async () => _openAiSdk ??= (await import('openai')).OpenAI;
 
 import { AgentConfigurationManager } from './utilities/AgentConfigurationManager.js';
 import { MediaStore } from './utilities/MediaStore.js';
@@ -30,6 +32,7 @@ import {
   MediaBudget,
   hydrateMessagesForAnthropic,
   hydrateContentsForGemini,
+  hydrateMessagesForOpenRouter,
   hydrateMessagesForOpenAi
 } from './utilities/ToolResultFormatter.js';
 import { BuiltInToolProvider, SDK_FILE_TOOL_TWINS } from './tools/BuiltInToolProvider.js';
@@ -45,6 +48,13 @@ import logger from '../utilities/logger.js';
 import config from '../config.js';
 import TokenUsageReporter, { Provider } from '../utilities/TokenUsageReporter.js';
 import { sanitizeSchemaForGemini } from './tools/builtin/toolHelpers.js';
+import {
+  OPENAI_COMPATIBLE_PROVIDERS,
+  openAiCompatibleClientOptions,
+  maxOutputTokensParam,
+  reasoningParams,
+  usageProviderFor
+} from './utilities/nativeProviders.js';
 import { isToolAvailable } from './tools/toolAvailability.js';
 import { join } from 'path';
 
@@ -143,6 +153,7 @@ export class AgentOrchestrator {
   // we see is the authoritative total. Reported once when the loop completes
   // (or aborts) — never per-event, which would double-count.
   #openRouterManualPendingUsage = null;
+  #openAiCompatibleManualPendingUsage = null;
   // Per-assistant usage accumulator for the anthropic SDK route. The SDKResultMessage
   // carries the authoritative aggregate and supersedes this on normal completion;
   // we only flush the accumulator as a fallback when a query aborts before its
@@ -198,6 +209,7 @@ export class AgentOrchestrator {
     this.geminiAdkSessionService = null;
     this.openRouterClient = null;
     this.openRouterConversationState = null;
+    this.openAiCompatibleClient = null;
 
     const clientId = sessionManager.getSession(sessionId)?.clientId ?? null;
     this.tokenReporter = new TokenUsageReporter(config.tokenReporterURL, clientId);
@@ -224,6 +236,8 @@ export class AgentOrchestrator {
     } else if (OPENROUTER_PROVIDERS.has(this.provider)) {
       await loadOpenRouterSdk();
       if (loop === 'sdk') await loadOpenRouterAgent();
+    } else if (OPENAI_COMPATIBLE_PROVIDERS.has(this.provider)) {
+      await loadOpenAiSdk();
     }
   }
 
@@ -246,6 +260,21 @@ export class AgentOrchestrator {
     const { OpenRouter } = await loadOpenRouterSdk();
     this.openRouterClient = new OpenRouter({ apiKey: process.env.OPEN_ROUTER_API_KEY });
     return this.openRouterClient;
+  }
+
+  /**
+   * Lazy client for the OpenAI-compatible native providers. The key and host come from
+   * the provider id (see openAiCompatibleClientOptions) — one client per session, and a
+   * session has exactly one provider, so caching it needs no provider key.
+   */
+  async #getOpenAiCompatibleClient() {
+    if (this.openAiCompatibleClient) return this.openAiCompatibleClient;
+    const OpenAI = await loadOpenAiSdk();
+    this.openAiCompatibleClient = new OpenAI({
+      ...openAiCompatibleClientOptions(this.provider),
+      timeout: 5 * 60 * 1000,
+    });
+    return this.openAiCompatibleClient;
   }
 
   /**
@@ -293,6 +322,12 @@ export class AgentOrchestrator {
       // the shared OpenRouter-SDK/manual methods — the brand selects the model slug, the
       // gateway is the same. Brand-specific cases keep the dispatch table explicit.
       const isOpenRouterBrand = OPENROUTER_PROVIDERS.has(this.provider);
+      // OpenAI-compatible native-API providers have no agent SDK, so they always run
+      // the manual (chat-completions) loop regardless of the 'sdk' default.
+      if (OPENAI_COMPATIBLE_PROVIDERS.has(this.provider)) {
+        await this.startConversationOpenAiCompatibleManual(userMessage);
+        return;
+      }
       switch (`${this.provider}-${loopStyle}`) {
         case 'anthropic-sdk':
           await this.startConversationWithAnthropicSdk(userMessage, previousAgentContext);
@@ -427,7 +462,7 @@ export class AgentOrchestrator {
           // on Opus 4.7+/Sonnet 4.6 and would 400.
           const thinkingEnabled = config.agentAnthropicThinking?.type !== 'disabled';
           const response = await anthropic.messages.create({
-            model: config.agentAnthropicModel,
+            model: config.nativeAgentProviders.anthropic.model,
             max_tokens: 8192,
             system: systemBlocks,
             // Image bytes are attached to a copy here and thrown away with the
@@ -616,7 +651,7 @@ export class AgentOrchestrator {
       const queryOptions = {
         abortController: this.abortController,
         systemPrompt: systemPrompt,
-        model: config.agentAnthropicModel,
+        model: config.nativeAgentProviders.anthropic.model,
         maxTokens: 8192,
         maxTurns: maxIterations,
         mcpServers: mcpServers,
@@ -1340,6 +1375,9 @@ ${lines.join('\n')}`;
       logger.log(`Prior agent context (${history.length} messages, ~${tokenCount} tokens) under limit — injecting verbatim`);
       return conversationText;
     }
+    if (OPENAI_COMPATIBLE_PROVIDERS.has(this.provider)) {
+      return this.#summarizePriorContextWithOpenAiCompatible(conversationText, history.length);
+    }
     if (OPENROUTER_PROVIDERS.has(this.provider)) {
       return this.#summarizePriorContextWithOpenRouter(conversationText, history.length);
     }
@@ -1369,13 +1407,14 @@ ${lines.join('\n')}`;
     try {
       logger.log(`Anthropic: Summarizing prior agent context (${messageCount} messages) before injection`);
       const anthropic = await this.#getAnthropic();
+      const summaryModel = config.nativeAgentProviders.anthropic.summaryModel;
       const response = await anthropic.messages.create({
-        model: config.agentAnthropicSummaryModel,
+        model: summaryModel,
         max_tokens: 1024,
         messages: [{ role: 'user', content: `Summarize this conversation history concisely (2-4 paragraphs):\n\n${conversationText}` }]
       });
       if (response.usage) {
-        this.#logApiUsage(Provider.ANTHROPIC, response.usage, config.agentAnthropicSummaryModel);
+        this.#logApiUsage(Provider.ANTHROPIC, response.usage, summaryModel);
       }
       return response.content[0].text;
     } catch (error) {
@@ -1388,19 +1427,45 @@ ${lines.join('\n')}`;
     try {
       logger.log(`Gemini: Summarizing prior agent context (${messageCount} messages) before injection`);
       const gemini = await this.#getGemini();
+      const summaryModel = config.nativeAgentProviders.google.summaryModel;
       const response = await gemini.models.generateContent({
-        model: config.agentGeminiSummaryModel,
+        model: summaryModel,
         contents: [{
           role: 'user',
           parts: [{ text: `Summarize this conversation history concisely (2-4 paragraphs):\n\n${conversationText}` }]
         }]
       });
       if (response.usageMetadata) {
-        this.#logApiUsage(Provider.GOOGLE, response.usageMetadata, config.agentGeminiSummaryModel);
+        this.#logApiUsage(Provider.GOOGLE, response.usageMetadata, summaryModel);
       }
       return response.text || response.candidates?.[0]?.content?.parts?.[0]?.text || '';
     } catch (error) {
       logger.error('Gemini: Error summarizing prior context:', error);
+      return '[Prior conversation condensed due to size]';
+    }
+  }
+
+  async #summarizePriorContextWithOpenAiCompatible(conversationText, messageCount) {
+    // Pick the per-provider summary model from the native registry. Falls back to
+    // the agent's primary model for any unforeseen provider so summarization proceeds.
+    const model = config.nativeAgentProviders[this.provider]?.summaryModel || this.#resolveNativeModel();
+    try {
+      logger.log(`${this.provider}: Summarizing prior agent context (${messageCount} messages) before injection`);
+      const client = await this.#getOpenAiCompatibleClient();
+      const completion = await client.chat.completions.create({
+        model,
+        messages: [
+          { role: 'user', content: `Summarize this conversation history concisely (2-4 paragraphs):\n\n${conversationText}` }
+        ],
+        ...maxOutputTokensParam(this.provider, 1024),
+        ...reasoningParams(this.provider),
+      });
+      if (completion.usage) {
+        this.#logApiUsage(usageProviderFor(this.provider), completion.usage, model);
+      }
+      return completion.choices?.[0]?.message?.content ?? '';
+    } catch (error) {
+      logger.error(`${this.provider}: Error summarizing prior context: ${this.#describeOpenAiError(error)}`);
       return '[Prior conversation condensed due to size]';
     }
   }
@@ -1631,7 +1696,7 @@ ${lines.join('\n')}`;
 
         try {
           const response = await gemini.models.generateContent({
-            model: config.agentGeminiModel,
+            model: config.nativeAgentProviders.google.model,
             // Transient copy — see the anthropic-manual call for why history must
             // never hold the bytes.
             contents: hydrateContentsForGemini(messages, this.mediaStore),
@@ -1833,7 +1898,7 @@ ${lines.join('\n')}`;
 
       const agent = new LlmAgent({
         name: this.configManager.getAgentName(),
-        model: config.agentGeminiModel,
+        model: config.nativeAgentProviders.google.model,
         // A function, not the string itself. ADK runs any *string* instruction
         // through injectSessionState, which treats every `{IDENTIFIER}` in it as a
         // session-state lookup and throws "Context variable not found" when the key
@@ -2159,7 +2224,7 @@ ${lines.join('\n')}`;
       }
 
       const cache = await gemini.caches.create({
-        model: config.agentGeminiModel,
+        model: config.nativeAgentProviders.google.model,
         config: cacheConfig
       });
 
@@ -2226,6 +2291,16 @@ ${lines.join('\n')}`;
   #resolveOpenRouterModel() {
     const model = config.openRouterAgentProviders[this.provider]?.model;
     if (!model) throw new Error(`No openRouterAgentProviders entry configured for provider "${this.provider}"`);
+    return model;
+  }
+
+  /**
+   * Resolve the model id for a native-API provider from the shared registry
+   * config.nativeAgentProviders.
+   */
+  #resolveNativeModel() {
+    const model = config.nativeAgentProviders[this.provider]?.model;
+    if (!model) throw new Error(`No nativeAgentProviders entry configured for provider "${this.provider}"`);
     return model;
   }
 
@@ -2569,7 +2644,7 @@ ${lines.join('\n')}`;
                 // must never hold the bytes.
                 messages: [
                   { role: 'system', content: systemPrompt },
-                  ...hydrateMessagesForOpenAi(messages, this.mediaStore)
+                  ...hydrateMessagesForOpenRouter(messages, this.mediaStore)
                 ],
                 tools: chatTools.length > 0 ? chatTools : undefined,
               }
@@ -2627,6 +2702,285 @@ ${lines.join('\n')}`;
       if (this.#openRouterManualPendingUsage && llmUsed)
         this.#logApiUsage(Provider.OPENROUTER, this.#openRouterManualPendingUsage, llmUsed);
     }
+  }
+
+  /**
+   * Start conversation for a native-API provider whose own API is OpenAI-compatible
+   * (OPENAI_COMPATIBLE_PROVIDERS — currently deepseek and openai). The request goes to
+   * the vendor's own API through the official `openai` client.
+   *
+   * Self-contained on purpose: tool conversion, response processing, media hydration and
+   * error description all have OpenAI-route implementations of their own. The OpenRouter
+   * loop looks similar because both descend from OpenAI's function-calling shape, but
+   * @openrouter/sdk speaks camelCase (toolCalls / toolCallId / imageUrl) and validates
+   * against it, while this client speaks the wire format and 400s on an unrecognized
+   * property. Sharing the code meant one dialect silently losing the other's tool calls,
+   * so the routes are kept apart rather than bridged by a translation step.
+   */
+  async startConversationOpenAiCompatibleManual(userMessage) {
+    let llmUsed = null;
+    const label = `${this.provider} Manual`;
+    try {
+      const session = this.sessionManager.getSession(this.sessionId);
+      const model = this.#resolveNativeModel();
+      const client = await this.#getOpenAiCompatibleClient();
+      llmUsed = model;
+
+      this.sessionManager.addToConversationHistory(this.sessionId, {
+        role: 'user',
+        content: userMessage
+      });
+
+      const mode = session.mode;
+      const systemPrompt = this.#buildSystemPromptWithRag(mode);
+      const builtInTools = this.builtInToolProvider.getTools();
+      const dynamicTools = this.dynamicToolProvider.getTools();
+
+      await this.sessionManager.cleanupContext(this.sessionId, config.agentMaxContextTokens, this.provider);
+
+      const messages = this.sessionManager.getConversationContext(this.sessionId);
+      // Normalize Anthropic/Gemini formats to plain {role, content} for the chat API.
+      for (let i = 0; i < messages.length; i++) {
+        const m = toAnthropicMessage(messages[i]);
+        const role = m.role === 'assistant' ? 'assistant' : m.role === 'system' ? 'system' : 'user';
+        const content = typeof m.content === 'string'
+          ? m.content
+          : Array.isArray(m.content)
+            ? m.content.filter(b => b.type === 'text').map(b => b.text || '').join('\n')
+            : '';
+        messages[i] = { role, content };
+      }
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (!messages[i].content || (typeof messages[i].content === 'string' && messages[i].content.trim() === '')) messages.splice(i, 1);
+      }
+
+      const currentModel = session?.clientModel;
+      let modelTokenCount = 0;
+      if (currentModel) {
+        const modelJson = JSON.stringify(currentModel, null, 2);
+        modelTokenCount = countTokens(modelJson);
+        this.sessionManager.updateModelTokenCount(this.sessionId, modelTokenCount);
+      }
+
+      const chatTools = this.#openAiManualConvertTools(builtInTools, dynamicTools, modelTokenCount, mode);
+      const maxIterations = this.configManager.getMaxIterations();
+
+      while (true) {
+        let continueLoop = true;
+        let completedNaturally = false;
+        let iteration = 0;
+
+        while (continueLoop && iteration < maxIterations && !this.stopRequested) {
+          iteration++;
+          await this.sessionManager.cleanupContext(this.sessionId, config.agentMaxContextTokens, this.provider);
+
+          try {
+            const completion = await client.chat.completions.create({
+              model,
+              // Transient copy — see the anthropic-manual call for why history
+              // must never hold the bytes.
+              messages: [
+                { role: 'system', content: systemPrompt },
+                ...hydrateMessagesForOpenAi(messages, this.mediaStore)
+              ],
+              tools: chatTools.length > 0 ? chatTools : undefined,
+              ...reasoningParams(this.provider),
+            });
+
+            if (completion?.usage)
+              this.#openAiCompatibleManualPendingUsage = completion.usage;
+
+            if (this.stopRequested) break;
+
+            continueLoop = await this.processOpenAiManualResponse(completion, messages, builtInTools, dynamicTools);
+            if (!continueLoop && !this.stopRequested) completedNaturally = true;
+
+            if (this.stopRequested) break;
+          } catch (error) {
+            const detail = this.#describeOpenAiError(error);
+            logger.error(`${label}: error in agent conversation loop: ${detail}`);
+            await this.sendToClient(createErrorMessage(this.sessionId, `Agent error: ${detail}`, 'AGENT_ERROR'));
+            await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'awaiting_user', 'Agent stopped due to error'));
+            continueLoop = false;
+            completedNaturally = true;
+          }
+        }
+
+        if (this.stopRequested) {
+          logger.log(`${label}: agent stopped by user request for session ${this.sessionId}`);
+          this.stopRequested = false;
+          await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'awaiting_user', 'Agent stopped by user request'));
+          break;
+        }
+        const reachedMax = !completedNaturally && iteration >= maxIterations;
+        if (this.#pendingMessages.length === 0) {
+          if (reachedMax) {
+            logger.log(`${label}: agent conversation reached max iterations (${maxIterations})`);
+            await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'awaiting_user', `Reached maximum iterations (${maxIterations})`));
+          }
+          break;
+        }
+        if (reachedMax) logger.log(`${label}: max iterations (${maxIterations}) hit; draining queued message with fresh budget`);
+        const next = this.#pendingMessages.shift();
+        logger.log(`${label}: processing queued message (remaining: ${this.#pendingMessages.length})`);
+        // `messages` IS the live session context — one append, not two.
+        this.sessionManager.addToConversationHistory(this.sessionId, { role: 'user', content: next });
+      }
+    } catch (error) {
+      // Catches setup-time failures (resolveModel, cleanupContext, tool conversion,
+      // etc.) and anything else outside the per-iteration try.
+      const detail = this.#describeOpenAiError(error);
+      logger.error(`${label}: in conversation setup: ${detail}`);
+      await this.sendToClient(createErrorMessage(this.sessionId, `Agent error: ${detail}`, 'AGENT_ERROR'));
+      await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'awaiting_user', `Agent error: ${detail}`));
+    } finally {
+      if (this.#openAiCompatibleManualPendingUsage && llmUsed)
+        this.#logApiUsage(usageProviderFor(this.provider), this.#openAiCompatibleManualPendingUsage, llmUsed);
+    }
+  }
+
+  /**
+   * Tool declarations for the OpenAI chat-completions API: `{type:'function', function:
+   * {name, description, parameters}}`, filtered by the same availability rules every
+   * route applies.
+   */
+  #openAiManualConvertTools(builtInTools, dynamicTools, modelTokenCount, mode) {
+    const tools = [];
+    const seen = new Set();
+    const session = this.sessionManager.getSession(this.sessionId);
+    for (const [toolName, toolDef] of Object.entries(builtInTools.tools)) {
+      if (seen.has(toolName)) continue;
+      if (!isToolAvailable(toolDef, { mode, modelTokenCount, session, canWriteToLocalSandbox: this.configManager.canWriteToLocalSandbox() })) continue;
+      seen.add(toolName);
+      tools.push({
+        type: 'function',
+        function: {
+          name: toolName,
+          description: toolDef.description,
+          parameters: toolDef.inputSchema.toJSONSchema()
+        }
+      });
+    }
+    if (dynamicTools?.tools) {
+      for (const [toolName, toolDef] of Object.entries(dynamicTools.tools)) {
+        if (seen.has(toolName)) continue;
+        seen.add(toolName);
+        tools.push({
+          type: 'function',
+          function: {
+            name: toolName,
+            description: toolDef.description,
+            parameters: toolDef.inputSchema.toJSONSchema()
+          }
+        });
+      }
+    }
+    return tools;
+  }
+
+  /**
+   * Process one chat-completions response from a native OpenAI-compatible provider:
+   * emit the assistant text, run every tool call, and append the turn plus its results
+   * to the live session context.
+   *
+   * Reads and writes the wire format — `tool_calls` on the assistant turn, `tool_call_id`
+   * on the tool turn — because that is what this client sends and receives verbatim.
+   * Returns true when the loop should iterate again (tool calls were answered).
+   */
+  async processOpenAiManualResponse(completion, messages, builtInTools, dynamicTools) {
+    const message = completion.choices?.[0]?.message ?? {};
+    const hasText = typeof message.content === 'string' && message.content.trim() !== '';
+    const toolCalls = Array.isArray(message.tool_calls) ? message.tool_calls : [];
+
+    if (hasText) {
+      const html = await marked.parse(message.content);
+      await this.sendToClient(createAgentTextMessage(this.sessionId, html, false));
+    }
+
+    // Commit the assistant turn exactly once. `messages` IS the live session context, so
+    // addToConversationHistory is the whole write — a companion messages.push would
+    // duplicate the turn, and when the response carries both text and tool calls the text
+    // belongs on the tool_calls turn rather than on a separate text-only turn ahead of it.
+    if (toolCalls.length === 0) {
+      if (hasText) {
+        this.sessionManager.addToConversationHistory(this.sessionId, { role: 'assistant', content: message.content });
+      }
+      await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'success', 'Task completed successfully'));
+      return false;
+    }
+
+    this.sessionManager.addToConversationHistory(this.sessionId, {
+      role: 'assistant',
+      content: message.content ?? '',
+      tool_calls: toolCalls.map(tc => ({ id: tc.id, type: 'function', function: { name: tc.function?.name, arguments: tc.function?.arguments } }))
+    });
+
+    const pendingMedia = [];
+
+    for (const tc of toolCalls) {
+      if (this.stopRequested) return false;
+
+      const name = tc.function?.name;
+      let args = {};
+      try { args = tc.function?.arguments ? JSON.parse(tc.function.arguments) : {}; } catch { /* leave empty */ }
+      const isBuiltIn = this.#isBuiltInTool(name, builtInTools);
+      await this.#sendSlowToolMessageHelper(name, args);
+      await this.sendToClient(createToolCallNotificationMessage(this.sessionId, tc.id, name, args, isBuiltIn));
+
+      const toolResult = await this.executeToolCallHelper({ name, input: args }, builtInTools, dynamicTools);
+      if (this.stopRequested) return false;
+
+      const resultText = toolResultToText(toolResult);
+
+      logger.log(`${this.provider} Manual: tool call completed: ${name}`);
+      const responseType = this.#getResponseType(name);
+      await this.sendToClient(createToolCallCompletedMessage(
+        this.sessionId, tc.id, name, toolResult.content, toolResult.isError, responseType
+      ));
+
+      // The tool message stays text-only: OpenAI rejects a non-text tool result outright.
+      // Pictures go in a user turn after the loop instead.
+      messages.push({ role: 'tool', tool_call_id: tc.id, content: resultText });
+
+      for (const media of mediaBlocksOf(toolResult)) {
+        pendingMedia.push({ toolName: name, media });
+      }
+    }
+
+    // After the loop, never inside it: every entry in tool_calls has to be answered by a
+    // tool message before any other role appears, or the API 400s the whole request. So
+    // one trailing turn carries whatever pictures this round produced.
+    if (pendingMedia.length > 0) {
+      messages.push({
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: `Images returned by ${[...new Set(pendingMedia.map(p => p.toolName))].join(', ')}:`
+          },
+          ...pendingMedia.map(p => p.media)
+        ]
+      });
+    }
+
+    return true;
+  }
+
+  /**
+   * Surface the actionable detail from an official `openai` client error. Its `.message`
+   * already carries the API's own sentence, but the status, the machine-readable code and
+   * the request id are what make a 400 reproducible — and the request id is the only
+   * thing OpenAI support can act on.
+   */
+  #describeOpenAiError(error) {
+    if (!error) return 'unknown error';
+    const parts = [error.message || error.toString()];
+    if (error.status !== undefined) parts.push(`status=${error.status}`);
+    if (error.code) parts.push(`code=${error.code}`);
+    if (error.type) parts.push(`type=${error.type}`);
+    if (error.param) parts.push(`param=${error.param}`);
+    if (error.request_id) parts.push(`request_id=${error.request_id}`);
+    return parts.join(' | ');
   }
 
   /**
@@ -2808,6 +3162,11 @@ ${lines.join('\n')}`;
   async processOpenRouterManualResponse(completion, messages, builtInTools, dynamicTools) {
     const message = completion.choices?.[0]?.message ?? {};
     const hasText = typeof message.content === 'string' && message.content.trim() !== '';
+    // camelCase, which is @openrouter/sdk's dialect throughout. The native
+    // OpenAI-compatible providers get their own processOpenAiManualResponse rather than
+    // sharing this one — feeding a wire-format response through here made its tool calls
+    // invisible, so the turn looked like an empty text answer and the agent reported
+    // itself complete the moment it tried to use a tool.
     const toolCalls = Array.isArray(message.toolCalls) ? message.toolCalls : [];
 
     if (hasText) {
@@ -2950,7 +3309,9 @@ ${lines.join('\n')}`;
   #logApiUsage(provider, usage, model = null) {
     if (!usage) return;
     const resolvedModel = model ?? (
-      provider === Provider.ANTHROPIC ? config.agentAnthropicModel : config.agentGeminiModel
+      provider === Provider.ANTHROPIC
+        ? config.nativeAgentProviders.anthropic.model
+        : config.nativeAgentProviders.google.model
     );
     this.tokenReporter.report({ provider, model: resolvedModel, usage, clientKey: false }).catch(() => {});
   }
