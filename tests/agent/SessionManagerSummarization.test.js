@@ -1,5 +1,6 @@
 import { SessionManager } from '../../agent/utilities/SessionManager.js';
 import { AgentOrchestrator } from '../../agent/AgentOrchestrator.js';
+import { OPENAI_COMPATIBLE_PROVIDERS } from '../../agent/utilities/nativeProviders.js';
 import config from '../../config.js';
 import { jest } from '@jest/globals';
 import path from 'path';
@@ -43,7 +44,7 @@ function makeOpenRouterMock(summaryText = 'Mocked summary.') {
   };
 }
 
-function makeDeepSeekMock(summaryText = 'Mocked summary.') {
+function makeChatCompletionsMock(summaryText = 'Mocked summary.') {
   return {
     chat: {
       completions: {
@@ -73,7 +74,14 @@ function installSdkGuards(sessionManager) {
   sessionManager.anthropic = { messages: { create: guard('anthropic') } };
   sessionManager.gemini = { models: { generateContent: guard('gemini') } };
   sessionManager.openRouter = { chat: { send: guard('openRouter') } };
-  sessionManager.deepSeek = { chat: { completions: { create: guard('deepSeek') } } };
+  // The OpenAI-compatible providers are keyed by provider id, so every registered one
+  // gets its own guard — a new entry in config.nativeAgentProviders is covered here
+  // without an edit.
+  for (const provider of OPENAI_COMPATIBLE_PROVIDERS) {
+    sessionManager.openAiCompatibleClients[provider] = {
+      chat: { completions: { create: guard(`openAiCompatibleClients.${provider}`) } }
+    };
+  }
 }
 
 function userTextMsg(text) {
@@ -487,9 +495,12 @@ describe('SessionManager.cleanupContext (OpenRouter)', () => {
   });
 });
 
-// ─── SessionManager.cleanupContext (native DeepSeek provider) ───────────────
+// ─── SessionManager.cleanupContext (OpenAI-compatible native providers) ─────
+// Run for every provider in the registry that reaches its vendor's own
+// OpenAI-compatible API, so adding one to config.nativeAgentProviders extends this
+// suite rather than leaving the new route untested.
 
-describe('SessionManager.cleanupContext (native DeepSeek)', () => {
+describe.each([...OPENAI_COMPATIBLE_PROVIDERS])('SessionManager.cleanupContext (native %s)', (provider) => {
   let sessionManager;
   let sessionId;
 
@@ -498,42 +509,71 @@ describe('SessionManager.cleanupContext (native DeepSeek)', () => {
     sessionId = sessionManager.createSession(null);
     sessionManager.initializeSession(sessionId, 'cld', {}, [], {}, 'test-client');
     installSdkGuards(sessionManager);
-    sessionManager.deepSeek = makeDeepSeekMock();
+    sessionManager.openAiCompatibleClients[provider] = makeChatCompletionsMock();
   });
 
   afterEach(() => { sessionManager.shutdown(); });
 
-  it('routes deepseek provider through the native DeepSeek API', async () => {
+  const createMock = () => sessionManager.openAiCompatibleClients[provider].chat.completions.create;
+
+  it('routes the provider through its own native API client', async () => {
     for (let i = 0; i < 10; i++) {
       sessionManager.addToConversationHistory(sessionId, userTextMsg(`Message ${i}`));
       sessionManager.addToConversationHistory(sessionId, assistantTextMsg(`Response ${i}`));
     }
 
-    await sessionManager.cleanupContext(sessionId, 1, 'deepseek');
+    await sessionManager.cleanupContext(sessionId, 1, provider);
 
-    expect(sessionManager.deepSeek.chat.completions.create).toHaveBeenCalled();
+    expect(createMock()).toHaveBeenCalled();
+    // Every other provider's client must stay untouched — one shared client would
+    // send this vendor's traffic to whichever host was constructed first.
+    for (const other of OPENAI_COMPATIBLE_PROVIDERS) {
+      if (other === provider) continue;
+      expect(sessionManager.openAiCompatibleClients[other].chat.completions.create).not.toHaveBeenCalled();
+    }
     const context = sessionManager.getConversationContext(sessionId);
     expect(context[0].role).toBe('user');
     expect(typeof context[0].content).toBe('string');
     expect(context[0].content).toMatch(/\[Previous conversation summary\]/);
   });
 
-  it('passes the native summary model to the DeepSeek API', async () => {
+  it('passes the native summary model to the API', async () => {
     for (let i = 0; i < 10; i++) {
       sessionManager.addToConversationHistory(sessionId, userTextMsg(`Message ${i}`));
       sessionManager.addToConversationHistory(sessionId, assistantTextMsg(`Response ${i}`));
     }
 
-    await sessionManager.cleanupContext(sessionId, 1, 'deepseek');
+    await sessionManager.cleanupContext(sessionId, 1, provider);
 
-    const callArgs = sessionManager.deepSeek.chat.completions.create.mock.calls[0][0];
-    expect(callArgs.model).toBe(config.nativeAgentProviders.deepseek.summaryModel);
+    const callArgs = createMock().mock.calls[0][0];
+    expect(callArgs.model).toBe(config.nativeAgentProviders[provider].summaryModel);
     expect(callArgs.messages[0].role).toBe('user');
   });
 
-  it('throws a clear error when DEEPSEEK_API_KEY is missing and no client is installed', async () => {
-    delete process.env.DEEPSEEK_API_KEY;
-    sessionManager.deepSeek = null;
+  it('sends the output cap under the parameter name this vendor accepts', async () => {
+    for (let i = 0; i < 10; i++) {
+      sessionManager.addToConversationHistory(sessionId, userTextMsg(`Message ${i}`));
+      sessionManager.addToConversationHistory(sessionId, assistantTextMsg(`Response ${i}`));
+    }
+
+    await sessionManager.cleanupContext(sessionId, 1, provider);
+
+    // OpenAI's own API rejects max_tokens for the GPT-5 family; the others take it.
+    const callArgs = createMock().mock.calls[0][0];
+    if (provider === 'openai') {
+      expect(callArgs.max_completion_tokens).toBe(1024);
+      expect(callArgs.max_tokens).toBeUndefined();
+    } else {
+      expect(callArgs.max_tokens).toBe(1024);
+      expect(callArgs.max_completion_tokens).toBeUndefined();
+    }
+  });
+
+  it('falls back to a condensed summary when the provider API key is missing', async () => {
+    const keyEnvVar = `${provider.toUpperCase()}_API_KEY`;
+    const savedKey = process.env[keyEnvVar];
+    delete process.env[keyEnvVar];
+    sessionManager.openAiCompatibleClients[provider] = null;
     for (let i = 0; i < 5; i++) {
       sessionManager.addToConversationHistory(sessionId, userTextMsg(`Message ${i}`));
       sessionManager.addToConversationHistory(sessionId, assistantTextMsg(`Response ${i}`));
@@ -541,11 +581,13 @@ describe('SessionManager.cleanupContext (native DeepSeek)', () => {
 
     // The missing-key throw is caught inside #summarizeMessages and converted to
     // a fallback summary; the error must not escape cleanupContext.
-    await sessionManager.cleanupContext(sessionId, 1, 'deepseek');
+    await sessionManager.cleanupContext(sessionId, 1, provider);
 
     const context = sessionManager.getConversationContext(sessionId);
     const summaryText = context[0].content;
     expect(summaryText).toMatch(/condensed/);
+
+    if (savedKey !== undefined) process.env[keyEnvVar] = savedKey;
   });
 });
 
@@ -574,7 +616,8 @@ describe('SessionManager.cleanupContext SDK guards', () => {
     ['google', 'gemini', sm => sm.gemini.models.generateContent],
     ['anthropic', 'anthropic', sm => sm.anthropic.messages.create],
     ['qwen', 'openRouter', sm => sm.openRouter.chat.send],
-    ['deepseek', 'deepSeek', sm => sm.deepSeek.chat.completions.create],
+    ['deepseek', 'openAiCompatibleClients.deepseek', sm => sm.openAiCompatibleClients.deepseek.chat.completions.create],
+    ['openai', 'openAiCompatibleClients.openai', sm => sm.openAiCompatibleClients.openai.chat.completions.create],
     ['moonshotai', 'openRouter', sm => sm.openRouter.chat.send],
   ])('guard for %s fires when no working mock is installed', async (provider, _instance, getMockFn) => {
     for (let i = 0; i < 5; i++) {

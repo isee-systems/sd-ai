@@ -33,21 +33,50 @@ const config = {
     "agentMaxTokensForEngines": 32_000, // Maximum tokens before force switching to file-based editing
     "agentMaxContextTokens": 32_000, // Maximum tokens for conversation history sent to Claude API
     "agentTargetedEditingMinimum": 250, //Above this size, models can be edited without quantitative/qualitative engine
-    "agentDefaultProvider": 'anthropic', // Default LLM provider when client does not specify one ('anthropic' | 'google' | 'openrouter')
-    "agentAnthropicModel": 'claude-sonnet-5', // Model used for agent conversations MUST BE Anthropic models
-    "agentAnthropicSummaryModel": 'claude-haiku-4-5', // Model used for conversation history summarization MUST BE Anthropic models
-    "agentGeminiModel": 'gemini-3.6-flash', // Model used for agent conversations MUST BE gemini models
-    "agentGeminiSummaryModel": 'gemini-3.5-flash-lite', // Model used for conversation history summarization MUST BE gemini models
-    // Native-API agent providers — the single source of truth for every provider
-    // that reaches its vendor's API directly rather than via OpenRouter. Same
-    // derivation contract as openRouterAgentProviders: keys are the provider IDs
-    // clients send in `select_agent`, `displayName` is the UI label, and
-    // `model`/`summaryModel` are the vendor's own model ids.
+    "agentDefaultProvider": 'anthropic', // Default LLM provider when client does not specify one — any id in agentProviders below
+
+    /*
+    * Native-API agent providers — the single source of truth for every provider
+    * that reaches its vendor's API directly rather than via OpenRouter. Same
+    * derivation contract as openRouterAgentProviders: keys are the provider IDs
+    * clients send in `select_agent`, `displayName` is the UI label, and
+    * `model`/`summaryModel` are the vendor's own model ids (`model` for agent
+    * conversations, `summaryModel` for conversation-history summarization).
+    *
+    * 'anthropic' and 'google' each drive their own vendor SDK and are dispatched by
+    * provider id; every other entry here is assumed to speak the OpenAI-compatible
+    * chat-completions API and shares one manual loop — so adding another such vendor
+    * needs no new code path. Those entries also carry `baseURL`, the host their
+    * compatible endpoint lives at: vendors do not follow one naming convention
+    * (api.deepseek.com, but api.moonshot.cn / api.z.ai / api.x.ai), and several want
+    * an explicit /v1 suffix, so the host is stated here rather than guessed from the
+    * provider id — a wrong guess would surface as a DNS failure or 404 on first use
+    * instead of a clear config error. null means "the OpenAI SDK's own default host".
+    * <PROVIDER>_BASE_URL in the environment overrides whatever is set here, which is
+    * what lets a deployment point one at a gateway, proxy or self-hosted endpoint.
+    */
     "nativeAgentProviders": {
+        anthropic: {
+            displayName: 'Claude',
+            model: 'claude-sonnet-5',
+            summaryModel: 'claude-haiku-4-5'
+        },
+        google: {
+            displayName: 'Gemini',
+            model: 'gemini-3.6-flash',
+            summaryModel: 'gemini-3.5-flash-lite'
+        },
+        openai: {
+            displayName: 'ChatGPT',
+            model: 'gpt-5.6-terra',
+            summaryModel: 'gpt-5.6-luna',
+            baseURL: null
+        },
         deepseek: {
             displayName: 'DeepSeek',
             model: 'deepseek-v4-pro',
-            summaryModel: 'deepseek-v4-flash'
+            summaryModel: 'deepseek-v4-flash',
+            baseURL: 'https://api.deepseek.com'
         }
     },
     // OpenRouter-backed agent providers — the single source of truth for every
@@ -88,13 +117,12 @@ const config = {
             nonBuild: { normal: 'gemini-3.6-flash low', hard: 'gemini-3.6-flash high' }
         }
     },
-    // Full ordered list of valid agent provider IDs: the two direct-API providers
-    // plus every native-API and OpenRouter-backed brand above. A getter so it always
-    // tracks the registries — adding/removing a brand above is the only edit needed.
-    // Drives the select_agent provider enum and the per-agent supported_providers
-    // defaults.
+    // Full ordered list of valid agent provider IDs: every native-API brand plus every
+    // OpenRouter-backed brand above. A getter so it always tracks the registries —
+    // adding/removing a brand above is the only edit needed. Drives the select_agent
+    // provider enum and the per-agent supported_providers defaults.
     get agentProviders() {
-        return ['anthropic', 'google', ...Object.keys(this.nativeAgentProviders), ...Object.keys(this.openRouterAgentProviders)];
+        return [...Object.keys(this.nativeAgentProviders), ...Object.keys(this.openRouterAgentProviders)];
     },
     "agentAnthropicEffort": "medium",
     "agentAnthropicThinking": { type: "adaptive" }, // Opus 4.7+/Sonnet 4.6 use adaptive thinking; depth is controlled by agentAnthropicEffort (budget_tokens is removed and 400s)

@@ -24,9 +24,16 @@ import config from '../../config.js';
 // single config.js edit. The same registry carries each brand's summaryModel slug.
 const OPENROUTER_PROVIDERS = new Set(Object.keys(config.openRouterAgentProviders));
 
-// Native-API provider ids (config.nativeAgentProviders) — reached via the vendor's
-// own OpenAI-compatible API rather than OpenRouter.
-const NATIVE_PROVIDERS = new Set(Object.keys(config.nativeAgentProviders));
+// Native-API provider ids reached via the vendor's own OpenAI-compatible API rather than
+// OpenRouter, plus the per-vendor details that differ between them — see
+// agent/utilities/nativeProviders.js.
+import {
+  OPENAI_COMPATIBLE_PROVIDERS,
+  openAiCompatibleClientOptions,
+  maxOutputTokensParam,
+  reasoningParams,
+  usageProviderFor
+} from './nativeProviders.js';
 
 /**
  * Can this message legally be the FIRST message of a conversation? The
@@ -64,6 +71,13 @@ export class SessionManager {
 
   constructor(options = {}) {
     this.sessions = new Map();
+
+    // Summarization clients for the OpenAI-compatible native providers, keyed by
+    // provider id. One SessionManager summarizes for every live session, so a single
+    // shared client would send one vendor's traffic to whichever vendor's host was
+    // built first. The vendor-SDK clients (this.gemini / this.anthropic /
+    // this.openRouter) are one-per-manager because each speaks to exactly one host.
+    this.openAiCompatibleClients = {};
 
     // Use explicit override (mainly for isolation in tests) > per-process
     // subdirectory under the configured temp directory > OS tmpdir.
@@ -569,16 +583,16 @@ export class SessionManager {
    * Private — only called by #summarizeContextIfNeeded and cleanupContext.
    *
    * `provider` selects the summarization API: 'google' → Gemini (Gemini-format
-   * output), a native-API provider (config.nativeAgentProviders) → the vendor's
-   * OpenAI-compatible API, an OpenRouter brand (config.openRouterAgentProviders) →
-   * OpenRouter chat completions, anything else → Anthropic. OpenRouter, native
-   * and Anthropic share the same `{role, content}` output shape; only Gemini
-   * emits `{role, parts}`.
+   * output), an OpenAI-compatible native provider (config.nativeAgentProviders minus
+   * the two vendor-SDK brands) → the vendor's own API, an OpenRouter brand
+   * (config.openRouterAgentProviders) → OpenRouter chat completions, anything else →
+   * Anthropic. OpenRouter, native and Anthropic share the same `{role, content}`
+   * output shape; only Gemini emits `{role, parts}`.
    */
   async #summarizeMessages(messages, sessionId, provider) {
     const isGeminiFormat = provider === 'google';
     const isOpenRouter = OPENROUTER_PROVIDERS.has(provider);
-    const isNative = NATIVE_PROVIDERS.has(provider);
+    const isNative = OPENAI_COMPATIBLE_PROVIDERS.has(provider);
     try {
       const conversationText = messages.map((msg) => {
         if (Array.isArray(msg.parts)) {
@@ -621,30 +635,26 @@ ${conversationText}`;
           const GoogleGenAI = await loadGoogleGenai();
           this.gemini = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
         }
+        const model = config.nativeAgentProviders.google.summaryModel;
         const response = await this.gemini.models.generateContent({
-          model: config.agentGeminiSummaryModel,
+          model,
           contents: [{ role: 'user', parts: [{ text: summaryPrompt }] }]
         });
-        reporter.report({ provider: Provider.GOOGLE, model: config.agentGeminiSummaryModel, usage: response.usageMetadata, clientKey: false }).catch(() => {});
+        reporter.report({ provider: Provider.GOOGLE, model, usage: response.usageMetadata, clientKey: false }).catch(() => {});
         summaryText = response.text || response.candidates?.[0]?.content?.parts?.[0]?.text || '';
       } else if (isNative) {
-        if (!this.deepSeek) {
-          if (!process.env.DEEPSEEK_API_KEY) {
-            throw new Error('DeepSeek provider selected but DEEPSEEK_API_KEY is not set');
-          }
+        if (!this.openAiCompatibleClients[provider]) {
           const OpenAI = await loadOpenAiSdk();
-          this.deepSeek = new OpenAI({
-            apiKey: process.env.DEEPSEEK_API_KEY,
-            baseURL: process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com',
-          });
+          this.openAiCompatibleClients[provider] = new OpenAI(openAiCompatibleClientOptions(provider));
         }
         const model = config.nativeAgentProviders[provider].summaryModel;
-        const completion = await this.deepSeek.chat.completions.create({
+        const completion = await this.openAiCompatibleClients[provider].chat.completions.create({
           model,
           messages: [{ role: 'user', content: summaryPrompt }],
-          max_tokens: 1024,
+          ...maxOutputTokensParam(provider, 1024),
+          ...reasoningParams(provider),
         });
-        reporter.report({ provider: Provider.DEEPSEEK, model, usage: completion.usage, clientKey: false }).catch(() => {});
+        reporter.report({ provider: usageProviderFor(provider), model, usage: completion.usage, clientKey: false }).catch(() => {});
         summaryText = completion.choices?.[0]?.message?.content ?? '';
       } else if (isOpenRouter) {
         if (!this.openRouter) {
@@ -673,12 +683,13 @@ ${conversationText}`;
           const Anthropic = await loadAnthropicSdk();
           this.anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
         }
+        const model = config.nativeAgentProviders.anthropic.summaryModel;
         const response = await this.anthropic.messages.create({
-          model: config.agentAnthropicSummaryModel,
+          model,
           max_tokens: 1024,
           messages: [{ role: 'user', content: summaryPrompt }]
         });
-        reporter.report({ provider: Provider.ANTHROPIC, model: config.agentAnthropicSummaryModel, usage: response.usage, clientKey: false }).catch(() => {});
+        reporter.report({ provider: Provider.ANTHROPIC, model, usage: response.usage, clientKey: false }).catch(() => {});
         summaryText = response.content[0].text;
       }
 

@@ -13,8 +13,9 @@ export const Provider = Object.freeze({
 // Maps both internal usage-reporter Provider enum values (anthropic/openai/google/openrouter)
 // AND external orchestrator brand IDs to human-readable display names. The brand IDs are
 // not in the Provider enum — they identify the upstream LLM family the user picked — but
-// the UI needs friendly names for them too. The OpenRouter-routed brands are derived from
-// the shared config registry so adding/removing a brand is a single config.js edit.
+// the UI needs friendly names for them too. Both agent registries are spread in last so the
+// labels stay single-sourced in config.js; the literals above are the fallback for enum
+// values that no registry covers (and for the ones it does, they agree).
 export const ProviderDisplayNames = Object.freeze({
   [Provider.ANTHROPIC]: 'Claude',
   [Provider.GOOGLE]: 'Gemini',
@@ -22,7 +23,8 @@ export const ProviderDisplayNames = Object.freeze({
   [Provider.OPENROUTER]: 'OpenRouter',
   [Provider.DEEPSEEK]: 'DeepSeek',
   ...Object.fromEntries(
-    Object.entries(config.openRouterAgentProviders).map(([id, { displayName }]) => [id, displayName])
+    [...Object.entries(config.nativeAgentProviders), ...Object.entries(config.openRouterAgentProviders)]
+      .map(([id, { displayName }]) => [id, displayName])
   ),
 });
 

@@ -80,6 +80,7 @@ import {
   toOpenRouterAgentOutput,
   hydrateMessagesForAnthropic,
   hydrateContentsForGemini,
+  hydrateMessagesForOpenRouter,
   hydrateMessagesForOpenAi,
   MediaBudget
 } from '../../../agent/utilities/ToolResultFormatter.js';
@@ -230,7 +231,7 @@ describe('per-route content shapes', () => {
         { role: 'user', content: [{ type: 'text', text: 'Images:' }, mediaBlock(meta)] }
       ];
 
-      const hydrated = hydrateMessagesForOpenAi(messages, store);
+      const hydrated = hydrateMessagesForOpenRouter(messages, store);
 
       expect(hydrated[0]).toEqual(messages[0]);
       expect(hydrated[1].content[1]).toEqual({
@@ -246,13 +247,56 @@ describe('per-route content shapes', () => {
     it('produces a content part @openrouter/sdk will accept', async () => {
       const { ChatContentItems$outboundSchema } = await import('@openrouter/sdk/models');
 
-      const hydrated = hydrateMessagesForOpenAi(
+      const hydrated = hydrateMessagesForOpenRouter(
         [{ role: 'user', content: [{ type: 'text', text: 'Images:' }, mediaBlock(meta)] }], store);
 
       for (const part of hydrated[0].content) {
         const parsed = ChatContentItems$outboundSchema.safeParse(part);
         expect(parsed.success).toBe(true);
       }
+    });
+  });
+
+  // The two OpenAI-shaped SDKs disagree on key casing and each rejects the other's:
+  // @openrouter/sdk fails validation before sending, the official client 400s on the
+  // unrecognized property. So the native OpenAI-compatible route hydrates its own way
+  // rather than borrowing the OpenRouter shape.
+  describe('openai-manual (native)', () => {
+    it('rewrites media to an image_url part, the name the official client sends', () => {
+      const messages = [
+        { role: 'tool', tool_call_id: 'tc_1', content: 'drew it' },
+        { role: 'user', content: [{ type: 'text', text: 'Images:' }, mediaBlock(meta)] }
+      ];
+
+      const hydrated = hydrateMessagesForOpenAi(messages, store);
+
+      expect(hydrated[0]).toEqual(messages[0]);
+      expect(hydrated[1].content[1]).toEqual({
+        type: 'image_url',
+        image_url: { url: `data:image/png;base64,${PNG_B64}` }
+      });
+      expect(hydrated[1].content[1].imageUrl).toBeUndefined();
+      expect(hydrated[1].content[0]).toEqual({ type: 'text', text: 'Images:' });
+    });
+
+    it('keeps the bytes out of the live context', () => {
+      const messages = [{ role: 'user', content: [mediaBlock(meta)] }];
+
+      hydrateMessagesForOpenAi(messages, store);
+
+      expect(JSON.stringify(messages)).not.toContain(PNG_B64);
+    });
+
+    it('is the mirror of the OpenRouter hydrator, never the same shape', () => {
+      const messages = [{ role: 'user', content: [mediaBlock(meta)] }];
+
+      const openai = hydrateMessagesForOpenAi(messages, store)[0].content[0];
+      const openRouter = hydrateMessagesForOpenRouter(messages, store)[0].content[0];
+
+      expect(openai.image_url).toBeDefined();
+      expect(openai.imageUrl).toBeUndefined();
+      expect(openRouter.imageUrl).toBeDefined();
+      expect(openRouter.image_url).toBeUndefined();
     });
   });
 
@@ -265,6 +309,7 @@ describe('per-route content shapes', () => {
           [{ role: 'user', content: [{ type: 'tool_result', tool_use_id: 't', content: toolResultToBlocks(envelope) }] }],
           store),
         hydrateContentsForGemini([{ role: 'user', parts: [{ media: mediaBlock(meta) }] }], store),
+        hydrateMessagesForOpenRouter([{ role: 'user', content: [mediaBlock(meta)] }], store),
         hydrateMessagesForOpenAi([{ role: 'user', content: [mediaBlock(meta)] }], store)
       ];
 

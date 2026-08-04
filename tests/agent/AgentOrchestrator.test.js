@@ -1,6 +1,7 @@
 import { AgentOrchestrator } from '../../agent/AgentOrchestrator.js';
 import { SessionManager } from '../../agent/utilities/SessionManager.js';
 import { jest } from '@jest/globals';
+import config from '../../config.js';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -561,14 +562,108 @@ describe('processOpenRouterManualResponse', () => {
     expect(continueLoop).toBe(false);
     expect(messages).toHaveLength(0);
   });
+
+  // Each processor speaks exactly one dialect. Feeding a wire-format response through
+  // this one is how the OpenAI route came to stop dead at its first tool call — the
+  // camelCase read found nothing, so the turn looked like an empty text answer.
+  it('does not see wire-format tool_calls — that is the OpenAI processor\'s job', async () => {
+    const continueLoop = await orc.processOpenRouterManualResponse(
+      { choices: [{ message: { content: null, tool_calls: [{ id: 'tc_1', function: { name: 'my_tool', arguments: '{}' } }] } }] },
+      messages, EMPTY_TOOLS, EMPTY_TOOLS
+    );
+
+    expect(continueLoop).toBe(false);
+    expect(orc.executeToolCallHelper).not.toHaveBeenCalled();
+  });
 });
 
-// ─── tool result flattening, shared across the three manual routes ───────────
+// ─── processOpenAiManualResponse ────────────────────────────────────────────
 //
-// All three used to carry their own copy of the filter/map/join, and they
-// disagreed about the non-array cases -- one used String(), one JSON.stringify(),
-// one checked for a string first. These pin the shared helper's behaviour on
-// every route so a future edit cannot quietly reintroduce the divergence.
+// The native OpenAI-compatible route's own processor: the official `openai` client
+// sends and receives the wire format, so this one reads `tool_calls` and writes
+// `tool_call_id`, with no translation step between it and the request.
+
+function openAiCompletion(content, toolCalls) {
+  return { choices: [{ message: { content, tool_calls: toolCalls } }] };
+}
+
+describe('processOpenAiManualResponse', () => {
+  let sessionManager;
+  let sessionId;
+  let orc;
+  let messages;
+
+  beforeEach(() => {
+    sessionManager = new SessionManager();
+    sessionId = sessionManager.createSession(null);
+    sessionManager.initializeSession(sessionId, 'cld', {}, [], {}, 'test-client');
+    orc = makeOrchestrator(sessionManager, sessionId);
+    messages = sessionManager.getConversationContext(sessionId);
+  });
+
+  afterEach(() => {
+    orc.destroy();
+    sessionManager.shutdown();
+  });
+
+  it('commits a text-only response as exactly one assistant turn', async () => {
+    const continueLoop = await orc.processOpenAiManualResponse(
+      openAiCompletion('Hello world', []), messages, EMPTY_TOOLS, EMPTY_TOOLS
+    );
+
+    expect(continueLoop).toBe(false);
+    expect(messages).toEqual([{ role: 'assistant', content: 'Hello world' }]);
+  });
+
+  it('runs the tool and records the turn in the wire format', async () => {
+    const completion = openAiCompletion('Let me check that', [
+      { id: 'tc_1', type: 'function', function: { name: 'my_tool', arguments: '{"x":1}' } },
+    ]);
+
+    const continueLoop = await orc.processOpenAiManualResponse(
+      completion, messages, EMPTY_TOOLS, EMPTY_TOOLS
+    );
+
+    expect(continueLoop).toBe(true);
+    expect(messages).toHaveLength(2);
+    expect(messages[0].content).toBe('Let me check that');
+    expect(messages[0].tool_calls).toEqual([
+      { id: 'tc_1', type: 'function', function: { name: 'my_tool', arguments: '{"x":1}' } },
+    ]);
+    expect(messages[0].toolCalls).toBeUndefined();
+    expect(messages[1]).toEqual({ role: 'tool', tool_call_id: 'tc_1', content: 'tool output' });
+    expect(orc.executeToolCallHelper).toHaveBeenCalledWith(
+      { name: 'my_tool', input: { x: 1 } }, EMPTY_TOOLS, EMPTY_TOOLS
+    );
+  });
+
+  it('ignores camelCase tool calls — the OpenRouter dialect is not this route\'s', async () => {
+    const continueLoop = await orc.processOpenAiManualResponse(
+      { choices: [{ message: { content: null, toolCalls: [{ id: 'tc_1', function: { name: 'my_tool', arguments: '{}' } }] } }] },
+      messages, EMPTY_TOOLS, EMPTY_TOOLS
+    );
+
+    expect(continueLoop).toBe(false);
+    expect(orc.executeToolCallHelper).not.toHaveBeenCalled();
+  });
+
+  it('commits no assistant turn for an empty text-only response', async () => {
+    const continueLoop = await orc.processOpenAiManualResponse(
+      openAiCompletion('   ', []), messages, EMPTY_TOOLS, EMPTY_TOOLS
+    );
+
+    expect(continueLoop).toBe(false);
+    expect(messages).toHaveLength(0);
+  });
+});
+
+// ─── tool result flattening, shared across the four manual routes ───────────
+//
+// They used to carry their own copies of the filter/map/join, and disagreed about
+// the non-array cases -- one used String(), one JSON.stringify(), one checked for a
+// string first. These pin the shared helper's behaviour on every route so a future
+// edit cannot quietly reintroduce the divergence. The routes are deliberately
+// separate code paths; toolResultToText is the one thing they still share.
 
 describe('tool result flattening (all manual routes)', () => {
   let sessionManager;
@@ -654,6 +749,22 @@ describe('tool result flattening (all manual routes)', () => {
     );
 
     expect(messages[1]).toEqual({ role: 'tool', toolCallId: 'tc_1', content: 'tool output' });
+  });
+
+  it.each([
+    ['a block array', TEXT_BLOCKS],
+    ['a bare string', BARE_STRING],
+  ])('openai-manual renders %s into the tool message', async (_label, toolResult) => {
+    const { orc, messages } = route(toolResult);
+
+    await orc.processOpenAiManualResponse(
+      openAiCompletion('Let me check', [
+        { id: 'tc_1', type: 'function', function: { name: 'my_tool', arguments: '{}' } },
+      ]),
+      messages, EMPTY_TOOLS, EMPTY_TOOLS
+    );
+
+    expect(messages[1]).toEqual({ role: 'tool', tool_call_id: 'tc_1', content: 'tool output' });
   });
 
   // The bug this whole pass exists to kill: a client tool's envelope used to be
@@ -969,5 +1080,102 @@ describe('sandbox write gating — manual execute paths', () => {
 
     expect(result.isError).toBe(true);
     expect(fs.existsSync(target)).toBe(false);
+  });
+});
+
+// ─── native OpenAI-compatible manual loop — outbound request shape ───────────
+//
+// Everything this loop sends is shaped by the provider id, and each mismatch has
+// already reached production once: max_tokens (rejected for the GPT-5 family),
+// reasoning_effort with function tools (rejected on /v1/chat/completions), and the
+// camelCase tool-call keys (silently invisible, so the agent stopped at its first
+// tool call). These pin the whole payload rather than any one of them.
+
+describe('startConversationOpenAiCompatibleManual — request shape', () => {
+  let sessionManager;
+  let sessionId;
+  let orc;
+  let create;
+
+  function makeNativeOrchestrator(provider) {
+    process.env.OPENAI_API_KEY = 'dummy';
+    process.env.DEEPSEEK_API_KEY = 'dummy';
+    const sendToClient = jest.fn().mockResolvedValue(undefined);
+    const o = new AgentOrchestrator(sessionManager, sessionId, sendToClient, CONFIG, provider);
+    o.executeToolCallHelper = jest.fn().mockResolvedValue(BLOCK_RESULT);
+    // The lazy getter returns this instance when it is already set, so no SDK is
+    // constructed and no request leaves the process.
+    o.openAiCompatibleClient = { chat: { completions: { create } } };
+    return o;
+  }
+
+  beforeEach(() => {
+    sessionManager = new SessionManager();
+    sessionId = sessionManager.createSession(null);
+    sessionManager.initializeSession(sessionId, 'cld', {}, [], {}, 'test-client');
+    // Round one asks for a tool, round two answers in text so the loop terminates.
+    create = jest.fn()
+      .mockResolvedValueOnce({
+        choices: [{
+          message: {
+            content: null,
+            tool_calls: [{ id: 'tc_1', type: 'function', function: { name: 'my_tool', arguments: '{}' } }]
+          }
+        }],
+        usage: { prompt_tokens: 10, completion_tokens: 5 }
+      })
+      .mockResolvedValueOnce({
+        choices: [{ message: { content: 'All done', tool_calls: [] } }],
+        usage: { prompt_tokens: 12, completion_tokens: 6 }
+      });
+  });
+
+  afterEach(() => {
+    orc.destroy();
+    sessionManager.shutdown();
+  });
+
+  it('sends the tool result back in the snake_case dialect the official client requires', async () => {
+    orc = makeNativeOrchestrator('openai');
+
+    await orc.startConversationOpenAiCompatibleManual('build me a model');
+
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(orc.executeToolCallHelper).toHaveBeenCalledWith(
+      { name: 'my_tool', input: {} }, expect.anything(), expect.anything()
+    );
+
+    const secondRequest = create.mock.calls[1][0];
+    const assistant = secondRequest.messages.find(m => m.role === 'assistant');
+    const toolResult = secondRequest.messages.find(m => m.role === 'tool');
+    expect(assistant.tool_calls[0].id).toBe('tc_1');
+    expect(toolResult.tool_call_id).toBe('tc_1');
+    // Not one camelCase key anywhere in the payload — the official client 400s on an
+    // unrecognized property rather than ignoring it.
+    const wire = JSON.stringify(secondRequest);
+    expect(wire).not.toContain('toolCalls');
+    expect(wire).not.toContain('toolCallId');
+    expect(wire).not.toContain('imageUrl');
+  });
+
+  it('sends openai the registry model with reasoning off', async () => {
+    orc = makeNativeOrchestrator('openai');
+
+    await orc.startConversationOpenAiCompatibleManual('build me a model');
+
+    const firstRequest = create.mock.calls[0][0];
+    expect(firstRequest.model).toBe(config.nativeAgentProviders.openai.model);
+    expect(firstRequest.reasoning_effort).toBe('none');
+    expect(firstRequest.messages[0].role).toBe('system');
+  });
+
+  it('leaves deepseek requests free of the openai-only parameters', async () => {
+    orc = makeNativeOrchestrator('deepseek');
+
+    await orc.startConversationOpenAiCompatibleManual('build me a model');
+
+    const firstRequest = create.mock.calls[0][0];
+    expect(firstRequest.model).toBe(config.nativeAgentProviders.deepseek.model);
+    expect(firstRequest.reasoning_effort).toBeUndefined();
   });
 });

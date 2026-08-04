@@ -7,6 +7,7 @@ import { execSync } from 'child_process';
 import net from 'net';
 import { EventEmitter } from 'events';
 import logger from '../utilities/logger.js';
+import { OPENAI_COMPATIBLE_PROVIDERS, envVarNamesFor } from './utilities/nativeProviders.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = dirname(__dirname);  // sd-ai root (parent of agent/)
@@ -356,10 +357,27 @@ export class WorkerSpawner {
           const socketName = `ipc-${randomBytes(4).toString('hex')}.sock`;
           const socketPath = join(sessionTempDir, socketName);
           const workerEnv = {
+            // Credentials the engine tools need in-sandbox no matter which provider the
+            // agent itself is on — LLMWrapper reads these directly, so they are tied to
+            // the engines, not to the agent provider registry.
             OPENAI_API_KEY: process.env.OPENAI_API_KEY,
             GEMINI_API_KEY: process.env.GEMINI_API_KEY,
             ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
             OPEN_ROUTER_API_KEY: process.env.OPEN_ROUTER_API_KEY,
+            DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY,
+            DEEPSEEK_BASE_URL: process.env.DEEPSEEK_BASE_URL,
+            // Credentials the agent's own OpenAI-compatible providers need, derived from
+            // the registry rather than listed. The bwrap env is an explicit allowlist, so
+            // a provider whose key never reaches the worker works fine unsandboxed and
+            // fails only on Linux — i.e. only in prod. Deriving keeps registering one in
+            // config.nativeAgentProviders the single edit it is everywhere else. (The
+            // vendor-SDK keys above cannot be derived: OPEN_ROUTER_API_KEY is not
+            // OPENROUTER_API_KEY and Gemini's is not GOOGLE_API_KEY.)
+            ...Object.fromEntries(
+              [...OPENAI_COMPATIBLE_PROVIDERS]
+                .flatMap(provider => Object.values(envVarNamesFor(provider)))
+                .map(name => [name, process.env[name]])
+            ),
             TOKEN_REPORTER_URL: process.env.TOKEN_REPORTER_URL,
             SESSION_ID: sessionId,
             SESSION_TEMP_DIR: WorkerSpawner.CONTAINER_SESSION_PATH,

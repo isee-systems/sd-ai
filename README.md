@@ -314,11 +314,12 @@ See [agent/README.md](agent/README.md) for the full WebSocket protocol, all mess
 1. fork this repo and git clone your fork locally
 2. create an `.env` file at the top level which has the following keys:
 ```
-OPENAI_API_KEY="sk-asdjkshd" # if you're doing work with engines that use the LLMWrapper class in utils.js (quantitative, qualitative, seldon, etc.)
+OPENAI_API_KEY="sk-asdjkshd" # if you're doing work with engines that use the LLMWrapper class in utils.js (quantitative, qualitative, seldon, etc.), or using the agent's native 'openai' provider
+OPENAI_BASE_URL="https://api.openai.com/v1" # optional override for the OpenAI API base URL (e.g. an OpenAI-compatible gateway); unset means the SDK's own default host
 GEMINI_API_KEY="asdjkshd" # if you're doing work with engines using Gemini models (causal-chains, seldon, quantitative, qualitative)
 ANTHROPIC_API_KEY="sk-ant-asdjkshd" # if you're using Claude models for engines or the agent
-OPEN_ROUTER_API_KEY="sk-or-asdjkshd" # if you're using OpenRouter-routed models (Qwen, Deepseek, Kimi) for engines or the agent
-DEEPSEEK_API_KEY="sk-asdjkshd" # if you're using DeepSeek's native API for engines (qualitative, quantitative, seldon, etc.) with the bare 'deepseek-v4-pro' / 'deepseek-v4-flash' models
+OPEN_ROUTER_API_KEY="sk-or-asdjkshd" # if you're using OpenRouter-routed models (Qwen, Kimi, GLM) for engines or the agent
+DEEPSEEK_API_KEY="sk-asdjkshd" # if you're using DeepSeek's native API for engines (qualitative, quantitative, seldon, etc.) with the bare 'deepseek-v4-pro' / 'deepseek-v4-flash' models, or using the agent's native 'deepseek' provider
 DEEPSEEK_BASE_URL="https://api.deepseek.com" # optional override for the native DeepSeek API base URL (e.g. an OpenAI-compatible gateway)
 AUTHENTICATION_KEY="my_secret_key" # only needed for securing publically accessible deployments. Requires client pass an Authentication header matching this value. e.g. `curl -H "Authentication: my_super_secret_value_in_env_file"` to the engine generate request only
 REPORTER_URL="https://your-metrics-server.com/api/metrics" # optional URL to POST engine usage metrics to. If not set, metrics reporting is disabled.
