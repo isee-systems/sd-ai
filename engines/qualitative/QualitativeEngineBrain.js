@@ -1,4 +1,4 @@
-import {LLMWrapper} from "../../utilities/LLMWrapper.js";
+import {LLMWrapper, ModelType} from "../../utilities/LLMWrapper.js";
 import projectUtils from "../../utilities/utils.js";
 
 class ResponseFormatError extends Error {
@@ -210,7 +210,7 @@ You will conduct a multistep process:
         // they sometimes return only the new relationships, dropping the existing
         // model. Evaluations compare names and existing edges exactly, so
         // DeepSeek-specific constraints are worth it.
-        if (this.#llmWrapper.model.kind === LLMWrapper.ModelType.DEEPSEEK) {
+        if (this.#llmWrapper.model.kind === ModelType.DEEPSEEK) {
             systemPrompt += "\n" + QualitativeEngineBrain.DEEPSEEK_NAMING_ADDITION;
             if (lastModel && lastModel.relationships && lastModel.relationships.length > 0) {
                 systemPrompt += "\n" + QualitativeEngineBrain.DEEPSEEK_ITERATION_ADDITION;
