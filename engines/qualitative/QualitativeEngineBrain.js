@@ -84,7 +84,7 @@ Example 6 of a user input:
 Corresponding JSON response:
 {}`
 
-    static DEFAULT_SYSTEM_PROMPT = 
+    static DEFAULT_SYSTEM_PROMPT =
 `You are a System Dynamics Professional Modeler. Users will give you text, and it is your job to generate causal relationships from that text.
 
 You will conduct a multistep process:

@@ -66,14 +66,19 @@ let isContinuing = false;
 let experimentResultsName;
 
 if (matchingFiles.length > 0) {
-    const response = await prompts({
-      type: 'toggle',
-      name: 'resume',
-      message: 'Do you want to resume previous evaluation run? Selecting no will discard previous in progress results.',
-      initial: true,
-      active: 'yes',
-      inactive: 'no'
-    });
+    // SDAI_NONINTERACTIVE=1 skips the interactive resume prompt — needed for
+    // background/CI runs (prompts hangs on a non-TTY stdin). Defaults to
+    // resuming, the same answer the prompt's initial state gives.
+    const response = process.env.SDAI_NONINTERACTIVE === '1'
+      ? { resume: true }
+      : await prompts({
+          type: 'toggle',
+          name: 'resume',
+          message: 'Do you want to resume previous evaluation run? Selecting no will discard previous in progress results.',
+          initial: true,
+          active: 'yes',
+          inactive: 'no'
+        });
     isContinuing = response.resume;
     if (isContinuing && matchingFiles.length > 1) {
       console.log(chalk.red(chalk.bold("Found multiple in progress experiment runs. Please delete all files you don't wish to resume from.")));
@@ -185,10 +190,12 @@ console.log();
 
 console.log("Press enter to run this experiment...");
 
-if (process.platform === "win32") {
-  spawnSync("pause", { shell: true, stdio: [0, 1, 2] });
-} else {
-  spawnSync("read _", { shell: true, stdio: [0, 1, 2] });
+if (process.env.SDAI_NONINTERACTIVE !== '1') {
+  if (process.platform === "win32") {
+    spawnSync("pause", { shell: true, stdio: [0, 1, 2] });
+  } else {
+    spawnSync("read _", { shell: true, stdio: [0, 1, 2] });
+  }
 }
 
 

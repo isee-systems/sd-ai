@@ -354,7 +354,10 @@ export function hydrateContentsForGemini(contents, store, budget = new MediaBudg
 // snake_case form fails the content-part union — "Input validation failed", with no
 // request sent at all. The response side is camelCase too (`finishReason`,
 // `imageUrl`), which is the tell that this SDK speaks camelCase throughout.
-export function hydrateMessagesForOpenAi(messages, store, budget = new MediaBudget()) {
+//
+// The official `openai` client is the exact mirror — see hydrateMessagesForOpenAi — so
+// the two routes hydrate separately rather than sharing a shape and translating.
+export function hydrateMessagesForOpenRouter(messages, store, budget = new MediaBudget()) {
   const out = [...messages];
 
   for (let i = out.length - 1; i >= 0; i--) {
@@ -364,6 +367,27 @@ export function hydrateMessagesForOpenAi(messages, store, budget = new MediaBudg
     const content = hydrateBlocks(message.content, store, budget, (block, data) => ({
       type: 'image_url',
       imageUrl: { url: `data:${block.mimeType};base64,${data}` }
+    }));
+
+    if (content !== message.content) out[i] = { ...message, content };
+  }
+
+  return out;
+}
+
+// `image_url`, the wire name, for the vendors reached through the official `openai`
+// client. That client sends the object as given and the API rejects an unrecognized
+// property outright, so the camelCase form @openrouter/sdk demands is a 400 here.
+export function hydrateMessagesForOpenAi(messages, store, budget = new MediaBudget()) {
+  const out = [...messages];
+
+  for (let i = out.length - 1; i >= 0; i--) {
+    const message = out[i];
+    if (!Array.isArray(message?.content)) continue;
+
+    const content = hydrateBlocks(message.content, store, budget, (block, data) => ({
+      type: 'image_url',
+      image_url: { url: `data:${block.mimeType};base64,${data}` }
     }));
 
     if (content !== message.content) out[i] = { ...message, content };

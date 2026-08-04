@@ -4,7 +4,7 @@ AI-powered agent for building and modifying System Dynamics models via WebSocket
 
 ## Overview
 
-This WebSocket server provides an AI agent (powered by Claude, Gemini, or OpenRouter-routed brands like Qwen / Deepseek / Kimi) that helps users build, modify, and analyze System Dynamics models. The agent uses built-in SD-AI engine tools and communicates with the client for model state, simulation runs, feedback loop data, and variable time-series.
+This WebSocket server provides an AI agent (powered by Claude, Gemini, DeepSeek or GPT on their own APIs, or OpenRouter-routed brands like Qwen / Kimi / GLM) that helps users build, modify, and analyze System Dynamics models. The agent uses built-in SD-AI engine tools and communicates with the client for model state, simulation runs, feedback loop data, and variable time-series.
 
 **Key Features:**
 - Stateless server architecture (all user data lives client-side)
@@ -265,7 +265,7 @@ The `agentConfig` string must be a Markdown document with valid YAML frontmatter
 **Fields:**
 - `agentId` — ID of a built-in agent (e.g., `"socrates"`, `"merlin"`). Available agent IDs are returned in `session_ready`. Required if `agentConfig` is not provided.
 - `agentConfig` — Full agent configuration as a Markdown string. Required if `agentId` is not provided. Server returns `AGENT_SELECTION_ERROR` if the frontmatter is missing or invalid.
-- `provider` — LLM provider. `"anthropic"` and `"google"` reach their vendor APIs directly; every other id names an upstream LLM brand routed internally through the OpenRouter gateway. The OpenRouter-backed brands are defined in `config.openRouterAgentProviders` (currently `qwen`, `deepseek`, `moonshotai`, `zai`/GLM) — add or remove one there and the full set updates everywhere. The complete accepted list is `config.agentProviders`. Defaults to `agentDefaultProvider` in `config.js`. Ignored when the agent's `supportedProviders` has exactly one entry.
+- `provider` — LLM provider. The brands that reach their vendor API directly are defined in `config.nativeAgentProviders` (currently `anthropic`/Claude, `google`/Gemini, `deepseek`, `openai`); every other id names an upstream LLM brand routed internally through the OpenRouter gateway and is defined in `config.openRouterAgentProviders` (currently `qwen`, `moonshotai`/Kimi, `zai`/GLM). Each entry carries that brand's `displayName`, `model` and `summaryModel` — add or remove one and the full set updates everywhere. The complete accepted list is `config.agentProviders`. Defaults to `agentDefaultProvider` in `config.js`. Ignored when the agent's `supportedProviders` has exactly one entry.
 
 #### 3. Chat Message
 
@@ -497,7 +497,7 @@ Confirms the selected agent is ready.
 - `agentId` — `"custom"` when a custom `agentConfig` was used; otherwise the built-in agent ID.
 - `agentName` — Display name from the agent's frontmatter.
 - `supportedProviders` — Providers this agent accepts, in `{id, name}` form. Same format as the `supportedProviders` array in `session_ready`. Use this to populate a provider selector after agent selection — especially important for custom agents where the supported providers are only known after the server parses the config.
-- `currentProvider` — The provider ID that was actually selected for this session (one of `config.agentProviders`, e.g. `"anthropic"`, `"google"`, or an OpenRouter brand such as `"zai"`). Resolved from the `provider` field of the `select_agent` message, falling back to `agentDefaultProvider` in config, or forced to the single entry when `supportedProviders` has exactly one item. The OpenRouter-routed brands all share the same internal code paths but pick different model slugs from their `config.openRouterAgentProviders` entry (`model` / `summaryModel`).
+- `currentProvider` — The provider ID that was actually selected for this session (one of `config.agentProviders`, e.g. `"anthropic"`, `"google"`, or an OpenRouter brand such as `"zai"`). Resolved from the `provider` field of the `select_agent` message, falling back to `agentDefaultProvider` in config, or forced to the single entry when `supportedProviders` has exactly one item. Every brand takes its models from its own registry entry (`model` / `summaryModel`) — `config.nativeAgentProviders` for the direct-API brands, `config.openRouterAgentProviders` for the gateway-routed ones, which additionally all share the same internal code paths.
 
 #### 4. Agent Text
 
@@ -1074,7 +1074,7 @@ Reading is never gated. `get_variable_data` writes simulation output to disk and
 
 Enforcement is in two places. `isToolAvailable` (see `agent/tools/toolAvailability.js`) withholds any tool marked `requiresSandboxWrite` from an agent without the grant, which keeps it out of every route's declaration list; and the manual execute paths refuse the call outright if it arrives anyway. The second guard matters on agent switch, where the previous agent's transcript is replayed into this agent's prompt — an agent without the grant can find itself reading worked examples of the tools Merlin has.
 
-Provider IDs name the actual LLM brand the user is choosing. `anthropic` and `google` reach their vendor APIs directly. The OpenRouter-backed brands are defined entirely in `config.openRouterAgentProviders` (currently `qwen`, `deepseek`, `moonshotai`, `zai`) — the orchestrator shares one code path for all of them and resolves the model slug from each brand's `model` / `summaryModel` entry. Adding or removing a brand is a single edit to that object in `config.js`.
+Provider IDs name the actual LLM brand the user is choosing. The direct-API brands are defined entirely in `config.nativeAgentProviders` (currently `anthropic`, `google`, `deepseek`, `openai`): `anthropic` and `google` each drive their own vendor SDK, and every other entry is assumed to speak the OpenAI-compatible chat-completions API and shares one code path. The OpenRouter-backed brands are defined entirely in `config.openRouterAgentProviders` (currently `qwen`, `moonshotai`, `zai`) — the orchestrator shares one code path for all of them too. Either way the models come from that brand's `model` / `summaryModel` entry, and adding or removing a brand is a single edit to the matching object in `config.js`.
 
 The Markdown body below the frontmatter is the agent's full system prompt/instructions.
 
@@ -1126,8 +1126,9 @@ ws.on('message', (data) => {
     case 'session_ready':
       const agentId = message.defaults?.sfd || message.availableAgents[0]?.id;
       // Optionally specify a provider; omit to use the server default (anthropic).
-      // Other supported values: 'google' plus the OpenRouter brands in
-      // config.openRouterAgentProviders ('qwen', 'deepseek', 'moonshotai', 'zai').
+      // Other supported values: the rest of config.nativeAgentProviders ('google',
+      // 'deepseek', 'openai') plus the OpenRouter brands in
+      // config.openRouterAgentProviders ('qwen', 'moonshotai', 'zai').
       ws.send(JSON.stringify({ type: 'select_agent', sessionId, agentId, provider: 'anthropic' }));
       break;
 
