@@ -25,7 +25,42 @@ const config = {
     */
     "buildDefaultModel": 'gemini-3.6-flash', //LLMWrapper underlyingModel default for building model tools
     "nonBuildDefaultModel": 'gemini-3.6-flash', //LLMWrapper underlyingModel default for non-building model tools
-    
+    "evalModel": "gemini-3.6-flash", //LLMWrapper underlyingModel default used for judging LLM repsonses during eval runs
+
+    /*
+    * Every model the engines expose in the `underlyingModel` combobox, in display
+    * order. `label` is the UI text, `value` is the id LLMWrapper routes on — and that
+    * routing is by shape, not by an explicit provider field (see ModelCapabilities.kind):
+    * a namespaced `<provider>/<model>` slug goes to OpenRouter, while a bare id is
+    * matched by substring to its vendor's own API. So 'deepseek/deepseek-v4-pro' and
+    * 'deepseek-v4-pro' are the same model reached two different ways, and both are
+    * listed deliberately.
+    */
+    "models": [
+        {label: "GPT-5.6 Sol", value: 'gpt-5.6-sol'},
+        {label: "GPT-5.6 Terra", value: 'gpt-5.6-terra'},
+        {label: "GPT-5.6 Luna", value: 'gpt-5.6-luna'},
+        {label: "Gemini 3.1-pro-preview", value: 'gemini-3.1-pro-preview'},
+        {label: "Gemini 3.6-flash", value: 'gemini-3.6-flash'},
+        {label: "Gemini 3.6-flash high", value: 'gemini-3.6-flash high'},
+        {label: "Gemini 3.6-flash medium", value: 'gemini-3.6-flash medium'},
+        {label: "Gemini 3.6-flash low", value: 'gemini-3.6-flash low'},
+        {label: "Gemini 3.5-flash", value: 'gemini-3.5-flash'},
+        {label: "Claude Fable 5", value: 'claude-fable-5'},
+        {label: "Claude Opus 5", value: 'claude-opus-5'},
+        {label: "Claude Sonnet 5", value: 'claude-sonnet-5'},
+        {label: "Claude Haiku 4.5", value: 'claude-haiku-4-5'},
+        {label: "Qwen3.7 Max", value: 'qwen/qwen3.7-max'},
+        {label: "Qwen3.7 Plus", value: 'qwen/qwen3.7-plus'},
+        {label: "Deepseek v4 Pro", value: 'deepseek/deepseek-v4-pro'},
+        {label: "Deepseek v4 Flash", value: 'deepseek/deepseek-v4-flash'},
+        // Native DeepSeek API models (routed directly to DEEPSEEK_API_KEY, not OpenRouter)
+        {label: "Deepseek v4 Pro (API)", value: 'deepseek-v4-pro'},
+        {label: "Deepseek v4 Flash (API)", value: 'deepseek-v4-flash'},
+        {label: "Kimi K3", value: 'moonshotai/kimi-k3'},
+        {label: "GLM 5.2", value: 'z-ai/glm-5.2'},
+    ],
+
     /*
     * These settings control the operation of the agents
     */

@@ -254,34 +254,11 @@ export class LLMWrapper {
     }
   }
 
-  static MODELS = [
-      {label: "GPT-5.6 Sol", value: 'gpt-5.6-sol'},
-      {label: "GPT-5.6 Terra", value: 'gpt-5.6-terra'},
-      {label: "GPT-5.6 Luna", value: 'gpt-5.6-luna'},
-      {label: "Gemini 3.1-pro-preview", value: 'gemini-3.1-pro-preview'},
-      {label: "Gemini 3.6-flash", value: 'gemini-3.6-flash'},
-      {label: "Gemini 3.6-flash high", value: 'gemini-3.6-flash high'},
-      {label: "Gemini 3.6-flash medium", value: 'gemini-3.6-flash medium'},
-      {label: "Gemini 3.6-flash low", value: 'gemini-3.6-flash low'},
-      {label: "Gemini 3.5-flash", value: 'gemini-3.5-flash'},
-      {label: "Claude Fable 5", value: 'claude-fable-5'},
-      {label: "Claude Opus 5", value: 'claude-opus-5'},
-      {label: "Claude Sonnet 5", value: 'claude-sonnet-5'},
-      {label: "Claude Haiku 4.5", value: 'claude-haiku-4-5'},
-      {label: "Qwen3.7 Max", value: 'qwen/qwen3.7-max'},
-      {label: "Qwen3.7 Plus", value: 'qwen/qwen3.7-plus'},
-      {label: "Deepseek v4 Pro", value: 'deepseek/deepseek-v4-pro'},
-      {label: "Deepseek v4 Flash", value: 'deepseek/deepseek-v4-flash'},
-      // Native DeepSeek API models (routed directly to DEEPSEEK_API_KEY, not OpenRouter)
-      {label: "Deepseek v4 Pro (API)", value: 'deepseek-v4-pro'},
-      {label: "Deepseek v4 Flash (API)", value: 'deepseek-v4-flash'},
-      {label: "Kimi K3", value: 'moonshotai/kimi-k3'},
-      {label: "GLM 5.2", value: 'z-ai/glm-5.2'},
-  ];
+  static MODELS = config.models;
 
   static BUILD_DEFAULT_MODEL = config.buildDefaultModel;
   static NON_BUILD_DEFAULT_MODEL = config.nonBuildDefaultModel;
-  static EVAL_MODEL = process.env.EVAL_MODEL ?? 'gemini-3.6-flash';
+  static EVAL_MODEL = config.evalModel;
   
   static SCHEMA_STRINGS = {
     "from": "This is a variable which causes the to variable in this relationship that is between two variables, from and to.  The from variable is the equivalent of a cause.  The to variable is the equivalent of an effect",
