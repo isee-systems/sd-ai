@@ -55,8 +55,8 @@ const config = {
         {label: "Deepseek v4 Pro", value: 'deepseek/deepseek-v4-pro'},
         {label: "Deepseek v4 Flash", value: 'deepseek/deepseek-v4-flash'},
         // Native DeepSeek API models (routed directly to DEEPSEEK_API_KEY, not OpenRouter)
-        {label: "Deepseek v4 Pro (API)", value: 'deepseek-v4-pro'},
-        {label: "Deepseek v4 Flash (API)", value: 'deepseek-v4-flash'},
+        /*{label: "Deepseek v4 Pro (API)", value: 'deepseek-v4-pro'},
+        {label: "Deepseek v4 Flash (API)", value: 'deepseek-v4-flash'},*/
         {label: "Kimi K3", value: 'moonshotai/kimi-k3'},
         {label: "GLM 5.2", value: 'z-ai/glm-5.2'},
     ],
@@ -100,7 +100,7 @@ const config = {
             displayName: 'Gemini',
             model: 'gemini-3.6-flash',
             summaryModel: 'gemini-3.5-flash-lite'
-        },
+        }/*,
         openai: {
             displayName: 'ChatGPT',
             model: 'gpt-5.6-terra',
@@ -113,6 +113,7 @@ const config = {
             summaryModel: 'deepseek-v4-flash',
             baseURL: 'https://api.deepseek.com'
         }
+        */
     },
     // OpenRouter-backed agent providers — the single source of truth for every
     // OpenRouter-routed brand. Add or remove an entry here and the whole agent stack
@@ -126,6 +127,11 @@ const config = {
             displayName: 'Qwen',
             model: 'qwen/qwen3.7-max',
             summaryModel: 'qwen/qwen3.7-plus'
+        },
+        deepseek: {
+            displayName: 'Deepseek',
+            model: 'deepseek/deepseek-v4-pro',
+            summaryModel: 'deepseek/deepseek-v4-flash'
         },
         moonshotai: {
             displayName: 'Kimi',
