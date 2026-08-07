@@ -98,19 +98,47 @@ describe('engineGenerate credential waiver', () => {
     expect(response.status).toBe(403);
   }, TIMEOUT);
 
-  // LLMWrapper reads openRouterKey/deepseekKey, but the route does not treat
-  // them as waivers — an OpenRouter-routed request always needs the header.
-  // Fail-closed, and pinned so widening the waiver stays a deliberate act.
+  // openRouterKey and deepseekKey waive on the same reasoning as the other
+  // three: LLMWrapper reads each from the request parameters and only falls back
+  // to the environment when it is absent, so a request carrying one genuinely
+  // runs on the caller's account.
   it.each([
     ['openRouterKey', 'qwen/qwen3.7-max'],
+    ['openRouterKey', 'deepseek/deepseek-v4-pro'],
     ['deepseekKey', 'deepseek-v4-pro'],
-  ])('does not waive auth for %s', async (keyName, model) => {
+  ])('waives auth for %s on %s', async (keyName, model) => {
+    const response = await request(app)
+      .post('/qualitative/generate')
+      .send({ prompt: 'hi', underlyingModel: model, [keyName]: 'sk-client-key' });
+
+    expect(response.status).not.toBe(403);
+  }, TIMEOUT);
+
+  // The two ways to reach DeepSeek take different keys, so the pair must not be
+  // interchangeable: the namespaced slug bills OpenRouter and the bare id bills
+  // DeepSeek directly. Sending the other one leaves the request on a server key.
+  it.each([
+    ['deepseekKey', 'deepseek/deepseek-v4-pro'],
+    ['openRouterKey', 'deepseek-v4-pro'],
+  ])('does not waive auth for %s on %s', async (keyName, model) => {
     const response = await request(app)
       .post('/qualitative/generate')
       .send({ prompt: 'hi', underlyingModel: model, [keyName]: 'sk-client-key' });
 
     expect(response.status).toBe(403);
   }, TIMEOUT);
+
+  // Local LM Studio takes no caller credential at all — it runs against
+  // LM_STUDIO_BASE_URL with a placeholder key — so no key may waive there.
+  it.each(['openAIKey', 'openRouterKey', 'deepseekKey'])(
+    'does not waive auth for %s on a local llama model',
+    async (keyName) => {
+      const response = await request(app)
+        .post('/qualitative/generate')
+        .send({ prompt: 'hi', underlyingModel: 'llama-3.3-70b', [keyName]: 'sk-client-key' });
+
+      expect(response.status).toBe(403);
+    }, TIMEOUT);
 
   it('still accepts a valid Authentication header with no client key', async () => {
     const response = await request(app)

@@ -25,11 +25,11 @@ import { join } from 'path';
 // The names LLMWrapper reads a client-supplied credential from. A credential
 // parameter must use one of these or the waiver stops meaning what it says.
 //
-// Only the first three appear in the route's CLIENT_CREDENTIAL_PARAMS, so only
-// they can waive AUTHENTICATION_KEY. openRouterKey and deepseekKey are read by
-// LLMWrapper but waive nothing: an OpenRouter- or Deepseek-routed request always
-// needs the header. That is deliberate and fail-closed — see the waiver tests in
-// engineGenerateAuth.test.js. `clientId` is canonical and not a secret; it is
+// Every key name here also appears in the route's CLIENT_CREDENTIAL_PARAMS, each
+// paired with the model kind it pays for, so any of them can waive
+// AUTHENTICATION_KEY on a request routed to that kind — see the waiver tests in
+// engineGenerateAuth.test.js. That is what makes this list load-bearing for all
+// five rather than three of them. `clientId` is canonical and not a secret; it is
 // listed here so it does not trip the name heuristic below.
 const CANONICAL_CREDENTIAL_NAMES = [
   'openAIKey', 'googleKey', 'anthropicKey', 'openRouterKey', 'deepseekKey', 'clientId'

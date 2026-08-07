@@ -14,9 +14,11 @@ const reporter = new GenerateMetricsReporter(config.metricsReporterURL)
 // A request carrying its own credentials runs on the caller's account, so it is
 // allowed past AUTHENTICATION_KEY — that is the intended product behaviour.
 const CLIENT_CREDENTIAL_PARAMS = [
-    { name: 'openAIKey',    kind: ModelType.OPEN_AI },
-    { name: 'googleKey',    kind: ModelType.GEMINI },
-    { name: 'anthropicKey', kind: ModelType.CLAUDE },
+    { name: 'openAIKey',     kind: ModelType.OPEN_AI },
+    { name: 'googleKey',     kind: ModelType.GEMINI },
+    { name: 'anthropicKey',  kind: ModelType.CLAUDE },
+    { name: 'openRouterKey', kind: ModelType.OPEN_ROUTER },
+    { name: 'deepseekKey',   kind: ModelType.DEEPSEEK },
 ];
 
 /**
@@ -35,7 +37,15 @@ const CLIENT_CREDENTIAL_PARAMS = [
  * declares a credential parameter outside this set. Checking
  * additionalParameters() here instead would be wrong: that list is what the
  * client UI renders, and several engines (qualitative, for one) advertise only
- * the key for their default model while LLMWrapper still honours all three.
+ * the key for their default model while LLMWrapper still honours every name in
+ * CLIENT_CREDENTIAL_PARAMS regardless.
+ *
+ * Pairing each name with a kind is what keeps the waiver honest across the two
+ * ways one vendor can be reached. A namespaced slug ('deepseek/deepseek-v4-pro')
+ * is kind OPEN_ROUTER and is paid for with openRouterKey; the bare id
+ * ('deepseek-v4-pro') is kind DEEPSEEK and is paid for with deepseekKey. Sending
+ * the wrong one of the pair waives nothing, because the request would still run
+ * on the server's key for the route it actually takes.
  *
  * The key's *value* is not verified. An invalid one simply 401s upstream, which
  * costs the operator nothing — the failure mode that matters is a valid request
