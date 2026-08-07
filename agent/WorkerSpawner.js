@@ -8,6 +8,7 @@ import net from 'net';
 import { EventEmitter } from 'events';
 import logger from '../utilities/logger.js';
 import { OPENAI_COMPATIBLE_PROVIDERS, envVarNamesFor } from './utilities/nativeProviders.js';
+import credentialProxy from './utilities/CredentialProxy.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = dirname(__dirname);  // sd-ai root (parent of agent/)
@@ -75,6 +76,54 @@ export function sandboxMaskArgs(appRoot) {
   }
 
   return args;
+}
+
+/**
+ * The provider credentials the worker needs in memory: LLMWrapper (the engine
+ * tools) and the agent's own provider clients both read them off process.env.
+ *
+ * They are not passed *in* the worker's environment, because a process's
+ * environment is readable from inside the sandbox. /proc/<pid>/environ is
+ * readable by the same uid, and the Agent SDK route hands the model two ways to
+ * reach it: `Bash`, and `Read` on an absolute path — and Read goes to every
+ * agent, with no capability gate. Masking /app/.env (sandboxMaskArgs) closed the
+ * on-disk copy of the same secret; this closes the in-environment one.
+ *
+ * So spawn() sends these over the IPC socket instead, as the first message the
+ * worker receives, and the worker assigns them into its own process.env. The
+ * assignment does not rewrite what the kernel exposes at /proc/<pid>/environ:
+ * that block is captured at exec and never revisited. The keys therefore live
+ * only in the worker's heap, which takes reading another process's memory to
+ * reach rather than opening a file.
+ *
+ * ANTHROPIC_API_KEY is deliberately absent — it is the one credential the worker
+ * cannot hold in the heap, since the Agent SDK spawns the `claude` CLI and the
+ * CLI authenticates from its environment. It is replaced by a per-session
+ * sentinel; see CredentialProxy.
+ *
+ * Exported for testing.
+ */
+export function workerCredentials() {
+  return {
+    // Credentials the engine tools need in-sandbox no matter which provider the
+    // agent itself is on — LLMWrapper reads these directly, so they are tied to
+    // the engines, not to the agent provider registry.
+    OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+    GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+    OPEN_ROUTER_API_KEY: process.env.OPEN_ROUTER_API_KEY,
+    DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY,
+    DEEPSEEK_BASE_URL: process.env.DEEPSEEK_BASE_URL,
+    // Credentials the agent's own OpenAI-compatible providers need, derived from
+    // the registry rather than listed, so registering a vendor in
+    // config.nativeAgentProviders stays the single edit it is everywhere else.
+    // (The vendor-SDK keys above cannot be derived: OPEN_ROUTER_API_KEY is not
+    // OPENROUTER_API_KEY and Gemini's is not GOOGLE_API_KEY.)
+    ...Object.fromEntries(
+      [...OPENAI_COMPATIBLE_PROVIDERS]
+        .flatMap(provider => Object.values(envVarNamesFor(provider)))
+        .map(name => [name, process.env[name]])
+    ),
+  };
 }
 
 /**
@@ -396,6 +445,26 @@ export class WorkerSpawner {
    * same .send() / on('message') / .connected interface used by WebSocket.js.
    */
   static async spawn(sessionId, sessionTempDir) {
+    // Minted once per spawn(), not per bwrap attempt: the retry loop would
+    // otherwise leave a live token behind for every attempt it burned. Revoked
+    // when the worker exits, or below if no worker ever starts.
+    await credentialProxy.start();
+    const anthropicSentinel = credentialProxy.issueToken(sessionId);
+    // The Anthropic credential the worker sees. Both halves are safe to sit in
+    // the environment where Bash can read them: the key is a session-scoped
+    // sentinel the proxy exchanges for the real one, and the URL is loopback.
+    // The Anthropic SDK picks up ANTHROPIC_BASE_URL on its own, so the manual
+    // Anthropic route and LLMWrapper follow the CLI through the proxy with no
+    // call-site change.
+    const anthropicEnv = {
+      ANTHROPIC_API_KEY: anthropicSentinel,
+      ANTHROPIC_BASE_URL: credentialProxy.origin,
+    };
+    const revokeOnExit = (worker) => {
+      worker.on('exit', () => credentialProxy.revokeToken(anthropicSentinel));
+      return worker;
+    };
+
     if (process.platform === 'linux') {
       const bwrapBin = WorkerSpawner.#findBinary('bwrap');
       if (bwrapBin && !WorkerSpawner.#bwrapCurrentlyBroken()) {
@@ -409,28 +478,12 @@ export class WorkerSpawner {
           // never races with the new IpcWorker's socket (agent-switch scenario).
           const socketName = `ipc-${randomBytes(4).toString('hex')}.sock`;
           const socketPath = join(sessionTempDir, socketName);
+          // No real provider credential appears here. The rest arrive over IPC
+          // once the socket is up — see workerCredentials — so this environment,
+          // and the /proc/<pid>/environ derived from it, holds nothing worth
+          // stealing.
           const workerEnv = {
-            // Credentials the engine tools need in-sandbox no matter which provider the
-            // agent itself is on — LLMWrapper reads these directly, so they are tied to
-            // the engines, not to the agent provider registry.
-            OPENAI_API_KEY: process.env.OPENAI_API_KEY,
-            GEMINI_API_KEY: process.env.GEMINI_API_KEY,
-            ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
-            OPEN_ROUTER_API_KEY: process.env.OPEN_ROUTER_API_KEY,
-            DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY,
-            DEEPSEEK_BASE_URL: process.env.DEEPSEEK_BASE_URL,
-            // Credentials the agent's own OpenAI-compatible providers need, derived from
-            // the registry rather than listed. The bwrap env is an explicit allowlist, so
-            // a provider whose key never reaches the worker works fine unsandboxed and
-            // fails only on Linux — i.e. only in prod. Deriving keeps registering one in
-            // config.nativeAgentProviders the single edit it is everywhere else. (The
-            // vendor-SDK keys above cannot be derived: OPEN_ROUTER_API_KEY is not
-            // OPENROUTER_API_KEY and Gemini's is not GOOGLE_API_KEY.)
-            ...Object.fromEntries(
-              [...OPENAI_COMPATIBLE_PROVIDERS]
-                .flatMap(provider => Object.values(envVarNamesFor(provider)))
-                .map(name => [name, process.env[name]])
-            ),
+            ...anthropicEnv,
             TOKEN_REPORTER_URL: process.env.TOKEN_REPORTER_URL,
             SESSION_ID: sessionId,
             SESSION_TEMP_DIR: WorkerSpawner.CONTAINER_SESSION_PATH,
@@ -502,7 +555,13 @@ export class WorkerSpawner {
             worker.once('exit', onExit);
           });
 
-          if (earlyExit === null) return worker; // socket connected — worker is up
+          if (earlyExit === null) {
+            // First thing on the wire, ahead of the main process's `initialize`:
+            // the ordered stream guarantees the worker installs these before any
+            // orchestrator work reads process.env.
+            worker.send({ type: 'credentials', values: workerCredentials() });
+            return revokeOnExit(worker); // socket connected — worker is up
+          }
 
           const { code, signal } = earlyExit;
           if (attempt < MAX_ATTEMPTS) {
@@ -528,6 +587,9 @@ export class WorkerSpawner {
       }
       if (WorkerSpawner.#bwrapCurrentlyBroken()) {
         if (!WorkerSpawner.#allowUnsandboxedFallback) {
+          // No worker will ever start, so nothing is left to fire the exit
+          // handler that would normally retire this token.
+          credentialProxy.revokeToken(anthropicSentinel);
           throw new SandboxUnavailableError('bwrap sandbox is unavailable and ALLOW_UNSANDBOXED_FALLBACK is not set — refusing to spawn unsandboxed worker');
         }
         logger.warn(`[worker:${sessionId}] bwrap sandbox unavailable — spawning unsandboxed worker`);
@@ -556,10 +618,14 @@ export class WorkerSpawner {
     // detached: true puts the worker in its own process group so that killing
     // the group (process.kill(-pid, signal)) also kills grandchildren like the
     // claude CLI subprocess spawned by the Agent SDK.
-    return fork(WorkerSpawner.#WORKER_PATH, [], {
+    const forked = fork(WorkerSpawner.#WORKER_PATH, [], {
       env: {
         ...process.env,
         ...(logger.isTestMode ? { SDAI_TEST_MODE: 'true' } : {}),
+        // After the spread, not before: an inherited real ANTHROPIC_API_KEY would
+        // otherwise be presented to the proxy, which does not recognise it and
+        // would answer 401.
+        ...anthropicEnv,
         SESSION_ID: sessionId,
         SESSION_TEMP_DIR: sessionTempDir,
       },
@@ -570,5 +636,7 @@ export class WorkerSpawner {
       // and negative-PID group killing isn't supported anyway.
       detached: process.platform !== 'win32',
     });
+    forked.send({ type: 'credentials', values: workerCredentials() });
+    return revokeOnExit(forked);
   }
 }

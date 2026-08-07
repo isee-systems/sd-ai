@@ -159,6 +159,19 @@ class AgentWorker {
     try {
       switch (msg.type) {
 
+        // Always the first message on the wire. Provider keys are delivered here
+        // rather than in the environment this process was exec'd with, so that
+        // /proc/<pid>/environ — which the agent's Read and Bash tools can open —
+        // never contains them. Assigning into process.env does not write back to
+        // that block: the kernel exposes what was captured at exec, so the keys
+        // exist only in this process's heap from here on. See workerCredentials.
+        case 'credentials': {
+          for (const [name, value] of Object.entries(msg.values || {})) {
+            if (value !== undefined && value !== null) process.env[name] = value;
+          }
+          break;
+        }
+
         case 'initialize': {
           this.#sessionManager.createSessionWithId(SESSION_ID, this.#mockWs, SESSION_TEMP_DIR);
           const capabilities = {

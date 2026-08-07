@@ -56,6 +56,7 @@ import {
   usageProviderFor
 } from './utilities/nativeProviders.js';
 import { isToolAvailable } from './tools/toolAvailability.js';
+import { APP_ROOT, createSdkFilesystemGuard } from './tools/pathConfinement.js';
 import { join } from 'path';
 
 // External provider ids that name the upstream LLM brand but resolve to the same
@@ -81,6 +82,34 @@ const OPENROUTER_PROVIDERS = new Set(Object.keys(config.openRouterAgentProviders
 // Bash is here because a shell is a write tool: withdrawing Write and Edit while
 // leaving `bash -c 'echo ... > f'` in reach would restrict nothing.
 const SDK_WRITE_TOOLS = ['Write', 'Edit', 'NotebookEdit', 'Bash'];
+
+// The environment the Agent SDK gives the `claude` CLI subprocess it spawns.
+//
+// Without this the subprocess inherits the worker's process.env, which is how
+// `Bash` running `env` — and `Read` on /proc/self/environ, which needs no write
+// capability at all — returned every provider key the worker held. An explicit
+// allowlist is the only thing that narrows it; the SDK documents the option as
+// "when omitted, the subprocess inherits process.env".
+//
+// ANTHROPIC_API_KEY is on the list and is safe to be: WorkerSpawner replaces it
+// with a per-session sentinel that only the loopback CredentialProxy will
+// exchange for the real credential. The rest are transport and locale settings a
+// proxied or custom-CA deployment needs; none is a secret.
+const SDK_SUBPROCESS_ENV = [
+  'PATH', 'HOME', 'SHELL', 'LANG', 'LC_ALL', 'TMPDIR', 'TERM',
+  'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_BASE_URL',
+  'NODE_EXTRA_CA_CERTS',
+  'HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY',
+  'http_proxy', 'https_proxy', 'no_proxy',
+];
+
+export function anthropicSdkSubprocessEnv() {
+  const env = {};
+  for (const name of SDK_SUBPROCESS_ENV) {
+    if (process.env[name] !== undefined) env[name] = process.env[name];
+  }
+  return env;
+}
 
 // Normalize a single message to Gemini format {role:'user'|'model', parts:[{text}]}.
 // Handles Anthropic-format messages ({role, content}) that arrive when switching
@@ -647,6 +676,13 @@ export class AgentOrchestrator {
       // would not leave `Read` alone if a builtin were ever named that.
       systemPrompt += this.#anthropicSdkFilesystemToolsNote(builtInSdkTools);
 
+      // Where the SDK's filesystem tools may look, and — via cwd — where a Glob
+      // or Grep that names no path defaults to. Pinning cwd is part of the gate:
+      // bwrap sets no --chdir, so the worker's cwd is the container root and an
+      // unqualified Grep would otherwise walk the whole sandbox.
+      const sessionTempDir = this.sessionManager.getSessionTempDir(this.sessionId);
+      const filesystemRoots = [sessionTempDir, APP_ROOT];
+
       // Build query options with MCP servers
       const queryOptions = {
         abortController: this.abortController,
@@ -658,6 +694,15 @@ export class AgentOrchestrator {
         allowedTools: allowedTools,
         ...(canWriteToLocalSandbox ? {} : { disallowedTools: SDK_WRITE_TOOLS }),
         permissionMode: 'bypassPermissions',
+        cwd: sessionTempDir,
+        env: anthropicSdkSubprocessEnv(),
+        // Confines native Read/Glob/Grep, which arrive with the claude_code
+        // preset and are handed to every agent including read-only ones. Nothing
+        // else in this options object can do it: allowedTools only pre-approves
+        // a prompt, and bypassPermissions means there is no prompt.
+        hooks: {
+          PreToolUse: [{ hooks: [createSdkFilesystemGuard(filesystemRoots, sessionTempDir)] }],
+        },
         thinking: config.agentAnthropicThinking,
         ...(config.agentAnthropicThinking?.type !== 'disabled' && { effort: config.agentAnthropicEffort }),
         compact: true  // Enable automatic compaction

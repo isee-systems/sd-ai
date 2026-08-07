@@ -1,23 +1,16 @@
 import { z } from 'zod';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
-import { dirname, resolve, sep } from 'path';
-import { fileURLToPath } from 'url';
+import { dirname } from 'path';
 import { createSuccessResponse, createErrorResponse } from './toolHelpers.js';
+import { APP_ROOT, isWithin } from '../pathConfinement.js';
 
 /**
  * Read/Write/Edit file tools for the non-SDK agent loop.
  * The SDK loop has built-in Read, Edit, Write tools; these mirror them for the manual route.
+ *
+ * The confinement below now lives in pathConfinement.js, shared with the guard
+ * that applies the same rule to the SDK loop's native Read/Glob/Grep.
  */
-
-// agent/tools/builtin/fileTools.js -> the sd-ai root. Inside the bwrap sandbox
-// this resolves to /app, which is where the application is bind-mounted.
-const APP_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
-
-function isWithin(candidatePath, rootPath) {
-  const root = resolve(rootPath);
-  const candidate = resolve(candidatePath);
-  return candidate === root || candidate.startsWith(root + sep);
-}
 
 export function createReadFileTool(sessionManager, sessionId) {
   return {
