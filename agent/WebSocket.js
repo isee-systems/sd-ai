@@ -112,7 +112,7 @@ export class WebSocketHandler {
   #agentSelected = false;
   // True once initialize_session has been accepted — which is where
   // AUTHENTICATION_KEY is checked. Until then no other message type is
-  // dispatched; they are held in #pendingMessages and replayed on success.
+  // dispatched; anything arriving early is refused and dropped.
   // Without this the key gates exactly one message and nothing else: the worker
   // is prewarmed on connect, so a client that simply skipped initialize_session
   // could go straight to select_agent + chat and drive the whole agent
@@ -124,17 +124,6 @@ export class WebSocketHandler {
   // disconnect is allowed so an unauthenticated client can still hang up
   // cleanly rather than being forced to drop the socket.
   static #PRE_INIT_MESSAGE_TYPES = new Set(['initialize_session', 'disconnect']);
-
-  // Frames received before initialization finished, replayed in order once it
-  // succeeds. Discarded — never dispatched — if it never does.
-  #pendingMessages = [];
-
-  // Ceiling on that queue. Generous on purpose: a legitimate opening burst is a
-  // handful of frames, but a client attaching the full ragMaxFilesPerSession
-  // allowance up front is 25 add_files, and those carry their content inline.
-  // The bound exists so an unauthenticated socket cannot buffer without limit,
-  // not to police ordinary use.
-  static #MAX_PENDING_MESSAGES = 64;
 
   // SIGKILL every live worker immediately. Called by process signal handlers so
   // workers don't outlive the main process as orphans.
@@ -236,27 +225,22 @@ export class WebSocketHandler {
 
       const message = validation.data;
 
-      // Held, not refused. A client is entitled to pipeline its opening frames —
-      // initialize_session immediately followed by select_agent and a first chat
-      // — and #handleInitializeSession is asynchronous: with historicalMessages
-      // it awaits cleanupContext, which can spend seconds in LLM summarization.
-      // Anything arriving in that window is a well-behaved client hitting a race,
-      // so closing the socket on it would break normal use rather than an attack.
+      // Refused and dropped, not held. The handshake rule is that nothing
+      // happens before session_ready: a client that pipelines its opening frames
+      // gets them back as errors and resends once the handshake completes.
       //
-      // The security property is unchanged and does not depend on refusing: the
-      // queue is drained only from the success path of #handleInitializeSession,
-      // after the authentication key has been checked. A client that never
-      // authenticates simply has its messages sit here until the socket closes
-      // and they are discarded, never dispatched.
+      // The security property is that no handler runs before the authentication
+      // key in #handleInitializeSession has been checked, and discarding the
+      // frame outright is the shortest path to it — nothing to replay, nothing
+      // to bound against an unauthenticated socket buffering without limit, and
+      // no failure path that has to remember to clear a queue.
       if (!this.#initialized && !WebSocketHandler.#PRE_INIT_MESSAGE_TYPES.has(message.type)) {
-        if (this.#pendingMessages.length >= WebSocketHandler.#MAX_PENDING_MESSAGES) {
-          logger.warn(`[session:${this.#sessionId}] Pre-initialize queue full (${WebSocketHandler.#MAX_PENDING_MESSAGES}) — closing`);
-          this.#pendingMessages = [];
-          this.#ws.close(1008, 'Too many messages before initialize_session.');
-          return;
-        }
-        this.#pendingMessages.push(message);
-        logger.log(`[session:${this.#sessionId}] Queued '${message.type}' received before initialize_session completed (${this.#pendingMessages.length} pending)`);
+        logger.warn(`[session:${this.#sessionId}] Dropped '${message.type}' received before initialize_session completed`);
+        await this.#sendToClient(createErrorMessage(
+          this.#sessionId,
+          `'${message.type}' was received before initialize_session completed. Wait for session_ready, then resend.`,
+          'SESSION_NOT_INITIALIZED'
+        ));
         return;
       }
 
@@ -270,9 +254,8 @@ export class WebSocketHandler {
   /**
    * Route one validated message to its handler.
    *
-   * Split out of #onMessage so the pre-initialize queue can replay through the
-   * exact same path a live message takes — a second switch would be a second
-   * place to forget a message type.
+   * Split out of #onMessage so the parse/validate/gate steps stay readable
+   * ahead of it.
    */
   async #dispatch(message) {
     switch (message.type) {
@@ -312,48 +295,11 @@ export class WebSocketHandler {
       }
   }
 
-  /**
-   * Replay everything that arrived while initialize_session was in flight.
-   *
-   * Sequential, not concurrent: the queue routinely holds select_agent followed
-   * by chat, and chat requires the worker that select_agent sets up. Awaiting
-   * each in turn preserves the order the client sent them in, which is the whole
-   * point of holding them.
-   *
-   * A handler that throws is reported and the drain continues — one bad frame
-   * should not strand the frames behind it. Handlers already report their own
-   * failures to the client; this catch is for anything that escapes them.
-   */
-  async #drainPendingMessages() {
-    if (this.#pendingMessages.length === 0) return;
-
-    const queued = this.#pendingMessages;
-    this.#pendingMessages = [];
-    logger.log(`[session:${this.#sessionId}] Replaying ${queued.length} message(s) queued before initialization completed`);
-
-    for (const message of queued) {
-      if (this.#ws.readyState !== 1) {
-        logger.log(`[session:${this.#sessionId}] Socket closed mid-replay; dropping ${queued.length - queued.indexOf(message)} queued message(s)`);
-        return;
-      }
-      try {
-        await this.#dispatch(message);
-      } catch (error) {
-        logger.error(`Error replaying queued ${message.type} for session ${this.#sessionId}:`, error);
-        await this.#sendToClient(createErrorMessage(this.#sessionId, error.message, 'MESSAGE_PROCESSING_ERROR'));
-      }
-    }
-  }
-
   async #handleInitializeSession(message) {
     try {
       const authenticationKey = process.env.AUTHENTICATION_KEY;
       if (authenticationKey) {
         if (message.authenticationKey !== authenticationKey) {
-          // Drop anything the client pipelined behind this. It was queued on the
-          // assumption authentication would succeed; it did not, so those frames
-          // must never reach a handler.
-          this.#pendingMessages = [];
           this.#ws.close(1008, 'Unauthorized, please pass valid Authentication key.');
           return;
         }
@@ -426,19 +372,12 @@ export class WebSocketHandler {
       this.#initialized = true;
 
       // First thing after the gate opens, so the bwrap startup + Node module load
-      // overlaps the client's select_agent round trip. Synchronous in its effect
-      // on #workerSpawnPromise, so a select_agent already sitting in
-      // #pendingMessages awaits this spawn rather than starting a second one.
+      // overlaps the client's select_agent round trip.
       this.#prewarmWorker();
 
       const { agents, defaults } = getAvailableAgents();
       await this.#sendToClient(createSessionReadyMessage(this.#sessionId, agents, defaults));
       logger.log(`Session initialized: ${this.#sessionId}`);
-
-      // After session_ready, so a client pipelining select_agent still sees the
-      // handshake complete in the order it expects. Anything queued during the
-      // awaits above now runs, in the order it arrived.
-      await this.#drainPendingMessages();
     } catch (error) {
       logger.error(`Failed to initialize session ${this.#sessionId}:`, error);
       await this.#sendToClient(createErrorMessage(this.#sessionId, `Initialization failed: ${error.message}`, 'INITIALIZATION_ERROR'));
@@ -773,8 +712,6 @@ export class WebSocketHandler {
 
   async #onClose(code, reason) {
     logger.log(`WebSocket closed: ${this.#sessionId} (code: ${code}, reason: ${reason})`);
-    // Never dispatched now — the socket they would answer on is gone.
-    this.#pendingMessages = [];
     if (this.#sessionId) {
       const sessionId = this.#sessionId;
       const startedAt = Date.now();

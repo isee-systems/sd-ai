@@ -108,21 +108,23 @@ describe('WebSocket message gate', () => {
     })],
   ];
 
-  // Held, not refused — a client is entitled to pipeline its opening frames.
-  // What must not happen is the message taking effect before authentication.
-  it.each(GATED)('holds %s sent before initialize_session without acting on it', async (_type, build) => {
+  // Refused and dropped — the protocol is connect → initialize_session →
+  // session_ready → everything else. What must not happen is the message taking
+  // effect before authentication; the client is told so it can resend.
+  it.each(GATED)('refuses %s sent before initialize_session without acting on it', async (_type, build) => {
     await ws.receive(build());
 
     expect(ws.closed).toBeNull();
     expect(ws.messagesOfType('agent_selected')).toHaveLength(0);
     expect(ws.messagesOfType('file_added')).toHaveLength(0);
+    expect(ws.messagesOfType('error')[0].errorCode).toBe('SESSION_NOT_INITIALIZED');
     // No worker was told to do anything.
     for (const worker of fakeWorkers) {
       expect(worker.send).not.toHaveBeenCalled();
     }
   });
 
-  it('holds a custom agentConfig rather than acting on it', async () => {
+  it('refuses a custom agentConfig rather than acting on it', async () => {
     // The self-granting agentConfig path is only reachable post-auth. A client
     // that could reach it unauthenticated would choose its own system prompt.
     await ws.receive({
@@ -137,9 +139,9 @@ describe('WebSocket message gate', () => {
     }
   });
 
-  it('never dispatches queued messages when the key is wrong', async () => {
+  it('never dispatches pre-initialize messages when the key is wrong', async () => {
     // The pipelined case that matters: the client sent everything at once and
-    // the key is bad. The queue must be dropped, not replayed.
+    // the key is bad. Those frames must never reach a handler.
     await ws.receive({ type: 'select_agent', sessionId: sessionId(), agentId: 'socrates' });
     await ws.receive({ type: 'chat', sessionId: sessionId(), message: 'exfiltrate something' });
 
@@ -158,11 +160,12 @@ describe('WebSocket message gate', () => {
     }
   });
 
-  it('replays queued messages, in order, once initialization succeeds', async () => {
+  it('does not replay pre-initialize messages once initialization succeeds', async () => {
+    // Nothing is retained, so a successful handshake cannot resurrect frames the
+    // client sent too early. It has been told they were refused and resends.
     await ws.receive({ type: 'select_agent', sessionId: sessionId(), agentId: 'socrates' });
     await ws.receive({ type: 'chat', sessionId: sessionId(), message: 'build me a model' });
 
-    // Nothing has happened yet.
     expect(ws.messagesOfType('agent_selected')).toHaveLength(0);
 
     await ws.receive({
@@ -174,28 +177,30 @@ describe('WebSocket message gate', () => {
     });
 
     expect(ws.closed).toBeNull();
-    expect(ws.messagesOfType('agent_selected')).toHaveLength(1);
+    expect(ws.messagesOfType('session_ready')).toHaveLength(1);
+    expect(ws.messagesOfType('agent_selected')).toHaveLength(0);
 
-    // session_ready must still precede the replayed agent_selected, so the
-    // client sees its handshake complete in the expected order.
-    const types = ws.sent.map(m => m.type);
-    expect(types.indexOf('session_ready')).toBeLessThan(types.indexOf('agent_selected'));
-
-    // select_agent ran before chat: the worker saw initialize, select_agent,
-    // then chat, in that order.
-    const worker = fakeWorkers[fakeWorkers.length - 1];
-    const sentTypes = worker.send.mock.calls.map(([msg]) => msg.type);
-    expect(sentTypes).toEqual(['initialize', 'select_agent', 'chat']);
+    // Nothing the client sent early ever reached the worker. (Only the prewarm
+    // handshake may have, and that is not driven by a client frame.)
+    for (const worker of fakeWorkers) {
+      const sentTypes = worker.send.mock.calls.map(([msg]) => msg.type);
+      expect(sentTypes).not.toContain('select_agent');
+      expect(sentTypes).not.toContain('chat');
+    }
   });
 
-  it('closes rather than buffering without limit', async () => {
+  it('drops a flood of pre-initialize frames without buffering or closing', async () => {
     for (let i = 0; i < 70; i++) {
       await ws.receive({ type: 'stop_iteration', sessionId: sessionId() });
-      if (ws.closed) break;
     }
 
-    expect(ws.closed?.code).toBe(1008);
-    expect(ws.closed?.reason).toMatch(/Too many messages/);
+    // There is no queue to overflow, so there is no reason to hang up on the
+    // client: every frame was refused and discarded as it arrived.
+    expect(ws.closed).toBeNull();
+    expect(ws.messagesOfType('error')).toHaveLength(70);
+    for (const worker of fakeWorkers) {
+      expect(worker.send).not.toHaveBeenCalled();
+    }
   });
 
   it('does not mark the session initialized when the key is wrong', async () => {
@@ -261,7 +266,7 @@ describe('WebSocket message gate', () => {
 
   it('gates the session even when no AUTHENTICATION_KEY is configured', async () => {
     // One ordering rule rather than two code paths: a keyless deployment still
-    // holds pre-initialize frames, so the state machine cannot drift.
+    // refuses pre-initialize frames, so the state machine cannot drift.
     delete process.env.AUTHENTICATION_KEY;
     const openWs = new FakeWebSocket();
     new WebSocketHandler(openWs, sessionManager);
@@ -279,8 +284,8 @@ describe('WebSocket message gate', () => {
       mode: 'cld', model: {}, tools: [],
     });
 
-    // And then it replays, so a keyless deployment behaves the same way.
-    expect(openWs.messagesOfType('agent_selected')).toHaveLength(1);
+    // And it stays dropped, so a keyless deployment behaves the same way.
+    expect(openWs.messagesOfType('agent_selected')).toHaveLength(0);
   });
 
   it('does not delay a client that waits for session_ready', async () => {
