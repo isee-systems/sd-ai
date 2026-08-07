@@ -50,7 +50,7 @@ const config = {
         {label: "Claude Opus 5", value: 'claude-opus-5'},
         {label: "Claude Sonnet 5", value: 'claude-sonnet-5'},
         {label: "Claude Haiku 4.5", value: 'claude-haiku-4-5'},
-        {label: "Qwen3.7 Max", value: 'qwen/qwen3.7-max'},
+        {label: "Qwen3.8 Max", value: 'qwen/qwen3.8-max'},
         {label: "Qwen3.7 Plus", value: 'qwen/qwen3.7-plus'},
         {label: "Deepseek v4 Pro", value: 'deepseek/deepseek-v4-pro'},
         {label: "Deepseek v4 Flash", value: 'deepseek/deepseek-v4-flash'},
@@ -125,8 +125,8 @@ const config = {
     "openRouterAgentProviders": {
         qwen: {
             displayName: 'Qwen',
-            model: 'qwen/qwen3.7-max',
-            summaryModel: 'qwen/qwen3.7-plus'
+            model: 'qwen/qwen3.8-max',
+            summaryModel: 'qwen/qwen3.8-max'
         },
         deepseek: {
             displayName: 'Deepseek',
