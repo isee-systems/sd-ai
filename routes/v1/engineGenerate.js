@@ -1,20 +1,59 @@
 import express from 'express'
-import fs from 'fs'
 import path from 'path'
 import utils from './../../utilities/utils.js'
 import { ModelCapabilities, ModelType, LLMWrapper } from './../../utilities/LLMWrapper.js'
 import logger from './../../utilities/logger.js'
 import GenerateMetricsReporter from './../../utilities/GenerateMetricsReporter.js'
 import config from './../../config.js'
+import { engineNames } from './engineRegistry.js'
 
 const router = express.Router()
 const reporter = new GenerateMetricsReporter(config.metricsReporterURL)
 
-router.post("/:engine/generate", async (req, res) => {
-    const enginePath = path.join(process.cwd(), 'engines', req.params.engine, 'engine.js');
+// The bring-your-own-key parameters, paired with the model kind each one covers.
+// A request carrying its own credentials runs on the caller's account, so it is
+// allowed past AUTHENTICATION_KEY — that is the intended product behaviour.
+const CLIENT_CREDENTIAL_PARAMS = [
+    { name: 'openAIKey',    kind: ModelType.OPEN_AI },
+    { name: 'googleKey',    kind: ModelType.GEMINI },
+    { name: 'anthropicKey', kind: ModelType.CLAUDE },
+];
 
-    // Check if engine file exists
-    if (!fs.existsSync(enginePath)) {
+/**
+ * Is the caller genuinely paying for this request with their own key?
+ *
+ * The waiver is only sound while every engine reads its credentials under these
+ * exact names, because that is what makes "the client sent openAIKey" equivalent
+ * to "the client's key will be used". causal-chains broke that equivalence by
+ * naming its parameter `apiKey`: the route saw `openAIKey`, waived
+ * authentication, and the engine — finding no `apiKey` — fell back to
+ * `process.env.OPENAI_API_KEY`, spending the operator's credits on an
+ * unauthenticated request. It has been renamed to match.
+ *
+ * The invariant that keeps this true is enforced by
+ * tests/routes/v1/engineCredentialNames.test.js, which fails CI if any engine
+ * declares a credential parameter outside this set. Checking
+ * additionalParameters() here instead would be wrong: that list is what the
+ * client UI renders, and several engines (qualitative, for one) advertise only
+ * the key for their default model while LLMWrapper still honours all three.
+ *
+ * The key's *value* is not verified. An invalid one simply 401s upstream, which
+ * costs the operator nothing — the failure mode that matters is a valid request
+ * silently running on server credentials, and that is what the naming invariant
+ * rules out.
+ */
+function suppliesOwnCredentials(req) {
+    const underlyingModel = req.body.underlyingModel || LLMWrapper.BUILD_DEFAULT_MODEL;
+    const { kind } = new ModelCapabilities(underlyingModel);
+
+    return CLIENT_CREDENTIAL_PARAMS.some(param =>
+        param.kind === kind && typeof req.body[param.name] === 'string' && req.body[param.name].length > 0
+    );
+}
+
+router.post("/:engine/generate", async (req, res) => {
+    // Allowlist, not existsSync on a caller-built path — see engineRegistry.js.
+    if (!engineNames().has(req.params.engine)) {
         return res.status(404).send({
             success: false,
             message: `Engine "${req.params.engine}" not found`
@@ -22,24 +61,13 @@ router.post("/:engine/generate", async (req, res) => {
     }
 
     const authenticationKey = process.env.AUTHENTICATION_KEY;
-    const underlyingModel = req.body.underlyingModel || LLMWrapper.BUILD_DEFAULT_MODEL;
-    const capabilities = new ModelCapabilities(underlyingModel);
-
-    let hasApiKey = false;
-    if (req.body.openAIKey && capabilities.kind === ModelType.OPEN_AI) {
-      hasApiKey = true;
-    } else if (req.body.googleKey && capabilities.kind === ModelType.GEMINI) {
-      hasApiKey = true;
-    } else if (req.body.anthropicKey && capabilities.kind == ModelType.CLAUDE) {
-      hasApiKey = true;
-    }
-
-    if (!hasApiKey && authenticationKey) {
+    if (authenticationKey && !suppliesOwnCredentials(req)) {
         if (!req.header('Authentication') || req.header('Authentication') !== authenticationKey) {
           return res.status(403).send({ "success": false, message: 'Unauthorized, please pass valid Authentication header or provide a valid API key.' });
         }
     }
 
+    const enginePath = path.join(process.cwd(), 'engines', req.params.engine, 'engine.js');
     const importPath = process.platform === 'win32' ? `file://${enginePath}` : enginePath;
     const engine = await import(importPath);
     const instance = new engine.default();

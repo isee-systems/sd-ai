@@ -132,7 +132,7 @@ export class BuiltInToolProvider {
         edit_relationships: createEditRelationshipsTool(this.sessionManager, this.sessionId, this.sendToClient),
         edit_specs: createEditSpecsTool(this.sessionManager, this.sessionId, this.sendToClient),
         edit_modules: createEditModulesTool(this.sessionManager, this.sessionId, this.sendToClient),
-        read_file: createReadFileTool(),
+        read_file: createReadFileTool(this.sessionManager, this.sessionId),
         // Built unconditionally and withdrawn by isToolAvailable unless the agent's
         // frontmatter grants can_write_to_local_sandbox — the collection is the
         // catalogue of what exists, the predicate decides what this agent may see.

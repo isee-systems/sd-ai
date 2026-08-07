@@ -1064,7 +1064,9 @@ describe('sandbox write gating — manual execute paths', () => {
   });
 
   it('never refuses a read, whichever way the flag is set', async () => {
-    const target = path.join(tmpDir, 'data.csv');
+    // Inside the session temp dir: read_file is scoped to that dir plus the app
+    // dir, so this is where a data file a tool told the model to read lives.
+    const target = path.join(sessionManager.getSessionTempDir(sessionId), 'data.csv');
     fs.writeFileSync(target, 'time,value\n0,1\n', 'utf-8');
 
     for (const grant of ['', 'can_write_to_local_sandbox: true\n']) {
@@ -1075,6 +1077,32 @@ describe('sandbox write gating — manual execute paths', () => {
       );
       expect(result.isError).toBeFalsy();
     }
+  });
+
+  // read_file is available to every agent with no capability gate, so without a
+  // scope it is an arbitrary host-filesystem read whose only boundary is bwrap —
+  // which does not exist on dev machines.
+  it('refuses a read outside the session and app directories', async () => {
+    const target = path.join(tmpDir, 'outside.csv');
+    fs.writeFileSync(target, 'secret\n', 'utf-8');
+
+    const orc = makeAgent('can_write_to_local_sandbox: true\n');
+    const result = await orc.executeToolCallHelper(
+      { name: 'read_file', input: { filePath: target } },
+      orc.builtInToolProvider.getTools()
+    );
+    expect(result.isError).toBeTruthy();
+  });
+
+  it('refuses a traversal out of the session directory', async () => {
+    const escape = path.join(sessionManager.getSessionTempDir(sessionId), '..', '..', '..', '..', 'etc', 'passwd');
+
+    const orc = makeAgent('');
+    const result = await orc.executeToolCallHelper(
+      { name: 'read_file', input: { filePath: escape } },
+      orc.builtInToolProvider.getTools()
+    );
+    expect(result.isError).toBeTruthy();
   });
 
   it('applies the same refusal on the Gemini manual path', async () => {

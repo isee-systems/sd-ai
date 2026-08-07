@@ -2,6 +2,7 @@ import { timeout } from 'async';
 import { z } from 'zod';
 import config from '../../config.js';
 import { scrubMediaForClient } from './ToolResultFormatter.js';
+import { FILE_ID_RE } from './RagStore.js';
 
 /**
  * Message Protocol Schemas
@@ -228,7 +229,11 @@ const DisconnectMessageSchema = z.object({
 export const AddFileMessageSchema = z.object({
   type: z.literal('add_file').describe('Message type identifier'),
   sessionId: z.string().describe('Unique session identifier'),
-  fileId: z.string().optional().describe('Optional client-provided file id; the server assigns one if omitted'),
+  // Constrained, not free-form: this value becomes a path segment under
+  // <sessionTempDir>/rag/, so a separator or a `..` would escape the session
+  // directory. Any other client-chosen id is accepted — see RagStore's FILE_ID_RE.
+  fileId: z.string().regex(FILE_ID_RE, 'fileId may contain only letters, numbers, dot, dash and underscore (no path separators)').optional()
+    .describe('Optional client-provided file id; letters, numbers, dot, dash and underscore only. The server assigns one if omitted'),
   name: z.string().describe('Display name of the file, including its extension (used as an extraction hint)'),
   mimeType: z.string().describe('MIME type of the file (e.g. "application/pdf", "text/markdown")'),
   encoding: z.enum(['utf8', 'base64']).describe('Encoding of the content field: "utf8" for plain text, "base64" for binary files'),
@@ -241,7 +246,10 @@ export const AddFileMessageSchema = z.object({
 const RemoveFileMessageSchema = z.object({
   type: z.literal('remove_file').describe('Message type identifier'),
   sessionId: z.string().describe('Unique session identifier'),
-  fileId: z.string().describe('Id of the attached file to remove'),
+  // Constrained for the same reason as add_file's: it is rmSync'd as
+  // <sessionTempDir>/rag/<fileId> with recursive:true.
+  fileId: z.string().regex(FILE_ID_RE, 'fileId may contain only letters, numbers, dot, dash and underscore (no path separators)')
+    .describe('Id of the attached file to remove'),
   timestamp: z.string().optional().describe('ISO 8601 timestamp of when the message was created')
 });
 

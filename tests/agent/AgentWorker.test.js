@@ -358,7 +358,7 @@ describe('AgentWorker IPC — RAG files', () => {
 
   it('processes an add_file and reports rag_file_processed (manifest tier, no embedding)', async () => {
     sendInit(worker);
-    const fileId = 'file_small_1';
+    const fileId = 'file_00000000000000a1';
     const dir = placeOriginal(fileId, 'A short attached reference note for the agent.');
 
     worker.send({ type: 'add_file', fileId, name: 'note.txt', mimeType: 'text/plain', addedAt: new Date().toISOString() });
@@ -376,7 +376,7 @@ describe('AgentWorker IPC — RAG files', () => {
 
   it('removes a file and deletes its artifacts', async () => {
     sendInit(worker);
-    const fileId = 'file_small_2';
+    const fileId = 'file_00000000000000a2';
     const dir = placeOriginal(fileId, 'Another note to be removed.');
 
     worker.send({ type: 'add_file', fileId, name: 'note.txt', mimeType: 'text/plain', addedAt: new Date().toISOString() });
@@ -395,7 +395,7 @@ describe('AgentWorker IPC — RAG files', () => {
   }, 30000);
 
   it('reconciles attachedFiles passed on initialize (uploaded before the worker)', async () => {
-    const fileId = 'file_pre_init';
+    const fileId = 'file_00000000000000a3';
     const dir = placeOriginal(fileId, 'Uploaded before the worker was ready.');
 
     sendInit(worker, {

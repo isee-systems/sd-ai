@@ -174,7 +174,7 @@ describe('MessageProtocol', () => {
       const result = validateClientMessage({
         type: 'remove_file',
         sessionId: 'test-123',
-        fileId: 'file_abc'
+        fileId: 'file_0123456789abcdef'
       });
       expect(result.success).toBe(true);
     });
@@ -185,6 +185,71 @@ describe('MessageProtocol', () => {
         sessionId: 'test-123'
       });
       expect(result.success).toBe(false);
+    });
+
+    // fileId becomes a path segment under <sessionTempDir>/rag/, and remove_file
+    // rmSync's that path recursively. A traversing id must never get that far.
+    it.each([
+      ['../../../../etc', 'traversal'],
+      ['rag/../../escape', 'separator'],
+      ['rag\\escape', 'backslash'],
+      ['/etc/passwd', 'absolute path'],
+      ['..', 'bare dot-dot']
+    ])('rejects remove_file with a %s fileId', (fileId) => {
+      const result = validateClientMessage({
+        type: 'remove_file',
+        sessionId: 'test-123',
+        fileId
+      });
+      expect(result.success).toBe(false);
+    });
+
+    // fileId is documented as an arbitrary client-chosen id, so the guard must
+    // reject only what could escape the session directory.
+    it.each([
+      ['3f2504e0-4f89-11d3-9a0c-0305e82c3301', 'UUID'],
+      ['file_abc', 'short client id'],
+      ['report.2026.pdf', 'dotted name'],
+      ['My Reference Document.pdf', 'name with spaces'],
+      ['Q3 (final) [v2].xlsx', 'name with punctuation']
+    ])('accepts remove_file with a %s fileId', (fileId) => {
+      const result = validateClientMessage({
+        type: 'remove_file',
+        sessionId: 'test-123',
+        fileId
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects add_file with a traversing fileId', () => {
+      const result = validateClientMessage({
+        type: 'add_file',
+        sessionId: 'test-123',
+        fileId: '../../../../tmp/pwned',
+        name: 'spec.md',
+        mimeType: 'text/markdown',
+        encoding: 'utf8',
+        content: '# Spec'
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it.each([
+      'file_0123456789abcdef',
+      '3f2504e0-4f89-11d3-9a0c-0305e82c3301',
+      'my-reference-doc',
+      'spec.md'
+    ])('accepts add_file with the client-chosen fileId %s', (fileId) => {
+      const result = validateClientMessage({
+        type: 'add_file',
+        sessionId: 'test-123',
+        fileId,
+        name: 'spec.md',
+        mimeType: 'text/markdown',
+        encoding: 'utf8',
+        content: '# Spec'
+      });
+      expect(result.success).toBe(true);
     });
   });
 

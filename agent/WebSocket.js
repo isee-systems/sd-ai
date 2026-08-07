@@ -1,6 +1,7 @@
 import { WorkerSpawner, SandboxUnavailableError } from './WorkerSpawner.js';
 import { AgentConfigurationManager } from './utilities/AgentConfigurationManager.js';
 import { MediaStore } from './utilities/MediaStore.js';
+import { isValidFileId } from './utilities/RagStore.js';
 import {
   validateClientMessage,
   createSessionCreatedMessage,
@@ -109,6 +110,31 @@ export class WebSocketHandler {
   // agent-switch (need to fetch context from old worker, kill it, spawn new)
   // from the first select_agent where the worker may already be prewarmed.
   #agentSelected = false;
+  // True once initialize_session has been accepted — which is where
+  // AUTHENTICATION_KEY is checked. Until then no other message type is
+  // dispatched; they are held in #pendingMessages and replayed on success.
+  // Without this the key gates exactly one message and nothing else: the worker
+  // is prewarmed on connect, so a client that simply skipped initialize_session
+  // could go straight to select_agent + chat and drive the whole agent
+  // unauthenticated. Enforced regardless of whether a key is configured, so
+  // there is one ordering rule rather than two code paths.
+  #initialized = false;
+
+  // Messages a client may send before initialize_session has been accepted.
+  // disconnect is allowed so an unauthenticated client can still hang up
+  // cleanly rather than being forced to drop the socket.
+  static #PRE_INIT_MESSAGE_TYPES = new Set(['initialize_session', 'disconnect']);
+
+  // Frames received before initialization finished, replayed in order once it
+  // succeeds. Discarded — never dispatched — if it never does.
+  #pendingMessages = [];
+
+  // Ceiling on that queue. Generous on purpose: a legitimate opening burst is a
+  // handful of frames, but a client attaching the full ragMaxFilesPerSession
+  // allowance up front is 25 add_files, and those carry their content inline.
+  // The bound exists so an unauthenticated socket cannot buffer without limit,
+  // not to police ordinary use.
+  static #MAX_PENDING_MESSAGES = 64;
 
   // SIGKILL every live worker immediately. Called by process signal handlers so
   // workers don't outlive the main process as orphans.
@@ -203,7 +229,46 @@ export class WebSocketHandler {
 
       const message = validation.data;
 
-      switch (message.type) {
+      // Held, not refused. A client is entitled to pipeline its opening frames —
+      // initialize_session immediately followed by select_agent and a first chat
+      // — and #handleInitializeSession is asynchronous: with historicalMessages
+      // it awaits cleanupContext, which can spend seconds in LLM summarization.
+      // Anything arriving in that window is a well-behaved client hitting a race,
+      // so closing the socket on it would break normal use rather than an attack.
+      //
+      // The security property is unchanged and does not depend on refusing: the
+      // queue is drained only from the success path of #handleInitializeSession,
+      // after the authentication key has been checked. A client that never
+      // authenticates simply has its messages sit here until the socket closes
+      // and they are discarded, never dispatched.
+      if (!this.#initialized && !WebSocketHandler.#PRE_INIT_MESSAGE_TYPES.has(message.type)) {
+        if (this.#pendingMessages.length >= WebSocketHandler.#MAX_PENDING_MESSAGES) {
+          logger.warn(`[session:${this.#sessionId}] Pre-initialize queue full (${WebSocketHandler.#MAX_PENDING_MESSAGES}) — closing`);
+          this.#pendingMessages = [];
+          this.#ws.close(1008, 'Too many messages before initialize_session.');
+          return;
+        }
+        this.#pendingMessages.push(message);
+        logger.log(`[session:${this.#sessionId}] Queued '${message.type}' received before initialize_session completed (${this.#pendingMessages.length} pending)`);
+        return;
+      }
+
+      await this.#dispatch(message);
+    } catch (error) {
+      logger.error(`Error handling message for session ${this.#sessionId}:`, error);
+      await this.#sendToClient(createErrorMessage(this.#sessionId, error.message, 'MESSAGE_PROCESSING_ERROR'));
+    }
+  }
+
+  /**
+   * Route one validated message to its handler.
+   *
+   * Split out of #onMessage so the pre-initialize queue can replay through the
+   * exact same path a live message takes — a second switch would be a second
+   * place to forget a message type.
+   */
+  async #dispatch(message) {
+    switch (message.type) {
         case 'initialize_session':
           await this.#handleInitializeSession(message);
           break;
@@ -238,9 +303,38 @@ export class WebSocketHandler {
         default:
           await this.#sendToClient(createErrorMessage(this.#sessionId, `Unknown message type: ${message.type}`, 'UNKNOWN_MESSAGE_TYPE'));
       }
-    } catch (error) {
-      logger.error(`Error handling message for session ${this.#sessionId}:`, error);
-      await this.#sendToClient(createErrorMessage(this.#sessionId, error.message, 'MESSAGE_PROCESSING_ERROR'));
+  }
+
+  /**
+   * Replay everything that arrived while initialize_session was in flight.
+   *
+   * Sequential, not concurrent: the queue routinely holds select_agent followed
+   * by chat, and chat requires the worker that select_agent sets up. Awaiting
+   * each in turn preserves the order the client sent them in, which is the whole
+   * point of holding them.
+   *
+   * A handler that throws is reported and the drain continues — one bad frame
+   * should not strand the frames behind it. Handlers already report their own
+   * failures to the client; this catch is for anything that escapes them.
+   */
+  async #drainPendingMessages() {
+    if (this.#pendingMessages.length === 0) return;
+
+    const queued = this.#pendingMessages;
+    this.#pendingMessages = [];
+    logger.log(`[session:${this.#sessionId}] Replaying ${queued.length} message(s) queued before initialization completed`);
+
+    for (const message of queued) {
+      if (this.#ws.readyState !== 1) {
+        logger.log(`[session:${this.#sessionId}] Socket closed mid-replay; dropping ${queued.length - queued.indexOf(message)} queued message(s)`);
+        return;
+      }
+      try {
+        await this.#dispatch(message);
+      } catch (error) {
+        logger.error(`Error replaying queued ${message.type} for session ${this.#sessionId}:`, error);
+        await this.#sendToClient(createErrorMessage(this.#sessionId, error.message, 'MESSAGE_PROCESSING_ERROR'));
+      }
     }
   }
 
@@ -249,6 +343,10 @@ export class WebSocketHandler {
       const authenticationKey = process.env.AUTHENTICATION_KEY;
       if (authenticationKey) {
         if (message.authenticationKey !== authenticationKey) {
+          // Drop anything the client pipelined behind this. It was queued on the
+          // assumption authentication would succeed; it did not, so those frames
+          // must never reach a handler.
+          this.#pendingMessages = [];
           this.#ws.close(1008, 'Unauthorized, please pass valid Authentication key.');
           return;
         }
@@ -313,9 +411,21 @@ export class WebSocketHandler {
         logger.log(`Loaded ${message.historicalMessages.length} historical messages for session ${this.#sessionId}`);
       }
 
+      // Set only here, after the authentication key, the platform check and
+      // every validating call above have all passed. A failure anywhere earlier
+      // either closed the socket or fell through to the catch below, and in both
+      // cases the session stays unauthenticated and every other message type
+      // remains refused.
+      this.#initialized = true;
+
       const { agents, defaults } = getAvailableAgents();
       await this.#sendToClient(createSessionReadyMessage(this.#sessionId, agents, defaults));
       logger.log(`Session initialized: ${this.#sessionId}`);
+
+      // After session_ready, so a client pipelining select_agent still sees the
+      // handshake complete in the order it expects. Anything queued during the
+      // awaits above now runs, in the order it arrived.
+      await this.#drainPendingMessages();
     } catch (error) {
       logger.error(`Failed to initialize session ${this.#sessionId}:`, error);
       await this.#sendToClient(createErrorMessage(this.#sessionId, `Initialization failed: ${error.message}`, 'INITIALIZATION_ERROR'));
@@ -578,6 +688,12 @@ export class WebSocketHandler {
   async #handleAddFile(message) {
     try {
       const fileId = message.fileId || `file_${randomBytes(8).toString('hex')}`;
+      // Belt and braces: the schema already rejects a malformed fileId, but this
+      // value becomes a path segment two lines below and the check is free.
+      if (!isValidFileId(fileId)) {
+        await this.#sendToClient(createErrorMessage(this.#sessionId, `Invalid fileId: ${message.fileId}`, 'INVALID_FILE_ID'));
+        return;
+      }
 
       const existing = this.#sessionManager.getAttachedFiles(this.#sessionId);
       const isNew = !existing.some(f => f.fileId === fileId);
@@ -625,6 +741,12 @@ export class WebSocketHandler {
   // no-worker case) and forward to the worker so it drops its in-memory vectors.
   async #handleRemoveFile(message) {
     try {
+      // Guarded before it reaches rmSync(recursive) — see #handleAddFile.
+      if (!isValidFileId(message.fileId)) {
+        await this.#sendToClient(createErrorMessage(this.#sessionId, `Invalid fileId: ${message.fileId}`, 'INVALID_FILE_ID'));
+        return;
+      }
+
       const tempDir = this.#sessionManager.getSessionTempDir(this.#sessionId);
       this.#sessionManager.removeAttachedFile(this.#sessionId, message.fileId);
       try { rmSync(join(tempDir, 'rag', message.fileId), { recursive: true, force: true }); } catch { /* already gone */ }
@@ -638,6 +760,8 @@ export class WebSocketHandler {
 
   async #onClose(code, reason) {
     logger.log(`WebSocket closed: ${this.#sessionId} (code: ${code}, reason: ${reason})`);
+    // Never dispatched now — the socket they would answer on is gone.
+    this.#pendingMessages = [];
     if (this.#sessionId) {
       const sessionId = this.#sessionId;
       const startedAt = Date.now();

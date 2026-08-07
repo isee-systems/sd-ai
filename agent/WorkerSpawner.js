@@ -1,5 +1,5 @@
 import { spawn, fork } from 'child_process';
-import { existsSync, readFileSync, statSync, unlink, unlinkSync, mkdirSync } from 'fs';
+import { existsSync, readdirSync, readFileSync, statSync, unlink, unlinkSync, mkdirSync } from 'fs';
 import { randomBytes } from 'crypto';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -24,6 +24,57 @@ export class SandboxUnavailableError extends Error {
     super(message);
     this.name = 'SandboxUnavailableError';
   }
+}
+
+/**
+ * bwrap arguments that hide the credential- and history-bearing parts of the
+ * application directory from inside the sandbox.
+ *
+ * The worker gets APP_ROOT bind-mounted at /app so it can load application code.
+ * That mount also carries whatever else lives at the repository root — and
+ * `npm start` runs with `--env-file=.env`, so .env is one of those things. Left
+ * visible, it makes the per-provider environment allowlist in spawn() decorative:
+ * the read_file tool, available to every agent with no capability gate, can read
+ * /app/.env and hand back every provider key, including the ones deliberately
+ * withheld from the worker's environment. .git and .claude are masked for the
+ * same reason — source history and local agent configuration are not the
+ * worker's business.
+ *
+ * Masking rather than narrowing the /app bind: enumerating the subpaths the
+ * worker needs risks missing one, and a missing bind fails only on Linux, which
+ * is to say only in production. These args must be appended AFTER the /app bind
+ * so they overlay it. Each target already exists inside the container, so bwrap
+ * binds over an existing mount point rather than trying to create one on a
+ * read-only filesystem.
+ *
+ * Exported for testing: the caller is a private static that only runs on Linux.
+ */
+export function sandboxMaskArgs(appRoot) {
+  const args = [];
+
+  for (const name of ['.env', '.git', '.claude']) {
+    const source = join(appRoot, name);
+    if (!existsSync(source)) continue;
+    if (statSync(source).isDirectory()) {
+      args.push('--tmpfs', `/app/${name}`);
+    } else {
+      args.push('--ro-bind', '/dev/null', `/app/${name}`);
+    }
+  }
+
+  // Any other dotenv variant a deployment might use (.env.local, .env.production).
+  let entries;
+  try {
+    entries = readdirSync(appRoot);
+  } catch {
+    return args;
+  }
+  for (const entry of entries) {
+    if (!entry.startsWith('.env') || entry === '.env') continue;
+    args.push('--ro-bind', '/dev/null', `/app/${entry}`);
+  }
+
+  return args;
 }
 
 /**
@@ -264,6 +315,8 @@ export class WorkerSpawner {
     }
 
     prefix.push('--ro-bind', APP_ROOT, '/app');
+    // Must follow the /app bind so these overlay it — see sandboxMaskArgs.
+    prefix.push(...sandboxMaskArgs(APP_ROOT));
 
     if (!nodeBin.startsWith('/usr/')) {
       const parts = nodeBinDir.split('/').filter(Boolean);

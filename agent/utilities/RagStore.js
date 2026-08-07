@@ -240,6 +240,36 @@ function chunkText(text, chunkTokens, overlapTokens, pageBoundaries) {
   return chunks.filter(c => c.text.trim().length > 0);
 }
 
+// Validated on every path-forming call, and again at the wire boundary by
+// AddFileMessageSchema / RemoveFileMessageSchema. fileIds arrive from the client
+// and are concatenated into <tempDir>/rag/<fileId>, so this is a path-traversal
+// guard, and only that.
+//
+// Deliberately expressed as "what would escape the directory" rather than as a
+// format. `fileId` is documented as an arbitrary client-chosen id
+// ("optional-client-id" in agent/README.md), and two successive attempts to pin
+// it to a shape — first the server's own `file_<16 hex>`, then a conservative
+// charset — each rejected ids that real clients send. Every such rejection is a
+// broken upload and none of them bought any safety, because the property that
+// actually matters is narrow and exactly expressible:
+//
+//   - no `/` or `\`, so the id is always a SINGLE path component
+//   - no NUL or control characters (Node's path APIs throw on NUL)
+//   - not exactly `.` or `..`, the two components that mean "somewhere else"
+//   - bounded length, to keep the joined path well short of PATH_MAX
+//
+// Anything satisfying those cannot leave <tempDir>/rag/ no matter what it
+// contains, so spaces, dots, unicode and punctuation are all fine. Prefer this
+// over a tighter allowlist: a guard that keeps breaking legitimate traffic gets
+// loosened in a hurry by someone with less context, and that is how it ends up
+// removed altogether.
+export const FILE_ID_MAX_LENGTH = 128;
+export const FILE_ID_RE = /^(?!\.{1,2}$)[^/\\\x00-\x1f]{1,128}$/;
+
+export function isValidFileId(fileId) {
+  return typeof fileId === 'string' && FILE_ID_RE.test(fileId);
+}
+
 export class RagStore {
   constructor(embedder) {
     this.embedder = embedder;
@@ -249,7 +279,17 @@ export class RagStore {
   }
 
   #ragDir(tempDir) { return join(tempDir, 'rag'); }
-  #fileDir(tempDir, fileId) { return join(this.#ragDir(tempDir), fileId); }
+
+  // Guarded rather than a bare join: the main process validates fileIds on the
+  // way in, but this is the only thing standing between a malformed id and a
+  // path outside the session dir if a future caller reaches RagStore by another
+  // route. Cheap, and it fails loudly instead of silently escaping.
+  #fileDir(tempDir, fileId) {
+    if (!isValidFileId(fileId)) {
+      throw new Error(`Not a file id: ${fileId}`);
+    }
+    return join(this.#ragDir(tempDir), fileId);
+  }
   #manifestPath(tempDir) { return join(this.#ragDir(tempDir), 'manifest.json'); }
 
   // The shared rag/<fileId> dir was deleted by a remove_file (the main process

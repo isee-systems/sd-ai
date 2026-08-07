@@ -516,6 +516,7 @@ Generate ONLY working Python code, no explanations.`;
     const vizId = this.generateVizId();
     const scriptPath = this.validatePath(join(this.sessionTempDir, `visualization-${vizId}.py`));
     const dataPath = this.validatePath(join(this.sessionTempDir, `data-${vizId}.json`));
+    const paramsPath = this.validatePath(join(this.sessionTempDir, `params-${vizId}.json`));
     const outputPath = this.validatePath(join(this.sessionTempDir, `visualization-${vizId}.svg`));
 
     let svgContent = null;
@@ -526,11 +527,14 @@ Generate ONLY working Python code, no explanations.`;
       const normalizedData = this.normalizeArrayLengths(data, variables);
       writeFileSync(dataPath, JSON.stringify(normalizedData));
 
-      // 2. Generate Python script
-      const pythonScript = this.generatePythonVisualizationScript(
-        type, dataPath, outputPath, variables, options
+      // 2. Generate Python script and the render parameters it reads. Titles,
+      //    labels, units and variable names travel as JSON rather than as
+      //    interpolated source — see generatePythonVisualizationScript.
+      const { script, params } = this.generatePythonVisualizationScript(
+        type, dataPath, outputPath, paramsPath, variables, options
       );
-      writeFileSync(scriptPath, pythonScript);
+      writeFileSync(paramsPath, JSON.stringify(params));
+      writeFileSync(scriptPath, script);
       logger.log(`[VizEngine] Template script created: ${scriptPath} at ${new Date().toISOString()}`);
 
       // 3. Execute Python script
@@ -567,6 +571,9 @@ Generate ONLY working Python code, no explanations.`;
     const filesToDelete = [
       join(this.sessionTempDir, `visualization-${vizId}.py`),
       join(this.sessionTempDir, `data-${vizId}.json`),
+      // Only the template path writes this one; the AI-custom path has no
+      // params file and the existsSync check below simply skips it.
+      join(this.sessionTempDir, `params-${vizId}.json`),
       join(this.sessionTempDir, `visualization-${vizId}.svg`)
     ];
 
@@ -583,51 +590,89 @@ Generate ONLY working Python code, no explanations.`;
     }
   }
 
-  // Returns a Python snippet that filters a flat {time, var1, ...} data dict to options.timeRange.
-  #timeRangeFilterFlat(options) {
-    if (!options?.timeRange) return '';
-    const { start, end } = options.timeRange;
+  // Python snippet that filters a flat {time, var1, ...} data dict to
+  // params['timeRange'], which is null when no window was requested.
+  #timeRangeFilterFlat() {
     return `
 # Apply time range filter
-_time_arr = data['time']
-_indices = [i for i, t in enumerate(_time_arr) if t >= ${start} and t <= ${end}]
-for _key in list(data.keys()):
-    if isinstance(data[_key], list) and len(data[_key]) == len(_time_arr):
-        data[_key] = [data[_key][i] for i in _indices]
+_range = params['timeRange']
+if _range:
+    _time_arr = data['time']
+    _indices = [i for i, t in enumerate(_time_arr) if t >= _range['start'] and t <= _range['end']]
+    for _key in list(data.keys()):
+        if isinstance(data[_key], list) and len(data[_key]) == len(_time_arr):
+            data[_key] = [data[_key][i] for i in _indices]
 `;
   }
 
-  // Returns a Python snippet that filters a run-keyed {runId: {time, var1,...}} data dict to options.timeRange.
-  #timeRangeFilterRunKeyed(options) {
-    if (!options?.timeRange) return '';
-    const { start, end } = options.timeRange;
+  // Python snippet that filters a run-keyed {runId: {time, var1,...}} data dict
+  // to params['timeRange'].
+  #timeRangeFilterRunKeyed() {
     return `
 # Apply time range filter per run
-for _run_id in list(data.keys()):
-    _run = data[_run_id]
-    _time_arr = _run.get('time', [])
-    _indices = [i for i, t in enumerate(_time_arr) if t >= ${start} and t <= ${end}]
-    for _key in list(_run.keys()):
-        if isinstance(_run[_key], list) and len(_run[_key]) == len(_time_arr):
-            _run[_key] = [_run[_key][i] for i in _indices]
+_range = params['timeRange']
+if _range:
+    for _run_id in list(data.keys()):
+        _run = data[_run_id]
+        _time_arr = _run.get('time', [])
+        _indices = [i for i, t in enumerate(_time_arr) if t >= _range['start'] and t <= _range['end']]
+        for _key in list(_run.keys()):
+            if isinstance(_run[_key], list) and len(_run[_key]) == len(_time_arr):
+                _run[_key] = [_run[_key][i] for i in _indices]
 `;
+  }
+
+  // The preamble every template shares: load the simulation data and the render
+  // parameters. Both paths are server-generated (session temp dir + a hex vizId,
+  // each already through validatePath), so they are the only values in the whole
+  // generated script that come from interpolation.
+  #scriptPreamble(dataPath, paramsPath) {
+    return `import json
+import warnings
+warnings.filterwarnings('ignore')
+
+with open('${dataPath}', 'r') as f:
+    data = json.load(f)
+with open('${paramsPath}', 'r') as f:
+    params = json.load(f)`;
   }
 
   /**
-   * Generate Python script for visualization
+   * Generate the Python script and its render parameters for a visualization.
+   *
+   * Returns `{ script, params }`. The caller writes `params` to `paramsPath` as
+   * JSON and the script reads it back at runtime.
+   *
+   * ## Why nothing caller-supplied is interpolated into the script
+   *
+   * These templates used to build Python by dropping values straight into
+   * single-quoted literals — `ax.set_title('${options.title}')` and friends.
+   * Every one of those values (title, timeUnits, seriesUnits, variable names,
+   * highlight-period labels and colors) is typed `z.string()` on the
+   * create_visualization tool, which means the model chooses it, which means a
+   * prompt injection reaching the model chose it. A title of
+   * `x'); import os; os.system(...); ('` closed the literal and ran as code in
+   * the process that executes the script.
+   *
+   * Escaping at each site would have worked, but there were ~15 of them and the
+   * next template added would have needed to remember. Passing the values as
+   * data removes the question: the script is a fixed program, `params` is input
+   * to it, and a string can no longer become a statement no matter what it says.
+   * It also fixes a latent bug — the old inline `JSON.stringify(highlightPeriods)`
+   * would have emitted `true`/`false`/`null`, which are not Python literals.
    */
-  generatePythonVisualizationScript(type, dataPath, outputPath, variables, options) {
+  generatePythonVisualizationScript(type, dataPath, outputPath, paramsPath, variables, options) {
     switch (type) {
       case 'time_series':
-        return this.generateTimeSeriesScript(dataPath, outputPath, variables, options);
+        return this.generateTimeSeriesScript(dataPath, outputPath, paramsPath, variables, options);
       case 'phase_portrait':
-        return this.generatePhasePortraitScript(dataPath, outputPath, variables, options);
+        return this.generatePhasePortraitScript(dataPath, outputPath, paramsPath, variables, options);
       case 'feedback_dominance':
-        return this.generateFeedbackDominanceScript(dataPath, outputPath, variables, options);
+        return this.generateFeedbackDominanceScript(dataPath, outputPath, paramsPath, variables, options);
       case 'comparison':
-        return this.generateComparisonScript(dataPath, outputPath, variables, options);
+        return this.generateComparisonScript(dataPath, outputPath, paramsPath, variables, options);
       case 'confidence_interval':
-        return this.generateConfidenceIntervalScript(dataPath, outputPath, variables, options);
+        return this.generateConfidenceIntervalScript(dataPath, outputPath, paramsPath, variables, options);
       default:
         throw new Error(`Unknown visualization type: ${type}`);
     }
@@ -636,7 +681,7 @@ for _run_id in list(data.keys()):
   /**
    * Generate time series plot script
    */
-  generateTimeSeriesScript(dataPath, outputPath, variables, options) {
+  generateTimeSeriesScript(dataPath, outputPath, paramsPath, variables, options) {
     const bandPalette = ['#4e79a7','#f28e2b','#59a14f','#e15759','#76b7b2','#edc948','#b07aa1','#ff9da7','#9c755f','#bab0ac'];
     let paletteIdx = 0;
     const labelColorMap = {};
@@ -644,55 +689,55 @@ for _run_id in list(data.keys()):
       if (!labelColorMap[period.label]) {
         labelColorMap[period.label] = period.color || bandPalette[paletteIdx++ % bandPalette.length];
       }
-      return { ...period, color: labelColorMap[period.label] };
+      return { start: period.start, end: period.end, label: period.label, color: labelColorMap[period.label] };
     });
-
-    const highlightPeriodsCode = periods.map(p =>
-      `\nax.axvspan(${p.start}, ${p.end}, alpha=0.2, color='${p.color}', zorder=0, linewidth=0)`
-    ).join('');
-
-    const uniqueLabelPeriods = Object.entries(labelColorMap).map(([label, color]) => ({ label, color }));
-    const legendCode = uniqueLabelPeriods.length > 0
-      ? `import matplotlib.patches as mpatches
-band_handles = [${uniqueLabelPeriods.map(p => `mpatches.Patch(facecolor='${p.color}', alpha=0.6, label='${p.label}')`).join(', ')}]
-line_handles = [l for l in ax.lines if not l.get_label().startswith('_')]
-ax.legend(handles=band_handles + line_handles, loc='best')`
-      : `ax.legend(loc='best')`;
 
     const su = options.seriesUnits || {};
     const unitValues = variables.map(v => su[v]).filter(Boolean);
     const sharedUnit = unitValues.length === variables.length && new Set(unitValues).size === 1 ? unitValues[0] : null;
-    const yAxisLabel = sharedUnit ? `Value (${sharedUnit})` : 'Value';
 
-    return `
+    const params = {
+      figsize: [(options.width || 800) / 100, (options.height || 600) / 100],
+      timeRange: options.timeRange ?? null,
+      title: options.title || 'Time Series',
+      xLabel: `Time (${options.timeUnits || 'units'})`,
+      yLabel: sharedUnit ? `Value (${sharedUnit})` : 'Value',
+      series: variables.map(v => ({
+        key: v,
+        label: su[v] ? `${v.replaceAll('_', ' ')} (${su[v]})` : v.replaceAll('_', ' ')
+      })),
+      highlightPeriods: periods,
+      legendBands: Object.entries(labelColorMap).map(([label, color]) => ({ label, color }))
+    };
+
+    const script = `
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-import json
-import warnings
-warnings.filterwarnings('ignore')
-
-# Load data
-with open('${dataPath}', 'r') as f:
-    data = json.load(f)
-${this.#timeRangeFilterFlat(options)}
-fig, ax = plt.subplots(figsize=(${(options.width || 800)/100}, ${(options.height || 600)/100}))
+import matplotlib.patches as mpatches
+${this.#scriptPreamble(dataPath, paramsPath)}
+${this.#timeRangeFilterFlat()}
+fig, ax = plt.subplots(figsize=tuple(params['figsize']))
 
 # Background highlight periods (drawn first so lines render on top)
-${highlightPeriodsCode}
+for _band in params['highlightPeriods']:
+    ax.axvspan(_band['start'], _band['end'], alpha=0.2, color=_band['color'], zorder=0, linewidth=0)
 
 # Plot each variable
-${variables.map(v => {
-      const units = su[v];
-      const label = units ? `${v.replaceAll('_', ' ')} (${units})` : v.replaceAll('_', ' ');
-      return `\nax.plot(data['time'], data['${v}'], label='${label}', linewidth=2, zorder=3)`;
-    }).join('')}
+for _series in params['series']:
+    ax.plot(data['time'], data[_series['key']], label=_series['label'], linewidth=2, zorder=3)
 
 # Styling
-ax.set_xlabel('Time (${options.timeUnits || 'units'})', fontsize=12)
-ax.set_ylabel('${yAxisLabel}', fontsize=12)
-ax.set_title('${options.title || 'Time Series'}', fontsize=14, fontweight='bold')
-${legendCode}
+ax.set_xlabel(params['xLabel'], fontsize=12)
+ax.set_ylabel(params['yLabel'], fontsize=12)
+ax.set_title(params['title'], fontsize=14, fontweight='bold')
+
+_band_handles = [mpatches.Patch(facecolor=_b['color'], alpha=0.6, label=_b['label']) for _b in params['legendBands']]
+if _band_handles:
+    _line_handles = [l for l in ax.lines if not l.get_label().startswith('_')]
+    ax.legend(handles=_band_handles + _line_handles, loc='best')
+else:
+    ax.legend(loc='best')
 ax.grid(True, alpha=0.3)
 
 plt.tight_layout()
@@ -700,34 +745,39 @@ plt.savefig('${outputPath}', format='svg', bbox_inches='tight')
 plt.close()
 print('Visualization saved')
 `.trim();
+
+    return { script, params };
   }
 
   /**
    * Generate phase portrait script
    */
-  generatePhasePortraitScript(dataPath, outputPath, variables, options) {
+  generatePhasePortraitScript(dataPath, outputPath, paramsPath, variables, options) {
     const [xVar, yVar] = variables;
     const su = options.seriesUnits || {};
-    const xLabel = su[xVar] ? `${xVar.replaceAll('_', ' ')} (${su[xVar]})` : xVar.replaceAll('_', ' ');
-    const yLabel = su[yVar] ? `${yVar.replaceAll('_', ' ')} (${su[yVar]})` : yVar.replaceAll('_', ' ');
-    const timeLabel = options.timeUnits ? `Time (${options.timeUnits})` : 'Time';
-    return `
+
+    const params = {
+      timeRange: options.timeRange ?? null,
+      xKey: xVar,
+      yKey: yVar,
+      xLabel: su[xVar] ? `${xVar.replaceAll('_', ' ')} (${su[xVar]})` : xVar.replaceAll('_', ' '),
+      yLabel: su[yVar] ? `${yVar.replaceAll('_', ' ')} (${su[yVar]})` : yVar.replaceAll('_', ' '),
+      title: `Phase Portrait: ${yVar.replaceAll('_', ' ')} vs ${xVar.replaceAll('_', ' ')}`,
+      timeLabel: options.timeUnits ? `Time (${options.timeUnits})` : 'Time'
+    };
+
+    const script = `
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
-import json
-import warnings
-warnings.filterwarnings('ignore')
-
-with open('${dataPath}', 'r') as f:
-    data = json.load(f)
-${this.#timeRangeFilterFlat(options)}
+${this.#scriptPreamble(dataPath, paramsPath)}
+${this.#timeRangeFilterFlat()}
 fig, ax = plt.subplots(figsize=(8, 6))
 
 time = np.array(data['time'])
-x = np.array(data['${xVar}'])
-y = np.array(data['${yVar}'])
+x = np.array(data[params['xKey']])
+y = np.array(data[params['yKey']])
 
 scatter = ax.scatter(x, y, c=time, cmap='viridis', s=20, alpha=0.6)
 ax.plot(x, y, 'k-', alpha=0.3, linewidth=0.5)
@@ -735,20 +785,22 @@ ax.plot(x, y, 'k-', alpha=0.3, linewidth=0.5)
 ax.scatter(x[0], y[0], c='green', s=100, marker='o', label='Start', zorder=5)
 ax.scatter(x[-1], y[-1], c='red', s=100, marker='s', label='End', zorder=5)
 
-ax.set_xlabel('${xLabel}', fontsize=12)
-ax.set_ylabel('${yLabel}', fontsize=12)
-ax.set_title('Phase Portrait: ${yVar.replaceAll('_', ' ')} vs ${xVar.replaceAll('_', ' ')}', fontsize=14, fontweight='bold')
+ax.set_xlabel(params['xLabel'], fontsize=12)
+ax.set_ylabel(params['yLabel'], fontsize=12)
+ax.set_title(params['title'], fontsize=14, fontweight='bold')
 ax.legend()
 ax.grid(True, alpha=0.3)
 
 cbar = plt.colorbar(scatter, ax=ax)
-cbar.set_label('${timeLabel}', fontsize=10)
+cbar.set_label(params['timeLabel'], fontsize=10)
 
 plt.tight_layout()
 plt.savefig('${outputPath}', format='svg', bbox_inches='tight')
 plt.close()
 print('Visualization saved')
 `.trim();
+
+    return { script, params };
   }
 
   /**
@@ -759,30 +811,32 @@ print('Visualization saved')
    * - variables: ['loopId1', 'loopId2', ...]
    * - options.highlightPeriods: [{ loopIds: [...], startTime: x, endTime: y, label: '...', color: '...' }, ...]
    */
-  generateFeedbackDominanceScript(dataPath, outputPath, variables, options) {
-    // Generate the loop variable names for Python script
-    const loopVarsList = variables.map(v => `'${v}'`).join(', ');
+  generateFeedbackDominanceScript(dataPath, outputPath, paramsPath, variables, options) {
+    const params = {
+      figsize: [(options.width || 800) / 100, (options.height || 600) / 100],
+      timeRange: options.timeRange ?? null,
+      loopIds: variables,
+      highlightPeriods: options.highlightPeriods || [],
+      xLabel: `Time (${options.timeUnits || 'units'})`,
+      yLabel: 'Percent of Behavior Explained',
+      title: options.title || 'Feedback Loop Dominance Over Time'
+    };
 
-    return `
+    const script = `
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.ticker
 import numpy as np
-import json
-import warnings
-warnings.filterwarnings('ignore')
-
-with open('${dataPath}', 'r') as f:
-    data = json.load(f)
-${this.#timeRangeFilterFlat(options)}
-fig, ax = plt.subplots(figsize=(${(options.width || 800)/100}, ${(options.height || 600)/100}))
+${this.#scriptPreamble(dataPath, paramsPath)}
+${this.#timeRangeFilterFlat()}
+fig, ax = plt.subplots(figsize=tuple(params['figsize']))
 
 # Get time array
 time = data.get('time', [])
 
 # Loop IDs to plot (from variables parameter)
-loop_ids = [${loopVarsList}]
+loop_ids = params['loopIds']
 
 # Collect loop data
 loop_data = []
@@ -800,7 +854,7 @@ if len(loop_data) > 0 and len(time) > 0:
     time = np.array(time)
 
     # Add highlight periods for dominant loops (from options.highlightPeriods)
-    highlight_periods = ${JSON.stringify(options.highlightPeriods || [])}
+    highlight_periods = params['highlightPeriods']
 
     for period in highlight_periods:
         start_time = period.get('startTime', 0)
@@ -825,9 +879,9 @@ if len(loop_data) > 0 and len(time) > 0:
     ax.stackplot(time, *loop_data, labels=loop_labels, colors=colors, alpha=0.7)
 
     ax.yaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda y, _: f'{y:.0f}%'))
-    ax.set_xlabel('Time (${options.timeUnits || 'units'})', fontsize=12)
-    ax.set_ylabel('Percent of Behavior Explained', fontsize=12)
-    ax.set_title('${options.title || 'Feedback Loop Dominance Over Time'}', fontsize=14, fontweight='bold')
+    ax.set_xlabel(params['xLabel'], fontsize=12)
+    ax.set_ylabel(params['yLabel'], fontsize=12)
+    ax.set_title(params['title'], fontsize=14, fontweight='bold')
     ax.legend(loc='upper left', bbox_to_anchor=(1.02, 1), borderaxespad=0)
     ax.grid(True, alpha=0.3)
 else:
@@ -839,27 +893,33 @@ plt.savefig('${outputPath}', format='svg', bbox_inches='tight')
 plt.close()
 print('Visualization saved')
 `.trim();
+
+    return { script, params };
   }
 
   /**
    * Generate comparison script
    */
-  generateComparisonScript(dataPath, outputPath, variables, options) {
+  generateComparisonScript(dataPath, outputPath, paramsPath, variables, options) {
     // For comparison, variables is expected to be a single variable name
     const variable = Array.isArray(variables) ? variables[0] : variables;
 
-    return `
+    const params = {
+      figsize: [(options.width || 800) / 100, (options.height || 600) / 100],
+      timeRange: options.timeRange ?? null,
+      variableKey: variable,
+      xLabel: 'Time',
+      yLabel: options.seriesUnits?.[variable] ? `${variable} (${options.seriesUnits[variable]})` : variable,
+      title: options.title || `Comparison: ${variable}`
+    };
+
+    const script = `
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-import json
-import warnings
-warnings.filterwarnings('ignore')
-
-with open('${dataPath}', 'r') as f:
-    data = json.load(f)
-${this.#timeRangeFilterRunKeyed(options)}
-fig, ax = plt.subplots(figsize=(${(options.width || 800)/100}, ${(options.height || 600)/100}))
+${this.#scriptPreamble(dataPath, paramsPath)}
+${this.#timeRangeFilterRunKeyed()}
+fig, ax = plt.subplots(figsize=tuple(params['figsize']))
 
 colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
 line_styles = ['-', '--', '-.', ':']
@@ -867,16 +927,16 @@ line_styles = ['-', '--', '-.', ':']
 # Run-keyed format: { runId: { time: [...], varName: [...], ... } }
 run_items = []
 for run_id, run_data in data.items():
-    run_items.append((run_id, run_data.get('time', []), run_data.get('${variable}', [])))
+    run_items.append((run_id, run_data.get('time', []), run_data.get(params['variableKey'], [])))
 
 for idx, (label, time_data, values) in enumerate(run_items):
     color = colors[idx % len(colors)]
     line_style = line_styles[0] if idx == 0 else line_styles[(idx % (len(line_styles)-1)) + 1]
     ax.plot(time_data, values, label=label, color=color, linestyle=line_style, linewidth=2)
 
-ax.set_xlabel('Time', fontsize=12)
-ax.set_ylabel('${options.seriesUnits?.[variable] ? `${variable} (${options.seriesUnits[variable]})` : variable}', fontsize=12)
-ax.set_title('${options.title || `Comparison: ${variable}`}', fontsize=14, fontweight='bold')
+ax.set_xlabel(params['xLabel'], fontsize=12)
+ax.set_ylabel(params['yLabel'], fontsize=12)
+ax.set_title(params['title'], fontsize=14, fontweight='bold')
 ax.legend(loc='best')
 ax.grid(True, alpha=0.3)
 
@@ -885,6 +945,8 @@ plt.savefig('${outputPath}', format='svg', bbox_inches='tight')
 plt.close()
 print('Visualization saved')
 `.trim();
+
+    return { script, params };
   }
 
   /**
@@ -894,37 +956,38 @@ print('Visualization saved')
    * For each variable, the script computes the median and configured percentile bands
    * across runs at each time point. Defaults: median + 50% (25–75) + 95% (2.5–97.5) bands.
    */
-  generateConfidenceIntervalScript(dataPath, outputPath, variables, options) {
-    const intervals = (options.confidenceIntervals && options.confidenceIntervals.length > 0)
-      ? options.confidenceIntervals
-      : [50, 95];
-    const showMedian = options.showMedian !== false;
-
+  generateConfidenceIntervalScript(dataPath, outputPath, paramsPath, variables, options) {
     const su = options.seriesUnits || {};
     const unitValues = variables.map(v => su[v]).filter(Boolean);
     const sharedUnit = unitValues.length === variables.length && new Set(unitValues).size === 1 ? unitValues[0] : null;
-    const yAxisLabel = sharedUnit ? `Value (${sharedUnit})` : 'Value';
 
-    const variableLabels = variables.map(v => su[v] ? `${v.replaceAll('_', ' ')} (${su[v]})` : v.replaceAll('_', ' '));
+    const params = {
+      figsize: [(options.width || 800) / 100, (options.height || 600) / 100],
+      timeRange: options.timeRange ?? null,
+      variables,
+      variableLabels: variables.map(v => su[v] ? `${v.replaceAll('_', ' ')} (${su[v]})` : v.replaceAll('_', ' ')),
+      intervals: (options.confidenceIntervals && options.confidenceIntervals.length > 0)
+        ? options.confidenceIntervals
+        : [50, 95],
+      showMedian: options.showMedian !== false,
+      xLabel: `Time (${options.timeUnits || 'units'})`,
+      yLabel: sharedUnit ? `Value (${sharedUnit})` : 'Value',
+      title: options.title || 'Confidence Intervals'
+    };
 
-    return `
+    const script = `
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
-import json
-import warnings
-warnings.filterwarnings('ignore')
+${this.#scriptPreamble(dataPath, paramsPath)}
+${this.#timeRangeFilterRunKeyed()}
+fig, ax = plt.subplots(figsize=tuple(params['figsize']))
 
-with open('${dataPath}', 'r') as f:
-    data = json.load(f)
-${this.#timeRangeFilterRunKeyed(options)}
-fig, ax = plt.subplots(figsize=(${(options.width || 800)/100}, ${(options.height || 600)/100}))
-
-variables = ${JSON.stringify(variables)}
-variable_labels = ${JSON.stringify(variableLabels)}
-intervals = ${JSON.stringify(intervals)}
-show_median = ${showMedian ? 'True' : 'False'}
+variables = params['variables']
+variable_labels = params['variableLabels']
+intervals = params['intervals']
+show_median = params['showMedian']
 
 palette = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
 
@@ -998,9 +1061,9 @@ if not plotted_vars:
         f"Checked {len(run_ids)} runs; none had matching time/values arrays for the requested variables."
     )
 
-ax.set_xlabel('Time (${options.timeUnits || 'units'})', fontsize=12)
-ax.set_ylabel('${yAxisLabel}', fontsize=12)
-ax.set_title('${options.title || 'Confidence Intervals'}', fontsize=14, fontweight='bold')
+ax.set_xlabel(params['xLabel'], fontsize=12)
+ax.set_ylabel(params['yLabel'], fontsize=12)
+ax.set_title(params['title'], fontsize=14, fontweight='bold')
 ax.legend(loc='best')
 ax.grid(True, alpha=0.3)
 
@@ -1009,6 +1072,8 @@ plt.savefig('${outputPath}', format='svg', bbox_inches='tight')
 plt.close()
 print('Visualization saved')
 `.trim();
+
+    return { script, params };
   }
 
   /**

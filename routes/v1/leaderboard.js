@@ -12,7 +12,18 @@ const router = express.Router()
 router.get('/:mode', async (req, res) => {
   try {
     const { mode } = req.params
-    
+
+    // `mode` lands in a filename that is then path.join'd. A percent-encoded
+    // separator survives route matching and is decoded before we see it, so
+    // `x%2f..%2f..%2fetc%2fpasswd` would join out of evals/results entirely.
+    // Restricting to a bare word keeps it a single path component.
+    if (!/^[a-z0-9]+$/i.test(mode)) {
+      return res.status(404).json({
+        success: false,
+        message: `Leaderboard data not found for mode: ${mode}`
+      })
+    }
+
     const filename = `leaderboard_${mode.toLowerCase()}_full_results.json`
     const filePath = path.join(__dirname, '../../evals/results', filename)
     

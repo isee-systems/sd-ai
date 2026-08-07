@@ -1,19 +1,22 @@
 import express from 'express'
-import fs from 'fs'
 import path from 'path'
+import { engineNames } from './engineRegistry.js'
 
 const router = express.Router()
 
 router.get("/:engine/parameters", async (req, res) => {
-    const enginePath = path.join(process.cwd(), 'engines', req.params.engine, 'engine.js');
-    
-    // Check if engine file exists
-    if (!fs.existsSync(enginePath)) {
+    // Membership in the engines/ directory listing, NOT existsSync on a path
+    // built from the parameter: Express decodes %2f in a route param after
+    // matching, so `..%2f..%2ftmp` arrives here as `../../tmp` and an existsSync
+    // check would happily approve importing any engine.js on the filesystem.
+    if (!engineNames().has(req.params.engine)) {
         return res.status(404).send({
             success: false,
             message: `Engine "${req.params.engine}" not found`
         });
     }
+
+    const enginePath = path.join(process.cwd(), 'engines', req.params.engine, 'engine.js');
 
     const importPath = process.platform === 'win32' ? `file://${enginePath}` : enginePath;
     const engine = await import(importPath);

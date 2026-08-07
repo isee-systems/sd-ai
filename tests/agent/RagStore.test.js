@@ -9,7 +9,7 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 import { randomBytes } from 'crypto';
 import * as XLSX from 'xlsx';
-import { RagStore } from '../../agent/utilities/RagStore.js';
+import { RagStore, isValidFileId, FILE_ID_RE } from '../../agent/utilities/RagStore.js';
 import { SessionManager } from '../../agent/utilities/SessionManager.js';
 import config from '../../config.js';
 
@@ -77,8 +77,8 @@ describe('RagStore', () => {
 
   describe('processFile — extraction & tiering', () => {
     it('classifies a small text file as the manifest tier and writes extracted.txt', async () => {
-      const dir = writeOriginal('f1', Buffer.from('A short reference note about systems.', 'utf8'));
-      const meta = await store.processFile(sessionManager, sessionId, { fileId: 'f1', name: 'note.txt', mimeType: 'text/plain', addedAt: 'now' });
+      const dir = writeOriginal('file_0000000000000001', Buffer.from('A short reference note about systems.', 'utf8'));
+      const meta = await store.processFile(sessionManager, sessionId, { fileId: 'file_0000000000000001', name: 'note.txt', mimeType: 'text/plain', addedAt: 'now' });
 
       expect(meta.tier).toBe('manifest');
       expect(meta.status).toBe('ready');
@@ -101,8 +101,8 @@ endobj
 5 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj
 trailer<</Root 1 0 R>>
 %%EOF`;
-      const dir = writeOriginal('pdf1', Buffer.from(pdf, 'latin1'));
-      await store.processFile(sessionManager, sessionId, { fileId: 'pdf1', name: 'doc.pdf', mimeType: 'application/pdf', addedAt: 'now' });
+      const dir = writeOriginal('file_0000000000000002', Buffer.from(pdf, 'latin1'));
+      await store.processFile(sessionManager, sessionId, { fileId: 'file_0000000000000002', name: 'doc.pdf', mimeType: 'application/pdf', addedAt: 'now' });
       const text = readFileSync(join(dir, 'extracted.txt'), 'utf8');
       expect(text).toContain('Hello RAG world');
     }, 20000);
@@ -112,8 +112,8 @@ trailer<</Root 1 0 R>>
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Towns');
       const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
-      const dir = writeOriginal('xl1', buffer);
-      await store.processFile(sessionManager, sessionId, { fileId: 'xl1', name: 'data.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', addedAt: 'now' });
+      const dir = writeOriginal('file_0000000000000003', buffer);
+      await store.processFile(sessionManager, sessionId, { fileId: 'file_0000000000000003', name: 'data.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', addedAt: 'now' });
       const text = readFileSync(join(dir, 'extracted.txt'), 'utf8');
       expect(text).toContain('Springfield');
       expect(text).toContain('Population');
@@ -124,15 +124,15 @@ trailer<</Root 1 0 R>>
       // the exact failure that stranded every chunk but the opening one.
       const collapsing = { async embed(texts) { return texts.length ? [featurize('only one')] : []; } };
       const badStore = new RagStore(collapsing);
-      writeOriginal('bad1', Buffer.from(buildLargeText(), 'utf8'));
+      writeOriginal('file_0000000000000004', Buffer.from(buildLargeText(), 'utf8'));
       await expect(
-        badStore.processFile(sessionManager, sessionId, { fileId: 'bad1', name: 'bad.txt', mimeType: 'text/plain', addedAt: 'now' })
+        badStore.processFile(sessionManager, sessionId, { fileId: 'file_0000000000000004', name: 'bad.txt', mimeType: 'text/plain', addedAt: 'now' })
       ).rejects.toThrow(/does not match chunk count/);
     });
 
     it('classifies a large file as the vector tier and writes chunks + embeddings', async () => {
-      const dir = writeOriginal('big1', Buffer.from(buildLargeText(), 'utf8'));
-      const meta = await store.processFile(sessionManager, sessionId, { fileId: 'big1', name: 'big.txt', mimeType: 'text/plain', addedAt: 'now' });
+      const dir = writeOriginal('file_0000000000000005', Buffer.from(buildLargeText(), 'utf8'));
+      const meta = await store.processFile(sessionManager, sessionId, { fileId: 'file_0000000000000005', name: 'big.txt', mimeType: 'text/plain', addedAt: 'now' });
 
       expect(meta.tier).toBe('vector');
       expect(meta.tokenCount).toBeGreaterThan(config.ragManifestMaxTokens);
@@ -153,7 +153,7 @@ trailer<</Root 1 0 R>>
     // shared rag/<id> dir out from under processFile, so its artifact writes hit
     // ENOENT. The embedder hook stands in for that mid-flight deletion.
     it('reclassifies a remove that races embedding as a benign typed error (rag root intact)', async () => {
-      const fileId = 'race1';
+      const fileId = 'file_0000000000000006';
       const dir = writeOriginal(fileId, Buffer.from(buildLargeText(), 'utf8'));
       const racingEmbedder = {
         async embed(texts) {
@@ -169,7 +169,7 @@ trailer<</Root 1 0 R>>
     });
 
     it('lets a vanished rag root (session teardown) surface as a raw ENOENT, not the benign code', async () => {
-      const fileId = 'race2';
+      const fileId = 'file_0000000000000007';
       writeOriginal(fileId, Buffer.from(buildLargeText(), 'utf8'));
       const teardownEmbedder = {
         async embed(texts) {
@@ -188,33 +188,33 @@ trailer<</Root 1 0 R>>
 
   describe('search', () => {
     it('returns the most relevant chunk for a query', async () => {
-      writeOriginal('big1', Buffer.from(buildLargeText(), 'utf8'));
-      await store.processFile(sessionManager, sessionId, { fileId: 'big1', name: 'big.txt', mimeType: 'text/plain', addedAt: 'now' });
+      writeOriginal('file_0000000000000005', Buffer.from(buildLargeText(), 'utf8'));
+      await store.processFile(sessionManager, sessionId, { fileId: 'file_0000000000000005', name: 'big.txt', mimeType: 'text/plain', addedAt: 'now' });
 
       const results = await store.search(sessionManager, sessionId, 'apple', { topK: 3 });
       expect(results.length).toBeGreaterThan(0);
       expect(results[0].text.toLowerCase()).toContain('apple');
-      expect(results[0]).toHaveProperty('fileId', 'big1');
+      expect(results[0]).toHaveProperty('fileId', 'file_0000000000000005');
       expect(results[0]).toHaveProperty('location');
     });
 
     it('respects topK', async () => {
-      writeOriginal('big1', Buffer.from(buildLargeText(), 'utf8'));
-      await store.processFile(sessionManager, sessionId, { fileId: 'big1', name: 'big.txt', mimeType: 'text/plain', addedAt: 'now' });
+      writeOriginal('file_0000000000000005', Buffer.from(buildLargeText(), 'utf8'));
+      await store.processFile(sessionManager, sessionId, { fileId: 'file_0000000000000005', name: 'big.txt', mimeType: 'text/plain', addedAt: 'now' });
       const results = await store.search(sessionManager, sessionId, 'dolphin', { topK: 2 });
       expect(results.length).toBeLessThanOrEqual(2);
     });
 
     it('filters by fileId', async () => {
-      writeOriginal('big1', Buffer.from(buildLargeText(), 'utf8'));
-      await store.processFile(sessionManager, sessionId, { fileId: 'big1', name: 'big.txt', mimeType: 'text/plain', addedAt: 'now' });
-      const results = await store.search(sessionManager, sessionId, 'apple', { fileId: 'does-not-exist' });
+      writeOriginal('file_0000000000000005', Buffer.from(buildLargeText(), 'utf8'));
+      await store.processFile(sessionManager, sessionId, { fileId: 'file_0000000000000005', name: 'big.txt', mimeType: 'text/plain', addedAt: 'now' });
+      const results = await store.search(sessionManager, sessionId, 'apple', { fileId: 'file_00000000000000ff' });
       expect(results).toEqual([]);
     });
 
     it('returns empty when there are no vector-tier files', async () => {
-      writeOriginal('f1', Buffer.from('tiny note', 'utf8'));
-      await store.processFile(sessionManager, sessionId, { fileId: 'f1', name: 'note.txt', mimeType: 'text/plain', addedAt: 'now' });
+      writeOriginal('file_0000000000000001', Buffer.from('tiny note', 'utf8'));
+      await store.processFile(sessionManager, sessionId, { fileId: 'file_0000000000000001', name: 'note.txt', mimeType: 'text/plain', addedAt: 'now' });
       const results = await store.search(sessionManager, sessionId, 'apple', {});
       expect(results).toEqual([]);
     });
@@ -222,21 +222,21 @@ trailer<</Root 1 0 R>>
 
   describe('removeFile', () => {
     it('deletes artifacts, manifest entry, and session metadata', async () => {
-      const dir = writeOriginal('f1', Buffer.from('note', 'utf8'));
-      await store.processFile(sessionManager, sessionId, { fileId: 'f1', name: 'note.txt', mimeType: 'text/plain', addedAt: 'now' });
+      const dir = writeOriginal('file_0000000000000001', Buffer.from('note', 'utf8'));
+      await store.processFile(sessionManager, sessionId, { fileId: 'file_0000000000000001', name: 'note.txt', mimeType: 'text/plain', addedAt: 'now' });
       expect(existsSync(dir)).toBe(true);
 
-      store.removeFile(sessionManager, sessionId, 'f1');
+      store.removeFile(sessionManager, sessionId, 'file_0000000000000001');
       expect(existsSync(dir)).toBe(false);
       expect(sessionManager.getAttachedFiles(sessionId)).toHaveLength(0);
-      expect(store.readManifest(tempDir).find(m => m.fileId === 'f1')).toBeUndefined();
+      expect(store.readManifest(tempDir).find(m => m.fileId === 'file_0000000000000001')).toBeUndefined();
     });
   });
 
   describe('reconcile', () => {
     it('re-registers an already-processed file without re-embedding (agent switch)', async () => {
-      writeOriginal('big1', Buffer.from(buildLargeText(), 'utf8'));
-      await store.processFile(sessionManager, sessionId, { fileId: 'big1', name: 'big.txt', mimeType: 'text/plain', addedAt: 'now' });
+      writeOriginal('file_0000000000000005', Buffer.from(buildLargeText(), 'utf8'));
+      await store.processFile(sessionManager, sessionId, { fileId: 'file_0000000000000005', name: 'big.txt', mimeType: 'text/plain', addedAt: 'now' });
       const embedCallsAfterProcess = embedder.calls;
 
       // Simulate a new worker: fresh store + fresh session, same temp dir on disk.
@@ -247,20 +247,112 @@ trailer<</Root 1 0 R>>
       newSm.createSessionWithId(newSessionId, null, tempDir);
       const newStore = new RagStore(embedder);
 
-      const fresh = await newStore.reconcile(newSm, newSessionId, [{ fileId: 'big1', name: 'big.txt', mimeType: 'text/plain', addedAt: 'now' }]);
+      const fresh = await newStore.reconcile(newSm, newSessionId, [{ fileId: 'file_0000000000000005', name: 'big.txt', mimeType: 'text/plain', addedAt: 'now' }]);
       expect(fresh).toHaveLength(0); // nothing freshly processed
       expect(embedder.calls).toBe(embedCallsAfterProcess); // no re-embedding
-      expect(newSm.getAttachedFiles(newSessionId).find(f => f.fileId === 'big1')?.tier).toBe('vector');
+      expect(newSm.getAttachedFiles(newSessionId).find(f => f.fileId === 'file_0000000000000005')?.tier).toBe('vector');
 
       newSm.shutdown();
     });
 
     it('processes a file whose bytes exist but was never extracted (uploaded before a worker)', async () => {
-      writeOriginal('pre1', Buffer.from('A note added before any worker existed.', 'utf8'));
-      const fresh = await store.reconcile(sessionManager, sessionId, [{ fileId: 'pre1', name: 'pre.txt', mimeType: 'text/plain', addedAt: 'now' }]);
+      writeOriginal('file_0000000000000008', Buffer.from('A note added before any worker existed.', 'utf8'));
+      const fresh = await store.reconcile(sessionManager, sessionId, [{ fileId: 'file_0000000000000008', name: 'pre.txt', mimeType: 'text/plain', addedAt: 'now' }]);
       expect(fresh).toHaveLength(1);
       expect(fresh[0].status).toBe('ready');
-      expect(existsSync(join(tempDir, 'rag', 'pre1', 'extracted.txt'))).toBe(true);
+      expect(existsSync(join(tempDir, 'rag', 'file_0000000000000008', 'extracted.txt'))).toBe(true);
     });
   });
+
+  /**
+   * Regression guard: fileId is a path segment, so it must never traverse.
+   *
+   * fileIds arrive from the client over the WebSocket and are concatenated into
+   * <sessionTempDir>/rag/<fileId>. `remove_file` rmSync's that path with
+   * recursive:true and `add_file` mkdirSync's it and writes into it — both in
+   * the MAIN process, outside the bwrap sandbox. A `..` in the id was arbitrary
+   * recursive deletion and arbitrary-directory write as the service user.
+   *
+   * The wire schema rejects a malformed id (see MessageProtocol.test.js); this
+   * is the second line, guarding the store itself so a future caller reaching
+   * RagStore by another route cannot escape either.
+   */
+  describe('fileId path-traversal guard', () => {
+    // Only what could escape <tempDir>/rag/ is rejected. The guard is about path
+    // safety, not about the id's shape — `fileId` is a client-chosen value.
+    const REJECTED = [
+      ['a traversal', '../../../../etc'],
+      ['a nested traversal', 'file_0123456789abcdef/../../../etc'],
+      ['a forward-slash separator', 'rag/escape'],
+      ['a backslash separator', 'rag\\escape'],
+      ['an absolute path', '/etc/passwd'],
+      ['a bare dot-dot', '..'],
+      ['a bare dot', '.'],
+      ['an empty string', ''],
+      ['a null byte', 'file name'],
+      ['an over-long id', 'a'.repeat(129)],
+    ];
+
+    it.each(REJECTED)('isValidFileId rejects %s', (_label, fileId) => {
+      expect(isValidFileId(fileId)).toBe(false);
+    });
+
+    it.each([[null], [undefined], [42], [{}]])(
+      'isValidFileId rejects the non-string %p', (fileId) => {
+        expect(isValidFileId(fileId)).toBe(false);
+      });
+
+    // The compatibility half. fileId is documented as an arbitrary client id
+    // (agent/README.md), so a real client's id must not be refused just because
+    // it does not look like the one the server mints — that was a live upload
+    // failure, not a hypothetical.
+    it.each([
+      ['the id the server mints', `file_${randomBytes(8).toString('hex')}`],
+      ['a UUID with dashes', '3f2504e0-4f89-11d3-9a0c-0305e82c3301'],
+      ['a short client id', 'file_abc'],
+      ['a mixed-case id', 'File_0123456789abcdeZ'],
+      ['an unprefixed hex id', '0123456789abcdef'],
+      ['a dotted name', 'report.2026.pdf'],
+      ['a name with dots that is not a traversal', 'v1..2'],
+      ['a single character', 'a'],
+      ['a name with spaces', 'My Reference Document.pdf'],
+      ['a name with unicode', 'rapport-financiér-2026.pdf'],
+      ['a name with punctuation', 'Q3 (final) [v2].xlsx'],
+      ['a 128-character id', 'a'.repeat(128)],
+    ])('isValidFileId accepts %s', (_label, fileId) => {
+      expect(isValidFileId(fileId)).toBe(true);
+      expect(FILE_ID_RE.test(fileId)).toBe(true);
+    });
+
+    it.each(REJECTED)('processFile refuses %s rather than building the path', async (_label, fileId) => {
+      await expect(
+        store.processFile(sessionManager, sessionId, {
+          fileId, name: 'note.txt', mimeType: 'text/plain', addedAt: 'now'
+        })
+      ).rejects.toThrow(/Not a file id/);
+    });
+
+    it('removeFile refuses a traversing id rather than rmSync-ing it', () => {
+      // A sibling directory that a traversing id would otherwise delete.
+      const victim = join(tempDir, 'victim');
+      mkdirSync(victim, { recursive: true });
+      writeFileSync(join(victim, 'keep.txt'), 'important');
+
+      store.removeFile(sessionManager, sessionId, '../victim');
+
+      expect(existsSync(join(victim, 'keep.txt'))).toBe(true);
+    });
+
+    it('search ignores a traversing fileId filter', async () => {
+      writeOriginal('file_0000000000000005', Buffer.from(buildLargeText(), 'utf8'));
+      await store.processFile(sessionManager, sessionId, {
+        fileId: 'file_0000000000000005', name: 'big.txt', mimeType: 'text/plain', addedAt: 'now'
+      });
+
+      const results = await store.search(sessionManager, sessionId, 'apple', { fileId: '../../../etc' });
+
+      expect(results).toEqual([]);
+    });
+  });
+
 });

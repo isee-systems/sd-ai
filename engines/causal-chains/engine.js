@@ -54,7 +54,12 @@ focus on chains of relationships, rather then individual links.`
 
         return [
             {
-                name: "apiKey",
+                // Named openAIKey to match every other engine, LLMWrapper, and the
+                // credential check in routes/v1/engineGenerate.js. It was `apiKey`,
+                // which meant a client sending the documented `openAIKey` waived
+                // authentication and then had its key silently ignored in favour of
+                // the server's OPENAI_API_KEY.
+                name: "openAIKey",
                 type: "string",
                 required: false,
                 uiElement: "password",
@@ -118,7 +123,8 @@ focus on chains of relationships, rather then individual links.`
     async generate(prompt, currentModel, parameters) {
         const resolvedParameters = {
             ...parameters,
-            apiKey: parameters.apiKey || process.env.OPENAI_API_KEY,
+            // The Go binary reads `apiKey`; the wire parameter is `openAIKey`.
+            apiKey: parameters.openAIKey || process.env.OPENAI_API_KEY,
             googleKey: parameters.googleKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY,
             anthropicKey: parameters.anthropicKey || process.env.ANTHROPIC_API_KEY,
         };

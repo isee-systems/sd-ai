@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
-import { dirname } from 'path';
+import { dirname, resolve, sep } from 'path';
+import { fileURLToPath } from 'url';
 import { createSuccessResponse, createErrorResponse } from './toolHelpers.js';
 
 /**
@@ -8,7 +9,17 @@ import { createSuccessResponse, createErrorResponse } from './toolHelpers.js';
  * The SDK loop has built-in Read, Edit, Write tools; these mirror them for the manual route.
  */
 
-export function createReadFileTool() {
+// agent/tools/builtin/fileTools.js -> the sd-ai root. Inside the bwrap sandbox
+// this resolves to /app, which is where the application is bind-mounted.
+const APP_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
+
+function isWithin(candidatePath, rootPath) {
+  const root = resolve(rootPath);
+  const candidate = resolve(candidatePath);
+  return candidate === root || candidate.startsWith(root + sep);
+}
+
+export function createReadFileTool(sessionManager, sessionId) {
   return {
     description: `Read a file from disk and return its contents. Use this to load data files (e.g. variable data) into context after a tool has written them to disk. NEVER use this to read model.sdjson — use the read_model_section tool to inspect the model.
 
@@ -29,6 +40,19 @@ Filtering options to avoid reading more than needed:
         if (filePath.endsWith('model.sdjson')) {
           return createErrorResponse('Reading model.sdjson with read_file is not allowed — use the read_model_section tool to inspect the model.');
         }
+
+        // Confine reads to the two directories the agent has legitimate business
+        // in: this session's temp dir (where every tool writes the data files it
+        // tells the model to read) and the application directory. Absent this,
+        // read_file is an arbitrary host-filesystem read whose only boundary is
+        // bwrap — which does not exist on macOS/Windows dev machines, and which
+        // still leaves everything mounted into the sandbox readable. Path is
+        // resolved before comparison, so `..` cannot walk out of a root.
+        const roots = [sessionManager.getSessionTempDir(sessionId), APP_ROOT].filter(Boolean);
+        if (!roots.some(root => isWithin(filePath, root))) {
+          return createErrorResponse(`Reading outside the session directory is not allowed: ${filePath}`);
+        }
+
         if (!existsSync(filePath)) {
           return createErrorResponse(`File not found: ${filePath}`);
         }

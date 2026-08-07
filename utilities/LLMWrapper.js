@@ -181,7 +181,17 @@ export class LLMWrapper {
     this.#seed = parameters.seed ?? parameters.randomSeed;
     this.#maxTokens = parameters.max_tokens ?? parameters.maxTokens;
     this.#thinking = parameters.thinking;
-    this.#localBaseURL = parameters.baseURL ?? 'http://localhost:1234/v1';
+    // The local LM Studio host, read from the environment and never from the
+    // caller. This value becomes the `baseURL` of an OpenAI client (ModelType.LLAMA
+    // below), so whoever sets it chooses the host and protocol this server connects
+    // to — and engineGenerate.js forwards every request-body key except `prompt` and
+    // `currentModel` into `parameters`, which made it a request parameter in
+    // practice. Every other provider host here is already env-driven (see
+    // DEEPSEEK_BASE_URL below and the <PROVIDER>_BASE_URL convention in
+    // agent/utilities/nativeProviders.js); this is the same variable LMStudioLoader
+    // reads, which carries no /v1 suffix, so it is appended here.
+    const lmStudioBase = process.env.LM_STUDIO_BASE_URL ?? 'http://localhost:1234';
+    this.#localBaseURL = `${lmStudioBase}/v1`;
 
     if (parameters.underlyingModel)
       this.model = new ModelCapabilities(parameters.underlyingModel);
