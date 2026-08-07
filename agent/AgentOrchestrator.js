@@ -57,6 +57,7 @@ import {
 } from './utilities/nativeProviders.js';
 import { isToolAvailable } from './tools/toolAvailability.js';
 import { APP_ROOT, createSdkFilesystemGuard } from './tools/pathConfinement.js';
+import { createSdkNetworkGuard } from './tools/networkConfinement.js';
 import { join } from 'path';
 
 // External provider ids that name the upstream LLM brand but resolve to the same
@@ -82,6 +83,19 @@ const OPENROUTER_PROVIDERS = new Set(Object.keys(config.openRouterAgentProviders
 // Bash is here because a shell is a write tool: withdrawing Write and Edit while
 // leaving `bash -c 'echo ... > f'` in reach would restrict nothing.
 const SDK_WRITE_TOOLS = ['Write', 'Edit', 'NotebookEdit', 'Bash'];
+
+// The preset's web half, which every agent gets — read-only ones included, since
+// neither name is in SDK_WRITE_TOOLS above. Listed here rather than left implicit
+// because that availability was previously a side effect of what the deny list
+// happened to omit, and something reachable by accident is something that gets
+// removed by accident too. Naming them in allowedTools does not grant anything
+// (the preset already did) but it puts the decision in the file.
+//
+// What bounds them is createSdkNetworkGuard, not this list: the sandbox shares
+// the host's network namespace, so an unrestricted fetch is a request aimed at
+// the host's own loopback and at the cloud metadata service. See
+// tools/networkConfinement.js.
+const SDK_WEB_TOOLS = ['WebFetch', 'WebSearch'];
 
 // The environment the Agent SDK gives the `claude` CLI subprocess it spawns.
 //
@@ -664,6 +678,7 @@ export class AgentOrchestrator {
         .map(name => `mcp__builtin__${name}`);
       let allowedTools = [
         ...builtInSdkTools,      // SDK filesystem tools (no prefix)
+        ...SDK_WEB_TOOLS,        // web access, every agent — see SDK_WEB_TOOLS
         ...builtInToolNames,     // Built-in tools with mcp__builtin__ prefix
         ...prefixedClientToolNames // Client tools with mcp__client__ prefix
       ];
@@ -696,12 +711,23 @@ export class AgentOrchestrator {
         permissionMode: 'bypassPermissions',
         cwd: sessionTempDir,
         env: anthropicSdkSubprocessEnv(),
+        // SDK isolation mode. Omitting this loads all three filesystem settings
+        // tiers "matching CLI defaults" (the SDK's own wording): user from
+        // ~/.claude/settings.json, project from <cwd>/.claude/settings.json, local
+        // from <cwd>/.claude/settings.local.json. In the sandbox HOME is /session
+        // and cwd is the session temp dir — the same directory, and the only
+        // writable one — so all three resolve inside space the agent can write,
+        // as does CLAUDE.md. A settings.json dropped there defines `hooks`, which
+        // are shell commands the CLI runs on its own tool calls: that turns any
+        // write primitive into command execution, and turns a written CLAUDE.md
+        // into self-injection. Nothing here needs on-disk settings, so load none.
+        settingSources: [],
         // Confines native Read/Glob/Grep, which arrive with the claude_code
         // preset and are handed to every agent including read-only ones. Nothing
         // else in this options object can do it: allowedTools only pre-approves
         // a prompt, and bypassPermissions means there is no prompt.
         hooks: {
-          PreToolUse: [{ hooks: [createSdkFilesystemGuard(filesystemRoots, sessionTempDir)] }],
+          PreToolUse: [{ hooks: [this.#sdkPreToolUseGuard(filesystemRoots, sessionTempDir)] }],
         },
         thinking: config.agentAnthropicThinking,
         ...(config.agentAnthropicThinking?.type !== 'disabled' && { effort: config.agentAnthropicEffort }),
@@ -1111,6 +1137,25 @@ export class AgentOrchestrator {
    * so without this the prohibition is simply absent here — and native `Read` has no
    * guard of its own.
    */
+  /**
+   * The single PreToolUse hook, covering both confinements.
+   *
+   * One function calling two evaluators rather than two entries in the hooks
+   * array: a deny has to win over an allow, and composing them here states that
+   * rather than assuming it of the SDK. Filesystem first — it is synchronous,
+   * while the network check may await a DNS lookup.
+   */
+  #sdkPreToolUseGuard(filesystemRoots, sessionTempDir) {
+    const filesystemGuard = createSdkFilesystemGuard(filesystemRoots, sessionTempDir);
+    const networkGuard = createSdkNetworkGuard();
+
+    return async (input) => {
+      const filesystemDecision = await filesystemGuard(input);
+      if (filesystemDecision?.hookSpecificOutput) return filesystemDecision;
+      return networkGuard(input);
+    };
+  }
+
   #anthropicSdkFilesystemToolsNote(builtInSdkTools) {
     if (!builtInSdkTools?.length) return '';
 

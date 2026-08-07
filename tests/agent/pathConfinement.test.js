@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
-import { mkdtempSync, rmSync, realpathSync } from 'fs';
+import { mkdtempSync, rmSync, realpathSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import {
@@ -21,6 +21,7 @@ import {
   evaluateSdkFilesystemAccess,
   createSdkFilesystemGuard,
 } from '../../agent/tools/pathConfinement.js';
+import { createVisualizationTool } from '../../agent/tools/builtin/createVisualization.js';
 
 let sessionDir;
 let roots;
@@ -138,5 +139,57 @@ describe('createSdkFilesystemGuard', () => {
     const out = await guard(preToolUse('Read', { file_path: '/proc/self/environ' }));
 
     expect(out.hookSpecificOutput.permissionDecision).toBe('deny');
+  });
+});
+
+/**
+ * create_visualization takes a model-chosen absolute path and reads it directly,
+ * which made it the one filesystem read in the worker that went around the
+ * confinement above. It is gated only by mode — no capability check — so every
+ * SFD agent, read-only ones included, could reach it.
+ */
+describe('create_visualization path confinement', () => {
+  const sessionId = 'sess_viz_confinement';
+
+  const toolFor = (dir) => createVisualizationTool(
+    { getSessionTempDir: () => dir, getSession: () => ({ clientId: null }) },
+    sessionId,
+    async () => {},
+    { createVisualization: async () => '<svg/>' },
+    'anthropic'
+  );
+
+  const call = (dir, filePath) => toolFor(dir).handler({
+    type: 'time_series', filePath, title: 'T', options: { timeUnits: 'y', seriesUnits: {} }
+  });
+
+  it('refuses the process environment', async () => {
+    const result = await call(sessionDir, '/proc/self/environ');
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/outside the session directory is not allowed/);
+  });
+
+  it('refuses a traversal out of the session directory', async () => {
+    const result = await call(sessionDir, join(sessionDir, '..', '..', 'etc', 'passwd'));
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/outside the session directory is not allowed/);
+  });
+
+  it('reads a data file inside the session directory', async () => {
+    const dataPath = join(sessionDir, 'variable_data_1.json');
+    writeFileSync(dataPath, JSON.stringify({ time: [0, 1], population: [10, 20] }));
+
+    const result = await call(sessionDir, dataPath);
+
+    expect(result.isError).toBe(false);
+  });
+
+  it('refuses everything when the session has no temp dir rather than permitting it', async () => {
+    const result = await call(undefined, join(sessionDir, 'variable_data_1.json'));
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/outside the session directory is not allowed/);
   });
 });

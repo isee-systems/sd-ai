@@ -166,19 +166,26 @@ export class WebSocketHandler {
     this.#ws.on('close', (code, reason) => this.#onClose(code, reason));
     this.#ws.on('error', (error) => this.#onError(error));
 
-    // Pre-warm the worker process in parallel with the client's
-    // initialize_session/select_agent round-trips. Clients always select an
-    // agent, so we'd spawn this worker anyway — doing it now overlaps the
-    // bwrap startup + Node module load with the network handshake. Saves
-    // ~1-1.5s of user-perceived session-start latency on the common case.
-    this.#prewarmWorker();
+    // No prewarm here. Spawning on connect meant every socket that reached the
+    // listener got a bwrap sandbox and a Node process before it had presented
+    // the authentication key — up to maxSessions of them, held until the
+    // inactivity sweep, from a client that never sends a single frame. The
+    // prewarm now runs from the success path of #handleInitializeSession
+    // instead; see #prewarmWorker.
   }
 
   /**
-   * Spawn a sandboxed worker eagerly on WS connect (before select_agent
-   * arrives). The worker's IPC socket is up by the time the client sends
-   * its first select_agent, so the only remaining latency is the two IPC
-   * sends (initialize + select_agent).
+   * Spawn a sandboxed worker eagerly, as soon as initialize_session has been
+   * accepted and before select_agent arrives. The worker's IPC socket is up by
+   * the time the client sends its first select_agent, so the only remaining
+   * latency is the two IPC sends (initialize + select_agent).
+   *
+   * Deliberately not called on connect: the spawn is the expensive part of a
+   * session and must sit behind the authentication key, so that an
+   * unauthenticated socket costs a session record and nothing more. The overlap
+   * this still buys — the select_agent round trip — is most of what the original
+   * prewarm was worth; only the initialize_session round trip is no longer
+   * covered.
    *
    * Errors are non-fatal: if the prewarmed spawn fails (bwrap diagnostics,
    * retries exhausted), #handleSelectAgent falls back to a fresh spawn that
@@ -417,6 +424,12 @@ export class WebSocketHandler {
       // cases the session stays unauthenticated and every other message type
       // remains refused.
       this.#initialized = true;
+
+      // First thing after the gate opens, so the bwrap startup + Node module load
+      // overlaps the client's select_agent round trip. Synchronous in its effect
+      // on #workerSpawnPromise, so a select_agent already sitting in
+      // #pendingMessages awaits this spawn rather than starting a second one.
+      this.#prewarmWorker();
 
       const { agents, defaults } = getAvailableAgents();
       await this.#sendToClient(createSessionReadyMessage(this.#sessionId, agents, defaults));

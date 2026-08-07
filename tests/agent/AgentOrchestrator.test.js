@@ -1037,7 +1037,9 @@ describe('sandbox write gating — manual execute paths', () => {
 
   it('lets a granted manual-mode agent write — the flag is authoritative off the SDK route too', async () => {
     const orc = makeAgent('can_write_to_local_sandbox: true\n');
-    const target = path.join(tmpDir, 'allowed.txt');
+    // Inside the session dir: the grant says whether this agent may write at all,
+    // and the tool's own confinement says where. Both have to pass.
+    const target = path.join(sessionManager.getSessionTempDir(sessionId), 'allowed.txt');
 
     const result = await orc.executeToolCallHelper(
       { name: 'write_file', input: { filePath: target, content: 'landed' } },
@@ -1046,6 +1048,54 @@ describe('sandbox write gating — manual execute paths', () => {
 
     expect(result.isError).toBeFalsy();
     expect(fs.readFileSync(target, 'utf-8')).toBe('landed');
+  });
+
+  // The grant is not a licence to write anywhere. bwrap makes /app read-only but
+  // leaves /tmp and the session bind mount writable, so without this the only
+  // boundary on a granted agent's writes lives outside the process.
+  it('refuses a granted agent a write outside the session directory', async () => {
+    const orc = makeAgent('can_write_to_local_sandbox: true\n');
+    const target = path.join(tmpDir, 'escaped.txt');
+
+    const result = await orc.executeToolCallHelper(
+      { name: 'write_file', input: { filePath: target, content: 'should never land' } },
+      orc.builtInToolProvider.getTools()
+    );
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/outside the session directory/);
+    expect(fs.existsSync(target)).toBe(false);
+  });
+
+  it('refuses a granted agent an edit outside the session directory', async () => {
+    const orc = makeAgent('can_write_to_local_sandbox: true\n');
+    const target = path.join(tmpDir, 'outside.txt');
+    fs.writeFileSync(target, 'original', 'utf-8');
+
+    const result = await orc.executeToolCallHelper(
+      { name: 'edit_file', input: { filePath: target, oldString: 'original', newString: 'tampered' } },
+      orc.builtInToolProvider.getTools()
+    );
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/outside the session directory/);
+    expect(fs.readFileSync(target, 'utf-8')).toBe('original');
+  });
+
+  // A traversal out of a legitimate-looking root must be resolved before the
+  // comparison, not after — see pathConfinement.canonical.
+  it('refuses a write that walks out of the session directory with ..', async () => {
+    const orc = makeAgent('can_write_to_local_sandbox: true\n');
+    const sessionDir = sessionManager.getSessionTempDir(sessionId);
+    const target = path.join(sessionDir, '..', '..', 'traversed.txt');
+
+    const result = await orc.executeToolCallHelper(
+      { name: 'write_file', input: { filePath: target, content: 'should never land' } },
+      orc.builtInToolProvider.getTools()
+    );
+
+    expect(result.isError).toBe(true);
+    expect(fs.existsSync(path.resolve(target))).toBe(false);
   });
 
   it('advertises the write tools to a granted manual-mode agent', async () => {

@@ -137,8 +137,8 @@ export class BuiltInToolProvider {
         // frontmatter grants can_write_to_local_sandbox — the collection is the
         // catalogue of what exists, the predicate decides what this agent may see.
         // This is what lets a future manual-mode agent opt in and actually get them.
-        write_file: createWriteFileTool(),
-        edit_file: createEditFileTool(),
+        write_file: createWriteFileTool(this.sessionManager, this.sessionId),
+        edit_file: createEditFileTool(this.sessionManager, this.sessionId),
         search_documents: createSearchDocumentsTool(this.sessionManager, this.sessionId),
         generate_image: createGenerateImageTool(this.sessionManager, this.sessionId, this.mediaStore, this.provider),
         view_media: createViewMediaTool(this.mediaStore)

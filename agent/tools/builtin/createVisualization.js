@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { createSuccessResponse, createErrorResponse, selectEngineModel } from './toolHelpers.js';
+import { APP_ROOT, isWithin } from '../pathConfinement.js';
 
 // Detect run-keyed format: { runId: { time: [...], varName: [...], ... } }
 export function isRunKeyedFormat(data) {
@@ -71,6 +72,22 @@ Use useAICustom=true to have AI generate custom matplotlib code for complex visu
     }),
     handler: async ({ type, filePath, variables, title, description, usePython, useAICustom, difficulty, dataDescription, visualizationGoal, options }) => {
       try {
+        // Same two roots, and the same helper, as read_file and the SDK route's
+        // Read/Glob/Grep guard — this tool takes a model-chosen absolute path and
+        // would otherwise be the one filesystem read in the worker that route
+        // around that boundary. It is available to every SFD agent with no
+        // capability gate, so an unconfined read here hands a read-only agent
+        // everything the confinement exists to withhold: /proc/<pid>/environ, the
+        // CLI's session state under HOME, anything else bwrap mounts. A non-JSON
+        // target leaks too — JSON.parse puts a snippet of the input in its message,
+        // and that message is returned to the model verbatim below.
+        const roots = [sessionManager.getSessionTempDir(sessionId), APP_ROOT].filter(Boolean);
+        if (!roots.some(root => isWithin(filePath, root))) {
+          return createErrorResponse(
+            `Reading outside the session directory is not allowed: ${filePath}. `
+            + `Pass a filePath returned by get_variable_data or get_feedback_information.`);
+        }
+
         const fileContent = readFileSync(filePath, 'utf8');
         const rawData = JSON.parse(fileContent);
 
