@@ -114,13 +114,18 @@ class CredentialProxy {
       || (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '');
 
     if (!presented || !this.#tokens.has(presented)) {
-      // A credential that was presented and is not live is worth surfacing: it is
-      // a worker outliving its session, or another process on the host trying the
-      // relay. An unauthenticated request is not — the claude CLI probes the base
-      // URL's root with no headers when a session starts, and warning on that
-      // would put a line in the log for every connect.
-      const note = `[credential-proxy] rejected request to ${req.url}: no valid session token`;
-      if (presented) logger.warn(note); else logger.debug(note);
+      // The claude CLI probes the base URL's root with no headers when a session
+      // starts, so that one case is silent — logging it would put a line in the
+      // log for every connect. Everything else here is worth a record: a
+      // presented credential that is not live means a worker outliving its
+      // session or another process on the host trying the relay, and an
+      // unauthenticated request to a real endpoint means the sentinel never
+      // reached the sandbox.
+      if (presented) {
+        logger.warn(`[credential-proxy] rejected request to ${req.url}: expired or unknown session token`);
+      } else if (req.url.split('?')[0] !== '/') {
+        logger.warn(`[credential-proxy] rejected unauthenticated request to ${req.url}`);
+      }
       res.writeHead(401, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ type: 'error', error: { type: 'authentication_error', message: 'Invalid or expired session credential' } }));
       req.resume();
