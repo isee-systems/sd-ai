@@ -15,7 +15,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { sandboxMaskArgs } from '../../agent/WorkerSpawner.js';
@@ -85,11 +85,17 @@ describe('sandboxMaskArgs', () => {
     expect(maskFor(args, '/app/node_modules')).toBeNull();
   });
 
-  it('masks this repository\'s own .env', () => {
-    // The check that would actually have caught the bug in production.
+  it('masks the sensitive paths this repository actually has', () => {
+    // The check that would actually have caught the bug in production, run
+    // against the real APP_ROOT rather than a synthetic one. Which paths are
+    // present varies: .env is gitignored, so a CI checkout has none of the
+    // dotenv variants. The expectation is therefore read off the directory,
+    // with .git — present in every checkout — as the fixed anchor.
     const args = sandboxMaskArgs(process.cwd());
 
-    expect(maskFor(args, '/app/.env')).toBe('ro-bind:/dev/null');
     expect(maskFor(args, '/app/.git')).toBe('tmpfs');
+    for (const entry of readdirSync(process.cwd()).filter(name => name.startsWith('.env'))) {
+      expect(maskFor(args, `/app/${entry}`)).toBe('ro-bind:/dev/null');
+    }
   });
 });
