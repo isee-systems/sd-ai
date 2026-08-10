@@ -14,7 +14,7 @@
  * module registry per test file).
  */
 
-import { describe, it, expect, jest, beforeAll, beforeEach, afterEach } from '@jest/globals';
+import { describe, it, expect, jest, beforeAll, afterAll, beforeEach, afterEach } from '@jest/globals';
 import { mkdirSync, rmSync } from 'fs';
 import { join } from 'path';
 import { randomBytes } from 'crypto';
@@ -84,6 +84,14 @@ beforeAll(async () => {
   // cleared before the import: we want hard-fail (throw) mode, not fork fallback.
   delete process.env.ALLOW_UNSANDBOXED_FALLBACK;
   ({ WorkerSpawner, SandboxUnavailableError } = await import('../../agent/WorkerSpawner.js'));
+});
+
+// Even on the failing-bwrap path, spawn() reaches credentialProxy.start() before
+// it ever touches bwrap, leaving a listening loopback server that keeps the Jest
+// worker alive past the last test ("failed to exit gracefully").
+afterAll(async () => {
+  const { default: credentialProxy } = await import('../../agent/utilities/CredentialProxy.js');
+  await credentialProxy.stop();
 });
 
 describe('WorkerSpawner bwrap cooldown (self-healing, not a permanent latch)', () => {

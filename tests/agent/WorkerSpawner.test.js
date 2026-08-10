@@ -14,12 +14,20 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { WorkerSpawner } from '../../agent/WorkerSpawner.js';
 import { SessionManager } from '../../agent/utilities/SessionManager.js';
+import credentialProxy from '../../agent/utilities/CredentialProxy.js';
 
 function makeTempDir() {
   const dir = join(tmpdir(), `spawner-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   mkdirSync(dir, { recursive: true });
   return dir;
 }
+
+// spawn() starts the process-wide loopback credential proxy. Nothing else in
+// this file owns it, and a listening server keeps the Jest worker alive past the
+// last test ("failed to exit gracefully"), so close it here.
+afterAll(async () => {
+  await credentialProxy.stop();
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 
