@@ -135,11 +135,14 @@ export class AgentOrchestrator {
   // yield). No LLM-call id is exposed on the event, so reference equality is the
   // only available dedup key.
   #geminiAdkReportedUsageMetadata = new WeakSet();
-  // Latest usage seen from a `response.completed` event on the OpenRouter SDK
-  // stream. The SDK delivers cumulative usage per response, so the *last* one
-  // we see is the authoritative total. Reported once when the loop completes
-  // (or aborts) — never per-event, which would double-count.
-  #openRouterSdkPendingUsage = null;
+  // Running usage total for the OpenRouter conversation currently in flight, shared
+  // by both loops (a session runs one of them, never both). OpenRouter bills one HTTP
+  // request at a time — the SDK loop sees a `response.completed` per turn, the manual
+  // loop a usage block per chat.send — so no single usage object is the run's total
+  // and they are summed as they arrive. Flushed and cleared at every exit from either
+  // loop: normal completion, user stop, abort and error alike, so a run that ends
+  // early still reports every token it spent up to that point.
+  #openRouterPendingUsage = null;
   // Upstream error block from a `response.failed` event on the OpenRouter SDK
   // stream. The SDK's own handler for that event reads `event.message`, which
   // does not exist — the detail lives at `event.response.error` — so it throws a
@@ -148,12 +151,6 @@ export class AgentOrchestrator {
   // events are always drained before the completion error surfaces, so we can
   // stash the real reason here and attach it when that error reaches the catch.
   #openRouterSdkFailureDetail = null;
-  // Latest usage seen from a the OpenRouter manual pathway. This pathway delivers 
-  // cumulative usage per response, so the *last* one
-  // we see is the authoritative total. Reported once when the loop completes
-  // (or aborts) — never per-event, which would double-count.
-  #openRouterManualPendingUsage = null;
-  #openAiCompatibleManualPendingUsage = null;
   // Per-assistant usage accumulator for the anthropic SDK route. The SDKResultMessage
   // carries the authoritative aggregate and supersedes this on normal completion;
   // we only flush the accumulator as a fallback when a query aborts before its
@@ -2394,16 +2391,21 @@ ${lines.join('\n')}`;
 
         const eventStreamTask = (async () => {
           const seenItemIds = new Set();
+          const countedResponseIds = new Set();
           try {
             for await (const event of result.getFullResponsesStream()) {
-              // Cumulative usage — overwrite each time so the last value
-              // wins. Captured BEFORE the stop check so an in-flight event
-              // carrying usage isn't dropped when the user hits stop: we
-              // still want to flush the latest tally in the finally block.
-              // Reporting happens once when the loop closes or aborts, never
-              // per-event (that would double-count).
+              // One `response.completed` per turn of the tool loop, each carrying
+              // what that turn alone billed — so they are summed into the run's
+              // total, not overwritten. Deduped by response id because the SDK can
+              // reissue an event (see the item dedup below) and a second copy would
+              // bill the same turn twice. Handled BEFORE the stop check so the turn
+              // in flight when the user hits stop is still counted.
               if (event?.type === 'response.completed' && event.response?.usage) {
-                this.#openRouterSdkPendingUsage = event.response.usage;
+                const responseId = event.response.id;
+                if (!responseId || !countedResponseIds.has(responseId)) {
+                  if (responseId) countedResponseIds.add(responseId);
+                  this.#accumulateOpenRouterUsage(event.response.usage);
+                }
                 continue;
               }
 
@@ -2424,7 +2426,13 @@ ${lines.join('\n')}`;
                 continue;
               }
 
-              if (this.stopRequested) break;
+              // After a stop, keep draining the stream rather than abandoning it.
+              // The request already in flight is not cancelled, so its turns finish
+              // and bill regardless; staying on the stream is what lets their
+              // `response.completed` events reach the accumulator above. This costs
+              // no extra waiting — getResponse() below is blocked on the same work
+              // either way. Everything client-facing is skipped from here on.
+              if (this.stopRequested) continue;
 
               // Tool execution completed — emit the completion message.
               if (event?.type === 'tool.call_output') {
@@ -2494,12 +2502,9 @@ ${lines.join('\n')}`;
         // client before we close this iteration.
         await Promise.allSettled([notifyStreamTask, eventStreamTask]);
 
-        // Report the cumulative usage captured from response.completed once
-        // per iteration of the outer queued-message loop.
-        if (this.#openRouterSdkPendingUsage) {
-          this.#logApiUsage(Provider.OPENROUTER, this.#openRouterSdkPendingUsage, model);
-          this.#openRouterSdkPendingUsage = null;
-        }
+        // Report what every turn of this tool loop billed, once per iteration of
+        // the outer queued-message loop.
+        this.#flushOpenRouterUsage(model);
 
         if (this.stopRequested) break;
 
@@ -2539,12 +2544,9 @@ ${lines.join('\n')}`;
         await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'awaiting_user', `Agent error: ${detail}`));
       }
     } finally {
-      // On abort / error paths the in-loop flush above is skipped; report
-      // the latest cumulative usage captured before the break.
-      if (this.#openRouterSdkPendingUsage) {
-        this.#logApiUsage(Provider.OPENROUTER, this.#openRouterSdkPendingUsage, model);
-        this.#openRouterSdkPendingUsage = null;
-      }
+      // A user stop, an abort or an error skips the in-loop flush above, so the
+      // tokens the run spent before it ended are reported here instead.
+      this.#flushOpenRouterUsage(model);
       this.#openRouterSdkFailureDetail = null;
       this.abortController = null;
     }
@@ -2624,8 +2626,11 @@ ${lines.join('\n')}`;
               }
             });
 
-            if (completion?.usage)
-              this.#openRouterManualPendingUsage = completion.usage;
+            // Each chat.send bills its own request, so an iteration's usage adds to
+            // the run's total rather than replacing it. Recorded before the stop
+            // check below, so a stop landing between this response and the next
+            // iteration still counts the turn the user was charged for.
+            this.#accumulateOpenRouterUsage(completion?.usage);
 
             if (this.stopRequested) break;
 
@@ -2673,8 +2678,9 @@ ${lines.join('\n')}`;
       await this.sendToClient(createErrorMessage(this.sessionId, `Agent error: ${detail}`, 'AGENT_ERROR'));
       await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'awaiting_user', `Agent error: ${detail}`));
     } finally {
-      if (this.#openRouterManualPendingUsage && llmUsed)
-        this.#logApiUsage(Provider.OPENROUTER, this.#openRouterManualPendingUsage, llmUsed);
+      // One exit for all of them — natural end, user stop, max iterations, a failed
+      // request, a setup error — so however the loop ended, what it spent is reported.
+      if (llmUsed) this.#flushOpenRouterUsage(llmUsed);
     }
   }
 
@@ -2692,13 +2698,11 @@ ${lines.join('\n')}`;
    * so the routes are kept apart rather than bridged by a translation step.
    */
   async startConversationOpenAiCompatibleManual(userMessage) {
-    let llmUsed = null;
     const label = `${this.provider} Manual`;
     try {
       const session = this.sessionManager.getSession(this.sessionId);
       const model = this.#resolveNativeModel();
       const client = await this.#getOpenAiCompatibleClient();
-      llmUsed = model;
 
       this.sessionManager.addToConversationHistory(this.sessionId, {
         role: 'user',
@@ -2761,8 +2765,16 @@ ${lines.join('\n')}`;
               ...reasoningParams(this.provider),
             });
 
+            // Reported per request, on the line after it returns, exactly as the
+            // anthropic and gemini manual loops do. Every stop check below is
+            // downstream of this, so no turn the user was billed for can be lost by
+            // ending the loop early. Deferring a summed total to the end would be
+            // wrong twice over: it drops every turn but the last if the run ends
+            // early, and openai's tiers bill by the size of a single prompt — a
+            // summed input count crosses the 272K long-context threshold that no
+            // individual request came near, doubling the rate for the whole run.
             if (completion?.usage)
-              this.#openAiCompatibleManualPendingUsage = completion.usage;
+              this.#logApiUsage(usageProviderFor(this.provider), completion.usage, model);
 
             if (this.stopRequested) break;
 
@@ -2807,9 +2819,6 @@ ${lines.join('\n')}`;
       logger.error(`${label}: in conversation setup: ${detail}`);
       await this.sendToClient(createErrorMessage(this.sessionId, `Agent error: ${detail}`, 'AGENT_ERROR'));
       await this.sendToClient(createAgentCompleteMessage(this.sessionId, 'awaiting_user', `Agent error: ${detail}`));
-    } finally {
-      if (this.#openAiCompatibleManualPendingUsage && llmUsed)
-        this.#logApiUsage(usageProviderFor(this.provider), this.#openAiCompatibleManualPendingUsage, llmUsed);
     }
   }
 
@@ -3274,6 +3283,42 @@ ${lines.join('\n')}`;
       this.#logApiUsage(Provider.ANTHROPIC, u);
     }
     this.#resetAnthropicSdkUsageAccumulator();
+  }
+
+  /**
+   * Fold one OpenRouter usage block into the run's running total. Takes either shape
+   * OpenRouter answers with — the responses API's inputTokens/outputTokens/
+   * inputTokensDetails (SDK loop) or chat completions' promptTokens/completionTokens/
+   * promptTokensDetails (manual loop) — and always stores the chat-completions shape,
+   * which TokenUsageReporter reads as-is. `cost` is OpenRouter's authoritative billed
+   * USD for that one request, so it sums like the token counts do; it stays null when
+   * no response carried one, which is how the reporter tells "free" from "unknown".
+   */
+  #accumulateOpenRouterUsage(usage) {
+    if (!usage) return;
+    const details = usage.promptTokensDetails ?? usage.inputTokensDetails;
+    const total = this.#openRouterPendingUsage ?? {
+      promptTokens: 0,
+      completionTokens: 0,
+      promptTokensDetails: { cachedTokens: 0, cacheWriteTokens: 0 },
+      cost: null,
+    };
+    total.promptTokens += usage.promptTokens ?? usage.inputTokens ?? 0;
+    total.completionTokens += usage.completionTokens ?? usage.outputTokens ?? 0;
+    total.promptTokensDetails.cachedTokens += details?.cachedTokens ?? 0;
+    total.promptTokensDetails.cacheWriteTokens += details?.cacheWriteTokens ?? 0;
+    if (typeof usage.cost === 'number') total.cost = (total.cost ?? 0) + usage.cost;
+    this.#openRouterPendingUsage = total;
+  }
+
+  /**
+   * Report the running OpenRouter total and clear it, so a later flush on the same
+   * conversation cannot bill the same tokens a second time.
+   */
+  #flushOpenRouterUsage(model) {
+    if (!this.#openRouterPendingUsage) return;
+    this.#logApiUsage(Provider.OPENROUTER, this.#openRouterPendingUsage, model);
+    this.#openRouterPendingUsage = null;
   }
 
   #logApiUsage(provider, usage, model = null) {

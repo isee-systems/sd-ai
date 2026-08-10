@@ -1186,3 +1186,121 @@ describe('startConversationOpenAiCompatibleManual — request shape', () => {
     expect(firstRequest.reasoning_effort).toBeUndefined();
   });
 });
+
+// ─── native OpenAI-compatible manual loop — usage reporting ──────────────────
+//
+// One report per request, never a total held back to the end of the run. The loop
+// used to keep only the latest usage and report it once on the way out, which billed
+// a five-turn conversation for its fifth turn — and billed a run the user stopped for
+// whichever turn happened to be last before the break. Per-request is also the only
+// shape openai's pricing tiers accept: they charge by the size of one prompt, and a
+// summed input count crosses the 272K long-context line no single request went near.
+
+describe('startConversationOpenAiCompatibleManual — usage reporting', () => {
+  let sessionManager;
+  let sessionId;
+  let orc;
+  let create;
+
+  const FIRST_USAGE = {
+    prompt_tokens: 100,
+    completion_tokens: 20,
+    prompt_tokens_details: { cached_tokens: 10, cache_write_tokens: 5 },
+  };
+  const SECOND_USAGE = {
+    prompt_tokens: 200,
+    completion_tokens: 30,
+    prompt_tokens_details: { cached_tokens: 100, cache_write_tokens: 0 },
+  };
+
+  function toolCallTurn(usage) {
+    return {
+      choices: [{
+        message: {
+          content: null,
+          tool_calls: [{ id: 'tc_1', type: 'function', function: { name: 'my_tool', arguments: '{}' } }]
+        }
+      }],
+      usage,
+    };
+  }
+
+  function makeNativeOrchestrator(provider) {
+    process.env.OPENAI_API_KEY = 'dummy';
+    process.env.DEEPSEEK_API_KEY = 'dummy';
+    const sendToClient = jest.fn().mockResolvedValue(undefined);
+    const o = new AgentOrchestrator(sessionManager, sessionId, sendToClient, CONFIG, provider);
+    o.executeToolCallHelper = jest.fn().mockResolvedValue(BLOCK_RESULT);
+    o.openAiCompatibleClient = { chat: { completions: { create } } };
+    o.tokenReporter = { report: jest.fn().mockResolvedValue(undefined) };
+    return o;
+  }
+
+  function reports(o) {
+    return o.tokenReporter.report.mock.calls.map(([call]) => call);
+  }
+
+  beforeEach(() => {
+    sessionManager = new SessionManager();
+    sessionId = sessionManager.createSession(null);
+    sessionManager.initializeSession(sessionId, 'cld', {}, [], {}, 'test-client');
+    create = jest.fn();
+  });
+
+  afterEach(() => {
+    orc.destroy();
+    sessionManager.shutdown();
+  });
+
+  it('reports each turn as its own request rather than one total at the end', async () => {
+    create
+      .mockResolvedValueOnce(toolCallTurn(FIRST_USAGE))
+      .mockResolvedValueOnce({ choices: [{ message: { content: 'All done', tool_calls: [] } }], usage: SECOND_USAGE });
+    orc = makeNativeOrchestrator('openai');
+
+    await orc.startConversationOpenAiCompatibleManual('build me a model');
+
+    expect(reports(orc)).toEqual([
+      { provider: 'openai', model: TEST_NATIVE_PROVIDERS.openai.model, usage: FIRST_USAGE, clientKey: false },
+      { provider: 'openai', model: TEST_NATIVE_PROVIDERS.openai.model, usage: SECOND_USAGE, clientKey: false },
+    ]);
+  });
+
+  it('reports the turn in flight when the user stops mid-loop', async () => {
+    create
+      .mockResolvedValueOnce(toolCallTurn(FIRST_USAGE))
+      .mockImplementationOnce(async () => {
+        // The stop lands while this turn is in flight. It completed upstream, so
+        // its tokens are on the bill whether or not the loop goes another round.
+        orc.stopIteration();
+        return { choices: [{ message: { content: 'half an answer', tool_calls: [] } }], usage: SECOND_USAGE };
+      });
+    orc = makeNativeOrchestrator('deepseek');
+
+    await orc.startConversationOpenAiCompatibleManual('build me a model');
+
+    expect(reports(orc).map(r => r.usage)).toEqual([FIRST_USAGE, SECOND_USAGE]);
+    // deepseek bills on its own table, not openai's — the usage shapes differ too.
+    expect(reports(orc).every(r => r.provider === 'deepseek')).toBe(true);
+  });
+
+  it('reports what the run spent before a request failed', async () => {
+    create
+      .mockResolvedValueOnce(toolCallTurn(FIRST_USAGE))
+      .mockRejectedValueOnce(new Error('upstream exploded'));
+    orc = makeNativeOrchestrator('openai');
+
+    await orc.startConversationOpenAiCompatibleManual('build me a model');
+
+    expect(reports(orc).map(r => r.usage)).toEqual([FIRST_USAGE]);
+  });
+
+  it('reports nothing for a run that never reached the API', async () => {
+    create.mockRejectedValueOnce(new Error('upstream exploded'));
+    orc = makeNativeOrchestrator('openai');
+
+    await orc.startConversationOpenAiCompatibleManual('build me a model');
+
+    expect(orc.tokenReporter.report).not.toHaveBeenCalled();
+  });
+});
