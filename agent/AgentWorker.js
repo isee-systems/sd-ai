@@ -21,7 +21,13 @@
  *   add_file      – RAG: fileId + metadata; worker extracts/chunks/embeds the
  *                   bytes the main process already wrote to <session>/rag/<id>/
  *   remove_file   – RAG: fileId; worker deletes the file's artifacts + vectors
- *   get_context   – requestId; worker replies with current conversation history
+ *   get_context   – requestId; worker replies with current conversation history.
+ *                   No production code path sends this: agent switches reuse the
+ *                   worker, so history never has to cross a handoff. It survives as
+ *                   the cheapest round-trip that proves the IPC channel is alive,
+ *                   which is what the worker/spawner suites use it for — both as a
+ *                   liveness probe and as an ordering barrier, since IPC messages
+ *                   are processed in order.
  *   shutdown      – clean exit
  *
  * IPC messages OUT (worker → main):
@@ -203,7 +209,16 @@ class AgentWorker {
             ? { markdownContent: msg.agentConfig }
             : { path: join(__dirname, 'config', `${msg.agentId}.md`) };
           const provider = msg.provider ?? config.agentDefaultProvider;
-          this.#orchestrator = new AgentOrchestrator(this.#sessionManager, SESSION_ID, (m) => this.#toClient(m), agentConfig, provider);
+          this.#orchestrator = new AgentOrchestrator(this.#sessionManager, SESSION_ID, (m) => this.#toClient(m), agentConfig, provider, msg.intelligence ?? null);
+          break;
+        }
+
+        // Mutates the live orchestrator rather than rebuilding it — that is the whole
+        // reason this is a separate message from select_agent. Conversation history is
+        // in the SessionManager and both provider routes resolve their model per turn,
+        // so the change lands on the next turn and an in-flight one is undisturbed.
+        case 'set_intelligence': {
+          this.#orchestrator?.setIntelligence(msg.intelligence);
           break;
         }
 
@@ -287,6 +302,8 @@ class AgentWorker {
           break;
         }
 
+        // Kept for the IPC liveness/barrier role described in the header comment, not
+        // for agent switching — that reuses the worker and never moves history.
         case 'get_context': {
           const context = this.#sessionManager.getConversationContext(SESSION_ID);
           this.#toMain({ type: 'context_response', requestId: msg.requestId, context });

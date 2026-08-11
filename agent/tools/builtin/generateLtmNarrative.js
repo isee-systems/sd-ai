@@ -8,7 +8,7 @@ import { generateRequestId, createSuccessResponse, createErrorResponse, loadBeha
 /**
  * Generate a narrative explanation of feedback loops and their influence on model behavior
  */
-export function createGenerateLtmNarrativeTool(sessionManager, sessionId, sendToClient, provider) {
+export function createGenerateLtmNarrativeTool(sessionManager, sessionId, sendToClient, agentProfile) {
   return {
     description: 'Generate a narrative explanation of feedback loops and their influence on model behavior (Loops That Matter analysis).',
     supportedModes: ['sfd'],
@@ -32,7 +32,7 @@ export function createGenerateLtmNarrativeTool(sessionManager, sessionId, sendTo
           return createErrorResponse('No model available in session');
         }
 
-        const underlyingModel = selectEngineModel(provider, difficulty, 'nonBuild');
+        const underlyingModel = selectEngineModel(agentProfile, difficulty, 'nonBuild');
         const baseParameters = { ...parameters, clientId: session.clientId, underlyingModel };
         const sessionTempDir = sessionManager.getSessionTempDir(sessionId);
         const feedbackPath = join(sessionTempDir, 'feedback.json');

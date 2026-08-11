@@ -8,7 +8,7 @@ import { generateRequestId, createSuccessResponse, createErrorResponse, loadBeha
 /**
  * Have a user-friendly discussion about the model without jargon, with ability to compare runs
  */
-export function createDiscussModelAcrossRunsTool(sessionManager, sessionId, sendToClient, provider) {
+export function createDiscussModelAcrossRunsTool(sessionManager, sessionId, sendToClient, agentProfile) {
   return {
     description: 'Have a user-friendly discussion about the model without jargon, with the ability to compare and explain differences between simulation runs. Use this to understand what causes behavioral differences across runs - analyzing how different scenarios or parameter changes produce different outcomes by examining the underlying feedback loop dynamics.',
     supportedModes: ['sfd'],
@@ -34,7 +34,7 @@ export function createDiscussModelAcrossRunsTool(sessionManager, sessionId, send
           return createErrorResponse('No model available in session');
         }
 
-        const underlyingModel = selectEngineModel(provider, difficulty, 'nonBuild');
+        const underlyingModel = selectEngineModel(agentProfile, difficulty, 'nonBuild');
         const baseParameters = { ...parameters, clientId: session.clientId, underlyingModel };
         const sessionTempDir = sessionManager.getSessionTempDir(sessionId);
         const feedbackPath = join(sessionTempDir, 'feedback.json');

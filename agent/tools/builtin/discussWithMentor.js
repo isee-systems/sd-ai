@@ -8,7 +8,7 @@ import { generateRequestId, createSuccessResponse, createErrorResponse, loadBeha
 /**
  * Ask thoughtful questions to the user to guide their learning
  */
-export function createDiscussWithMentorTool(sessionManager, sessionId, sendToClient, provider) {
+export function createDiscussWithMentorTool(sessionManager, sessionId, sendToClient, agentProfile) {
   return {
     description: 'Ask thoughtful questions to the user to guide their learning and help them think through System Dynamics concepts. Use this to engage users in Socratic dialogue about their model.',
     supportedModes: ['sfd', 'cld'],
@@ -33,7 +33,7 @@ export function createDiscussWithMentorTool(sessionManager, sessionId, sendToCli
           return createErrorResponse('No model available in session');
         }
 
-        const underlyingModel = selectEngineModel(provider, difficulty, 'nonBuild');
+        const underlyingModel = selectEngineModel(agentProfile, difficulty, 'nonBuild');
         const baseParameters = { ...parameters, clientId: session.clientId, underlyingModel };
         const sessionTempDir = sessionManager.getSessionTempDir(sessionId);
         const feedbackPath = join(sessionTempDir, 'feedback.json');

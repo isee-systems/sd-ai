@@ -7,6 +7,7 @@ import {
   createSessionCreatedMessage,
   createSessionReadyMessage,
   createAgentSelectedMessage,
+  createIntelligenceChangedMessage,
   createAgentTextMessage,
   createErrorMessage,
   createFileAddedMessage,
@@ -21,6 +22,7 @@ import logger from '../utilities/logger.js';
 import utils from '../utilities/utils.js';
 import config from '../config.js';
 import { ProviderDisplayNames } from '../utilities/TokenUsageReporter.js';
+import { buildIntelligenceDiscovery, resolveLevel, supportsIntelligence } from './utilities/intelligenceLevels.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -104,12 +106,21 @@ export class WebSocketHandler {
   // hits ENOENT on /session/ipc-*.sock (during connect) or /session/model.sdjson
   // (during writes). Null when no spawn is in flight.
   #workerSpawnPromise = null;
-  // True on the first chat message after a select_agent — tells worker to bridge context
-  #pendingAgentSwitch = false;
-  // True once the first select_agent has succeeded. Differentiates a true
-  // agent-switch (need to fetch context from old worker, kill it, spawn new)
-  // from the first select_agent where the worker may already be prewarmed.
-  #agentSelected = false;
+  // The provider and intelligence level the session is currently running. Tracked here
+  // because a later set_intelligence has to resolve against the CURRENT provider's
+  // ladder, and that message deliberately carries no provider of its own — the whole
+  // point is that it changes one thing without restating the session's identity.
+  // Both stay null until the first select_agent; intelligence stays null for a
+  // provider with no ladder.
+  #currentProvider = null;
+  #currentIntelligence = null;
+  // Wall-clock of the last APPLIED intelligence change, for the cooldown in
+  // #handleSetIntelligence. Zero until the first one, so the first is never throttled.
+  #lastIntelligenceChangeAt = 0;
+  // Minimum gap between applied intelligence changes. A user working a control cannot
+  // realistically outrun this; a client looping on the message can, and each applied
+  // change costs a Gemini context-cache rebuild on the next turn.
+  static #INTELLIGENCE_CHANGE_COOLDOWN_MS = 1000;
   // True once initialize_session has been accepted — which is where
   // AUTHENTICATION_KEY is checked. Until then no other message type is
   // dispatched; anything arriving early is refused and dropped.
@@ -265,6 +276,9 @@ export class WebSocketHandler {
         case 'select_agent':
           await this.#handleSelectAgent(message);
           break;
+        case 'set_intelligence':
+          await this.#handleSetIntelligence(message);
+          break;
         case 'chat':
           await this.#handleChat(message);
           break;
@@ -376,7 +390,7 @@ export class WebSocketHandler {
       this.#prewarmWorker();
 
       const { agents, defaults } = getAvailableAgents();
-      await this.#sendToClient(createSessionReadyMessage(this.#sessionId, agents, defaults));
+      await this.#sendToClient(createSessionReadyMessage(this.#sessionId, agents, defaults, buildIntelligenceDiscovery()));
       logger.log(`Session initialized: ${this.#sessionId}`);
     } catch (error) {
       logger.error(`Failed to initialize session ${this.#sessionId}:`, error);
@@ -407,27 +421,13 @@ export class WebSocketHandler {
         }
       }
 
-      // First select_agent uses the prewarmed worker (or falls back to fresh
-      // spawn if the prewarm failed). Subsequent select_agents are switches.
-      const isSwitching = this.#agentSelected;
+      // Every select_agent — first or subsequent — reuses this session's worker
+      // (prewarmed, or spawned fresh below if the prewarm failed). Switching agent is
+      // just a new orchestrator inside that worker: conversation history lives in the
+      // worker's SessionManager, so it survives the handoff without being copied.
+      const conversationHistory = this.#sessionManager.getConversationContext(this.#sessionId);
 
-      // When switching agents, ask the running worker for its current conversation
-      // history so the new worker can bridge context across the handoff.
-      let conversationHistory = this.#sessionManager.getConversationContext(this.#sessionId);
-      if (isSwitching) {
-        try {
-          conversationHistory = await this.#getWorkerContext(this.#worker);
-        } catch (err) {
-          logger.warn(`[session:${this.#sessionId}] Could not retrieve context from old worker: ${err.message}`);
-        }
-        // Must await — both spawn (below) and any concurrent #onClose use the
-        // same tempDir. Spawning a new bwrap while the old worker is still
-        // alive shares the bind-mount source; letting #onClose race ahead would
-        // rmSync that source out from under either worker.
-        await this.#killWorker();
-      }
-
-      // Guard: the WS may have closed during the async context fetch above.
+      // Guard: the WS may have closed during an await above.
       // #onClose already killed the worker and deleted the session — bail out
       // before spawning a new worker that would never be cleaned up.
       if (this.#ws.readyState !== 1) return;
@@ -510,21 +510,31 @@ export class WebSocketHandler {
       const provider = supportedProviders.length === 1
         ? supportedProviders[0].id
         : (message.provider ?? config.agentDefaultProvider);
-      const workerSelectMsg = message.agentConfig
-        ? { type: 'select_agent', agentConfig: message.agentConfig, provider }
-        : { type: 'select_agent', agentId: message.agentId, provider };
-      this.#worker.send(workerSelectMsg);
-      this.#pendingAgentSwitch = isSwitching;
+      // An omitted `intelligence` on a provider that hasn't changed means "leave it
+      // alone", not "reset to default". Without this, any later select_agent — an agent
+      // switch, a re-select — silently undoes a set_intelligence the user made, because
+      // select_agent is the message a client sends for reasons unrelated to the level.
+      // A provider change does reset, since level ids are per provider.
+      const requestedIntelligence = message.intelligence
+        ?? (provider === this.#currentProvider ? this.#currentIntelligence : undefined);
+      // Resolved against the chosen provider's ladder, never rejected: a client may
+      // legitimately send a level valid for the provider it was just using but not for
+      // the one it is switching to, and that must degrade rather than fail the session.
+      // null when this provider has no ladder, which keeps the message shape unchanged
+      // for every provider that ignores the lever.
+      const intelligence = resolveLevel(provider, requestedIntelligence)?.id ?? null;
+      this.#currentProvider = provider;
+      this.#currentIntelligence = intelligence;
 
-      await this.#sendToClient(createAgentSelectedMessage(this.#sessionId, selectedAgent.id, selectedAgent.name, selectedAgent.supportedProviders, provider));
+      const workerSelectMsg = message.agentConfig
+        ? { type: 'select_agent', agentConfig: message.agentConfig, provider, intelligence }
+        : { type: 'select_agent', agentId: message.agentId, provider, intelligence };
+      this.#worker.send(workerSelectMsg);
+
+      await this.#sendToClient(createAgentSelectedMessage(this.#sessionId, selectedAgent.id, selectedAgent.name, selectedAgent.supportedProviders, provider, intelligence));
       const providerLabel = ProviderDisplayNames[provider] ?? provider;
-      if (isSwitching) {
-        await this.#sendToClient(createAgentTextMessage(this.#sessionId, `I've switched to ${selectedAgent.name} (${providerLabel}). How can I help you?`, false));
-        logger.log(`Agent switched to: ${selectedAgent.id} (${provider}) for session ${this.#sessionId}`);
-      } else {
-        await this.#sendToClient(createAgentTextMessage(this.#sessionId, `${selectedAgent.name} (${providerLabel}) — What can I do for you today?`, false));
-        logger.log(`Agent selected: ${selectedAgent.id} (${provider}) for session ${this.#sessionId}`);
-      }
+      await this.#sendToClient(createAgentTextMessage(this.#sessionId, `${selectedAgent.name} (${providerLabel}) — What can I do for you today?`, false));
+      logger.log(`Agent selected: ${selectedAgent.id} (${provider}) for session ${this.#sessionId}`);
     } catch (error) {
       logger.error(`Failed to select agent for session ${this.#sessionId}:`, error);
       // A SandboxUnavailableError is permanent for the lifetime of this process
@@ -542,13 +552,64 @@ export class WebSocketHandler {
     }
   }
 
+  /**
+   * Change the intelligence level on a live session.
+   *
+   * Deliberately the lightest possible operation: it forwards one value to the worker
+   * and answers with what was applied. It does NOT rebuild the orchestrator the way
+   * select_agent does — that would drop the SDK/ADK conversation-continuity handles and
+   * emit an agent-switch line, which is exactly the disruption this message exists to
+   * avoid. An in-flight turn is untouched and finishes on the model it started with;
+   * the new level applies from the next turn.
+   *
+   * Never errors on a bad value. The reply carries the level actually in effect, so a
+   * client that asked for something unavailable is told the truth rather than being
+   * left to assume its request stuck.
+   */
+  async #handleSetIntelligence(message) {
+    // The real precondition is a resolved provider — the level is meaningless without
+    // one, since ladders are per provider. #currentProvider is set by select_agent.
+    if (!this.#currentProvider) {
+      await this.#sendToClient(createErrorMessage(this.#sessionId, 'Cannot set intelligence before an agent is selected', 'NO_AGENT'));
+      return;
+    }
+
+    if (!supportsIntelligence(this.#currentProvider)) {
+      // Not an error: the client may be showing a control the provider ignores.
+      // Answer with the truth (null) so it can hide it.
+      await this.#sendToClient(createIntelligenceChangedMessage(this.#sessionId, null));
+      return;
+    }
+
+    const intelligence = resolveLevel(this.#currentProvider, message.intelligence)?.id ?? null;
+    if (intelligence !== this.#currentIntelligence) {
+      // An applied change is not free: it drops the Gemini context cache, so the next
+      // turn pays a rebuild. Flipping levels is a client-driven action with no natural
+      // rate limit, so cap how often one can be applied. Answering with the level
+      // actually in effect is already the contract, which is why a throttled request
+      // needs no new message type — the client is told the truth either way.
+      const since = Date.now() - this.#lastIntelligenceChangeAt;
+      if (since < WebSocketHandler.#INTELLIGENCE_CHANGE_COOLDOWN_MS) {
+        logger.warn(`Ignoring intelligence change for session ${this.#sessionId}: ${since}ms since the last one`);
+        await this.#sendToClient(createIntelligenceChangedMessage(this.#sessionId, this.#currentIntelligence));
+        return;
+      }
+
+      this.#lastIntelligenceChangeAt = Date.now();
+      this.#currentIntelligence = intelligence;
+      this.#worker?.send({ type: 'set_intelligence', intelligence });
+      logger.log(`Intelligence set to "${intelligence}" (${this.#currentProvider}) for session ${this.#sessionId}`);
+    }
+
+    await this.#sendToClient(createIntelligenceChangedMessage(this.#sessionId, intelligence));
+  }
+
   async #handleChat(message) {
     try {
       if (!this.#worker) {
         throw new Error('No agent selected. Send select_agent first.');
       }
       this.#worker.send({ type: 'chat', message: message.message });
-      this.#pendingAgentSwitch = false;
     } catch (error) {
       logger.error(`Error in chat for session ${this.#sessionId}:`, error);
       await this.#sendToClient(createErrorMessage(this.#sessionId, error.message, 'CHAT_ERROR'));
@@ -868,7 +929,6 @@ export class WebSocketHandler {
           }
         }
       }
-      // context_response is handled inside #getWorkerContext via its own listener
     });
 
     w.on('error', (err) => logger.error(`[worker:${this.#sessionId}] process error: ${err.message}`));
@@ -877,31 +937,6 @@ export class WebSocketHandler {
       logger.log(`[worker:${this.#sessionId}] exited (code=${code} signal=${signal})`);
       liveWorkers.delete(w);
       if (this.#worker === w) this.#worker = null;
-    });
-  }
-
-  /**
-   * Ask a running worker for its current conversation context.
-   * Returns a promise that resolves with the history array.
-   */
-  #getWorkerContext(w) {
-    return new Promise((resolve, reject) => {
-      const requestId = `ctx_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-      const timeout = setTimeout(() => {
-        w.off('message', handler);
-        reject(new Error('Context request timed out'));
-      }, 5000);
-
-      function handler(msg) {
-        if (msg.type === 'context_response' && msg.requestId === requestId) {
-          clearTimeout(timeout);
-          w.off('message', handler);
-          resolve(msg.context);
-        }
-      }
-
-      w.on('message', handler);
-      w.send({ type: 'get_context', requestId });
     });
   }
 }

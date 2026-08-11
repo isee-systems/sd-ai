@@ -282,11 +282,25 @@ The `agent/` directory contains a WebSocket server that wraps the SD-AI engines 
 - All core tools are built-in (get/update model, run simulation, fetch variable data, feedback loops, visualizations)
 - Clients can optionally register custom tools for application-specific behavior
 - Agent personalities are configured via Markdown files in `agent/config/`
+- Clients can raise an **intelligence level** to trade money for capability (see below)
 - Visualizations are returned as raw SVG strings
 
 **WebSocket endpoint:** `ws://localhost:3000/api/v1/agent`
 
 **Protocol summary:** client connects → `initialize_session` (model type + initial model) → `session_ready` (agent list) → `select_agent` → `chat` messages → agent responds with `agent_text`, `visualization`, and `tool_call_request` messages that the client must answer.
+
+## Intelligence Levels
+
+Clients can raise a single lever that selects both the model and the reasoning effort the agent runs at — so a user on a hard modeling problem can ask for more capability, and pay for it.
+
+- **Opt-in on both sides.** A client that never sends `intelligence` gets the default level, whose model and effort are identical to what the agent sent before the feature existed. A client talking to a deployment with no ladders never sees the field at all.
+- **Entirely config-driven.** `config.agentIntelligence` defines which levels exist, what they are called, and every model behind them — **per provider**, so brands may offer different rungs and even different rung names. A provider with no ladder ignores the lever; that absence is the "providers that support it" gate.
+- **Changeable mid-conversation** via the `set_intelligence` message, with no history loss and no interruption of an in-flight turn.
+- **Moves the agent's conversation model and its engine tools**, but deliberately *not* history summarization, which stays on the cheap `summaryModel` at every level.
+- **Effort is optional per level** — omitting it sends no effort/thinking parameter at all, so the provider applies its own default.
+- **Relevant config keys** (`config.js`): `agentIntelligence` (`defaultLevel`, `providers`), `agentToolModels` (now keyed by level id), and `agentAnthropicEffort` / `agentAnthropicThinking` / `agentGeminiThinking`, which remain as the fallback for providers with no ladder.
+
+Clients are expected to show that a higher level costs more; each level carries a `relativeCost` multiplier derived from [utilities/pricing.js](utilities/pricing.js). See [agent/README.md](agent/README.md#intelligence-levels) for the full contract and the wire protocol.
 
 ## File Attachments (RAG)
 

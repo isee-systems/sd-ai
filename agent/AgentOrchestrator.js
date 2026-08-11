@@ -46,6 +46,7 @@ import {
 } from './utilities/MessageProtocol.js';
 import logger from '../utilities/logger.js';
 import config from '../config.js';
+import { resolveLevel, supportsIntelligence } from './utilities/intelligenceLevels.js';
 import TokenUsageReporter, { Provider } from '../utilities/TokenUsageReporter.js';
 import { sanitizeSchemaForGemini } from './tools/builtin/toolHelpers.js';
 import {
@@ -205,12 +206,22 @@ export class AgentOrchestrator {
     cache_read_input_tokens: 0,
   };
 
-  constructor(sessionManager, sessionId, sendToClient, agentConfig, provider = config.agentDefaultProvider) {
+  constructor(sessionManager, sessionId, sendToClient, agentConfig, provider = config.agentDefaultProvider, intelligence = null) {
     this.sessionManager = sessionManager;
     this.sessionId = sessionId;
     this.sendToClient = sendToClient;
     this.stopRequested = false;
     this.provider = provider;
+    // Resolved against this provider's ladder, so it is always a level the provider
+    // actually offers (or null when the provider doesn't participate at all).
+    this.intelligence = resolveLevel(provider, intelligence)?.id ?? null;
+
+    // The engine tools pick their underlyingModel from this. It is a stable OBJECT
+    // that setIntelligence() mutates in place rather than a copied string, because
+    // the tools capture it in a closure at registration time but read it inside the
+    // handler — which is what lets a mid-conversation change reach the next tool
+    // call without re-registering every tool.
+    this.agentProfile = { provider: this.provider, intelligence: this.intelligence };
 
     // SDK-specific properties (for SDK mode)
     this.abortController = null;
@@ -236,7 +247,7 @@ export class AgentOrchestrator {
     this.mediaStore = new MediaStore(sessionManager, sessionId);
 
     // Create tool providers
-    this.builtInToolProvider = new BuiltInToolProvider(sessionManager, sessionId, sendToClient, this.provider, this.mediaStore, this.configManager.canWriteToLocalSandbox());
+    this.builtInToolProvider = new BuiltInToolProvider(sessionManager, sessionId, sendToClient, this.agentProfile, this.mediaStore, this.configManager.canWriteToLocalSandbox());
     this.dynamicToolProvider = new DynamicToolProvider(sessionManager, sessionId, sendToClient, this.mediaStore);
 
     // Provider SDK clients are lazy-instantiated via #getX() — see top-of-file
@@ -484,6 +495,19 @@ export class AgentOrchestrator {
 
     const maxIterations = this.configManager.getMaxIterations();
 
+    // Pinned for the whole turn, not re-read per iteration. setIntelligence() can land
+    // between any two awaits below (it arrives as a worker IPC message), and a turn that
+    // swapped models mid tool-use loop would bill half its iterations to one model and
+    // half to another while the client was told nothing changed. Resolving once here is
+    // what makes the documented contract true: the turn finishes on the model it started
+    // with, and the new level applies from the next turn.
+    const model = this.#resolveNativeModel();
+    // Adaptive thinking controls depth via `effort` (output_config) rather than a token
+    // budget — budget_tokens is removed on Opus 4.7+/Sonnet 4.6 and would 400.
+    const thinking = this.#resolveAnthropicThinking();
+    const thinkingEnabled = thinking?.type !== 'disabled';
+    const effort = this.#resolveEffort();
+
     while (true) {
       let continueLoop = true;
       let completedNaturally = false;
@@ -497,12 +521,8 @@ export class AgentOrchestrator {
         await this.sessionManager.cleanupContext(this.sessionId, config.agentMaxContextTokens, this.provider);
 
         try {
-          // Call Claude API. Adaptive thinking controls depth via `effort`
-          // (output_config) rather than a token budget — budget_tokens is removed
-          // on Opus 4.7+/Sonnet 4.6 and would 400.
-          const thinkingEnabled = config.agentAnthropicThinking?.type !== 'disabled';
           const response = await anthropic.messages.create({
-            model: config.nativeAgentProviders.anthropic.model,
+            model,
             max_tokens: 8192,
             system: systemBlocks,
             // Image bytes are attached to a copy here and thrown away with the
@@ -510,12 +530,34 @@ export class AgentOrchestrator {
             // place would put base64 into stored history and into every later
             // token count.
             messages: hydrateMessagesForAnthropic(messages, this.mediaStore),
-            thinking: config.agentAnthropicThinking,
-            ...(thinkingEnabled && { output_config: { effort: config.agentAnthropicEffort } }),
+            thinking,
+            // A level may omit effort on purpose; omit the whole key rather than
+            // sending `{effort: undefined}` so the API applies its own default.
+            ...(thinkingEnabled && effort ? { output_config: { effort } } : {}),
             tools: tools.length > 0 ? tools : undefined
           });
 
-          this.#logApiUsage(Provider.ANTHROPIC, response.usage);
+          // Reported against the pinned model rather than whatever the session resolves
+          // to now, so a level change mid-turn can't misattribute this call's cost.
+          this.#logApiUsage(Provider.ANTHROPIC, response.usage, model);
+
+          // A safety classifier can decline the request: HTTP 200, stop_reason
+          // "refusal", and `content` empty or holding only a partial answer. Checked
+          // before the content is read because the processing path below assumes usable
+          // blocks — without this the turn ends as an opaque stall rather than a reason.
+          // Reachable on any Claude model; the top intelligence rung makes it likelier,
+          // which is why it is handled here rather than left to chance.
+          if (response.stop_reason === 'refusal') {
+            const category = response.stop_details?.category;
+            logger.warn(`Anthropic declined the request (model=${model}${category ? `, category=${category}` : ''})`);
+            await this.sendToClient(createAgentTextMessage(
+              this.sessionId,
+              `I wasn't able to answer that — the safety system for the model I'm using declined the request${category ? ` (${category})` : ''}. Rephrasing it, or switching to a lower intelligence level, will usually get past it.`,
+              false
+            ));
+            continueLoop = false;
+            break;
+          }
 
           // Check if stop was requested during the API call
           if (this.stopRequested) {
@@ -695,11 +737,14 @@ export class AgentOrchestrator {
       const sessionTempDir = this.sessionManager.getSessionTempDir(this.sessionId);
       const filesystemRoots = [sessionTempDir, APP_ROOT];
 
+      const anthropicSdkThinking = this.#resolveAnthropicThinking();
+      const anthropicSdkEffort = this.#resolveEffort();
+
       // Build query options with MCP servers
       const queryOptions = {
         abortController: this.abortController,
         systemPrompt: systemPrompt,
-        model: config.nativeAgentProviders.anthropic.model,
+        model: this.#resolveNativeModel(),
         maxTokens: 8192,
         maxTurns: maxIterations,
         mcpServers: mcpServers,
@@ -726,8 +771,10 @@ export class AgentOrchestrator {
         hooks: {
           PreToolUse: [{ hooks: [this.#sdkPreToolUseGuard(filesystemRoots, sessionTempDir)] }],
         },
-        thinking: config.agentAnthropicThinking,
-        ...(config.agentAnthropicThinking?.type !== 'disabled' && { effort: config.agentAnthropicEffort }),
+        thinking: anthropicSdkThinking,
+        // Omitted entirely when the level defines no effort — see the manual loop.
+        ...(anthropicSdkThinking?.type !== 'disabled' && anthropicSdkEffort
+          ? { effort: anthropicSdkEffort } : {}),
         compact: true  // Enable automatic compaction
       };
 
@@ -1756,6 +1803,13 @@ ${lines.join('\n')}`;
 
     const maxIterations = this.configManager.getMaxIterations();
 
+    // Pinned for the whole turn — see the anthropic-manual loop for why. It matters more
+    // here: the context cache is created against a specific model, so re-resolving per
+    // iteration would let a mid-turn setIntelligence() rebuild the cache underneath a
+    // running tool-use loop as well as swap the model.
+    const model = this.#resolveNativeModel();
+    const thinkingConfig = this.#resolveGeminiThinking();
+
     while (true) {
       let continueLoop = true;
       let completedNaturally = false;
@@ -1770,18 +1824,19 @@ ${lines.join('\n')}`;
         // Refresh the context cache before each call. #getGeminiManualConfig
         // returns the live cache cheaply while it's valid, and proactively
         // recreates it ~30s before its 300s TTL so it never expires mid-flight.
-        const geminiConfig = await this.#getGeminiManualConfig(systemPrompt, toolDeclarations);
+        const geminiConfig = await this.#getGeminiManualConfig(systemPrompt, toolDeclarations, model, thinkingConfig);
 
         try {
           const response = await gemini.models.generateContent({
-            model: config.nativeAgentProviders.google.model,
+            model,
             // Transient copy — see the anthropic-manual call for why history must
             // never hold the bytes.
             contents: hydrateContentsForGemini(messages, this.mediaStore),
             config: geminiConfig
           });
 
-          this.#logApiUsage(Provider.GOOGLE, response.usageMetadata);
+          // Pinned model, so a level change mid-turn can't misattribute this call.
+          this.#logApiUsage(Provider.GOOGLE, response.usageMetadata, model);
           cacheRetries = 0;
 
           if (this.stopRequested) break;
@@ -1970,9 +2025,10 @@ ${lines.join('\n')}`;
 
       const pendingCallIds = new Map();
 
+      const geminiThinking = this.#resolveGeminiThinking();
       const agent = new LlmAgent({
         name: this.configManager.getAgentName(),
-        model: config.nativeAgentProviders.google.model,
+        model: this.#resolveNativeModel(),
         // A function, not the string itself. ADK runs any *string* instruction
         // through injectSessionState, which treats every `{IDENTIFIER}` in it as a
         // session-state lookup and throws "Context variable not found" when the key
@@ -1984,7 +2040,8 @@ ${lines.join('\n')}`;
         instruction: () => systemPrompt,
         tools: [...builtInAdkTools, ...clientAdkTools],
         generateContentConfig: {
-          thinkingConfig: config.agentGeminiThinking
+          // Spread so a level that defines no effort sends no thinkingConfig at all.
+          ...(geminiThinking ? { thinkingConfig: geminiThinking } : {})
         },
         // The only way to get a picture in front of the model on this route. ADK
         // drops anything but the returned value from a tool response, so the tools
@@ -2252,9 +2309,18 @@ ${lines.join('\n')}`;
     return declarations;
   }
 
-  async #getGeminiManualConfig(systemPrompt, toolDeclarations) {
+  /**
+   * @param geminiModel   the caller's pinned model for this turn. Passed in rather than
+   *                      re-resolved so every iteration of one turn caches against the
+   *                      same model even if the level changes while the turn is running.
+   * @param geminiThinking the caller's pinned thinkingConfig, or undefined to send none.
+   */
+  async #getGeminiManualConfig(systemPrompt, toolDeclarations, geminiModel, geminiThinking) {
+    // A cache is created against a specific model, so the model belongs in the key.
+    // setIntelligence() also clears the cache explicitly, but keying on the model means
+    // any future path that changes it can't silently reuse a cache built for another.
     // Build a cache key from the stable inputs — recreate if they change (e.g. tool set changes on model resize)
-    const cacheKey = systemPrompt + JSON.stringify(toolDeclarations.map(t => t.name));
+    const cacheKey = geminiModel + systemPrompt + JSON.stringify(toolDeclarations.map(t => t.name));
 
     const cacheStillValid = this.#geminiManualCacheName &&
       this.#geminiManualCacheKey === cacheKey &&
@@ -2263,7 +2329,7 @@ ${lines.join('\n')}`;
     if (cacheStillValid) {
       return {
         cachedContent: this.#geminiManualCacheName,
-        thinkingConfig: config.agentGeminiThinking
+        ...(geminiThinking ? { thinkingConfig: geminiThinking } : {})
       };
     }
 
@@ -2291,7 +2357,7 @@ ${lines.join('\n')}`;
       }
 
       const cache = await gemini.caches.create({
-        model: config.nativeAgentProviders.google.model,
+        model: geminiModel,
         config: cacheConfig
       });
 
@@ -2301,13 +2367,13 @@ ${lines.join('\n')}`;
 
       return {
         cachedContent: cache.name,
-        thinkingConfig: config.agentGeminiThinking
+        ...(geminiThinking ? { thinkingConfig: geminiThinking } : {})
       };
     } catch (e) {
       logger.warn('[gemini-cache] failed to create cache, falling back to uncached:', e.message);
       const cfg = {
         systemInstruction: systemPrompt,
-        thinkingConfig: config.agentGeminiThinking
+        ...(geminiThinking ? { thinkingConfig: geminiThinking } : {})
       };
       if (toolDeclarations.length > 0) {
         cfg.tools = [{ functionDeclarations: toolDeclarations }];
@@ -2362,13 +2428,102 @@ ${lines.join('\n')}`;
   }
 
   /**
-   * Resolve the model id for a native-API provider from the shared registry
-   * config.nativeAgentProviders.
+   * Resolve the model id for a native-API provider.
+   *
+   * The intelligence ladder wins when this provider has one; config.nativeAgentProviders
+   * is the fallback, which is what keeps a provider with no ladder byte-identical to
+   * its pre-feature behaviour without a branch at any call site.
    */
   #resolveNativeModel() {
+    const level = this.#resolveLevelConfig();
+    if (level?.model) return level.model;
+
     const model = config.nativeAgentProviders[this.provider]?.model;
     if (!model) throw new Error(`No nativeAgentProviders entry configured for provider "${this.provider}"`);
     return model;
+  }
+
+  /** The resolved level object for the current (provider, intelligence), or null. */
+  #resolveLevelConfig() {
+    return resolveLevel(this.provider, this.intelligence)?.level ?? null;
+  }
+
+  /**
+   * Anthropic/OpenAI-style effort for the current level.
+   *
+   * Returns undefined when the level deliberately omits `effort` — callers must then
+   * omit the parameter entirely rather than sending `undefined`, so the provider
+   * applies its own default. A missing key and an explicit undefined are not the same
+   * request; on the Anthropic path the latter risks a 400.
+   */
+  #resolveEffort() {
+    const level = this.#resolveLevelConfig();
+    if (level) return level.effort;              // may legitimately be undefined
+    return config.agentAnthropicEffort;           // no ladder -> pre-feature constant
+  }
+
+  /** Anthropic `thinking` config; a level may override the shared default. */
+  #resolveAnthropicThinking() {
+    return this.#resolveLevelConfig()?.thinking ?? config.agentAnthropicThinking;
+  }
+
+  /**
+   * Gemini `thinkingConfig`. Same omit-vs-default contract as #resolveEffort: a level
+   * with no `effort` yields undefined and the caller drops the key.
+   */
+  #resolveGeminiThinking() {
+    const level = this.#resolveLevelConfig();
+    if (!level) return config.agentGeminiThinking; // no ladder -> pre-feature constant
+    return level.effort === undefined ? undefined : { thinkingLevel: level.effort };
+  }
+
+  /**
+   * Change the intelligence level on a live session.
+   *
+   * Deliberately does not tear anything down: conversation history lives in
+   * SessionManager, and both the Anthropic and Gemini routes resolve their model per
+   * turn, so a change simply applies to the next turn. An in-flight turn is left
+   * alone — it finishes on the model it started with.
+   *
+   * The one thing that does need clearing is Gemini's context cache. It is created
+   * against a specific model but keyed only on systemPrompt+tools, so without this
+   * the next call would hand the new model a cache built for the old one.
+   */
+  setIntelligence(requested) {
+    if (!supportsIntelligence(this.provider)) {
+      logger.log(`[intelligence] provider "${this.provider}" does not use intelligence levels — ignoring "${requested}"`);
+      return this.intelligence;
+    }
+
+    const previousModel = this.#resolveNativeModel();
+    const resolved = resolveLevel(this.provider, requested);
+    if (resolved.id === this.intelligence) return this.intelligence;
+
+    this.intelligence = resolved.id;
+    // Mutate in place: the tool providers hold a reference to this object.
+    this.agentProfile.intelligence = resolved.id;
+
+    if (this.#resolveNativeModel() !== previousModel) this.#invalidateGeminiManualCache();
+
+    logger.log(`[intelligence] session ${this.sessionId} -> "${resolved.id}" (${this.#resolveNativeModel()})`);
+    return this.intelligence;
+  }
+
+  /**
+   * Drop the Gemini context cache so the next call rebuilds it against the current
+   * model. Fire-and-forget: the delete is best-effort (Gemini may have expired it
+   * already) and the local handles are what actually gate reuse.
+   */
+  #invalidateGeminiManualCache() {
+    const name = this.#geminiManualCacheName;
+    this.#geminiManualCacheName = null;
+    this.#geminiManualCacheKey = null;
+    this.#geminiManualCacheExpiry = null;
+    if (!name) return;
+
+    this.#getGemini()
+      .then(gemini => gemini.caches.delete({ name }))
+      .catch(() => { /* already expired or unreachable — the cleared handles suffice */ });
   }
 
   /**
@@ -3413,11 +3568,19 @@ ${lines.join('\n')}`;
 
   #logApiUsage(provider, usage, model = null) {
     if (!usage) return;
-    const resolvedModel = model ?? (
-      provider === Provider.ANTHROPIC
-        ? config.nativeAgentProviders.anthropic.model
-        : config.nativeAgentProviders.google.model
-    );
+    // Falls back to the model this session actually resolved rather than the registry
+    // default, so a raised intelligence level is reflected in the cost report. Guarded
+    // because this is a reporting path: every caller that could hit a provider with no
+    // nativeAgentProviders entry passes `model` explicitly, but a resolver throw here
+    // must never be what loses a turn.
+    let resolvedModel = model;
+    if (!resolvedModel) {
+      try {
+        resolvedModel = this.#resolveNativeModel();
+      } catch {
+        resolvedModel = null;
+      }
+    }
     this.tokenReporter.report({ provider, model: resolvedModel, usage, clientKey: false }).catch(() => {});
   }
 

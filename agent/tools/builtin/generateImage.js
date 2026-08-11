@@ -154,7 +154,7 @@ export function createImageGeneratorFor(model, clientId) {
     : createGeminiImageGenerator(clientId);
 }
 
-export function createGenerateImageTool(sessionManager, sessionId, mediaStore, provider, generator = null) {
+export function createGenerateImageTool(sessionManager, sessionId, mediaStore, agentProfile, generator = null) {
   return {
     description: `Generate an image and keep it in this session, ready to be used.
 
@@ -182,7 +182,7 @@ fabrication. Ask the user for those instead.`,
       review: z.boolean().optional().describe('Whether to show you the generated image so you can check it. Default true; set false only when you are certain you do not need to look.')
     }),
     handler: async ({ prompt, aspectRatio, referenceMediaIds, review }) => {
-      const model = selectImageModel(provider);
+      const model = selectImageModel(agentProfile);
 
       try {
         // Resolved before the API call, so a bad handle costs nothing.

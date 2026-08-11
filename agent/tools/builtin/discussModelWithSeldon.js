@@ -8,7 +8,7 @@ import { generateRequestId, createSuccessResponse, createErrorResponse, loadBeha
 /**
  * Have an expert-level discussion about the model using System Dynamics terminology
  */
-export function createDiscussModelWithSeldonTool(sessionManager, sessionId, sendToClient, provider) {
+export function createDiscussModelWithSeldonTool(sessionManager, sessionId, sendToClient, agentProfile) {
   return {
     description: 'Have an expert-level discussion about the model using System Dynamics terminology. Use this for technical analysis and SD theory discussions.',
     supportedModes: ['sfd', 'cld'],
@@ -33,7 +33,7 @@ export function createDiscussModelWithSeldonTool(sessionManager, sessionId, send
           return createErrorResponse('No model available in session');
         }
 
-        const underlyingModel = selectEngineModel(provider, difficulty, 'nonBuild');
+        const underlyingModel = selectEngineModel(agentProfile, difficulty, 'nonBuild');
         const baseParameters = { ...parameters, clientId: session.clientId, underlyingModel };
         const sessionTempDir = sessionManager.getSessionTempDir(sessionId);
         const feedbackPath = join(sessionTempDir, 'feedback.json');

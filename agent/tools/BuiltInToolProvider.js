@@ -91,11 +91,17 @@ export class BuiltInToolProvider {
   // it is a property of who the agent is, fixed for the provider's whole lifetime,
   // which is why it is a constructor argument rather than something re-read per pass
   // the way the media gates read the client's declarations.
-  constructor(sessionManager, sessionId, sendToClient, provider, mediaStore, canWriteToLocalSandbox) {
+  // agentProfile is `{provider, intelligence}` and is the orchestrator's LIVE object,
+  // not a copy: setIntelligence() mutates it in place. The tools below capture it once
+  // at registration but only read it inside their handlers, so a level change mid
+  // conversation reaches the next tool call without re-registering anything. A bare
+  // provider string is still accepted (selectEngineModel normalizes it) so existing
+  // callers and tests keep working.
+  constructor(sessionManager, sessionId, sendToClient, agentProfile, mediaStore, canWriteToLocalSandbox) {
     this.sessionManager = sessionManager;
     this.sessionId = sessionId;
     this.sendToClient = sendToClient;
-    this.provider = provider;
+    this.agentProfile = agentProfile;
     this.vizEngine = new VisualizationEngine(sessionManager, sessionId);
     this.mediaStore = mediaStore;
     this.canWriteToLocalSandbox = canWriteToLocalSandbox;
@@ -113,20 +119,20 @@ export class BuiltInToolProvider {
     return {
       name: 'builtin_core_tools',
       tools: {
-        generate_quantitative_model: createGenerateQuantitativeModelTool(this.sessionManager, this.sessionId, this.sendToClient, this.provider),
-        generate_qualitative_model: createGenerateQualitativeModelTool(this.sessionManager, this.sessionId, this.sendToClient, this.provider),
-        discuss_model_with_seldon: createDiscussModelWithSeldonTool(this.sessionManager, this.sessionId, this.sendToClient, this.provider),
-        discuss_model_across_runs: createDiscussModelAcrossRunsTool(this.sessionManager, this.sessionId, this.sendToClient, this.provider),
-        generate_ltm_narrative: createGenerateLtmNarrativeTool(this.sessionManager, this.sessionId, this.sendToClient, this.provider),
-        discuss_with_mentor: createDiscussWithMentorTool(this.sessionManager, this.sessionId, this.sendToClient, this.provider),
+        generate_quantitative_model: createGenerateQuantitativeModelTool(this.sessionManager, this.sessionId, this.sendToClient, this.agentProfile),
+        generate_qualitative_model: createGenerateQualitativeModelTool(this.sessionManager, this.sessionId, this.sendToClient, this.agentProfile),
+        discuss_model_with_seldon: createDiscussModelWithSeldonTool(this.sessionManager, this.sessionId, this.sendToClient, this.agentProfile),
+        discuss_model_across_runs: createDiscussModelAcrossRunsTool(this.sessionManager, this.sessionId, this.sendToClient, this.agentProfile),
+        generate_ltm_narrative: createGenerateLtmNarrativeTool(this.sessionManager, this.sessionId, this.sendToClient, this.agentProfile),
+        discuss_with_mentor: createDiscussWithMentorTool(this.sessionManager, this.sessionId, this.sendToClient, this.agentProfile),
         get_feedback_information: createGetFeedbackInformationTool(this.sessionManager, this.sessionId, this.sendToClient),
         get_current_model: createGetCurrentModelTool(this.sessionManager, this.sessionId, this.sendToClient),
         update_model: createUpdateModelTool(this.sessionManager, this.sessionId, this.sendToClient),
         run_model: createRunModelTool(this.sessionManager, this.sessionId, this.sendToClient),
         get_run_info: createGetRunInfoTool(this.sessionManager, this.sessionId, this.sendToClient),
         get_variable_data: createGetVariableDataTool(this.sessionManager, this.sessionId, this.sendToClient),
-        create_visualization: createVisualizationTool(this.sessionManager, this.sessionId, this.sendToClient, this.vizEngine, this.provider),
-        draw_causal_loop_diagram: createDrawCausalLoopDiagramTool(this.sessionManager, this.sessionId, this.sendToClient, this.vizEngine, this.provider),
+        create_visualization: createVisualizationTool(this.sessionManager, this.sessionId, this.sendToClient, this.vizEngine, this.agentProfile),
+        draw_causal_loop_diagram: createDrawCausalLoopDiagramTool(this.sessionManager, this.sessionId, this.sendToClient, this.vizEngine, this.agentProfile),
         read_model_section: createReadModelSectionTool(this.sessionManager, this.sessionId),
         edit_variables: createEditVariablesTool(this.sessionManager, this.sessionId, this.sendToClient),
         edit_relationships: createEditRelationshipsTool(this.sessionManager, this.sessionId, this.sendToClient),
@@ -140,7 +146,7 @@ export class BuiltInToolProvider {
         write_file: createWriteFileTool(this.sessionManager, this.sessionId),
         edit_file: createEditFileTool(this.sessionManager, this.sessionId),
         search_documents: createSearchDocumentsTool(this.sessionManager, this.sessionId),
-        generate_image: createGenerateImageTool(this.sessionManager, this.sessionId, this.mediaStore, this.provider),
+        generate_image: createGenerateImageTool(this.sessionManager, this.sessionId, this.mediaStore, this.agentProfile),
         view_media: createViewMediaTool(this.mediaStore)
       }
     };

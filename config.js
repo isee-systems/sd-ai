@@ -144,18 +144,128 @@ const config = {
             summaryModel: 'z-ai/glm-5.2'
         }
     },
-    // Underlying model the engine tools use, by provider. `default` is the fallback
-    // for every provider (including the OpenRouter brands in openRouterAgentProviders),
-    // so a newly added provider works with no extra config. To override the models for
-    // a specific provider, add a key matching that provider id alongside `default`, e.g.:
+    /*
+    * Intelligence levels — the client-facing lever that trades money for capability.
+    *
+    * This block is the single source of truth: the levels that exist, what they are
+    * called, and every model behind them. Nothing about levels is hard-coded in code,
+    * so adding a rung — or renaming one, or giving a provider its own vocabulary — is
+    * a config edit and a restart, with no code change and no client release.
+    *
+    * Ladders are PER PROVIDER and ordered low -> high. A provider absent from
+    * `providers` ignores the lever entirely and keeps its nativeAgentProviders model:
+    * that absence IS the "providers that support it" gate, which is why the OpenRouter
+    * brands need no entry and no special case. Levels are matched by `id`, never by
+    * position, so two providers may name their rungs differently; a client asking for
+    * an id the selected provider does not offer gets that provider's default rather
+    * than an error.
+    *
+    * Per level:
+    *   id            required — the value the client sends back on select_agent /
+    *                 set_intelligence.
+    *   label         optional — UI text. Defaults to a title-cased id.
+    *   description   optional — client tooltip.
+    *   model         required — the conversation model.
+    *   effort        OPTIONAL — omit to send NO effort/thinking parameter at all and
+    *                 let the provider apply its own default. Omitting is not the same
+    *                 as sending a low value, which is why it is expressible here.
+    *   thinking      optional — provider-shaped override of agentAnthropicThinking.
+    *   relativeCost  optional — overrides the multiplier derived from pricing.js.
+    *   toolModels    optional — engine-tool lanes for this rung, same shape as an
+    *                 agentToolModels lane; falls back to agentToolModels below.
+    *
+    * The floor is the default: the first level of each ladder reproduces today's
+    * behaviour exactly, and there is deliberately no rung below it. Haiku stays
+    * unreachable from here — it remains the server-internal summaryModel.
+    */
+    "agentIntelligence": {
+        // Level id used when a client sends nothing. A provider whose ladder lacks
+        // this id falls back to the first level it does define.
+        defaultLevel: 'standard',
+        providers: {
+            anthropic: [
+                { id: 'standard', label: 'Standard',
+                  description: 'Balanced quality and cost. Recommended for most work.',
+                  model: 'claude-sonnet-5', effort: 'medium' },
+                { id: 'high', label: 'High',
+                  description: 'A more capable model with deeper reasoning.',
+                  model: 'claude-opus-5', effort: 'high' },
+                // No effort: Fable always thinks, and we want its own default depth.
+                { id: 'maximum', label: 'Maximum',
+                  description: 'The most capable model available. Use it for the hardest problems.',
+                  model: 'claude-fable-5' }
+            ],
+            google: [
+                { id: 'standard', label: 'Standard',
+                  description: 'Balanced quality and cost. Recommended for most work.',
+                  model: 'gemini-3.6-flash', effort: ThinkingLevel.MEDIUM },
+                // Same model as `standard`, so the price-derived multiplier would be
+                // 1.0 — but it thinks longer and therefore bills more tokens. State the
+                // cost explicitly; an effort-only step is exactly what derivation misses.
+                { id: 'high', label: 'High',
+                  description: 'The same model thinking harder before it answers.',
+                  model: 'gemini-3.6-flash', effort: ThinkingLevel.HIGH, relativeCost: 1.5 },
+                // No effort: let the pro model pick its own thinking level.
+                // Priced-derived would be ~1.65x on the pro model's first input tier,
+                // which both collides with `high` above and ignores that it thinks more
+                // and bills the higher tier on long conversations. State it explicitly.
+                { id: 'maximum', label: 'Maximum',
+                  description: 'The most capable model available. Use it for the hardest problems.',
+                  model: 'gemini-3.1-pro-preview', relativeCost: 2.5 }
+            ],
+            // nativeAgentProviders.openai is commented out today; this ladder is here
+            // so re-enabling that provider is a one-line change rather than two. It is
+            // not advertised while the provider is disabled — buildIntelligenceDiscovery
+            // filters byProvider to agentProviders, so a parked ladder never offers the
+            // client a control for a provider select_agent would reject.
+            //
+            // NOTE: no `effort` on any rung, and that is not an oversight. This provider
+            // runs through the shared OpenAI-compatible chat-completions loop, which
+            // pins reasoning_effort to 'none' because GPT-5.6 refuses function tools
+            // while reasoning is on (see reasoningParams in agent/utilities/nativeProviders.js)
+            // and every agent request carries tools. So the lever moves the model only,
+            // which is why there are two rungs here rather than three — a third would
+            // have to repeat a model and would be indistinguishable from the second.
+            openai: [
+                { id: 'standard', label: 'Standard',
+                  description: 'Balanced quality and cost. Recommended for most work.',
+                  model: 'gpt-5.6-terra' },
+                { id: 'high', label: 'High',
+                  description: 'The most capable model available. Use it for the hardest problems.',
+                  model: 'gpt-5.6-sol' }
+            ]
+        }
+    },
+
+    // Underlying model the engine tools use, by provider then by intelligence level.
+    // `default` is the fallback for every provider (including the OpenRouter brands in
+    // openRouterAgentProviders), so a newly added provider works with no extra config.
+    // Within a provider, lanes are keyed by intelligence level id; a level that names
+    // its own `toolModels` in agentIntelligence wins over anything here, and a level id
+    // with no lane falls back to the `defaultLevel` lane — which is what lets a provider
+    // use its own rung vocabulary without duplicating this whole table.
+    // To override the models for a specific provider, add a key matching that provider
+    // id alongside `default`, e.g.:
     //   anthropic: {
-    //       build:    { normal: 'claude-sonnet-4-6', hard: 'claude-opus-4-8' },
-    //       nonBuild: { normal: 'claude-haiku-4-5', hard: 'claude-sonnet-4-6' }
+    //       standard: {
+    //           build:    { normal: 'claude-sonnet-4-6', hard: 'claude-opus-4-8' },
+    //           nonBuild: { normal: 'claude-haiku-4-5', hard: 'claude-sonnet-4-6' }
+    //       }
     //   },
     "agentToolModels": {
         default: {
-            build:    { normal: 'gemini-3.6-flash low', hard: 'gemini-3.6-flash high' },
-            nonBuild: { normal: 'gemini-3.6-flash low', hard: 'gemini-3.6-flash high' }
+            standard: {
+                build:    { normal: 'gemini-3.6-flash low', hard: 'gemini-3.6-flash high' },
+                nonBuild: { normal: 'gemini-3.6-flash low', hard: 'gemini-3.6-flash high' }
+            },
+            high: {
+                build:    { normal: 'gemini-3.6-flash high', hard: 'gemini-3.1-pro-preview high' },
+                nonBuild: { normal: 'gemini-3.6-flash high', hard: 'gemini-3.6-flash high' }
+            },
+            maximum: {
+                build:    { normal: 'gemini-3.1-pro-preview high', hard: 'gemini-3.1-pro-preview high' },
+                nonBuild: { normal: 'gemini-3.1-pro-preview high', hard: 'gemini-3.1-pro-preview high' }
+            }
         }
     },
     // Full ordered list of valid agent provider IDs: every native-API brand plus every
@@ -165,8 +275,12 @@ const config = {
     get agentProviders() {
         return [...Object.keys(this.nativeAgentProviders), ...Object.keys(this.openRouterAgentProviders)];
     },
+    // Effort/thinking fallbacks for a provider with NO agentIntelligence ladder.
+    // Providers that do have one take their effort from the selected level instead,
+    // and a level may omit effort entirely to defer to the provider's own default —
+    // so these are the floor, not the setting most requests actually use.
     "agentAnthropicEffort": "medium",
-    "agentAnthropicThinking": { type: "adaptive" }, // Opus 4.7+/Sonnet 4.6 use adaptive thinking; depth is controlled by agentAnthropicEffort (budget_tokens is removed and 400s)
+    "agentAnthropicThinking": { type: "adaptive" }, // Opus 4.7+/Sonnet 4.6 use adaptive thinking; depth is controlled by effort (budget_tokens is removed and 400s)
     "agentGeminiThinking": { thinkingLevel: ThinkingLevel.MEDIUM },
     /*
     * Retrieval-Augmented Generation (RAG). Clients attach files over the

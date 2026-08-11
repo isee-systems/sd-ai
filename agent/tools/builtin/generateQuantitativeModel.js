@@ -7,7 +7,7 @@ import config from '../../../config.js';
 /**
  * Generate a Stock Flow Diagram (SFD) model with equations and quantitative structure
  */
-export function createGenerateQuantitativeModelTool(sessionManager, sessionId, sendToClient, provider) {
+export function createGenerateQuantitativeModelTool(sessionManager, sessionId, sendToClient, agentProfile) {
   return {
     description: 'Generate a Stock Flow Diagram (SFD) model with equations and quantitative structure. Use this for building computational models that can be simulated. Automatically pushes the generated model to the client.',
     supportedModes: ['sfd'],
@@ -30,7 +30,7 @@ export function createGenerateQuantitativeModelTool(sessionManager, sessionId, s
           throw new Error(`Session not found: ${sessionId}`);
         }
 
-        const underlyingModel = selectEngineModel(provider, difficulty, 'build');
+        const underlyingModel = selectEngineModel(agentProfile, difficulty, 'build');
         const currentModel = sessionManager.getClientModel(sessionId);
 
         const mergedParameters = {

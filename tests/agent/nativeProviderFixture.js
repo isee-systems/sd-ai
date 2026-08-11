@@ -38,7 +38,18 @@ export const TEST_NATIVE_PROVIDERS = Object.freeze({
  * derived from these keys once, when nativeProviders.js is evaluated. That is why the
  * suites calling this import the modules under test dynamically, after it returns. Jest
  * gives each test file its own module registry, so the mutation cannot leak between suites.
+ *
+ * The intelligence ladders for the same ids are dropped at the same time, and that is
+ * load-bearing rather than tidiness: a ladder outranks nativeAgentProviders when the
+ * orchestrator resolves a model, so leaving one in place would send these suites at a
+ * real vendor model id and quietly void the "no test may reach either" guarantee above.
+ * Removing it also means these providers exercise the no-ladder fallback path, which is
+ * the behaviour every OpenRouter brand relies on.
  */
 export function installTestNativeProviders() {
   config.nativeAgentProviders = { ...config.nativeAgentProviders, ...TEST_NATIVE_PROVIDERS };
+
+  const ladders = { ...config.agentIntelligence?.providers };
+  for (const id of Object.keys(TEST_NATIVE_PROVIDERS)) delete ladders[id];
+  config.agentIntelligence = { ...config.agentIntelligence, providers: ladders };
 }

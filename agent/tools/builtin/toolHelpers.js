@@ -8,18 +8,37 @@ import { readdirSync, readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import logger from '../../../utilities/logger.js';
 import config from '../../../config.js';
+import { resolveToolLane } from '../../utilities/intelligenceLevels.js';
 
 /**
- * Pick the underlyingModel for an engine call based on the agent provider,
- * difficulty, and engine kind ('build' for quantitative/qualitative,
- * 'nonBuild' for seldon/ltm/mentor). Providers without their own entry fall back
- * to the `default` lane in config.agentToolModels, so an unrecognized or newly
- * added provider doesn't break the call.
+ * Normalize what the tool providers hand us into `{provider, intelligence}`.
+ *
+ * The orchestrator passes a live profile OBJECT so a mid-conversation intelligence
+ * change reaches the next tool call without re-registering anything. A bare provider
+ * string is still accepted — every existing test and any direct caller predates the
+ * profile — and resolves to the default level.
  */
-export function selectEngineModel(provider, difficulty, kind) {
-  const providerMap = config.agentToolModels?.[provider] ?? config.agentToolModels?.default;
-  const lane = providerMap?.[kind] ?? providerMap?.nonBuild;
-  return lane?.[difficulty] ?? lane?.normal;
+function toProfile(agentProfile) {
+  return typeof agentProfile === 'string'
+    ? { provider: agentProfile, intelligence: config.agentIntelligence?.defaultLevel }
+    : (agentProfile ?? {});
+}
+
+/**
+ * Pick the underlyingModel for an engine call based on the agent profile,
+ * difficulty, and engine kind ('build' for quantitative/qualitative,
+ * 'nonBuild' for seldon/ltm/mentor).
+ *
+ * Lanes are resolved by intelligenceLevels.resolveToolLane, which walks
+ * level.toolModels -> agentToolModels[provider][level] -> agentToolModels.default[level]
+ * -> the defaultLevel lane. Providers without their own entry fall back to the
+ * `default` lane, so an unrecognized or newly added provider doesn't break the call.
+ */
+export function selectEngineModel(agentProfile, difficulty, kind) {
+  const { provider, intelligence } = toProfile(agentProfile);
+  const lane = resolveToolLane(provider, intelligence);
+  const laneForKind = lane?.[kind] ?? lane?.nonBuild;
+  return laneForKind?.[difficulty] ?? laneForKind?.normal;
 }
 
 /**
@@ -30,7 +49,8 @@ export function selectEngineModel(provider, difficulty, kind) {
  * generation is decoupled from the chat provider anyway — the session may be
  * talking to Claude and still draw with Gemini.
  */
-export function selectImageModel(provider) {
+export function selectImageModel(agentProfile) {
+  const { provider } = toProfile(agentProfile);
   return config.mediaImageModels?.[provider] ?? config.mediaImageModels?.default;
 }
 

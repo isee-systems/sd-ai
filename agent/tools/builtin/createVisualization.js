@@ -28,7 +28,7 @@ export function extractRunFeedback(feedbackContent, preferredRunId = null) {
 /**
  * Create a data visualization and send it to the client
  */
-export function createVisualizationTool(sessionManager, sessionId, sendToClient, vizEngine, provider) {
+export function createVisualizationTool(sessionManager, sessionId, sendToClient, vizEngine, agentProfile) {
   return {
     description: `Create a data visualization and send it to the client for display in chat.
 
@@ -176,7 +176,7 @@ Use useAICustom=true to have AI generate custom matplotlib code for complex visu
           }
         }
 
-        const underlyingModel = selectEngineModel(provider, difficulty, 'nonBuild');
+        const underlyingModel = selectEngineModel(agentProfile, difficulty, 'nonBuild');
         const vizOptions = {
           ...options,
           ...extraOptions,

@@ -7,7 +7,7 @@ import config from '../../../config.js';
 /**
  * Generate a Causal Loop Diagram (CLD) showing feedback loops and causal relationships
  */
-export function createGenerateQualitativeModelTool(sessionManager, sessionId, sendToClient, provider) {
+export function createGenerateQualitativeModelTool(sessionManager, sessionId, sendToClient, agentProfile) {
   return {
     description: 'Generate a Causal Loop Diagram (CLD) showing feedback loops and causal relationships. Use this for conceptual models focusing on system structure. Automatically pushes the generated model to the client.',
     supportedModes: ['cld'],
@@ -27,7 +27,7 @@ export function createGenerateQualitativeModelTool(sessionManager, sessionId, se
           throw new Error(`Session not found: ${sessionId}`);
         }
 
-        const underlyingModel = selectEngineModel(provider, difficulty, 'build');
+        const underlyingModel = selectEngineModel(agentProfile, difficulty, 'build');
         const currentModel = sessionManager.getClientModel(sessionId);
         const result = await callQualitativeEngine(prompt, currentModel, { ...parameters, underlyingModel, clientId: session.clientId });
 

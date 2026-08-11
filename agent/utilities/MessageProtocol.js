@@ -138,6 +138,11 @@ const HistoricalMessageSchema = z.object({
   status: z.string().optional().describe('Status for agent_complete messages')
 }).catchall(z.any()).describe('Historical message from a previous session');
 
+// Upper bound on a client-supplied intelligence level id. Generous next to every id any
+// ladder in config.js uses, so it constrains no plausible future rung — it exists only to
+// keep an unbounded string off the resolution path and out of the logs.
+const INTELLIGENCE_ID_MAX_LENGTH = 64;
+
 export const InitializeSessionMessageSchema = z.object({
   type: z.literal('initialize_session').describe('Message type identifier'),
   sessionId: z.string().optional().describe('Optional session ID to resume an existing session. If not provided, a new session will be created.'),
@@ -166,9 +171,32 @@ const SelectAgentMessageSchema = z.object({
   // out: this description is what clients read, and a hand-maintained copy of a registry
   // that is single-sourced everywhere else goes stale the first time a brand is added.
   provider: z.enum(config.agentProviders).optional().default(config.agentDefaultProvider).describe(`LLM provider to use. Ids in config.nativeAgentProviders (${Object.keys(config.nativeAgentProviders).join(', ')}) reach their vendor APIs directly; every other id is an upstream LLM brand (${Object.keys(config.openRouterAgentProviders).join(', ')}) routed via OpenRouter. Defaults to ${config.agentDefaultProvider}. Ignored if the selected agent supports only one provider.`),
+  // A free-form string rather than an enum, deliberately. Valid ids depend on the
+  // provider (ladders are per provider in config.agentIntelligence and need not share a
+  // vocabulary), so no single enum can describe them — and a strict one would reject a
+  // message a newer client sends for a provider this server spells differently. The
+  // server resolves it against the chosen provider's ladder instead and falls back to
+  // that provider's default, so a wrong value degrades rather than failing the session.
+  //
+  // Free-form is not unbounded, though. An unknown id reaches a log line, and the frame
+  // cap (config.websocketMaxPayloadBytes) is measured in MB, so without a length limit a
+  // client can write arbitrarily much to disk one bad id at a time. No plausible level id
+  // is near this cap, so it rejects abuse without constraining a future rung name.
+  intelligence: z.string().max(INTELLIGENCE_ID_MAX_LENGTH).optional().describe(`Intelligence level id. Valid ids per provider are advertised in session_ready.intelligenceLevels; omit to use the provider's default (${config.agentIntelligence?.defaultLevel ?? 'none'}). Ignored by providers with no ladder.`),
   timestamp: z.string().optional().describe('ISO 8601 timestamp of when the message was created')
 }).refine(msg => msg.agentId || msg.agentConfig, {
   message: 'Either agentId or agentConfig must be provided'
+});
+
+// Changes the intelligence level on a live session without disturbing it: no history
+// change, no agent re-introduction, and an in-flight turn is left to finish on the model
+// it started with. Deliberately separate from select_agent, which rebuilds the
+// orchestrator and would drop the SDK/ADK conversation-continuity handles.
+const SetIntelligenceMessageSchema = z.object({
+  type: z.literal('set_intelligence').describe('Message type identifier'),
+  sessionId: z.string().describe('Unique session identifier'),
+  intelligence: z.string().max(INTELLIGENCE_ID_MAX_LENGTH).describe('Intelligence level id, as advertised in session_ready.intelligenceLevels for the session\'s current provider'),
+  timestamp: z.string().optional().describe('ISO 8601 timestamp of when the message was created')
 });
 
 export const ChatMessageSchema = z.object({
@@ -256,6 +284,7 @@ const RemoveFileMessageSchema = z.object({
 const ClientMessageSchema = z.discriminatedUnion('type', [
   InitializeSessionMessageSchema,
   SelectAgentMessageSchema,
+  SetIntelligenceMessageSchema,
   ChatMessageSchema,
   ToolCallResponseMessageSchema,
   ModelUpdatedNotificationSchema,
@@ -296,17 +325,23 @@ export function createSessionCreatedMessage(sessionId) {
   };
 }
 
-export function createSessionReadyMessage(sessionId, availableAgents, defaults) {
+// intelligenceLevels is spread in only when the deployment actually offers levels, so a
+// deployment with none — and therefore every client talking to one — sees the exact
+// payload it saw before the feature existed.
+export function createSessionReadyMessage(sessionId, availableAgents, defaults, intelligenceLevels = null) {
   return {
     type: 'session_ready',
     sessionId,
     availableAgents,
     defaults,
+    ...(intelligenceLevels ? { intelligenceLevels } : {}),
     timestamp: new Date().toISOString()
   };
 }
 
-export function createAgentSelectedMessage(sessionId, agentId, agentName, supportedProviders, currentProvider) {
+// currentIntelligence is null for a provider with no ladder; omitted entirely so the
+// message keeps its pre-feature shape for clients that never asked for the field.
+export function createAgentSelectedMessage(sessionId, agentId, agentName, supportedProviders, currentProvider, currentIntelligence = null) {
   return {
     type: 'agent_selected',
     sessionId,
@@ -314,6 +349,22 @@ export function createAgentSelectedMessage(sessionId, agentId, agentName, suppor
     agentName,
     supportedProviders,
     currentProvider,
+    ...(currentIntelligence ? { currentIntelligence } : {}),
+    timestamp: new Date().toISOString()
+  };
+}
+
+/**
+ * Acknowledges a `set_intelligence` request with the level the server actually applied.
+ *
+ * Always sent, even when the requested value was unavailable and fell back, because the
+ * client's job is to display the truth rather than what it asked for.
+ */
+export function createIntelligenceChangedMessage(sessionId, currentIntelligence) {
+  return {
+    type: 'intelligence_changed',
+    sessionId,
+    currentIntelligence,
     timestamp: new Date().toISOString()
   };
 }

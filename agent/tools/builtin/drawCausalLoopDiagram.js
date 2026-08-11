@@ -11,7 +11,7 @@ import { createSuccessResponse, createErrorResponse, selectEngineModel } from '.
  * pass them here. The simplified loops are then drawn as SVG by an LLM (see
  * VisualizationEngine.createCausalLoopDiagram).
  */
-export function createDrawCausalLoopDiagramTool(sessionManager, sessionId, sendToClient, vizEngine, provider) {
+export function createDrawCausalLoopDiagramTool(sessionManager, sessionId, sendToClient, vizEngine, agentProfile) {
   return {
     description: `Draw a simplified causal loop diagram (CLD) as an SVG and display it in chat. SFD models only.
 
@@ -47,7 +47,7 @@ By default the diagram is kept CLEAN — it shows only the structure (loops, lin
     handler: async ({ title, description, loops, notes, showDescriptions, width, height }) => {
       try {
         // Drawing a clean, low-crossing CLD is hard layout work — always use the high-difficulty model.
-        const underlyingModel = selectEngineModel(provider, 'hard', 'nonBuild');
+        const underlyingModel = selectEngineModel(agentProfile, 'hard', 'nonBuild');
         const svgContent = await vizEngine.createCausalLoopDiagram(
           { loops, title, notes },
           { title, notes, width, height, underlyingModel, showDescriptions: showDescriptions ?? false }

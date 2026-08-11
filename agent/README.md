@@ -41,8 +41,10 @@ Each agent session runs in a dedicated **worker subprocess** spawned by `WorkerS
 **On macOS / Linux without bwrap:** falls back to a plain Node.js `fork()`. The fork runs in its own process group (`detached: true`) so killing the group also terminates any grandchild processes (e.g. the Claude CLI subprocess spawned by the Anthropic Agent SDK).
 
 IPC messages between the main process and worker:
-- **Main → Worker:** `initialize`, `select_agent`, `chat`, `stop`, `tool_response`, `model_updated`, `add_file`, `remove_file`, `get_context`, `shutdown`
+- **Main → Worker:** `initialize`, `select_agent`, `set_intelligence`, `chat`, `stop`, `tool_response`, `model_updated`, `add_file`, `remove_file`, `get_context`, `shutdown`
 - **Worker → Main:** `to_client` (relayed to the WebSocket), `context_response`, `rag_file_processed`, `worker_error`
+
+Selecting a different agent mid-session **reuses the same worker** — it builds a new orchestrator inside it. Conversation history lives in the worker's `SessionManager`, so it survives the change without being copied anywhere. (`get_context` / `context_response` are consequently not part of that path; they remain as the IPC liveness probe the worker test suites use.)
 
 ### Model Type Enforcement
 
@@ -266,8 +268,38 @@ The `agentConfig` string must be a Markdown document with valid YAML frontmatter
 - `agentId` — ID of a built-in agent (e.g., `"socrates"`, `"merlin"`). Available agent IDs are returned in `session_ready`. Required if `agentConfig` is not provided.
 - `agentConfig` — Full agent configuration as a Markdown string. Required if `agentId` is not provided. Server returns `AGENT_SELECTION_ERROR` if the frontmatter is missing or invalid.
 - `provider` — LLM provider. The brands that reach their vendor API directly are defined in `config.nativeAgentProviders` (currently `anthropic`/Claude, `google`/Gemini, `deepseek`, `openai`); every other id names an upstream LLM brand routed internally through the OpenRouter gateway and is defined in `config.openRouterAgentProviders` (currently `qwen`, `moonshotai`/Kimi, `zai`/GLM). Each entry carries that brand's `displayName`, `model` and `summaryModel` — add or remove one and the full set updates everywhere. The complete accepted list is `config.agentProviders`. Defaults to `agentDefaultProvider` in `config.js`. Ignored when the agent's `supportedProviders` has exactly one entry.
+- `intelligence` — **Optional.** Intelligence level id, chosen from `session_ready.intelligenceLevels.byProvider[<provider>]`. Ignored by providers with no ladder. An id the chosen provider doesn't offer falls back to that provider's default and is reported back on `agent_selected` — it is never an error, because a client switching provider can legitimately still be holding the previous provider's id. See [Intelligence Levels](#intelligence-levels).
+  - **Omitting it means "leave the level alone", not "reset it".** On the first `select_agent` that is the provider's default, which reproduces the pre-feature behaviour exactly. On a later one — an agent switch, a re-select — the session keeps whatever level is in effect, so a `set_intelligence` the user made is not silently undone by a message sent for an unrelated reason. **Changing `provider` does reset to the new provider's default**, since level ids are per provider. Either way `agent_selected.currentIntelligence` reports what is actually in effect.
 
-#### 3. Chat Message
+#### 3. Set Intelligence
+
+Changes the intelligence level on a live session. **Optional message** — a client that never sends it is unaffected.
+
+```json
+{
+  "type": "set_intelligence",
+  "sessionId": "sess_abc123",
+  "intelligence": "high"
+}
+```
+
+Use this rather than re-sending `select_agent` to change the level. `select_agent` rebuilds the agent, which drops the provider SDK's conversation-continuity handle and prints an agent-switch line; this message changes one setting and nothing else:
+
+- **The conversation is untouched** — no history loss, no re-introduction message.
+- **An in-flight turn is never interrupted.** If the agent is mid-run the turn finishes on the model it started with, and the new level applies from the next turn.
+- **It never errors on a bad value.** An unknown id falls back to the current provider's default; a provider with no ladder answers `null`.
+- The server replies with [`intelligence_changed`](#5-intelligence-changed) carrying the level actually in effect.
+- **Applied changes are rate-limited** to one per second per session, because each one costs a context-cache rebuild on the next turn. A request that arrives inside the cooldown is answered with the level still in effect rather than the one asked for — which is why the reply, not the request, is what a client should display.
+
+Two costs are worth knowing, neither of which is a failure:
+
+- Prompt caches are per model, so the first turn after a change pays a cold cache write.
+- Thinking blocks do not cross models. Stepping *down* a rung mid-conversation silently drops the earlier reasoning from the prompt (unbilled) — the conversation text itself is unaffected.
+
+**Fields:**
+- `intelligence` — Required. A level id from `session_ready.intelligenceLevels.byProvider[<current provider>]`.
+
+#### 4. Chat Message
 
 Sends a user message to the agent.
 
@@ -279,7 +311,7 @@ Sends a user message to the agent.
 }
 ```
 
-#### 4. Tool Call Response
+#### 5. Tool Call Response
 
 Responds to any `tool_call_request` or `feedback_request` from the server.
 
@@ -337,7 +369,7 @@ what every provider route can render and what the desktop client can decode. An 
 limit is answered as a tool error rather than dropped silently. Declare the intent with
 `media.returnsMedia` on the tool definition; the caps, not the declaration, are what enforce it.
 
-#### 5. Model Updated Notification
+#### 6. Model Updated Notification
 
 Notifies the server when the client updates the model externally (e.g., user manual edit).
 
@@ -353,7 +385,7 @@ Notifies the server when the client updates the model externally (e.g., user man
 }
 ```
 
-#### 6. Stop Iteration
+#### 7. Stop Iteration
 
 Interrupts the current agent loop without disconnecting the session.
 
@@ -366,7 +398,7 @@ Interrupts the current agent loop without disconnecting the session.
 
 The agent stops after the current API call completes, then sends `agent_complete` with status `awaiting_user`. The session remains active and can receive new `chat` messages.
 
-#### 7. Add File (RAG)
+#### 8. Add File (RAG)
 
 Attaches a reference document to the session. The content is sent inline — as plain UTF-8 text or, for binary documents (PDF/DOCX/XLSX), base64-encoded. Decoded size is capped by `config.ragMaxFileBytes`, and the number of attached files by `config.ragMaxFilesPerSession`. The overall WebSocket frame is capped by `config.websocketMaxPayloadBytes`.
 
@@ -384,7 +416,7 @@ Attaches a reference document to the session. The content is sent inline — as 
 
 `fileId` is optional; the server assigns one if omitted. The server replies with a `file_added` snapshot immediately (`status: "processing"`) and again once extraction/embedding completes (`status: "ready"`).
 
-#### 8. Remove File (RAG)
+#### 9. Remove File (RAG)
 
 Removes a previously attached file and all of its artifacts.
 
@@ -398,7 +430,7 @@ Removes a previously attached file and all of its artifacts.
 
 The server replies with a `file_removed` snapshot.
 
-#### 9. Disconnect
+#### 10. Disconnect
 
 Gracefully closes the session and cleans up all server-side resources including the temp directory.
 
@@ -467,9 +499,33 @@ Sent after successful initialization. Lists available agents.
     "sfd": "socrates",
     "cld": "socrates"
   },
+  "intelligenceLevels": {
+    "default": "standard",
+    "byProvider": {
+      "anthropic": [
+        {"id": "standard", "label": "Standard", "relativeCost": 1,
+         "description": "Balanced quality and cost. Recommended for most work."},
+        {"id": "high", "label": "High", "relativeCost": 2.5,
+         "description": "A more capable model with deeper reasoning."},
+        {"id": "maximum", "label": "Maximum", "relativeCost": 5,
+         "description": "The most capable model available. Use it for the hardest problems."}
+      ],
+      "google": [
+        {"id": "standard", "label": "Standard", "relativeCost": 1, "description": "..."},
+        {"id": "high", "label": "High", "relativeCost": 1.5, "description": "..."},
+        {"id": "maximum", "label": "Maximum", "relativeCost": 2.5, "description": "..."}
+      ]
+    }
+  },
   "timestamp": "2025-01-15T10:30:00.100Z"
 }
 ```
+
+- `intelligenceLevels` — **Optional.** The intelligence ladder this deployment offers (see [Intelligence Levels](#intelligence-levels)). Absent entirely when no provider defines one, so a client that ignores it sees exactly the payload it saw before the field existed.
+  - `default` — the level id used when a client sends none.
+  - `byProvider` — ladders keyed by provider id, ordered cheapest to most capable. **A provider with no ladder is simply absent from this map** — that absence is how a client knows to hide the control rather than needing a separate "supported" list.
+  - `relativeCost` — roughly how much more a level costs than that provider's cheapest rung, derived from the server's own pricing table. Clients are expected to surface this; see [Intelligence Levels](#intelligence-levels).
+  - Level ids are **per provider and need not match across providers** — one brand may offer `standard | high | maximum` and another `fast | thorough`. Always populate the control from the entry for the *currently selected* provider.
 
 #### 3. Agent Selected
 
@@ -490,6 +546,7 @@ Confirms the selected agent is ready.
     {"id": "zai", "name": "GLM (OpenRouter)"}
   ],
   "currentProvider": "anthropic",
+  "currentIntelligence": "standard",
   "timestamp": "2025-01-15T10:30:00.200Z"
 }
 ```
@@ -498,6 +555,7 @@ Confirms the selected agent is ready.
 - `agentName` — Display name from the agent's frontmatter.
 - `supportedProviders` — Providers this agent accepts, in `{id, name}` form. Same format as the `supportedProviders` array in `session_ready`. Use this to populate a provider selector after agent selection — especially important for custom agents where the supported providers are only known after the server parses the config.
 - `currentProvider` — The provider ID that was actually selected for this session (one of `config.agentProviders`, e.g. `"anthropic"`, `"google"`, or an OpenRouter brand such as `"zai"`). Resolved from the `provider` field of the `select_agent` message, falling back to `agentDefaultProvider` in config, or forced to the single entry when `supportedProviders` has exactly one item. Every brand takes its models from its own registry entry (`model` / `summaryModel`) — `config.nativeAgentProviders` for the direct-API brands, `config.openRouterAgentProviders` for the gateway-routed ones, which additionally all share the same internal code paths.
+- `currentIntelligence` — **Optional.** The intelligence level actually applied, which may differ from what was requested if the id was unknown for this provider (see [Intelligence Levels](#intelligence-levels)). Omitted entirely when the provider has no ladder. Display this rather than what you asked for.
 
 #### 4. Agent Text
 
@@ -515,7 +573,24 @@ Text response from the agent.
 
 `isThinking: true` indicates internal reasoning — display is optional.
 
-#### 5. Tool Call Notification
+#### 5. Intelligence Changed
+
+Acknowledges a [`set_intelligence`](#3-set-intelligence) request.
+
+```json
+{
+  "type": "intelligence_changed",
+  "sessionId": "sess_abc123",
+  "currentIntelligence": "high",
+  "timestamp": "2025-01-15T10:30:00.300Z"
+}
+```
+
+- `currentIntelligence` — the level **actually applied**, which is not always the one requested: an unknown id falls back to the current provider's default, and a provider with no ladder answers `null`. Display this value rather than the one you sent.
+
+Sent only in response to `set_intelligence`. A level chosen as part of `select_agent` is reported on `agent_selected` instead.
+
+#### 6. Tool Call Notification
 
 Informs the client that a tool is being called (for UI display). Sent for all tools — built-in and custom.
 
@@ -530,7 +605,7 @@ Informs the client that a tool is being called (for UI display). Sent for all to
 }
 ```
 
-#### 6. Tool Call Request
+#### 7. Tool Call Request
 
 Requests the client to execute a model interaction and return results via `tool_call_response`. Sent for both built-in client interaction tools and any custom registered tools.
 
@@ -682,7 +757,7 @@ The response is keyed by run ID, then by variable name. Each variable entry has 
 
 For **custom registered tools**, the `toolName` will match a name from the `tools` array provided in `initialize_session`, and `result` can be any JSON value meaningful to the agent.
 
-#### 7. Tool Call Completed
+#### 8. Tool Call Completed
 
 Sent after a built-in tool finishes execution.
 
@@ -697,7 +772,7 @@ Sent after a built-in tool finishes execution.
 }
 ```
 
-#### 8. Visualization
+#### 9. Visualization
 
 Sends an SVG visualization to the client.
 
@@ -718,7 +793,7 @@ Sends an SVG visualization to the client.
 - `data` is a raw SVG string (not base64, not PNG)
 - `description` is optional
 
-#### 9. Feedback Request
+#### 10. Feedback Request
 
 Requests feedback loop analysis data from the client, used by the Seldon and LTM narrative tools.
 
@@ -767,7 +842,7 @@ Requests feedback loop analysis data from the client, used by the Seldon and LTM
 }
 ```
 
-#### 10. Get Variable Data Request
+#### 11. Get Variable Data Request
 
 Requests time-series data for specific variables from specific runs.
 
@@ -787,7 +862,7 @@ Requests time-series data for specific variables from specific runs.
 
 **Client response** — send `tool_call_response` with `callId` set to the `requestId` and the `result` in the `get_variable_data` shape shown in §6 above (keyed by run ID → variable name → `{ time, values }`).
 
-#### 11. Agent Complete
+#### 12. Agent Complete
 
 Signals the agent has finished the current request. **Agent execution only stops when the client disconnects or when this message is received** — clients should treat `agent_complete` as the authoritative signal that the agent is idle and ready for the next input.
 
@@ -803,7 +878,7 @@ Signals the agent has finished the current request. **Agent execution only stops
 
 **Status values:** `"success"` | `"error"` | `"awaiting_user"`
 
-#### 12. Error
+#### 13. Error
 
 Reports errors during processing.
 
@@ -834,7 +909,7 @@ Reports errors during processing.
 
 Note that receiving an `error` message does not mean the agent has stopped — the agent may still continue iterating. Wait for `agent_complete` before treating the agent as idle.
 
-#### 13. File Added (RAG)
+#### 14. File Added (RAG)
 
 Acknowledges an `add_file`. Carries the **full snapshot** of currently attached files so the client always has authoritative state. Sent twice per upload: once immediately (`status: "processing"`) and again when extraction/embedding completes (`status: "ready"`, or `"error"` on failure).
 
@@ -860,7 +935,7 @@ Acknowledges an `add_file`. Carries the **full snapshot** of currently attached 
 
 `tier` is `"manifest"` (read in full by the agent) or `"vector"` (searched via `search_documents`).
 
-#### 14. File Removed (RAG)
+#### 15. File Removed (RAG)
 
 Acknowledges a `remove_file`, carrying the updated full snapshot (the same `files` shape as `file_added`).
 
@@ -1077,6 +1152,59 @@ Enforcement is in two places. `isToolAvailable` (see `agent/tools/toolAvailabili
 Provider IDs name the actual LLM brand the user is choosing. The direct-API brands are defined entirely in `config.nativeAgentProviders` (currently `anthropic`, `google`, `deepseek`, `openai`): `anthropic` and `google` each drive their own vendor SDK, and every other entry is assumed to speak the OpenAI-compatible chat-completions API and shares one code path. The OpenRouter-backed brands are defined entirely in `config.openRouterAgentProviders` (currently `qwen`, `moonshotai`, `zai`) — the orchestrator shares one code path for all of them too. Either way the models come from that brand's `model` / `summaryModel` entry, and adding or removing a brand is a single edit to the matching object in `config.js`.
 
 The Markdown body below the frontmatter is the agent's full system prompt/instructions.
+
+---
+
+## Intelligence Levels
+
+An **intelligence level** is a single lever the end user moves to trade money for capability. It selects both the model and the reasoning-effort setting, for the providers that support it.
+
+It is **opt-in on both sides**. A client that never sends `intelligence` gets its provider's default level, whose model and effort are byte-identical to what the agent sent before the feature existed; a client talking to a deployment with no ladders never sees `intelligenceLevels` in `session_ready` at all.
+
+### The ladder lives in config
+
+Everything about levels — which exist, what they are called, and every model behind them — is defined in `config.agentIntelligence` in `config.js`. Nothing about them is hard-coded, so adding a rung, renaming one, or giving a provider its own vocabulary is a config edit and a restart, with no code change and no client release.
+
+```js
+"agentIntelligence": {
+    defaultLevel: 'standard',
+    providers: {
+        anthropic: [
+            { id: 'standard', label: 'Standard', description: '...', model: 'claude-sonnet-5', effort: 'medium' },
+            { id: 'high',     label: 'High',     description: '...', model: 'claude-opus-5',   effort: 'high' },
+            { id: 'maximum',  label: 'Maximum',  description: '...', model: 'claude-fable-5' }
+        ]
+    }
+}
+```
+
+| Field | Required | Meaning |
+|---|---|---|
+| `id` | yes | The value the client sends back on `select_agent` / `set_intelligence`. |
+| `label` | no | UI text. Defaults to a title-cased `id`. |
+| `description` | no | Client tooltip. |
+| `model` | yes | The conversation model for this rung. |
+| `effort` | **no** | Anthropic/OpenAI effort, or a Gemini thinking level. **Omit it to send no effort parameter at all** and let the provider apply its own default — which is a different request from sending a low value, and is why `maximum` above has none. |
+| `thinking` | no | Provider-shaped override of `agentAnthropicThinking`. |
+| `relativeCost` | no | Overrides the multiplier derived from `utilities/pricing.js`. Set it on a rung that raises effort without changing model, since price-derived comparison can't see that. |
+| `toolModels` | no | Engine-tool lanes for this rung; otherwise `agentToolModels` applies. |
+
+**Ladders are per provider**, ordered cheapest first, and level ids need not match across providers. A provider absent from `providers` ignores the lever entirely and keeps its `nativeAgentProviders` model — that absence is the "providers that support it" gate, which is why the OpenRouter brands need no entry and no special case.
+
+### What the lever moves, and what it does not
+
+| | Follows the level |
+|---|---|
+| The agent's own conversation model and effort | **Yes** |
+| The engine tools the agent calls (`generate_quantitative_model`, etc.), via `config.agentToolModels` keyed by level | **Yes** |
+| Conversation-history summarization (`summaryModel`) | **No — deliberately.** Summarizing long histories at top-rung prices would dominate the bill for no quality gain, so it stays cheap at every level. |
+
+### Constraints worth knowing
+
+- **The floor is the default.** The first rung of each ladder reproduces today's behaviour and there is deliberately no rung below it — the lever raises cost from the baseline, it never lowers quality beneath it. Cheap models used internally (e.g. `claude-haiku-4-5` as `summaryModel`) are not reachable from the ladder.
+- **It can change at any time.** See [`set_intelligence`](#3-set-intelligence) — the level changes mid-conversation without disturbing the conversation.
+- **Nothing rejects a bad value.** An unknown id resolves to the provider's default and the server reports what it actually applied.
+- **Clients are expected to surface the cost.** Each level carries a `relativeCost` derived from the server's own pricing table; a UI that offers the lever without showing that a higher rung costs several times more is not doing its job.
 
 ---
 
