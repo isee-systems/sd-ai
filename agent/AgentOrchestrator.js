@@ -981,6 +981,21 @@ export class AgentOrchestrator {
         await this.#handleAnthropicSdkUserMessage(message);
         break;
 
+      // The SDK reset its transcript and mounted a fresh one — /clear, plan-mode
+      // exit, or a fresh-session flow. None of those are reachable from here (we
+      // send no slash commands and run bypassPermissions), so this is a notice,
+      // not a branch we act on: session_id is what `resume` keys on and it is
+      // unchanged, and nothing we cache is scoped to the conversation id.
+      case 'conversation_reset':
+        break;
+
+      // Liveness heartbeat the SDK emits every 30s while a tool is still running
+      // (our long generate_* tools trip it routinely). Nothing to do: the client
+      // already has the tool-call notification and gets the completion message
+      // when the tool returns.
+      case 'tool_progress':
+        break;
+
       default:
         logger.warn(`Anthropic SDK: Unhandled message type: ${message.type}`, message);
     }

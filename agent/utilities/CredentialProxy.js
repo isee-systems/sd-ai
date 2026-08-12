@@ -113,25 +113,44 @@ class CredentialProxy {
     const presented = req.headers['x-api-key']
       || (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '');
 
-    if (!presented || !this.#tokens.has(presented)) {
-      // The claude CLI probes the base URL's root with no headers when a session
-      // starts, so that one case is silent — logging it would put a line in the
-      // log for every connect. Everything else here is worth a record: a
-      // presented credential that is not live means a worker outliving its
-      // session or another process on the host trying the relay, and an
-      // unauthenticated request to a real endpoint means the sentinel never
-      // reached the sandbox.
-      if (presented) {
-        logger.warn(`[credential-proxy] rejected request to ${req.url}: expired or unknown session token`);
-      } else if (req.url.split('?')[0] !== '/') {
-        logger.warn(`[credential-proxy] rejected unauthenticated request to ${req.url}`);
-      }
-      res.writeHead(401, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ type: 'error', error: { type: 'authentication_error', message: 'Invalid or expired session credential' } }));
-      req.resume();
+    // A credential that is not live is always refused, whatever it asks for: it
+    // means a worker outliving its session, or another process on the host
+    // trying the relay. Worth a record either way.
+    if (presented && !this.#tokens.has(presented)) {
+      logger.warn(`[credential-proxy] rejected request to ${req.url}: expired or unknown session token`);
+      this.#refuse(req, res);
       return;
     }
 
+    // A request carrying no credential is relayed with none either, and upstream
+    // decides. The CLI reaches for several endpoints before it has any reason to
+    // authenticate — a `HEAD /api/hello` preconnect so the first real turn does
+    // not pay DNS and the TLS handshake, a probe of the base URL's root — and
+    // since it is this process, not the CLI, that holds the connection to
+    // Anthropic, answering those locally would leave the handshake to happen on
+    // the first /v1/messages anyway. The set of them is the CLI's business and
+    // changes when it is upgraded, so nothing here enumerates it.
+    //
+    // What the proxy guarantees is narrower than a gate on the request, and
+    // survives that churn: the operator's credential is attached only to a
+    // request that presented a live sentinel. Anything else reaches api.anthropic
+    // .com exactly as an anonymous caller would, which is a thing any process on
+    // this host could do without going through here.
+    this.#relay(req, res, Boolean(presented));
+  }
+
+  #refuse(req, res) {
+    res.writeHead(401, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ type: 'error', error: { type: 'authentication_error', message: 'Invalid or expired session credential' } }));
+    req.resume();
+  }
+
+  /**
+   * Forward one request upstream. `credentialed` decides whether the operator's
+   * real key goes with it — false for any request that arrived without a
+   * sentinel, which has none to exchange and must not be lent one.
+   */
+  #relay(req, res, credentialed) {
     const upstream = this.#upstream;
     const headers = {};
     for (const [name, value] of Object.entries(req.headers)) {
@@ -140,13 +159,16 @@ class CredentialProxy {
     headers.host = upstream.host;
 
     // The swap. Whichever scheme the operator configured is the one sent on; the
-    // sentinel never travels past this process.
+    // sentinel never travels past this process. Stripped unconditionally, so an
+    // uncredentialed relay cannot carry a credential either.
     delete headers['x-api-key'];
     delete headers['authorization'];
-    if (process.env.ANTHROPIC_AUTH_TOKEN) {
-      headers['authorization'] = `Bearer ${process.env.ANTHROPIC_AUTH_TOKEN}`;
-    } else {
-      headers['x-api-key'] = process.env.ANTHROPIC_API_KEY;
+    if (credentialed) {
+      if (process.env.ANTHROPIC_AUTH_TOKEN) {
+        headers['authorization'] = `Bearer ${process.env.ANTHROPIC_AUTH_TOKEN}`;
+      } else {
+        headers['x-api-key'] = process.env.ANTHROPIC_API_KEY;
+      }
     }
 
     const basePath = upstream.pathname.replace(/\/$/, '');
@@ -164,6 +186,14 @@ class CredentialProxy {
         headers,
       },
       (upstreamRes) => {
+        // The diagnostic the local 401 used to carry, now taken from the one
+        // party that actually knows which endpoints need a credential. An
+        // uncredentialed request upstream refuses means the sentinel never
+        // reached the sandbox; a probe answers 200 and stays silent, and stays
+        // silent through a CLI upgrade that adds another one.
+        if (!credentialed && (upstreamRes.statusCode === 401 || upstreamRes.statusCode === 403)) {
+          logger.warn(`[credential-proxy] upstream refused uncredentialed request to ${req.url} (${upstreamRes.statusCode})`);
+        }
         const outHeaders = {};
         for (const [name, value] of Object.entries(upstreamRes.headers)) {
           if (!HOP_BY_HOP.has(name.toLowerCase())) outHeaders[name] = value;

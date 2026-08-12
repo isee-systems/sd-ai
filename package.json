@@ -1,12 +1,12 @@
 {
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.3.170",
-    "@anthropic-ai/sdk": "^0.103.0",
+    "@anthropic-ai/claude-agent-sdk": "^0.3.228",
+    "@anthropic-ai/sdk": "^0.116.0",
     "@anthropic-ai/tokenizer": "^0.0.4",
-    "@google/adk": "^1.1.0",
-    "@google/genai": "^1.41.0",
-    "@openrouter/agent": "^0.7.0",
-    "@openrouter/sdk": "^0.12.79",
+    "@google/adk": "^1.6.0",
+    "@google/genai": "^2.16.0",
+    "@openrouter/agent": "^0.9.0",
+    "@openrouter/sdk": "^0.13.67",
     "async": "^3.2.6",
     "chalk": "^5.4.1",
     "cli-progress": "^3.12.0",

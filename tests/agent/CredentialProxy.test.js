@@ -18,9 +18,9 @@ let upstreamOrigin;
 let received;
 let savedEnv;
 
-function request(path, headers, body) {
+function request(method, path, headers, body) {
   return new Promise((resolve, reject) => {
-    const req = http.request(`${credentialProxy.origin}${path}`, { method: 'POST', headers }, (res) => {
+    const req = http.request(`${credentialProxy.origin}${path}`, { method, headers }, (res) => {
       let chunks = '';
       res.on('data', (d) => { chunks += d; });
       res.on('end', () => resolve({ status: res.statusCode, body: chunks }));
@@ -66,7 +66,7 @@ describe('CredentialProxy', () => {
   it('exchanges a session sentinel for the real key', async () => {
     const sentinel = credentialProxy.issueToken('session-a');
 
-    const res = await request('/v1/messages', { 'x-api-key': sentinel, 'content-type': 'application/json' }, '{"model":"x"}');
+    const res = await request('POST', '/v1/messages', { 'x-api-key': sentinel, 'content-type': 'application/json' }, '{"model":"x"}');
 
     expect(res.status).toBe(200);
     expect(received.headers['x-api-key']).toBe('sk-ant-the-real-one');
@@ -77,7 +77,7 @@ describe('CredentialProxy', () => {
   it('never forwards the sentinel itself', async () => {
     const sentinel = credentialProxy.issueToken('session-b');
 
-    await request('/v1/messages', { 'x-api-key': sentinel }, '{}');
+    await request('POST', '/v1/messages', { 'x-api-key': sentinel }, '{}');
 
     expect(JSON.stringify(received.headers)).not.toContain(sentinel);
   });
@@ -91,26 +91,46 @@ describe('CredentialProxy', () => {
   });
 
   it('rejects an unknown credential without touching upstream', async () => {
-    const res = await request('/v1/messages', { 'x-api-key': 'sk-ant-guessed' }, '{}');
+    const res = await request('POST', '/v1/messages', { 'x-api-key': 'sk-ant-guessed' }, '{}');
 
     expect(res.status).toBe(401);
     expect(received).toBeNull();
   });
 
-  it('rejects a request carrying no credential at all', async () => {
-    const res = await request('/v1/messages', {}, '{}');
+  it('relays a request carrying no credential, without one', async () => {
+    // The CLI probes several endpoints before it has any reason to authenticate
+    // — `HEAD /api/hello` preconnects so the first turn does not pay the TLS
+    // handshake. Refusing those locally would defeat the preconnect, since it is
+    // the proxy that holds the connection to Anthropic. Which endpoints those
+    // are is the CLI's business and changes on upgrade, so the proxy does not
+    // enumerate them; it only refuses to lend them a credential.
+    const res = await request('HEAD', '/api/hello', {}, undefined);
 
-    expect(res.status).toBe(401);
-    expect(received).toBeNull();
+    expect(res.status).toBe(200);
+    expect(received.url).toBe('/api/hello');
+    expect(received.headers['x-api-key']).toBeUndefined();
+    expect(received.headers.authorization).toBeUndefined();
+  });
+
+  it('never lends the real credential to an unauthenticated caller', async () => {
+    // The invariant that replaces the path gate: no sentinel, no key — whatever
+    // the endpoint. Upstream refuses it exactly as it would any anonymous
+    // caller, which this one could have been by calling Anthropic directly.
+    const res = await request('POST', '/v1/messages', {}, '{"model":"x"}');
+
+    expect(res.status).toBe(200); // the stand-in upstream answers everything
+    expect(received.headers['x-api-key']).toBeUndefined();
+    expect(received.headers.authorization).toBeUndefined();
+    expect(JSON.stringify(received.headers)).not.toContain('sk-ant-the-real-one');
   });
 
   it('stops honouring a sentinel once its session ends', async () => {
     const sentinel = credentialProxy.issueToken('session-e');
-    expect((await request('/v1/messages', { 'x-api-key': sentinel }, '{}')).status).toBe(200);
+    expect((await request('POST', '/v1/messages', { 'x-api-key': sentinel }, '{}')).status).toBe(200);
 
     credentialProxy.revokeToken(sentinel);
 
-    const after = await request('/v1/messages', { 'x-api-key': sentinel }, '{}');
+    const after = await request('POST', '/v1/messages', { 'x-api-key': sentinel }, '{}');
     expect(after.status).toBe(401);
   });
 
@@ -119,7 +139,7 @@ describe('CredentialProxy', () => {
     // token rather than an api key.
     const sentinel = credentialProxy.issueToken('session-f');
 
-    const res = await request('/v1/messages', { authorization: `Bearer ${sentinel}` }, '{}');
+    const res = await request('POST', '/v1/messages', { authorization: `Bearer ${sentinel}` }, '{}');
 
     expect(res.status).toBe(200);
     expect(received.headers['x-api-key']).toBe('sk-ant-the-real-one');
@@ -130,7 +150,7 @@ describe('CredentialProxy', () => {
     process.env.ANTHROPIC_AUTH_TOKEN = 'oat-real-token';
     const sentinel = credentialProxy.issueToken('session-g');
 
-    await request('/v1/messages', { 'x-api-key': sentinel }, '{}');
+    await request('POST', '/v1/messages', { 'x-api-key': sentinel }, '{}');
 
     expect(received.headers.authorization).toBe('Bearer oat-real-token');
     expect(received.headers['x-api-key']).toBeUndefined();
@@ -144,7 +164,7 @@ describe('CredentialProxy', () => {
     process.env.ANTHROPIC_BASE_URL = `${upstreamOrigin}/anthropic`;
     const sentinel = credentialProxy.issueToken('session-h');
 
-    await request('/v1/messages', { 'x-api-key': sentinel }, '{}');
+    await request('POST', '/v1/messages', { 'x-api-key': sentinel }, '{}');
 
     expect(received.url).toBe('/anthropic/v1/messages');
   });
