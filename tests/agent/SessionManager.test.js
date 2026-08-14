@@ -131,6 +131,62 @@ describe('SessionManager', () => {
       // No unitWarnings field and no errors => nothing to report.
       expect(issues).toBeNull();
     });
+
+    it('drops the cached token count so the next reader measures the new model', () => {
+      const sessionId = sessionManager.createSession(null);
+      sessionManager.initializeSession(sessionId, 'sfd', {}, [], {}, '');
+
+      const small = sessionManager.getModelTokenCount(sessionId);
+      sessionManager.updateClientModel(sessionId, {
+        variables: Array.from({ length: 50 }, (_, i) => ({ name: `stock_${i}`, type: 'stock', equation: '100' }))
+      });
+
+      expect(sessionManager.getModelTokenCount(sessionId)).toBeGreaterThan(small);
+    });
+  });
+
+  describe('onModelChange', () => {
+    // The tool list that follows the model hangs off this. The case it exists for is
+    // the one no server-side caller can announce: the host application inserting an
+    // assembly through a client tool, which reaches the server only as a new model.
+    it('notifies listeners on every model change, whatever made it', () => {
+      const sessionId = sessionManager.createSession(null);
+      sessionManager.initializeSession(sessionId, 'sfd', {}, [], {}, '');
+
+      let calls = 0;
+      sessionManager.onModelChange(sessionId, () => calls++);
+
+      sessionManager.updateClientModel(sessionId, { variables: [{ name: 'a', type: 'stock' }] });
+      sessionManager.updateClientModel(sessionId, { variables: [{ name: 'b', type: 'stock' }] });
+
+      expect(calls).toBe(2);
+    });
+
+    it('keeps going when a listener throws, and stops after unsubscribe', () => {
+      const sessionId = sessionManager.createSession(null);
+      sessionManager.initializeSession(sessionId, 'sfd', {}, [], {}, '');
+
+      const seen = [];
+      sessionManager.onModelChange(sessionId, () => { throw new Error('listener blew up'); });
+      const unsubscribe = sessionManager.onModelChange(sessionId, () => seen.push('second'));
+
+      expect(() => sessionManager.updateClientModel(sessionId, { variables: [] })).not.toThrow();
+      expect(seen).toEqual(['second']);
+
+      unsubscribe();
+      sessionManager.updateClientModel(sessionId, { variables: [] });
+      expect(seen).toEqual(['second']);
+    });
+
+    it('forgets a deleted session\'s listeners rather than holding its orchestrator', async () => {
+      const sessionId = sessionManager.createSession(null);
+      sessionManager.initializeSession(sessionId, 'sfd', {}, [], {}, '');
+      sessionManager.onModelChange(sessionId, () => {});
+
+      await sessionManager.deleteSession(sessionId);
+
+      expect(sessionManager.modelChangeListeners.has(sessionId)).toBe(false);
+    });
   });
 
   describe('conversation history', () => {

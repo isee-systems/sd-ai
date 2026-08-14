@@ -2,7 +2,7 @@ import { VisualizationEngine } from '../utilities/VisualizationEngine.js';
 import { MediaStore } from '../utilities/MediaStore.js';
 import { toolResultToText, toMcpContentResult, mediaBlocksOf } from '../utilities/ToolResultFormatter.js';
 import { sanitizeSchemaForGemini } from './builtin/toolHelpers.js';
-import { isToolAvailable, modelStateGate } from './toolAvailability.js';
+import { isToolAvailable, isToolActive, modelStateGate } from './toolAvailability.js';
 
 // Lazy-loaded provider SDK symbols. Each tool provider serves multiple agent
 // loops (SDK, ADK, manual) but only one is selected per session — eagerly
@@ -111,6 +111,48 @@ export class BuiltInToolProvider {
     // pushed onto the next request. Drained by the orchestrator's
     // beforeModelCallback, which drains both providers' queues.
     this.pendingAdkMedia = [];
+
+    // MCP handles for the tools whose availability follows the model, keyed by name:
+    // { registered, toolDef }. Populated by getMcpServer, read by
+    // syncModelStateGates. Empty on every other route, which rebuilds its tool list
+    // instead of toggling one.
+    this.#mcpModelStateTools = new Map();
+  }
+
+  // Private because nothing outside this class may hold an MCP handle: enabling a
+  // tool is how it becomes callable, and that decision belongs to one predicate.
+  #mcpModelStateTools;
+
+  /**
+   * Bring the MCP tool list back in line with the model, and tell the client it
+   * moved. Called after any change to the model, from any source.
+   *
+   * This is the half of "withhold what cannot be used" that a static list cannot do.
+   * The Agent SDK's MCP server is built once per query, so a tool filtered out at
+   * registration stays gone for the rest of the turn no matter what the agent does to
+   * the model in the meantime — which is how an agent that had just inserted an
+   * assembly came to tell a user it could not edit an equation. Toggling the
+   * registration instead means MCP recomputes tools/list and notifies the client
+   * (autoRefresh, debounced), so the tool appears in the agent's next request.
+   *
+   * A no-op on every other route: their maps are empty because they rebuild their
+   * declarations per turn (and per iteration, in the manual loops) from isToolActive.
+   */
+  syncModelStateGates() {
+    if (this.#mcpModelStateTools.size === 0) return;
+
+    const session = this.#session();
+
+    for (const [toolName, { registered, toolDef }] of this.#mcpModelStateTools) {
+      const shouldBeLive = !modelStateGate(toolDef, session);
+      // Only on an actual transition: MCP fires a tools/list_changed notification on
+      // every update() call, and a model edited in a loop would otherwise notify the
+      // client once per edit with nothing to report.
+      if (shouldBeLive === registered.enabled) continue;
+
+      shouldBeLive ? registered.enable() : registered.disable();
+      logger.log(`${shouldBeLive ? 'Restored' : 'Withheld'} ${toolName} — model state changed`);
+    }
   }
 
   /**
@@ -212,10 +254,11 @@ export class BuiltInToolProvider {
    * to keep it unavailable. Mirrors the filtering in getAdkTools.
    *
    * Model-SIZE constraints are deliberately not applied here. This server is built
-   * once per query and cannot be re-registered while the query runs, so a size gate
-   * decided here would still be answering for the model as it stood before the agent
-   * edited it. Those gates live in the handler wrapper instead — see
-   * #applyModelStateGates — where they are re-read on every call.
+   * once per query and cannot be re-registered while the query runs. A tool gated on
+   * the model is registered here whether or not it is usable yet, and then disabled —
+   * MCP omits a disabled tool from tools/list and refuses a call to it, so the agent
+   * does not see it, and syncModelStateGates can bring it back the moment the model
+   * makes it legal. Registering only the live ones would leave nothing to revive.
    * @returns {Object} MCP server instance
    */
   async getMcpServer(mode) {
@@ -224,6 +267,9 @@ export class BuiltInToolProvider {
     const server = new McpServer({ name: 'builtin', version: '1.0.0' });
     const session = this.#session();
     let count = 0;
+    let withheld = 0;
+
+    this.#mcpModelStateTools = new Map();
 
     for (const [toolName, toolDef] of Object.entries(toolCollection.tools)) {
       if (toolDef.nonSdkOnly) continue;
@@ -255,14 +301,26 @@ export class BuiltInToolProvider {
       // Register via MCP's own registerTool so MCP 1.29's zod-v4-aware converter
       // builds the advertised schema (preserving field descriptions and full
       // structure). registerTool takes the raw zod shape and wraps it internally.
-      server.registerTool(toolName, {
+      const registered = server.registerTool(toolName, {
         description: toolDef.description,
         inputSchema: toolDef.inputSchema.shape
       }, sdkHandler);
       count++;
+
+      if (!toolDef.requiresModelContent && !toolDef.maxModelTokens) continue;
+
+      // Held so syncModelStateGates can flip it later. Disabling before the server is
+      // connected is silent by design — MCP's sendToolListChanged is a no-op until
+      // there is a client — so a tool that starts dead is simply never advertised,
+      // rather than advertised and then retracted in front of the agent.
+      this.#mcpModelStateTools.set(toolName, { registered, toolDef });
+      if (modelStateGate(toolDef, session)) {
+        registered.disable();
+        withheld++;
+      }
     }
 
-    logger.log(`Creating builtin MCP server with ${count} tools`);
+    logger.log(`Creating builtin MCP server with ${count - withheld} tools (${withheld} withheld pending model state)`);
     // Match the shape the Agent SDK's createSdkMcpServer returns; query() consumes
     // `instance` as a generic MCP server over a transport (no class check).
     return { type: 'sdk', name: 'builtin', instance: server };
@@ -276,7 +334,7 @@ export class BuiltInToolProvider {
 
     for (const [toolName, toolDef] of Object.entries(toolCollection.tools)) {
       if (toolDef.nonSdkOnly) continue;
-      if (!isToolAvailable(toolDef, { mode, session, canWriteToLocalSandbox: this.canWriteToLocalSandbox })) continue;
+      if (!isToolActive(toolDef, { mode, session, canWriteToLocalSandbox: this.canWriteToLocalSandbox })) continue;
 
       adkTools.push(new FunctionTool({
         name: toolName,

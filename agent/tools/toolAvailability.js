@@ -1,3 +1,5 @@
+import { countTokens } from '@anthropic-ai/tokenizer';
+
 /**
  * The one place that decides whether a built-in tool is offered to the model.
  *
@@ -85,26 +87,65 @@ export function modelHasContent(model) {
 }
 
 /**
- * The gates that depend on the MODEL rather than the session, checked when a tool is
- * CALLED rather than when it is registered.
+ * How big this session's model is in tokens, measured at most once per version of it.
  *
- * They are here, and not in isToolAvailable, because the model changes inside a turn
- * while a route's tool list does not. Every route builds its tool list once, at the
- * top of the turn — and on the Agent SDK route it is an MCP server that cannot be
- * re-registered mid-query at all. Deciding a model-shaped gate there freezes an
- * answer that was only true of the model as it stood before the agent touched it: an
- * agent that inserted an assembly into an empty model spent the rest of that turn
- * believing it had no way to edit an equation, and told the user to go and
- * double-click the converters by hand.
+ * Cached on the session and invalidated by SessionManager.updateClientModel, because
+ * the two frequencies are nothing alike: a model changes on every edit in a long
+ * building loop, while the number is read only when a tool list is built or a gated
+ * tool is called. Measuring on write tokenized a whole model to answer a question
+ * nobody had asked yet.
  *
- * So these two are decided against the live session at call time, and every route
- * registers the tools they gate unconditionally. The cost is one wasted call when a
- * tool is genuinely out of range — paid back by the message, which names the tool to
- * use instead.
+ * Pretty-printed to match what the routes measure, so a count filled in by a route at
+ * the top of a turn and one computed here are the same quantity.
+ */
+export function measureModelTokens(session) {
+  if (!session) return 0;
+
+  if (session.modelTokenCount == null) {
+    session.modelTokenCount = session.clientModel
+      ? countTokens(JSON.stringify(session.clientModel, null, 2))
+      : 0;
+  }
+
+  return session.modelTokenCount;
+}
+
+/**
+ * Whether a tool should be in the agent's tool list right now: allowed for this
+ * session AND usable against the model as it currently stands.
+ *
+ * What every route builds its declaration list from. The one caller that cannot use
+ * it is the SDK's MCP registration, which has to register a tool it intends to
+ * withhold so it has something to re-enable later — it composes the same two
+ * predicates itself.
+ */
+export function isToolActive(toolDef, options = {}) {
+  return isToolAvailable(toolDef, options) && !modelStateGate(toolDef, options.session);
+}
+
+/**
+ * The gates that depend on the MODEL rather than the session.
+ *
+ * Separate from isToolAvailable because they are not answered once. A session's mode
+ * and grants hold for its whole life; the model changes inside a single turn — a
+ * generate_* call, a targeted edit, an assembly the user's application inserted
+ * through a client tool. A tool gated on the model is therefore live or dead at a
+ * moment, not for a session, and both states have to reach the agent as they happen:
+ * a dead tool withheld from its list, a revived one put back into it. What used to
+ * happen instead was that an agent watched an assembly land in an empty model and
+ * spent the rest of that turn believing it had no way to edit an equation, because
+ * edit_variables had been filtered out when the turn began.
+ *
+ * Callers use this two ways. Routes that can rebuild a tool list — the manual loops,
+ * and every route at the top of a turn — treat a refusal as "withhold this tool"
+ * (see isToolActive). The SDK's MCP server, which is built once per query and cannot
+ * be rebuilt while the query runs, registers the tool and toggles it instead, which
+ * MCP reports to the client as a tools/list change. Either way the handler re-checks
+ * when it runs, since no list is perfectly current at the instant of the call.
  *
  * @param {Object} toolDef  Entry from BuiltInToolProvider's tool collection
  * @param {Object} session  The session record, read live — not a snapshot
- * @returns {string|null}   Why the call must be refused, or null to let it through
+ * @returns {string|null}   Why the tool is dead right now, or null if it is live
  */
 export function modelStateGate(toolDef, session) {
   if (!toolDef) return null;
@@ -114,10 +155,10 @@ export function modelStateGate(toolDef, session) {
   }
 
   if (toolDef.maxModelTokens) {
-    // Kept current by SessionManager.updateClientModel, which recomputes it on every
-    // model change from any source — a generate_* call, a targeted edit, or a model
-    // the client pushed after its own user edited it.
-    const tokens = session?.modelTokenCount ?? 0;
+    // Measured against the model as it stands: SessionManager.updateClientModel drops
+    // the cached count on every change from any source — a generate_* call, a targeted
+    // edit, or a model the client pushed after its own user edited it.
+    const tokens = measureModelTokens(session);
     if (tokens > toolDef.maxModelTokens) {
       return `this model is ~${tokens} tokens, past the ${toolDef.maxModelTokens}-token ceiling for the generative engines. Change it with the targeted-edit tools instead: edit_variables, edit_relationships, edit_specs, edit_modules.`;
     }

@@ -117,9 +117,10 @@ describe('BuiltInToolProvider.getMcpServer — tools the Agent SDK provides nati
 
 describe('BuiltInToolProvider — model-state gating', () => {
   // The bug: an agent that inserted an assembly into an empty model spent the rest of
-  // that turn unable to edit an equation, because the SDK's MCP server had been built
-  // when the model was empty and cannot be re-registered mid-query. Both tools are now
-  // always registered, and the gate is re-read when the handler runs.
+  // that turn unable to edit an equation, because the SDK's MCP server is built once
+  // per query and had been built while the model was still empty. A tool that cannot
+  // be used is withheld — but withholding is only half of it, since the model changes
+  // mid-turn and the list has to change with it.
   const EMPTY_MODEL = { variables: [], relationships: [] };
   const ONE_VARIABLE = { variables: [{ name: 'population', type: 'stock', equation: '100' }] };
 
@@ -128,14 +129,57 @@ describe('BuiltInToolProvider — model-state gating', () => {
     return provider.getTools().tools[toolName].handler(args);
   };
 
-  it('registers both editing paths regardless of model size', async () => {
-    for (const size of [0, config.agentMaxTokensForEngines + 1]) {
-      const names = await registeredToolNames(makeProvider({ modelTokenCount: size }), 'sfd');
-      expect(names.has('edit_variables')).toBe(true);
-      expect(names.has('generate_quantitative_model')).toBe(true);
-    }
+  // What tools/list would return: MCP filters disabled tools out of it.
+  const liveToolNames = async (provider, mode) => {
+    const { instance } = await provider.getMcpServer(mode);
+    return new Set(Object.entries(instance._registeredTools)
+      .filter(([, tool]) => tool.enabled)
+      .map(([name]) => name));
+  };
+
+  it('withholds a tool the model cannot support yet, in both directions', async () => {
+    const empty = await liveToolNames(makeProvider({ clientModel: EMPTY_MODEL }), 'sfd');
+    expect(empty.has('edit_variables')).toBe(false);
+    expect(empty.has('generate_quantitative_model')).toBe(true);
+
+    const huge = await liveToolNames(
+      makeProvider({ clientModel: ONE_VARIABLE, modelTokenCount: config.agentMaxTokensForEngines + 1 }), 'sfd');
+    expect(huge.has('edit_variables')).toBe(true);
+    expect(huge.has('generate_quantitative_model')).toBe(false);
   });
 
+  it('restores a withheld tool when the model gains content mid-query', async () => {
+    // The reported failure, start to finish: the turn opens on an empty model, an
+    // assembly lands, and the agent must be able to edit it without waiting for the
+    // next turn — which on this route means without rebuilding the server.
+    const session = { clientModel: EMPTY_MODEL };
+    const provider = makeProvider(session);
+    const { instance } = await provider.getMcpServer('sfd');
+
+    expect(instance._registeredTools.edit_variables.enabled).toBe(false);
+
+    session.clientModel = ONE_VARIABLE;
+    session.modelTokenCount = null;
+    provider.syncModelStateGates();
+
+    expect(instance._registeredTools.edit_variables.enabled).toBe(true);
+  });
+
+  it('withdraws the engines when the model outgrows them mid-query', async () => {
+    const session = { clientModel: ONE_VARIABLE };
+    const provider = makeProvider(session);
+    const { instance } = await provider.getMcpServer('sfd');
+
+    expect(instance._registeredTools.generate_quantitative_model.enabled).toBe(true);
+
+    session.modelTokenCount = config.agentMaxTokensForEngines + 1;
+    provider.syncModelStateGates();
+
+    expect(instance._registeredTools.generate_quantitative_model.enabled).toBe(false);
+  });
+
+  // The backstop behind the withholding: a list is only as current as its last
+  // rebuild, and a call can land just after the model moved under it.
   it('refuses a targeted edit on an empty model, naming what to do instead', async () => {
     const result = await callTool({ clientModel: EMPTY_MODEL }, 'edit_variables',
       { operation: 'update', data: [{ name: 'population' }] });

@@ -1088,8 +1088,8 @@ Each built-in tool is a plain object returned by a factory function. The fields 
 
 | Field | Type | Description |
 |---|---|---|
-| `maxModelTokens` | `number` | The tool is still registered, but **refuses at call time** while the model's token count exceeds this value. Used for tools that receive the full model (e.g., `generate_quantitative_model`). See *Model-state gates* below. |
-| `requiresModelContent` | `boolean` | The tool is still registered, but **refuses at call time** while the model holds no variables. Used for tools that edit a model in place (`edit_variables`, `edit_relationships`, `edit_specs`, `edit_modules`) — there must be something there to edit, and one variable is the whole bar. |
+| `maxModelTokens` | `number` | Withheld from the agent's tool list while the model's token count exceeds this value, and restored when it drops back. Used for tools that receive the full model (e.g., `generate_quantitative_model`). See *Model-state gates* below. |
+| `requiresModelContent` | `boolean` | Withheld while the model holds no variables, and restored the moment it holds one. Used for tools that edit a model in place (`edit_variables`, `edit_relationships`, `edit_specs`, `edit_modules`) — there must be something there to edit, and one variable is the whole bar. |
 | `requiresMedia` | `'sink' \| 'any'` | Excludes the tool unless the client declared `supportsMedia` at session init **and** its tool list backs that up. `'sink'` needs a client tool with a non-empty `media.inputs` — somewhere a generated picture can go (`generate_image`). `'any'` needs a sink *or* a client tool with `media.returnsMedia` — some way for a handle to exist at all (`view_media`). |
 | `nonSdkOnly` | `boolean` | If `true`, the tool is excluded from the Anthropic SDK (`sdk`) mode's MCP server and the Google ADK tool list. It is only available in `manual` loop mode. Use this for tools that duplicate functionality already provided natively by the SDK (e.g. file system tools). |
 
@@ -1100,27 +1100,42 @@ added there takes effect everywhere rather than on the routes someone remembered
 
 ### Model-state gates
 
-`maxModelTokens` and `requiresModelContent` are decided somewhere else, and later: `modelStateGate`,
-run from the handler wrapper that `BuiltInToolProvider` puts around every tool carrying one of them.
+`maxModelTokens` and `requiresModelContent` are decided by a second predicate, `modelStateGate`, and
+a tool they rule out is **withheld** — kept out of the agent's tool list entirely, not offered and
+then refused. `isToolActive` composes the two, and every route's declaration list is built from it.
 
-They have to be. A route builds its tool list once, at the top of the turn — and the Agent SDK route
-builds an MCP server that cannot be re-registered at all while the query runs. But the model changes
-*during* a turn: a `generate_*` call, a targeted edit, an assembly the user's application inserted
-through a client tool. A size gate answered at registration keeps answering for the model as it stood
-before any of that. That is a real failure, not a hypothetical one — an agent that watched an assembly
-land in an empty model went on to tell the user it had no way to edit an equation and they would have
-to go and double-click the converters themselves, because `edit_variables` had been withheld when the
-turn began and could not come back.
+What makes them a separate predicate is that they are not answered once. A session's mode and grants
+hold for its whole life; the model changes *inside* a turn — a `generate_*` call, a targeted edit, an
+assembly the user's application inserted through a client tool. A tool gated on the model is therefore
+live or dead at a moment, not for a session, and both transitions have to reach the agent as they
+happen. That is a real failure, not a hypothetical one: an agent that watched an assembly land in an
+empty model went on to tell the user it had no way to edit an equation and they would have to go and
+double-click the converters themselves, because `edit_variables` had been filtered out when the turn
+began and nothing put it back.
 
-So tools with these flags are registered unconditionally on every route, and the gate is re-read from
-the live session each time one is called. A refusal comes back as an ordinary error envelope naming
-the tool to use instead (`edit_variables` for a model too big for the engines, `generate_*` for one
-too empty to edit), so the agent can correct itself inside the same turn. The cost is one wasted call
-when a tool is genuinely out of range.
+How the list keeps up depends on what the route can rebuild:
 
-The token count they read is kept current by `SessionManager.updateClientModel`, which re-measures on
-every model change from any source. `maxModelTokens` uses `agentMaxTokensForEngines` from `config.js`
-(default: 32,000).
+| Route | Mechanism |
+|---|---|
+| Anthropic SDK (`sdk` mode) | The MCP server is built once per query and cannot be re-registered, so a gated tool is **registered and then disabled**. MCP omits a disabled tool from `tools/list` and refuses a call to it, and `BuiltInToolProvider.syncModelStateGates()` toggles it as the model moves — which MCP reports to the client as a `notifications/tools/list_changed`, and the Agent SDK's client re-fetches on it. Registering only the live tools would leave nothing to revive. |
+| Manual loops (Anthropic, Gemini, OpenRouter, OpenAI-compatible) | Declarations are rebuilt **every iteration**, so the list tracks whatever the previous tool call did to the model. Filtering is a pass over a fixed map — it costs nothing next to the request it precedes. |
+| Gemini ADK, OpenRouter agent | Rebuilt per turn. Within a turn the call-time backstop below is what holds. |
+
+The trigger is `SessionManager.onModelChange`, fired from `updateClientModel` — the one funnel every
+model change passes through. The orchestrator subscribes for the SDK route. It has to be a
+subscription rather than a call after each edit, because the change that matters most is the one no
+server-side caller makes: the host application inserting an assembly, which reaches the server only
+as a new model.
+
+Behind all of that, the handler wrapper re-checks the gate when a tool actually runs and returns an
+error envelope naming the tool to use instead. No list is perfectly current at the instant of a call
+— a model can move between the request being built and the call landing — and that backstop is what
+keeps a stale list from producing a bad edit rather than a correctable message.
+
+Model size is measured lazily: `updateClientModel` drops the cached count, and `measureModelTokens`
+re-measures for whoever reads it next. A model changes far more often than the count is read, so
+counting on write tokenized a whole model to answer a question nobody had asked. `maxModelTokens`
+uses `agentMaxTokensForEngines` from `config.js` (default: 32,000).
 
 ---
 
