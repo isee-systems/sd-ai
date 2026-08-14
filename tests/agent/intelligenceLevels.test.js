@@ -34,9 +34,9 @@ const LEGACY = {
   anthropicModel: 'claude-sonnet-5',
   anthropicEffort: 'medium',
   anthropicThinking: { type: 'adaptive' },
-  geminiModel: 'gemini-3.6-flash',
-  geminiToolBuildNormal: 'gemini-3.6-flash low',
-  geminiToolBuildHard: 'gemini-3.6-flash high'
+  geminiModel: 'gemini-3.7-flash',
+  geminiToolBuildNormal: 'gemini-3.7-flash low',
+  geminiToolBuildHard: 'gemini-3.7-flash high'
 };
 
 describe('intelligence ladder — resolution', () => {
@@ -610,7 +610,7 @@ describe('intelligence ladder — changing level mid-conversation', () => {
 
     await orc.startConversationGeminiManual('first');
     expect(cachesCreate).toHaveBeenCalledTimes(1);
-    expect(cachesCreate.mock.calls[0][0].model).toBe('gemini-3.6-flash');
+    expect(cachesCreate.mock.calls[0][0].model).toBe('gemini-3.7-flash');
 
     orc.setIntelligence('maximum');
     await orc.startConversationGeminiManual('second');

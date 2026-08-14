@@ -72,8 +72,13 @@ describe('image generation pricing', () => {
   describe('a text-only model is unaffected', () => {
     it('has no image rate and so costs nothing extra', () => {
       expect(getPricing(Provider.GOOGLE, 'gemini-3.6-flash').outputImageTokens).toBeUndefined();
-      expect(costOf('gemini-3.6-flash', { input: 1000, outputText: 500 }))
-        .toBeCloseTo((1000 / 1e6) * 1.50 + (500 / 1e6) * 7.00, 8);
+
+      // Stated as a comparison rather than against literal rates: the published
+      // rates move, but image tokens billed against a model that has no image
+      // rate must add nothing -- never silently fall back to the text rate.
+      const textOnly = costOf('gemini-3.6-flash', { input: 1000, outputText: 500 });
+      expect(costOf('gemini-3.6-flash', { input: 1000, outputText: 500, outputImage: 1120 }))
+        .toBe(textOnly);
     });
   });
 
