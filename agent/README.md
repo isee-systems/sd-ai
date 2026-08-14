@@ -1046,6 +1046,17 @@ Because the model-facing name of a client tool differs by route, the roster is g
 Anthropic SDK route the roster is rewritten to `mcp__client__<name>` along with the rest of the
 prompt.
 
+Every name the roster prints is a tool that is live in that same request. Both the roster and the
+route's registration are generated from one filter, `#liveClientTools`, over the one tool collection
+the provider builds at session start — so the prompt cannot advertise a tool the route did not
+register, under a name the route does not answer to.
+
+The only thing that filter withholds is a client tool whose model-facing name collides with a
+built-in's. That can happen on the ADK route alone, since `client_<name>` is not a name any built-in
+has, and it is refused there the way the manual routes already refuse it — the built-in wins, and the
+withheld tool is logged. If a custom tool is silently unavailable on Gemini ADK but works elsewhere,
+this is why: rename it.
+
 **Write the `description` accordingly** — it is the entire steering surface. It is what the model
 weighs when choosing between your tool and its own general approach, and a vague one loses that
 comparison silently, with no error anywhere to explain why the tool never gets called.

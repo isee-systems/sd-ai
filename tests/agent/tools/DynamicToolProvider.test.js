@@ -469,6 +469,12 @@ describe('DynamicToolProvider.buildPromptRoster', () => {
 
   const MEDIA_CLIENT = { supportsMedia: true };
   const PLAIN_CLIENT = {};
+  const NO_BUILTINS = new Set();
+
+  // Every name the roster prints, so a test can compare it against what was registered.
+  function rosteredNames(roster) {
+    return [...roster.matchAll(/^- `([^`]+)`/gm)].map(m => m[1]);
+  }
 
   afterEach(() => {
     sessionManager.shutdown();
@@ -480,21 +486,21 @@ describe('DynamicToolProvider.buildPromptRoster', () => {
   });
 
   it('names tools the way every route but ADK does', () => {
-    const roster = providerWith([TEXT_TOOL], PLAIN_CLIENT).buildPromptRoster('prefixed');
+    const roster = providerWith([TEXT_TOOL], PLAIN_CLIENT).buildPromptRoster('prefixed', NO_BUILTINS);
 
     expect(roster).toContain('`client_get_variable_tags`');
     expect(roster).toContain(TEXT_TOOL.description);
   });
 
   it('names them bare for the ADK route, which strips the prefix when registering', () => {
-    const roster = providerWith([TEXT_TOOL], PLAIN_CLIENT).buildPromptRoster('bare');
+    const roster = providerWith([TEXT_TOOL], PLAIN_CLIENT).buildPromptRoster('bare', NO_BUILTINS);
 
     expect(roster).toContain('`get_variable_tags`');
     expect(roster).not.toContain('client_get_variable_tags');
   });
 
   it('states the media contract, which the client description cannot', () => {
-    const roster = providerWith([WRITE_MEDIA_TOOL, CAPTURE_TOOL], MEDIA_CLIENT).buildPromptRoster('prefixed');
+    const roster = providerWith([WRITE_MEDIA_TOOL, CAPTURE_TOOL], MEDIA_CLIENT).buildPromptRoster('prefixed', NO_BUILTINS);
 
     // Which argument takes a handle — otherwise the model learns it from a failed call.
     expect(roster).toContain('`image`');
@@ -505,7 +511,7 @@ describe('DynamicToolProvider.buildPromptRoster', () => {
   it('withholds the media note when the client never declared supportsMedia', () => {
     // Same tools, but generate_image is not offered in this session — so the roster
     // must not describe a handle flow that cannot happen.
-    const roster = providerWith([WRITE_MEDIA_TOOL, CAPTURE_TOOL], PLAIN_CLIENT).buildPromptRoster('prefixed');
+    const roster = providerWith([WRITE_MEDIA_TOOL, CAPTURE_TOOL], PLAIN_CLIENT).buildPromptRoster('prefixed', NO_BUILTINS);
 
     expect(roster).toContain('`client_write_interface_media`');
     expect(roster).not.toContain('generate_image');
@@ -513,14 +519,14 @@ describe('DynamicToolProvider.buildPromptRoster', () => {
   });
 
   it('leaves the media note off a tool that exchanges none', () => {
-    const roster = providerWith([TEXT_TOOL], MEDIA_CLIENT).buildPromptRoster('prefixed');
+    const roster = providerWith([TEXT_TOOL], MEDIA_CLIENT).buildPromptRoster('prefixed', NO_BUILTINS);
 
     expect(roster).not.toContain('generate_image');
     expect(roster).not.toContain('may answer with an image');
   });
 
   it('tells the agent the list is complete, so it cannot promise a tool it lacks', () => {
-    const roster = providerWith([TEXT_TOOL], PLAIN_CLIENT).buildPromptRoster('prefixed');
+    const roster = providerWith([TEXT_TOOL], PLAIN_CLIENT).buildPromptRoster('prefixed', NO_BUILTINS);
 
     expect(roster).toContain('## Tools From This Application');
     expect(roster).toMatch(/complete and fixed/i);
@@ -530,9 +536,56 @@ describe('DynamicToolProvider.buildPromptRoster', () => {
     const roster = providerWith([{
       name: 'undocumented',
       inputSchema: { type: 'object', properties: {} }
-    }], PLAIN_CLIENT).buildPromptRoster('prefixed');
+    }], PLAIN_CLIENT).buildPromptRoster('prefixed', NO_BUILTINS);
 
     expect(roster).toContain('`client_undocumented`');
     expect(roster).not.toContain('undefined');
+  });
+
+  describe('everything it names is live in the same request', () => {
+    it('lists exactly the tools the prefixed routes register', () => {
+      const provider = providerWith([TEXT_TOOL, WRITE_MEDIA_TOOL, CAPTURE_TOOL], MEDIA_CLIENT);
+
+      // getToolNames is what the manual converters, the MCP server and the OpenRouter
+      // builders all iterate. The roster must be that set and nothing besides.
+      expect(rosteredNames(provider.buildPromptRoster('prefixed', NO_BUILTINS)).sort())
+        .toEqual(provider.getToolNames().sort());
+    });
+
+    it('lists exactly the tools the ADK route registers', async () => {
+      const provider = providerWith([TEXT_TOOL, WRITE_MEDIA_TOOL], MEDIA_CLIENT);
+      const adkNames = (await provider.getAdkTools(NO_BUILTINS)).map(t => t.name);
+
+      expect(rosteredNames(provider.buildPromptRoster('bare', NO_BUILTINS)).sort())
+        .toEqual(adkNames.sort());
+    });
+
+    it('withholds a bare-name collision from both the roster and the ADK registration', async () => {
+      // ADK is the only route that registers client tools unprefixed, so it is the only
+      // one where a client tool can be named over a built-in. Refusing it in one place
+      // but not the other is how a prompt comes to advertise an unreachable tool.
+      const provider = providerWith([TEXT_TOOL, { ...CAPTURE_TOOL, name: 'run_model' }], MEDIA_CLIENT);
+      const builtIns = new Set(['run_model', 'get_current_model']);
+
+      const roster = provider.buildPromptRoster('bare', builtIns);
+      const adkNames = (await provider.getAdkTools(builtIns)).map(t => t.name);
+
+      expect(rosteredNames(roster)).toEqual(['get_variable_tags']);
+      expect(adkNames).toEqual(['get_variable_tags']);
+    });
+
+    it('keeps that same tool on a prefixed route, where the name cannot collide', () => {
+      // `client_run_model` is not a name any built-in has, so nothing is withheld.
+      const provider = providerWith([TEXT_TOOL, { ...CAPTURE_TOOL, name: 'run_model' }], MEDIA_CLIENT);
+      const roster = provider.buildPromptRoster('prefixed', new Set(['run_model']));
+
+      expect(rosteredNames(roster).sort()).toEqual(['client_get_variable_tags', 'client_run_model']);
+    });
+
+    it('says nothing when every registered tool was withheld', () => {
+      const provider = providerWith([{ ...TEXT_TOOL, name: 'run_model' }], PLAIN_CLIENT);
+
+      expect(provider.buildPromptRoster('bare', new Set(['run_model']))).toBe('');
+    });
   });
 });

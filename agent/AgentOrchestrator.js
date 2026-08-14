@@ -1524,7 +1524,9 @@ model tools.`;
   #buildRouteSystemPrompt(mode, clientToolNameStyle) {
     const sections = [
       this.configManager.buildSystemPrompt(mode),
-      this.dynamicToolProvider.buildPromptRoster(clientToolNameStyle)
+      // The roster names only tools the route will actually register, which is why the
+      // built-in names go in: under 'bare' they are what a client tool can collide with.
+      this.dynamicToolProvider.buildPromptRoster(clientToolNameStyle, this.#builtInToolNameSet())
     ];
 
     const files = this.sessionManager.getAttachedFiles(this.sessionId).filter(f => f.status === 'ready');
@@ -1544,6 +1546,18 @@ ${lines.join('\n')}`);
     }
 
     return sections.filter(Boolean).join('\n\n');
+  }
+
+  /**
+   * Every built-in tool name, unfiltered by availability.
+   *
+   * Used only to settle client-tool name collisions, so it deliberately ignores mode and
+   * model size: whether a client tool exists should not depend on how big the model
+   * happens to be this turn, and a name that is a built-in's in one session is a
+   * built-in's in all of them.
+   */
+  #builtInToolNameSet() {
+    return new Set(this.builtInToolProvider.getToolNames());
   }
 
   async #buildPriorContextTextHelper(history) {
@@ -2074,7 +2088,9 @@ ${lines.join('\n')}`);
 
     try {
       const builtInAdkTools = await this.builtInToolProvider.getAdkTools(mode, modelTokenCount);
-      const clientAdkTools = await this.dynamicToolProvider.getAdkTools();
+      // The same set the roster was built against a few lines up, so what this
+      // registers and what the prompt announces are decided by one rule, not two.
+      const clientAdkTools = await this.dynamicToolProvider.getAdkTools(this.#builtInToolNameSet());
 
       const pendingCallIds = new Map();
 

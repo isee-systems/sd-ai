@@ -276,40 +276,49 @@ export class DynamicToolProvider {
    * model-facing name of a client tool differs by route — one that would have to know
    * which loop it was running inside to avoid naming the tools wrongly.
    *
+   * Every name it prints is a tool that is live in the same request. That is a property
+   * of where it reads from, not of care taken here: the source is `this.toolCollection`,
+   * the one object getTools, getMcpServer and getAdkTools all build their registrations
+   * out of, run through #liveClientTools — the same filter those registrations use. A
+   * roster naming a tool the route did not register would be worse than no roster, since
+   * the model would plan around a call that comes back "unknown tool".
+   *
    * @param {'prefixed'|'bare'} nameStyle  How this route names a client tool to the model.
    *        'prefixed' — `client_foo`, which is every route but the ADK one. The
    *        anthropic-sdk route rewrites that to mcp__client__foo in the same pass that
    *        rewrites the rest of the prompt, so it wants 'prefixed' too.
    *        'bare' — `foo`, which is what getAdkTools registers.
+   * @param {Set<string>} builtInToolNames  Built-in tool names, for the shadowing check
+   *        in #liveClientTools.
    */
-  buildPromptRoster(nameStyle) {
-    const session = this.sessionManager.getSession(this.sessionId);
-    const clientTools = session?.clientTools || [];
-    if (clientTools.length === 0) return '';
+  buildPromptRoster(nameStyle, builtInToolNames) {
+    const live = this.#liveClientTools(nameStyle, builtInToolNames);
+    if (live.length === 0) return '';
 
     // Read off the same capability the media built-ins are gated by, so the roster can
     // never describe a handle flow this session does not have: a client that declares a
     // media contract but no supportsMedia gets neither generate_image nor a sentence
     // telling the model to pass its output somewhere.
+    const session = this.sessionManager.getSession(this.sessionId);
     const { declared } = mediaCapability(session);
 
-    const lines = clientTools.map(toolDef => {
-      const name = nameStyle === 'bare' ? toolDef.name : `client_${toolDef.name}`;
-
-      // The media contract is worth stating here rather than leaving to the description,
-      // which the client wrote without knowing handles exist. Saying which argument takes
-      // a handle up front is what stops the model passing a file name and learning the
-      // difference from #resolveMediaArguments' error.
+    const lines = live.map(({ modelFacingName, unprefixedName, toolDef }) => {
+      // The media contract lives on the client's own definition, not on the collection
+      // entry — the same asymmetry #clientToolDef exists to absorb. Stating it here
+      // rather than leaving it to the description, which the client wrote without
+      // knowing handles exist, is what stops the model passing a file name and learning
+      // the difference from #resolveMediaArguments' error.
+      const clientDef = this.#clientToolDef(unprefixedName);
       const notes = [];
-      const mediaInputs = declared ? (toolDef.media?.inputs || []) : [];
+      const mediaInputs = declared ? (clientDef?.media?.inputs || []) : [];
       if (mediaInputs.length > 0) {
         notes.push(`pass an image handle from generate_image in ${mediaInputs.map(a => `\`${a}\``).join(', ')}`);
       }
-      if (declared && toolDef.media?.returnsMedia === true) notes.push('may answer with an image');
+      if (declared && clientDef?.media?.returnsMedia === true) notes.push('may answer with an image');
 
       const description = toolDef.description ? ` — ${toolDef.description}` : '';
       const suffix = notes.length > 0 ? ` (${notes.join('; ')})` : '';
-      return `- \`${name}\`${description}${suffix}`;
+      return `- \`${modelFacingName}\`${description}${suffix}`;
     });
 
     return `## Tools From This Application
@@ -317,6 +326,41 @@ The application the user is working in registered the tools below for this sessi
 
 This list is complete and fixed for the session. A capability not named here is one this application did not offer, so never promise, imply, or plan around an action you have no tool for.
 ${lines.join('\n')}`;
+  }
+
+  /**
+   * The client tools a route can actually put in front of the model, under the names it
+   * will use. The single definition of "live", so a registration and the roster that
+   * announces it cannot disagree.
+   *
+   * The one thing that can drop a tool here is a name collision with a built-in. It can
+   * only happen under 'bare', since `client_foo` is not a name any built-in has — which
+   * is to say only on the ADK route, the one route that registers client tools
+   * unprefixed. Two tools with one name is not a state to hand a provider: the manual
+   * routes already refuse it ("skipping client version, using built-in") and this makes
+   * ADK refuse it the same way, loudly, instead of registering a duplicate and letting
+   * the SDK pick.
+   *
+   * The built-in set is deliberately the unfiltered one rather than what isToolAvailable
+   * left standing this turn: whether a client tool exists should not depend on how big
+   * the model happens to be.
+   */
+  #liveClientTools(nameStyle, builtInToolNames) {
+    const live = [];
+
+    for (const [toolName, toolDef] of Object.entries(this.toolCollection?.tools || {})) {
+      const unprefixedName = toolName.replace(/^client_/, '');
+      const modelFacingName = nameStyle === 'bare' ? unprefixedName : toolName;
+
+      if (builtInToolNames.has(modelFacingName)) {
+        logger.warn(`Client tool '${modelFacingName}' collides with a built-in of the same name — withheld from this session`);
+        continue;
+      }
+
+      live.push({ modelFacingName, unprefixedName, toolDef });
+    }
+
+    return live;
   }
 
   /**
@@ -363,17 +407,22 @@ ${lines.join('\n')}`;
     return { type: 'sdk', name: 'client', instance: server };
   }
 
-  async getAdkTools() {
+  /**
+   * @param {Set<string>} builtInToolNames  What the built-ins are called on this route.
+   *        Client tools are registered unprefixed here — the only route where that is
+   *        true — so this is the only route where a client tool can collide with a
+   *        built-in, and #liveClientTools is where that is settled. Passed in rather
+   *        than reached for because this provider knows nothing of the built-in side.
+   */
+  async getAdkTools(builtInToolNames) {
     if (!this.toolCollection) return [];
 
     const FunctionTool = await loadFunctionTool();
     const adkTools = [];
 
-    for (const [toolName, toolDef] of Object.entries(this.toolCollection.tools)) {
-      const unprefixedName = toolName.replace(/^client_/, '');
-
+    for (const { modelFacingName, toolDef } of this.#liveClientTools('bare', builtInToolNames)) {
       adkTools.push(new FunctionTool({
-        name: unprefixedName,
+        name: modelFacingName,
         description: toolDef.description,
         parameters: sanitizeSchemaForGemini(toolDef.inputSchema.toJSONSchema()),
         execute: async (args) => {
