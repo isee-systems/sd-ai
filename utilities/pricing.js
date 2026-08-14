@@ -101,7 +101,7 @@ export const gemini = {
     {                         inputTokens: 4.00, cachedTokens: 0.40, outputTokens: 18.00 },
   ],
   'gemini-2.5-pro': [
-    { maxInputTokens: 200000, inputTokens: 1.25, cachedTokens: 0.13, outputTokens: 10.00 },
+    { maxInputTokens: 200000, inputTokens: 1.25, cachedTokens: 0.125, outputTokens: 10.00 },
     {                         inputTokens: 2.50, cachedTokens: 0.25, outputTokens: 15.00 },
   ],
   'gemini-2.5-flash': {
@@ -129,15 +129,22 @@ export const gemini = {
     cachedTokens: 0.15,
     outputTokens: 9.00,
   },
+  // 3.6 and 3.7 Flash share introductory pricing through 2026-12-31. On
+  // 2027-01-01 both double to 1.50 / 0.15 / 7.50 — update both entries then.
   'gemini-3.6-flash': {
-    inputTokens: 1.50,
-    cachedTokens: 0.15,
-    outputTokens: 7.00,
+    inputTokens: 0.75,
+    cachedTokens: 0.075,
+    outputTokens: 3.75,
+  },
+  'gemini-3.7-flash': {
+    inputTokens: 0.75,
+    cachedTokens: 0.075,
+    outputTokens: 3.75,
   },
   // Embedding model used for RAG. Embeddings bill input (prompt) tokens only;
   // there are no output/cached tokens, so those rates are 0.
   'gemini-embedding-2': {
-    inputTokens: 0.15,
+    inputTokens: 0.20,
     cachedTokens: 0.00,
     outputTokens: 0.00,
   },

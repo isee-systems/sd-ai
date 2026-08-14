@@ -23,9 +23,9 @@ const config = {
     /*
     * Defaults for the engines that use LLMWrapper and the agent tools that use those engines
     */
-    "buildDefaultModel": 'gemini-3.6-flash', //LLMWrapper underlyingModel default for building model tools
-    "nonBuildDefaultModel": 'gemini-3.6-flash', //LLMWrapper underlyingModel default for non-building model tools
-    "evalModel": "gemini-3.6-flash", //LLMWrapper underlyingModel default used for judging LLM repsonses during eval runs
+    "buildDefaultModel": 'gemini-3.7-flash', //LLMWrapper underlyingModel default for building model tools
+    "nonBuildDefaultModel": 'gemini-3.7-flash', //LLMWrapper underlyingModel default for non-building model tools
+    "evalModel": "gemini-3.7-flash", //LLMWrapper underlyingModel default used for judging LLM repsonses during eval runs
 
     /*
     * Every model the engines expose in the `underlyingModel` combobox, in display
@@ -41,11 +41,11 @@ const config = {
         {label: "GPT-5.6 Terra", value: 'gpt-5.6-terra'},
         {label: "GPT-5.6 Luna", value: 'gpt-5.6-luna'},
         {label: "Gemini 3.1-pro-preview", value: 'gemini-3.1-pro-preview'},
+        {label: "Gemini 3.7-flash", value: 'gemini-3.7-flash'},
+        {label: "Gemini 3.7-flash high", value: 'gemini-3.7-flash high'},
+        {label: "Gemini 3.7-flash medium", value: 'gemini-3.7-flash medium'},
+        {label: "Gemini 3.7-flash low", value: 'gemini-3.7-flash low'},
         {label: "Gemini 3.6-flash", value: 'gemini-3.6-flash'},
-        {label: "Gemini 3.6-flash high", value: 'gemini-3.6-flash high'},
-        {label: "Gemini 3.6-flash medium", value: 'gemini-3.6-flash medium'},
-        {label: "Gemini 3.6-flash low", value: 'gemini-3.6-flash low'},
-        {label: "Gemini 3.5-flash", value: 'gemini-3.5-flash'},
         {label: "Claude Fable 5", value: 'claude-fable-5'},
         {label: "Claude Opus 5", value: 'claude-opus-5'},
         {label: "Claude Sonnet 5", value: 'claude-sonnet-5'},
@@ -198,13 +198,13 @@ const config = {
             google: [
                 { id: 'standard', label: 'Standard',
                   description: 'Balanced quality and cost. Recommended for most work.',
-                  model: 'gemini-3.6-flash', effort: ThinkingLevel.MEDIUM },
+                  model: 'gemini-3.7-flash', effort: ThinkingLevel.MEDIUM },
                 // Same model as `standard`, so the price-derived multiplier would be
                 // 1.0 — but it thinks longer and therefore bills more tokens. State the
                 // cost explicitly; an effort-only step is exactly what derivation misses.
                 { id: 'high', label: 'High',
                   description: 'The same model thinking harder before it answers.',
-                  model: 'gemini-3.6-flash', effort: ThinkingLevel.HIGH, relativeCost: 1.5 },
+                  model: 'gemini-3.7-flash', effort: ThinkingLevel.HIGH, relativeCost: 1.5 },
                 // No effort: let the pro model pick its own thinking level.
                 // Priced-derived would be ~1.65x on the pro model's first input tier,
                 // which both collides with `high` above and ignores that it thinks more
@@ -255,12 +255,12 @@ const config = {
     "agentToolModels": {
         default: {
             standard: {
-                build:    { normal: 'gemini-3.6-flash low', hard: 'gemini-3.6-flash high' },
-                nonBuild: { normal: 'gemini-3.6-flash low', hard: 'gemini-3.6-flash high' }
+                build:    { normal: 'gemini-3.7-flash low', hard: 'gemini-3.7-flash high' },
+                nonBuild: { normal: 'gemini-3.7-flash low', hard: 'gemini-3.7-flash high' }
             },
             high: {
-                build:    { normal: 'gemini-3.6-flash high', hard: 'gemini-3.1-pro-preview high' },
-                nonBuild: { normal: 'gemini-3.6-flash high', hard: 'gemini-3.6-flash high' }
+                build:    { normal: 'gemini-3.7-flash high', hard: 'gemini-3.1-pro-preview high' },
+                nonBuild: { normal: 'gemini-3.7-flash high', hard: 'gemini-3.7-flash high' }
             },
             maximum: {
                 build:    { normal: 'gemini-3.1-pro-preview high', hard: 'gemini-3.1-pro-preview high' },
