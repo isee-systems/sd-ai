@@ -49,10 +49,11 @@ WHEN TO USE DISCRETE ENTITY SUB-TYPES:
 - DO NOT use sub-types for standard continuous stocks and flows — they add significant complexity
 - Only introduce sub-types when specifically requested by the user
 
-STOCK SUB-TYPES — set 'subType' and include 'additionalProperties':
+STOCK SUB-TYPES — set 'subType'; 'queue', 'oven' and 'conveyor' also include 'additionalProperties':
 - 'queue': Waiting line. additionalProperties: fifoEnabled, oneAtATime, splitBatches, discrete, roundRobin, queueOutflowPriority, purgeEq, overflow.
 - 'oven': Batch processor; all items released together after processTime. additionalProperties: processTime (required), capacity, inflowLimit, fillTime, cleanTime, sample, arrest.
 - 'conveyor': Pipeline delay; items exit after processTime. additionalProperties: processTime (required), capacity, inflowLimit, sample, arrest.
+- 'nonNegative': Stock that can never go below zero (the XMILE <non_negative/> constraint). No additionalProperties.
 
 FLOW SUB-TYPES — leave 'equation' empty; automatically computed:
 - 'discreteOutflow': Output from a conveyor or oven.
@@ -65,7 +66,7 @@ REGULAR FLOWS entering a conveyor may set additionalProperties:
 - distribEq: required when spreadFlow is 'distribution'.
 
 EQUATION RULES:
-- 'queue', 'oven', 'conveyor' stocks: 'equation' is the initial value, like a regular stock.
+- 'queue', 'oven', 'conveyor', 'nonNegative' stocks: 'equation' is the initial value, like a regular stock.
 - Flow sub-types: leave 'equation' empty.
 - Settings go in 'additionalProperties', not equations.
 

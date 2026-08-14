@@ -172,13 +172,14 @@ Models can be organized into modules for better structure and encapsulation:
 ### Discrete-Entity Sub-Types in SD-JSON
 Variables can have a `subType` field that further classifies them. Sub-types are a refinement of `type` — the top-level `type` field remains `"stock"`, `"flow"`, or `"variable"`.
 
-**Stock sub-types** — also set `additionalProperties` with the relevant configuration:
+**Stock sub-types** — `"queue"`, `"oven"` and `"conveyor"` also set `additionalProperties` with the relevant configuration; `"nonNegative"` does not:
 
 | `subType` | Description |
 |-----------|-------------|
 | `"queue"` | A waiting line that holds discrete items until they are dispatched. |
 | `"oven"` | A batch processor where items are held for a fixed cook time then released together. |
 | `"conveyor"` | A pipeline delay where items travel a fixed transit time before exiting from the other end. |
+| `"nonNegative"` | A stock that can never go below zero — the XMILE `<non_negative/>` constraint. No `additionalProperties`. |
 
 **Flow sub-types** — automatically managed flows. Set `subType` only; leave `equation` as an empty string:
 

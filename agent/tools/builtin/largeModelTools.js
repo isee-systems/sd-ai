@@ -43,7 +43,7 @@ Array handling:
 - Element-specific equations are in the "arrayEquations" field
 
 Sub-type handling:
-- Stock sub-types (set subType + additionalProperties): "queue" (waiting line), "oven" (batch processor), "conveyor" (pipeline delay)
+- Stock sub-types — "queue", "oven" and "conveyor" set subType + additionalProperties, "nonNegative" sets subType only: "queue" (waiting line), "oven" (batch processor), "conveyor" (pipeline delay), "nonNegative" (stock that can never go below zero)
 - Flow sub-types (set subType only, equation = ""): "discreteOutflow" (output from conveyor/oven), "conveyorLeakage" (leakage from conveyor), "queueOutflow" (output from queue), "queueOverflow" (overflow from full queue)
 - Variable sub-types: "delayVariable" (plain variable whose equation uses a DELAY or SMTH builtin function)
 - additionalProperties fields by subType:
@@ -63,7 +63,7 @@ Filtering:
       filter: z.object({
         variableNames: z.array(z.string()).optional().describe('Filter variables by base name (matches both qualified and unqualified names, e.g., "cost" matches "Module_1.cost", "Module_2.cost", and "cost")'),
         variableType: z.enum(['stock', 'flow', 'variable']).optional().describe('Filter variables by type'),
-        subType: z.enum(['queue', 'oven', 'conveyor', 'discreteOutflow', 'conveyorLeakage', 'queueOutflow', 'queueOverflow', 'delayVariable']).optional().describe('Filter variables by sub-type (e.g., find all conveyors, all queues, or all delay variables)'),
+        subType: z.enum(['queue', 'oven', 'conveyor', 'nonNegative', 'discreteOutflow', 'conveyorLeakage', 'queueOutflow', 'queueOverflow', 'delayVariable']).optional().describe('Filter variables by sub-type (e.g., find all conveyors, all queues, or all delay variables)'),
         moduleName: z.string().optional().describe('Filter variables by module (e.g., "Module_Name" - variable names are module-qualified as Module_Name.variable_name)'),
         usedInEquation: z.string().optional().describe('Find variables whose equations reference this variable (case-insensitive). Searches in both equation and arrayEquations fields.'),
         relationshipFrom: z.string().optional().describe('Filter relationships by source variable'),
@@ -494,7 +494,7 @@ CRITICAL ARRAY RULES:
 
 CRITICAL SUBTYPE RULES (queue/oven/conveyor/leakage/discreteOutflow/queueOutflow/queueOverflow):
 - Use sub-types ONLY when the model already has discrete-entity semantics or the user explicitly requests them — they add significant complexity
-- Stock sub-types: set subType AND additionalProperties; equation is still the initial value (like a regular stock)
+- Stock sub-types: set subType, plus additionalProperties for queue/oven/conveyor (not nonNegative); equation is still the initial value (like a regular stock)
 - Flow sub-types: set subType only and leave equation as "" — the flow is computed automatically, do NOT write an equation
 - All sub-type settings (processTime, capacity, leakFraction, etc.) go in additionalProperties, NEVER embedded in equations
 - Every variable referenced in an additionalProperties equation REQUIRES a relationship arrow FROM that variable TO the element

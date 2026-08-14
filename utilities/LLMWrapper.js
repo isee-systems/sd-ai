@@ -337,7 +337,7 @@ export class LLMWrapper {
     "parentModule": "The name of the module that contains this module. If this module is at the top level (not nested within another module), this should be an empty string. If nested, this should be the simple name (not module-qualified) of the parent module.",
     "modules": "A list of module definitions that exist within this model. Each module represents a logical grouping or subsystem within the model hierarchy. Modules can contain variables and can be nested within other modules to create hierarchical model structures.",
 
-    "subType": "The sub-type of this stock, flow, or variable. Stock sub-types (also set additionalProperties): 'queue' (a waiting line that holds items until they can be processed), 'oven' (a batch processor where items are held for a fixed cook time then released together), 'conveyor' (a pipeline delay where items travel a fixed transit time before exiting). Flow sub-types — automatically managed flows you name but do NOT write equations for: 'discreteOutflow' (output from a conveyor or oven), 'conveyorLeakage' (leakage from a conveyor — set additionalProperties to configure leakage behavior), 'queueOutflow' (output from a queue), 'queueOverflow' (overflow when a queue is full). Variable sub-types: 'delayVariable' (a plain variable whose equation contains a DELAY or SMTH builtin function — set this whenever the variable equation uses DELAY1, DELAY3, DELAY N, SMTH1, SMTH3, or any other DELAY/SMTH variant). Omit this field for all other stocks, flows, and variables.",
+    "subType": "The sub-type of this stock, flow, or variable. Stock sub-types — 'queue', 'oven' and 'conveyor' also set additionalProperties, 'nonNegative' does not: 'queue' (a waiting line that holds items until they can be processed), 'oven' (a batch processor where items are held for a fixed cook time then released together), 'conveyor' (a pipeline delay where items travel a fixed transit time before exiting), 'nonNegative' (a stock that can never go below zero — the XMILE <non_negative/> constraint). Flow sub-types — automatically managed flows you name but do NOT write equations for: 'discreteOutflow' (output from a conveyor or oven), 'conveyorLeakage' (leakage from a conveyor — set additionalProperties to configure leakage behavior), 'queueOutflow' (output from a queue), 'queueOverflow' (overflow when a queue is full). Variable sub-types: 'delayVariable' (a plain variable whose equation contains a DELAY or SMTH builtin function — set this whenever the variable equation uses DELAY1, DELAY3, DELAY N, SMTH1, SMTH3, or any other DELAY/SMTH variant). Omit this field for all other stocks, flows, and variables.",
 
     "additionalProperties": "Sub-type-specific configuration for queue, oven, conveyor, conveyorLeakage, and any regular flow that uses spreadFlow. Include this object when subType is 'queue', 'oven', 'conveyor', or 'conveyorLeakage', or when the variable is a regular flow that sets spreadFlow. Omit entirely for all other variable types.",
 
@@ -1240,7 +1240,7 @@ export class LLMWrapper {
 
   static subTypeSchema() {
     return z.enum([
-      "queue", "oven", "conveyor",
+      "queue", "oven", "conveyor", "nonNegative",
       "discreteOutflow", "conveyorLeakage", "queueOutflow", "queueOverflow",
       "delayVariable"
     ]).describe(LLMWrapper.SCHEMA_STRINGS.subType);
