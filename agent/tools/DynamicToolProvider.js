@@ -2,6 +2,7 @@ import { StructuredOutputToZodConverter } from '../../utilities/StructuredOutput
 import { toolResultToText, mediaBlock, mediaBlocksOf, toMcpContentResult } from '../utilities/ToolResultFormatter.js';
 import { MediaStore } from '../utilities/MediaStore.js';
 import { sanitizeSchemaForGemini } from './builtin/toolHelpers.js';
+import { mediaCapability } from './toolAvailability.js';
 import logger from '../../utilities/logger.js';
 import config from '../../config.js';
 
@@ -257,6 +258,65 @@ export class DynamicToolProvider {
    */
   isClientTool(toolName) {
     return this.getToolNames().includes(toolName);
+  }
+
+  /**
+   * The client's tools as a system-prompt section, or '' when it registered none.
+   *
+   * Not an inventory the model could not otherwise see: every route already puts these
+   * tools in the request's tool list, with name, description and schema, before the
+   * first token is generated. What a schema cannot say is where they came from — that
+   * this set is the host application's and varies with it, so a capability missing here
+   * is a fact about this client and not about the task. Without that, an unfamiliar name
+   * reads as an oddity to route around, and a familiar-sounding absence reads as
+   * something to promise anyway.
+   *
+   * A discovery tool would be the wrong shape for the same information: a round trip to
+   * fetch what is already in the context window that requested it, and — because the
+   * model-facing name of a client tool differs by route — one that would have to know
+   * which loop it was running inside to avoid naming the tools wrongly.
+   *
+   * @param {'prefixed'|'bare'} nameStyle  How this route names a client tool to the model.
+   *        'prefixed' — `client_foo`, which is every route but the ADK one. The
+   *        anthropic-sdk route rewrites that to mcp__client__foo in the same pass that
+   *        rewrites the rest of the prompt, so it wants 'prefixed' too.
+   *        'bare' — `foo`, which is what getAdkTools registers.
+   */
+  buildPromptRoster(nameStyle) {
+    const session = this.sessionManager.getSession(this.sessionId);
+    const clientTools = session?.clientTools || [];
+    if (clientTools.length === 0) return '';
+
+    // Read off the same capability the media built-ins are gated by, so the roster can
+    // never describe a handle flow this session does not have: a client that declares a
+    // media contract but no supportsMedia gets neither generate_image nor a sentence
+    // telling the model to pass its output somewhere.
+    const { declared } = mediaCapability(session);
+
+    const lines = clientTools.map(toolDef => {
+      const name = nameStyle === 'bare' ? toolDef.name : `client_${toolDef.name}`;
+
+      // The media contract is worth stating here rather than leaving to the description,
+      // which the client wrote without knowing handles exist. Saying which argument takes
+      // a handle up front is what stops the model passing a file name and learning the
+      // difference from #resolveMediaArguments' error.
+      const notes = [];
+      const mediaInputs = declared ? (toolDef.media?.inputs || []) : [];
+      if (mediaInputs.length > 0) {
+        notes.push(`pass an image handle from generate_image in ${mediaInputs.map(a => `\`${a}\``).join(', ')}`);
+      }
+      if (declared && toolDef.media?.returnsMedia === true) notes.push('may answer with an image');
+
+      const description = toolDef.description ? ` — ${toolDef.description}` : '';
+      const suffix = notes.length > 0 ? ` (${notes.join('; ')})` : '';
+      return `- \`${name}\`${description}${suffix}`;
+    });
+
+    return `## Tools From This Application
+The application the user is working in registered the tools below for this session. They act on that application itself — its interface, its files, its exports — which nothing else available to you can do. Prefer one whenever the request matches what it does, instead of approximating the result another way or telling the user to do it by hand.
+
+This list is complete and fixed for the session. A capability not named here is one this application did not offer, so never promise, imply, or plan around an action you have no tool for.
+${lines.join('\n')}`;
   }
 
   /**

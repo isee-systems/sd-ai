@@ -1025,6 +1025,39 @@ Merlin or Socrates, and offers it during interface work, without either side nam
 
 When the agent calls a custom tool, the server sends a `tool_call_request` and the client must respond with `tool_call_response`.
 
+### How the agent learns about these tools
+
+Automatically, and before its first token. Every provider route puts the client's tools into the
+request's own tool list — name, `description` and `inputSchema` — alongside the built-ins, so there is
+never a discovery step and never a tool the agent has to be told to go looking for. Client tools are
+also the one category that is **never** filtered: `isToolAvailable` gates built-ins by mode, model
+size and media capability, but a registered client tool is advertised unconditionally on every route.
+
+On top of that, `buildPromptRoster` in [`tools/DynamicToolProvider.js`](tools/DynamicToolProvider.js)
+adds a short **Tools From This Application** section to the system prompt, listing each registered
+tool with its description. This is not there to reveal the tools — the schemas already did that — but
+to say the thing a schema cannot: that the set belongs to the host application, that it is complete
+for the session, and that a capability missing from it is one the application chose not to offer, so
+the agent should not plan around or promise an action it has no tool for. Sessions that register no
+tools get no such section.
+
+Because the model-facing name of a client tool differs by route, the roster is generated per route:
+`client_<name>` everywhere except the Google ADK route, which registers the bare `<name>`. On the
+Anthropic SDK route the roster is rewritten to `mcp__client__<name>` along with the rest of the
+prompt.
+
+**Write the `description` accordingly** — it is the entire steering surface. It is what the model
+weighs when choosing between your tool and its own general approach, and a vague one loses that
+comparison silently, with no error anywhere to explain why the tool never gets called.
+
+- Say what the tool *does to the application*, not what it returns: "Opens the model's interface
+  editor and adds a slider bound to a variable" beats "Adds a slider".
+- Say when to reach for it, if it is not obvious from the name.
+- Name the units, formats or identifiers the arguments expect, in the per-property
+  `description` fields of the `inputSchema` — those reach the model on every route.
+- Avoid names so generic they read as ordinary English (`export`, `search`, `notes`). They still work,
+  but a distinct name is easier for the agent to reason about — and for you to grep.
+
 ---
 
 ## Built-In Tool Interface

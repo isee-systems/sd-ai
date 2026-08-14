@@ -126,6 +126,13 @@ export function anthropicSdkSubprocessEnv() {
   return env;
 }
 
+// Neutralize regex metacharacters in text that is about to become a pattern. Used on
+// tool names, which are client-supplied on the dynamic side and so are not guaranteed
+// to be the plain [a-z0-9_] identifiers the convention implies.
+function escapeRegExp(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 // Normalize a single message to Gemini format {role:'user'|'model', parts:[{text}]}.
 // Handles Anthropic-format messages ({role, content}) that arrive when switching
 // from an Anthropic-mode agent or from client-provided historical messages.
@@ -435,7 +442,7 @@ export class AgentOrchestrator {
 
     // Build system prompt from config
     const mode = session.mode;
-    const systemPrompt = this.#buildSystemPromptWithRag(mode);
+    const systemPrompt = this.#buildRouteSystemPrompt(mode, 'prefixed');
 
     // Get tool collections
     const builtInTools = this.builtInToolProvider.getTools();
@@ -665,7 +672,7 @@ export class AgentOrchestrator {
       content: userMessage
     });
 
-    let systemPrompt = this.#buildSystemPromptWithRag(mode);
+    let systemPrompt = this.#buildRouteSystemPrompt(mode, 'prefixed');
 
     // Check model token count and handle large models (for SDK mode)
     const currentModel = session?.clientModel;
@@ -1238,12 +1245,23 @@ model tools.`;
   /**
    * Prefix tool names in system prompt for SDK mode
    * Scans the system prompt and adds mcp__ prefixes to tool names
+   *
+   * Two tiers, because the two sets of names carry different risk. Built-in names and
+   * the `client_`-prefixed form are ours: they are chosen here, they read as identifiers,
+   * and rewriting them anywhere they appear is safe. A client tool's *bare* name is
+   * chosen by the host application and rewritten only where the prompt marks it up as
+   * code or bold — a client registering `export`, `search` or `notes` would otherwise
+   * have every ordinary occurrence of that word turned into mcp__client__export
+   * mid-sentence. The client-tool roster makes those names appear in the prompt as a
+   * matter of course, so the distinction now earns its keep.
    */
   #anthropicSdkPrefixToolNamesInSystemPrompt(systemPrompt, builtInToolNames, clientToolNames) {
     let modifiedPrompt = systemPrompt;
 
-    // Create mapping of unprefixed tool names to prefixed versions
+    // Rewritten wherever they appear, marked up or not.
     const toolNameMapping = {};
+    // Rewritten only inside `backticks` or **bold**.
+    const delimitedOnlyMapping = {};
 
     // Built-in tools: tool_name -> mcp__builtin__tool_name
     for (const prefixedName of builtInToolNames) {
@@ -1256,27 +1274,35 @@ model tools.`;
       const unprefixedName = clientToolName.replace(/^client_/, '');
       const prefixedName = `mcp__client__${unprefixedName}`;
       toolNameMapping[clientToolName] = prefixedName;
-      // Also map the unprefixed name
-      toolNameMapping[unprefixedName] = prefixedName;
+      // Also map the unprefixed name, for an agent config that writes it plainly —
+      // but only where it is delimited. See the note above.
+      delimitedOnlyMapping[unprefixedName] = prefixedName;
     }
 
     // Replace tool names in the system prompt
     // Look for patterns like `tool_name` or **tool_name** or tool_name (surrounded by word boundaries)
-    for (const [unprefixed, prefixed] of Object.entries(toolNameMapping)) {
-      // Match tool names in backticks, bold, or standalone
-      const patterns = [
-        new RegExp(`\`${unprefixed}\``, 'g'),           // `tool_name`
-        new RegExp(`\\*\\*${unprefixed}\\*\\*`, 'g'),   // **tool_name**
-        new RegExp(`\\b${unprefixed}\\b`, 'g')          // tool_name (word boundary)
-      ];
+    const rewrite = (mapping, includeBareWord) => {
+      for (const [unprefixed, prefixed] of Object.entries(mapping)) {
+        // Escaped: a client picks its own tool names, and a '.' or '(' in one would
+        // otherwise compile into a pattern that matches far more than the name.
+        const escaped = escapeRegExp(unprefixed);
+        const patterns = [
+          new RegExp(`\`${escaped}\``, 'g'),           // `tool_name`
+          new RegExp(`\\*\\*${escaped}\\*\\*`, 'g'),   // **tool_name**
+          ...(includeBareWord ? [new RegExp(`\\b${escaped}\\b`, 'g')] : []) // tool_name
+        ];
 
-      for (const pattern of patterns) {
-        modifiedPrompt = modifiedPrompt.replace(pattern, (match) => {
-          // Preserve the formatting around the tool name
-          return match.replace(unprefixed, prefixed);
-        });
+        for (const pattern of patterns) {
+          modifiedPrompt = modifiedPrompt.replace(pattern, (match) => {
+            // Preserve the formatting around the tool name
+            return match.replace(unprefixed, prefixed);
+          });
+        }
       }
-    }
+    };
+
+    rewrite(toolNameMapping, true);
+    rewrite(delimitedOnlyMapping, false);
 
     return modifiedPrompt;
   }
@@ -1479,35 +1505,45 @@ model tools.`;
    * the shared normalizer below.
    */
   /**
-   * Universal RAG hook: every route builds its system prompt through here so
-   * attached-file context reaches all six provider/loop paths identically.
-   * Appends an "Attached Files" manifest listing each ready file.
+   * Universal system-prompt hook: every route builds its prompt through here, so the
+   * session-dependent sections — the client's own tools, attached-file context — reach
+   * all six provider/loop paths identically instead of once per route.
    *
-   * Wording is intentionally tool-agnostic for the read-in-full (manifest) tier
+   * RAG wording is intentionally tool-agnostic for the read-in-full (manifest) tier
    * ("open and read the file at <path>") — the anthropic-sdk route excludes the
    * read_file built-in (it uses the SDK's native Read) and would rewrite a
    * literal `read_file` token to a non-existent MCP tool. The `search_documents`
    * token is safe to mention (it exists on every route).
+   *
+   * @param {'prefixed'|'bare'} clientToolNameStyle  Passed straight to buildPromptRoster;
+   *        'bare' only on the ADK route, which is the only one that registers client
+   *        tools under their unprefixed names. Explicit at every call site rather than
+   *        re-derived here from provider + agent mode: that derivation is startConversation's
+   *        dispatch, and a second copy of it would drift the moment a route moved.
    */
-  #buildSystemPromptWithRag(mode) {
-    const base = this.configManager.buildSystemPrompt(mode);
+  #buildRouteSystemPrompt(mode, clientToolNameStyle) {
+    const sections = [
+      this.configManager.buildSystemPrompt(mode),
+      this.dynamicToolProvider.buildPromptRoster(clientToolNameStyle)
+    ];
+
     const files = this.sessionManager.getAttachedFiles(this.sessionId).filter(f => f.status === 'ready');
-    if (files.length === 0) return base;
+    if (files.length > 0) {
+      const tempDir = this.sessionManager.getSessionTempDir(this.sessionId);
+      const lines = files.map(f => {
+        if (f.tier === 'vector') {
+          return `- "${f.name}" (${f.mimeType}, ~${f.tokenCount} tokens) — large document. Use the search_documents tool to find relevant passages (optionally restrict to this file with fileId "${f.fileId}").`;
+        }
+        const path = join(tempDir, 'rag', f.fileId, 'extracted.txt');
+        return `- "${f.name}" (${f.mimeType}, ~${f.tokenCount} tokens) — open and read the file at ${path} to use its full contents.`;
+      });
 
-    const tempDir = this.sessionManager.getSessionTempDir(this.sessionId);
-    const lines = files.map(f => {
-      if (f.tier === 'vector') {
-        return `- "${f.name}" (${f.mimeType}, ~${f.tokenCount} tokens) — large document. Use the search_documents tool to find relevant passages (optionally restrict to this file with fileId "${f.fileId}").`;
-      }
-      const path = join(tempDir, 'rag', f.fileId, 'extracted.txt');
-      return `- "${f.name}" (${f.mimeType}, ~${f.tokenCount} tokens) — open and read the file at ${path} to use its full contents.`;
-    });
-
-    return `${base}
-
-## Attached Files
+      sections.push(`## Attached Files
 The user has attached the following reference documents to this session. Consult them whenever they are relevant to the request.
-${lines.join('\n')}`;
+${lines.join('\n')}`);
+    }
+
+    return sections.filter(Boolean).join('\n\n');
   }
 
   async #buildPriorContextTextHelper(history) {
@@ -1789,7 +1825,7 @@ ${lines.join('\n')}`;
 
     const session = this.sessionManager.getSession(this.sessionId);
     const mode = session.mode;
-    const systemPrompt = this.#buildSystemPromptWithRag(mode);
+    const systemPrompt = this.#buildRouteSystemPrompt(mode, 'prefixed');
     const builtInTools = this.builtInToolProvider.getTools();
     const dynamicTools = this.dynamicToolProvider.getTools();
 
@@ -2016,7 +2052,9 @@ ${lines.join('\n')}`;
       parts: [{ text: userMessage }]
     });
 
-    let systemPrompt = this.#buildSystemPromptWithRag(mode);
+    // 'bare': getAdkTools strips the client_ prefix before registering, and this route
+    // has no prompt-rewrite pass to reconcile a mismatch the way the SDK route does.
+    let systemPrompt = this.#buildRouteSystemPrompt(mode, 'bare');
     const currentModel = session?.clientModel;
     let modelTokenCount = 0;
 
@@ -2558,7 +2596,7 @@ ${lines.join('\n')}`;
       content: userMessage
     });
 
-    const systemPrompt = this.#buildSystemPromptWithRag(mode);
+    const systemPrompt = this.#buildRouteSystemPrompt(mode, 'prefixed');
     const currentModel = session?.clientModel;
     let modelTokenCount = 0;
     if (currentModel) {
@@ -2830,7 +2868,7 @@ ${lines.join('\n')}`;
       });
 
       const mode = session.mode;
-      const systemPrompt = this.#buildSystemPromptWithRag(mode);
+      const systemPrompt = this.#buildRouteSystemPrompt(mode, 'prefixed');
       const builtInTools = this.builtInToolProvider.getTools();
       const dynamicTools = this.dynamicToolProvider.getTools();
 
@@ -2970,7 +3008,7 @@ ${lines.join('\n')}`;
       });
 
       const mode = session.mode;
-      const systemPrompt = this.#buildSystemPromptWithRag(mode);
+      const systemPrompt = this.#buildRouteSystemPrompt(mode, 'prefixed');
       const builtInTools = this.builtInToolProvider.getTools();
       const dynamicTools = this.dynamicToolProvider.getTools();
 
