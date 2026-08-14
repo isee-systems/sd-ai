@@ -380,6 +380,14 @@ export class SessionManager {
     const session = this.getSession(sessionId);
     if (session) {
       session.clientModel = model;
+      // Re-measure here, at the one place every model change passes through, rather
+      // than only at the top of a turn where the routes measure it. The size decides
+      // which editing tools may be called (see modelStateGate), and a model that grew
+      // or shrank mid-turn — an assembly inserted by a client tool, a generate_* call,
+      // an edit — must be gated on what it is NOW, not on what it was when the turn
+      // began. The routes still overwrite this with their own tokenizer's count; the
+      // two differ by a few percent, which no gate here is sensitive to.
+      session.modelTokenCount = model ? countTokens(JSON.stringify(model, null, 2)) : 0;
       if (model) {
         const result = this.#writeModelToDisk(sessionId, model);
         const parts = [];

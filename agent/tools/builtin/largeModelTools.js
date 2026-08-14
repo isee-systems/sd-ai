@@ -3,7 +3,6 @@ import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { createUpdateModelMessage, UpdateModelResponseSchema } from '../../utilities/MessageProtocol.js';
 import { generateRequestId, createSuccessResponse, createErrorResponse } from './toolHelpers.js';
-import config from '../../../config.js';
 import { LLMWrapper } from '../../../utilities/LLMWrapper.js';
 
 const variableBase = LLMWrapper.variableSchemaBase();
@@ -504,7 +503,7 @@ CRITICAL SUBTYPE RULES (queue/oven/conveyor/leakage/discreteOutflow/queueOutflow
 
 After editing, the model is validated and sent to the client for processing before the session state is updated.`,
     supportedModes: ['sfd', 'cld'],
-    minModelTokens: config.agentTargetedEditingMinimum,
+    requiresModelContent: true,
     inputSchema: z.object({
       operation: z.enum(['add', 'update', 'remove']).describe('Operation to perform'),
       data: z.array(z.object({
@@ -539,7 +538,7 @@ export function createEditRelationshipsTool(sessionManager, sessionId, sendToCli
 
 CRITICAL: Every variable referenced inside an additionalProperties equation on a discrete-entity element (e.g. processTime, capacity, leakFraction, purgeEq, queueOutflowPriority) REQUIRES a relationship arrow FROM that referenced variable TO the element.`,
     supportedModes: ['sfd', 'cld'],
-    minModelTokens: config.agentTargetedEditingMinimum,
+    requiresModelContent: true,
     inputSchema: z.object({
       operation: z.enum(['add', 'update', 'remove']).describe('Operation to perform'),
       data: z.array(
@@ -569,7 +568,7 @@ export function createEditSpecsTool(sessionManager, sessionId, sendToClient) {
 
 CRITICAL: When updating arrayDimensions, provide the COMPLETE array — it replaces the entire arrayDimensions list. Each dimension requires all four fields (type, name, size, elements) and elements.length MUST equal size. Define dimensions here BEFORE any variable references them via its 'dimensions' field.`,
     supportedModes: ['sfd', 'cld'],
-    minModelTokens: config.agentTargetedEditingMinimum,
+    requiresModelContent: true,
     inputSchema: z.object({
       data: z.object(simSpecsBase).partial().describe('Spec fields to update. Only included fields are changed.')
     }),
@@ -600,7 +599,7 @@ export function createEditModulesTool(sessionManager, sessionId, sendToClient) {
 
 IMPORTANT: The modules array only defines the hierarchical structure. It does NOT control which variables belong to a module — variable membership is determined by the variable name prefix ("Finance.revenue" belongs to Finance). To move a variable between modules, edit the variable's name via edit_variables (operation: update, newName: "NewModule.variableName").`,
     supportedModes: ['sfd', 'cld'],
-    minModelTokens: config.agentTargetedEditingMinimum,
+    requiresModelContent: true,
     inputSchema: z.object({
       operation: z.enum(['add', 'update', 'remove']).describe('Operation to perform'),
       data: z.array(

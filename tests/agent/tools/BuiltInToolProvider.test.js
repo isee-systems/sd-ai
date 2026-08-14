@@ -3,13 +3,17 @@
  *
  * Regression guard for the Anthropic Agent SDK pathway: query() runs with
  * permissionMode 'bypassPermissions', under which `allowedTools` does NOT remove
- * a tool the model can see — it only pre-approves. So supportedModes and
- * model-token gating MUST happen at MCP registration time; a tool left on the
- * server stays advertised and callable regardless of the query's allowedTools.
- * These tests assert getMcpServer omits tools whose supportedModes / token
- * constraints don't match (mirroring getAdkTools and the manual pathways).
+ * a tool the model can see — it only pre-approves. So session-fixed gating
+ * (supportedModes, sandbox grant, media capability) MUST happen at MCP
+ * registration time; a tool left on the server stays advertised and callable
+ * regardless of the query's allowedTools.
+ *
+ * Model-SIZE gating is the opposite case and is tested as such below: the server is
+ * built once per query and the model changes during it, so those gates are enforced
+ * when the handler runs, not when the tool is registered.
  */
 import { BuiltInToolProvider } from '../../../agent/tools/BuiltInToolProvider.js';
+import { modelStateGate } from '../../../agent/tools/toolAvailability.js';
 import { MediaStore } from '../../../agent/utilities/MediaStore.js';
 import config from '../../../config.js';
 
@@ -36,8 +40,8 @@ function makeProvider(session = {}, canWriteToLocalSandbox = false) {
 }
 
 // MCP's McpServer stores registered tools keyed by name on _registeredTools.
-async function registeredToolNames(provider, mode, modelTokenCount = 0) {
-  const { instance } = await provider.getMcpServer(mode, modelTokenCount);
+async function registeredToolNames(provider, mode) {
+  const { instance } = await provider.getMcpServer(mode);
   return new Set(Object.keys(instance._registeredTools));
 }
 
@@ -111,19 +115,51 @@ describe('BuiltInToolProvider.getMcpServer — tools the Agent SDK provides nati
   });
 });
 
-describe('BuiltInToolProvider.getMcpServer — model-token filtering', () => {
-  it('omits engine tools when the model exceeds maxModelTokens', async () => {
-    const huge = config.agentMaxTokensForEngines + 1;
-    const names = await registeredToolNames(makeProvider(), 'sfd', huge);
-    expect(names.has('generate_quantitative_model')).toBe(false);
+describe('BuiltInToolProvider — model-state gating', () => {
+  // The bug: an agent that inserted an assembly into an empty model spent the rest of
+  // that turn unable to edit an equation, because the SDK's MCP server had been built
+  // when the model was empty and cannot be re-registered mid-query. Both tools are now
+  // always registered, and the gate is re-read when the handler runs.
+  const EMPTY_MODEL = { variables: [], relationships: [] };
+  const ONE_VARIABLE = { variables: [{ name: 'population', type: 'stock', equation: '100' }] };
+
+  const callTool = async (session, toolName, args = {}) => {
+    const provider = makeProvider(session);
+    return provider.getTools().tools[toolName].handler(args);
+  };
+
+  it('registers both editing paths regardless of model size', async () => {
+    for (const size of [0, config.agentMaxTokensForEngines + 1]) {
+      const names = await registeredToolNames(makeProvider({ modelTokenCount: size }), 'sfd');
+      expect(names.has('edit_variables')).toBe(true);
+      expect(names.has('generate_quantitative_model')).toBe(true);
+    }
   });
 
-  it('gates targeted-edit tools on minModelTokens', async () => {
-    const below = await registeredToolNames(makeProvider(), 'sfd', 0);
-    expect(below.has('edit_variables')).toBe(false); // minimum not met at 0 tokens
+  it('refuses a targeted edit on an empty model, naming what to do instead', async () => {
+    const result = await callTool({ clientModel: EMPTY_MODEL }, 'edit_variables',
+      { operation: 'update', data: [{ name: 'population' }] });
 
-    const above = await registeredToolNames(makeProvider(), 'sfd', config.agentTargetedEditingMinimum + 1);
-    expect(above.has('edit_variables')).toBe(true);
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result)).toMatch(/generate_quantitative_model/);
+  });
+
+  it('allows a targeted edit as soon as the model holds anything at all', async () => {
+    // One variable is enough — far below the 250-token floor this used to require,
+    // which is what withheld editing right after an assembly was inserted.
+    const gate = modelStateGate({ requiresModelContent: true }, { clientModel: ONE_VARIABLE });
+    expect(gate).toBeNull();
+  });
+
+  it('refuses an engine call once the model outgrows the engines, mid-turn', async () => {
+    const result = await callTool(
+      { clientModel: ONE_VARIABLE, modelTokenCount: config.agentMaxTokensForEngines + 1 },
+      'generate_quantitative_model',
+      { prompt: 'anything', difficulty: 'normal' }
+    );
+
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result)).toMatch(/edit_variables/);
   });
 });
 

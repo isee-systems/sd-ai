@@ -7,7 +7,7 @@
  * itself; BuiltInToolProvider.test.js pins that the registration path actually
  * calls it.
  */
-import { isToolAvailable, mediaCapability } from '../../../agent/tools/toolAvailability.js';
+import { isToolAvailable, mediaCapability, modelStateGate, modelHasContent } from '../../../agent/tools/toolAvailability.js';
 
 const SINK_TOOL = { name: 'write_interface_media', media: { inputs: ['image'] } };
 const SOURCE_TOOL = { name: 'capture_interface_preview', media: { returnsMedia: true } };
@@ -110,11 +110,12 @@ describe('isToolAvailable — pre-existing gates still apply', () => {
     expect(isToolAvailable(sfdOnly, {})).toBe(true);
   });
 
-  it('honours the model token range', () => {
-    expect(isToolAvailable({ maxModelTokens: 100 }, { modelTokenCount: 101 })).toBe(false);
-    expect(isToolAvailable({ maxModelTokens: 100 }, { modelTokenCount: 100 })).toBe(true);
-    expect(isToolAvailable({ minModelTokens: 100 }, { modelTokenCount: 99 })).toBe(false);
-    expect(isToolAvailable({ minModelTokens: 100 }, { modelTokenCount: 100 })).toBe(true);
+  it('leaves the model-shaped gates to modelStateGate', () => {
+    // Registration must not decide these: the tool list is built once per turn (and
+    // on the SDK route cannot be rebuilt at all while the query runs), so a size
+    // gate answered here would stay answered for a model the agent then changed.
+    expect(isToolAvailable({ maxModelTokens: 100 }, { session: { modelTokenCount: 101 } })).toBe(true);
+    expect(isToolAvailable({ requiresModelContent: true }, { session: { clientModel: { variables: [] } } })).toBe(true);
   });
 
   it('applies mode and media gates together, not as alternatives', () => {
@@ -125,5 +126,39 @@ describe('isToolAvailable — pre-existing gates still apply', () => {
 
   it('rejects a missing tool definition instead of throwing', () => {
     expect(isToolAvailable(undefined, { mode: 'sfd' })).toBe(false);
+  });
+});
+
+describe('modelStateGate', () => {
+  const CONTENT_TOOL = { requiresModelContent: true };
+  const ENGINE_TOOL = { maxModelTokens: 32_000 };
+
+  it('holds targeted editing back only while the model is empty', () => {
+    expect(modelStateGate(CONTENT_TOOL, { clientModel: { variables: [] } })).toMatch(/empty/);
+    expect(modelStateGate(CONTENT_TOOL, { clientModel: null })).toMatch(/empty/);
+    expect(modelStateGate(CONTENT_TOOL, {})).toMatch(/empty/);
+
+    // One variable is the whole bar — an inserted assembly clears it immediately,
+    // which is the case that used to sit below the old 250-token floor.
+    expect(modelStateGate(CONTENT_TOOL, { clientModel: { variables: [{ name: 'stock' }] } })).toBeNull();
+  });
+
+  it('refuses an engine call past its ceiling and names the alternative', () => {
+    expect(modelStateGate(ENGINE_TOOL, { modelTokenCount: 32_001 })).toMatch(/edit_variables/);
+    expect(modelStateGate(ENGINE_TOOL, { modelTokenCount: 32_000 })).toBeNull();
+    expect(modelStateGate(ENGINE_TOOL, {})).toBeNull();
+  });
+
+  it('lets an ungated tool through, and survives a missing definition', () => {
+    expect(modelStateGate({}, { clientModel: null })).toBeNull();
+    expect(modelStateGate(undefined, {})).toBeNull();
+    expect(modelStateGate(CONTENT_TOOL, null)).toMatch(/empty/);
+  });
+
+  it('counts variables, not the arrangements of them', () => {
+    // A model carrying only relationships or modules has nothing an edit can land on.
+    expect(modelHasContent({ relationships: [{ from: 'a', to: 'b' }] })).toBe(false);
+    expect(modelHasContent({ variables: [{ name: 'a' }] })).toBe(true);
+    expect(modelHasContent(null)).toBe(false);
   });
 });

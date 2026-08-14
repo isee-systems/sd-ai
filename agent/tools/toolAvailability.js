@@ -38,21 +38,22 @@ export function mediaCapability(session) {
 /**
  * Whether a built-in tool should be advertised for this session.
  *
+ * Everything decided here is fixed for the session: which mode it opened in, what the
+ * agent's frontmatter grants, what the client declared it can display. The gates that
+ * depend on the MODEL are deliberately NOT here — see modelStateGate.
+ *
  * @param {Object} toolDef        Entry from BuiltInToolProvider's tool collection
  * @param {Object} options
  * @param {string} [options.mode]             'sfd' | 'cld'
- * @param {number} [options.modelTokenCount]  Size of the current model, for the token-range gates
  * @param {Object} [options.session]          Session record, for capability gates
  * @param {boolean} [options.canWriteToLocalSandbox]  The agent's can_write_to_local_sandbox
  *        frontmatter flag. Only tools marked `requiresSandboxWrite` consult it, and it is
  *        read as a grant rather than a default — omitting it withholds those tools.
  */
-export function isToolAvailable(toolDef, { mode, modelTokenCount = 0, session = null, canWriteToLocalSandbox } = {}) {
+export function isToolAvailable(toolDef, { mode, session = null, canWriteToLocalSandbox } = {}) {
   if (!toolDef) return false;
 
   if (mode && toolDef.supportedModes && !toolDef.supportedModes.includes(mode)) return false;
-  if (toolDef.maxModelTokens && modelTokenCount > toolDef.maxModelTokens) return false;
-  if (toolDef.minModelTokens && modelTokenCount < toolDef.minModelTokens) return false;
 
   // The agent's own grant to modify the sandbox, absent unless its frontmatter asks
   // for it. Reading is never gated here — see AgentConfigurationManager.
@@ -70,4 +71,57 @@ export function isToolAvailable(toolDef, { mode, modelTokenCount = 0, session = 
   }
 
   return true;
+}
+
+/**
+ * Does this model have anything in it to edit?
+ *
+ * Variables, specifically — relationships and modules are arrangements OF variables,
+ * so a model carrying only those is either empty or malformed, and in both cases
+ * there is nothing for a targeted edit to land on.
+ */
+export function modelHasContent(model) {
+  return (model?.variables?.length ?? 0) > 0;
+}
+
+/**
+ * The gates that depend on the MODEL rather than the session, checked when a tool is
+ * CALLED rather than when it is registered.
+ *
+ * They are here, and not in isToolAvailable, because the model changes inside a turn
+ * while a route's tool list does not. Every route builds its tool list once, at the
+ * top of the turn — and on the Agent SDK route it is an MCP server that cannot be
+ * re-registered mid-query at all. Deciding a model-shaped gate there freezes an
+ * answer that was only true of the model as it stood before the agent touched it: an
+ * agent that inserted an assembly into an empty model spent the rest of that turn
+ * believing it had no way to edit an equation, and told the user to go and
+ * double-click the converters by hand.
+ *
+ * So these two are decided against the live session at call time, and every route
+ * registers the tools they gate unconditionally. The cost is one wasted call when a
+ * tool is genuinely out of range — paid back by the message, which names the tool to
+ * use instead.
+ *
+ * @param {Object} toolDef  Entry from BuiltInToolProvider's tool collection
+ * @param {Object} session  The session record, read live — not a snapshot
+ * @returns {string|null}   Why the call must be refused, or null to let it through
+ */
+export function modelStateGate(toolDef, session) {
+  if (!toolDef) return null;
+
+  if (toolDef.requiresModelContent && !modelHasContent(session?.clientModel)) {
+    return 'the model is empty and a targeted edit needs something to edit. Build the structure first with generate_quantitative_model (SFD) or generate_qualitative_model (CLD), then edit it.';
+  }
+
+  if (toolDef.maxModelTokens) {
+    // Kept current by SessionManager.updateClientModel, which recomputes it on every
+    // model change from any source — a generate_* call, a targeted edit, or a model
+    // the client pushed after its own user edited it.
+    const tokens = session?.modelTokenCount ?? 0;
+    if (tokens > toolDef.maxModelTokens) {
+      return `this model is ~${tokens} tokens, past the ${toolDef.maxModelTokens}-token ceiling for the generative engines. Change it with the targeted-edit tools instead: edit_variables, edit_relationships, edit_specs, edit_modules.`;
+    }
+  }
+
+  return null;
 }

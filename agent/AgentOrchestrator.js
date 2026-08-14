@@ -698,7 +698,7 @@ export class AgentOrchestrator {
         : ['Read', 'Glob', 'Grep'];
 
       let mcpServers = {
-        builtin: await this.builtInToolProvider.getMcpServer(mode, modelTokenCount)
+        builtin: await this.builtInToolProvider.getMcpServer(mode)
       };
 
       // Get client MCP server and derive allowed tool names from the same source
@@ -709,9 +709,10 @@ export class AgentOrchestrator {
         mcpServers.client = clientMcpServer;
       }
 
-      // Build allowed tools list with MCP prefixes, filtered by mode, model token
-      // count and client capability — the same predicate getMcpServer registers by,
-      // so this list can never name a tool the server did not register.
+      // Build allowed tools list with MCP prefixes, filtered by mode, sandbox grant
+      // and client capability — the same predicate getMcpServer registers by, so this
+      // list can never name a tool the server did not register. Model-size gating is
+      // not part of either: it happens when the tool is called (modelStateGate).
       const allBuiltInTools = this.builtInToolProvider.getTools();
       const toolSession = this.sessionManager.getSession(this.sessionId);
       const builtInToolNames = this.builtInToolProvider.getToolNames()
@@ -719,7 +720,7 @@ export class AgentOrchestrator {
           if (SDK_FILE_TOOL_TWINS.has(name)) return false; // SDK provides native Read/Write/Edit
           const toolDef = allBuiltInTools.tools[name];
           if (toolDef?.nonSdkOnly) return false;
-          return isToolAvailable(toolDef, { mode, modelTokenCount, session: toolSession, canWriteToLocalSandbox });
+          return isToolAvailable(toolDef, { mode, session: toolSession, canWriteToLocalSandbox });
         })
         .map(name => `mcp__builtin__${name}`);
       let allowedTools = [
@@ -1782,8 +1783,8 @@ ${lines.join('\n')}`);
         continue;
       }
 
-      // Skip tools ruled out by mode, model size, or client capability
-      if (!isToolAvailable(toolDef, { mode, modelTokenCount, session, canWriteToLocalSandbox: this.configManager.canWriteToLocalSandbox() })) {
+      // Skip tools ruled out by mode, sandbox grant, or client capability
+      if (!isToolAvailable(toolDef, { mode, session, canWriteToLocalSandbox: this.configManager.canWriteToLocalSandbox() })) {
         continue;
       }
 
@@ -2087,7 +2088,7 @@ ${lines.join('\n')}`);
     let maxIterationsHit = false;
 
     try {
-      const builtInAdkTools = await this.builtInToolProvider.getAdkTools(mode, modelTokenCount);
+      const builtInAdkTools = await this.builtInToolProvider.getAdkTools(mode);
       // The same set the roster was built against a few lines up, so what this
       // registers and what the prompt announces are decided by one rule, not two.
       const clientAdkTools = await this.dynamicToolProvider.getAdkTools(this.#builtInToolNameSet());
@@ -2353,7 +2354,7 @@ ${lines.join('\n')}`);
 
     for (const [toolName, toolDef] of Object.entries(builtInTools.tools)) {
       if (toolNames.has(toolName)) continue;
-      if (!isToolAvailable(toolDef, { mode, modelTokenCount, session, canWriteToLocalSandbox: this.configManager.canWriteToLocalSandbox() })) continue;
+      if (!isToolAvailable(toolDef, { mode, session, canWriteToLocalSandbox: this.configManager.canWriteToLocalSandbox() })) continue;
 
       toolNames.add(toolName);
       declarations.push({
@@ -3147,7 +3148,7 @@ ${lines.join('\n')}`);
     const session = this.sessionManager.getSession(this.sessionId);
     for (const [toolName, toolDef] of Object.entries(builtInTools.tools)) {
       if (seen.has(toolName)) continue;
-      if (!isToolAvailable(toolDef, { mode, modelTokenCount, session, canWriteToLocalSandbox: this.configManager.canWriteToLocalSandbox() })) continue;
+      if (!isToolAvailable(toolDef, { mode, session, canWriteToLocalSandbox: this.configManager.canWriteToLocalSandbox() })) continue;
       seen.add(toolName);
       tools.push({
         type: 'function',
@@ -3381,7 +3382,7 @@ ${lines.join('\n')}`);
 
     for (const [toolName, toolDef] of Object.entries(builtInTools.tools)) {
       if (seen.has(toolName)) continue;
-      if (!isToolAvailable(toolDef, { mode, modelTokenCount, session, canWriteToLocalSandbox: this.configManager.canWriteToLocalSandbox() })) continue;
+      if (!isToolAvailable(toolDef, { mode, session, canWriteToLocalSandbox: this.configManager.canWriteToLocalSandbox() })) continue;
       seen.add(toolName);
 
       tools.push(orTool({
@@ -3427,7 +3428,7 @@ ${lines.join('\n')}`);
     const session = this.sessionManager.getSession(this.sessionId);
     for (const [toolName, toolDef] of Object.entries(builtInTools.tools)) {
       if (seen.has(toolName)) continue;
-      if (!isToolAvailable(toolDef, { mode, modelTokenCount, session, canWriteToLocalSandbox: this.configManager.canWriteToLocalSandbox() })) continue;
+      if (!isToolAvailable(toolDef, { mode, session, canWriteToLocalSandbox: this.configManager.canWriteToLocalSandbox() })) continue;
       seen.add(toolName);
       tools.push({
         type: 'function',

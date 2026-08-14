@@ -2,7 +2,7 @@ import { VisualizationEngine } from '../utilities/VisualizationEngine.js';
 import { MediaStore } from '../utilities/MediaStore.js';
 import { toolResultToText, toMcpContentResult, mediaBlocksOf } from '../utilities/ToolResultFormatter.js';
 import { sanitizeSchemaForGemini } from './builtin/toolHelpers.js';
-import { isToolAvailable } from './toolAvailability.js';
+import { isToolAvailable, modelStateGate } from './toolAvailability.js';
 
 // Lazy-loaded provider SDK symbols. Each tool provider serves multiple agent
 // loops (SDK, ADK, manual) but only one is selected per session — eagerly
@@ -44,7 +44,8 @@ import {
   createReadFileTool,
   createWriteFileTool,
   createEditFileTool,
-  createSearchDocumentsTool
+  createSearchDocumentsTool,
+  createErrorResponse
 } from './builtin/index.js';
 
 // Builtins the Claude Agent SDK already provides natively, and which therefore must
@@ -116,7 +117,7 @@ export class BuiltInToolProvider {
    * Create the tool collection with all built-in tools
    */
   #createToolCollection() {
-    return {
+    return this.#applyModelStateGates({
       name: 'builtin_core_tools',
       tools: {
         generate_quantitative_model: createGenerateQuantitativeModelTool(this.sessionManager, this.sessionId, this.sendToClient, this.agentProfile),
@@ -149,7 +150,39 @@ export class BuiltInToolProvider {
         generate_image: createGenerateImageTool(this.sessionManager, this.sessionId, this.mediaStore, this.agentProfile),
         view_media: createViewMediaTool(this.mediaStore)
       }
-    };
+    });
+  }
+
+  /**
+   * Wrap every handler in the model-shaped gates, so they are decided against the
+   * model as it stands when the tool is CALLED.
+   *
+   * Applied to the collection rather than at each route's registration because the
+   * collection is what all five routes build from — the MCP server, ADK, and the
+   * three manual loops all reach the same handler through it, and a gate installed
+   * anywhere else would have to be installed five times.
+   *
+   * The refusal comes back as an ordinary error envelope, which each route already
+   * knows how to deliver: the SDK's wrapper throws it, ADK turns it into text, the
+   * manual loops hand it back as a tool result. In every case the model reads a
+   * sentence naming what to do instead and can act on it in the same turn.
+   */
+  #applyModelStateGates(toolCollection) {
+    for (const [toolName, toolDef] of Object.entries(toolCollection.tools)) {
+      if (!toolDef.requiresModelContent && !toolDef.maxModelTokens) continue;
+
+      const inner = toolDef.handler;
+      toolDef.handler = async (args) => {
+        const refusal = modelStateGate(toolDef, this.#session());
+        if (refusal) {
+          logger.log(`Withheld ${toolName} at call time: ${refusal}`);
+          return createErrorResponse(`${toolName} cannot run right now — ${refusal}`);
+        }
+        return inner(args);
+      };
+    }
+
+    return toolCollection;
   }
 
   /**
@@ -169,17 +202,23 @@ export class BuiltInToolProvider {
   /**
    * Create MCP server from tool instances (for SDK mode)
    *
-   * Tools are filtered by mode and model-token constraints HERE, at registration
-   * time — NOT via the SDK query's allowedTools. Under permissionMode
-   * 'bypassPermissions' the Agent SDK auto-approves every registered tool
-   * regardless of allowedTools (allowedTools only pre-approves; it never removes a
-   * tool the model can see). A tool left on the server — e.g.
+   * Session-fixed constraints — mode, sandbox grant, media capability — are filtered
+   * HERE, at registration time, NOT via the SDK query's allowedTools. Under
+   * permissionMode 'bypassPermissions' the Agent SDK auto-approves every registered
+   * tool regardless of allowedTools (allowedTools only pre-approves; it never removes
+   * a tool the model can see). A tool left on the server — e.g.
    * draw_causal_loop_diagram, which is sfd-only, in cld mode — would still be
    * advertised and callable. Omitting it from the server is the only reliable way
    * to keep it unavailable. Mirrors the filtering in getAdkTools.
+   *
+   * Model-SIZE constraints are deliberately not applied here. This server is built
+   * once per query and cannot be re-registered while the query runs, so a size gate
+   * decided here would still be answering for the model as it stood before the agent
+   * edited it. Those gates live in the handler wrapper instead — see
+   * #applyModelStateGates — where they are re-read on every call.
    * @returns {Object} MCP server instance
    */
-  async getMcpServer(mode, modelTokenCount) {
+  async getMcpServer(mode) {
     const McpServer = await loadMcpServer();
     const toolCollection = this.#createToolCollection();
     const server = new McpServer({ name: 'builtin', version: '1.0.0' });
@@ -197,7 +236,7 @@ export class BuiltInToolProvider {
       // them; that is the whole point of SDK_FILE_TOOL_TWINS being a route fact
       // rather than a property of the tools.)
       if (SDK_FILE_TOOL_TWINS.has(toolName)) continue;
-      if (!isToolAvailable(toolDef, { mode, modelTokenCount, session, canWriteToLocalSandbox: this.canWriteToLocalSandbox })) continue;
+      if (!isToolAvailable(toolDef, { mode, session, canWriteToLocalSandbox: this.canWriteToLocalSandbox })) continue;
 
       // Tools in SDK mode need to throw errors instead of returning error responses
       const sdkHandler = async (args) => {
@@ -229,7 +268,7 @@ export class BuiltInToolProvider {
     return { type: 'sdk', name: 'builtin', instance: server };
   }
 
-  async getAdkTools(mode, modelTokenCount) {
+  async getAdkTools(mode) {
     const FunctionTool = await loadFunctionTool();
     const toolCollection = this.getTools();
     const session = this.#session();
@@ -237,7 +276,7 @@ export class BuiltInToolProvider {
 
     for (const [toolName, toolDef] of Object.entries(toolCollection.tools)) {
       if (toolDef.nonSdkOnly) continue;
-      if (!isToolAvailable(toolDef, { mode, modelTokenCount, session, canWriteToLocalSandbox: this.canWriteToLocalSandbox })) continue;
+      if (!isToolAvailable(toolDef, { mode, session, canWriteToLocalSandbox: this.canWriteToLocalSandbox })) continue;
 
       adkTools.push(new FunctionTool({
         name: toolName,
