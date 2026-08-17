@@ -330,9 +330,15 @@ export class SessionManager {
    */
   setAgentName(sessionId, agentName) {
     const session = this.sessions.get(sessionId);
-    if (session) {
-      session.agentName = agentName;
+    if (!session) {
+      // Every caller builds an orchestrator over a session that already exists, so
+      // there is nothing to recover here — but a missing one would cost the whole
+      // session's usage attribution and change nothing else observable, so say so
+      // rather than letting the reports quietly come back sourceless.
+      logger.warn(`[${sessionId}] setAgentName('${agentName}') found no session — token usage for it will be reported with no source.`);
+      return;
     }
+    session.agentName = agentName;
   }
 
   /**
