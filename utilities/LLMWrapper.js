@@ -122,6 +122,10 @@ export class LLMWrapper {
   #openRouterAPI = null;
   #deepseekAPI = null;
   #tokenReporter = null;
+  // The agent this engine is working for, reported as the usage `source`. Null for a
+  // bare engine call — /generate, or an eval driving a brain — which is what tells the
+  // two apart in the usage report; the agent's tools set it explicitly.
+  #source = null;
   // Per-model cache of the Anthropic model's maximum output tokens, resolved
   // lazily from the Models API so we never impose an arbitrary cap that could
   // truncate a large generation mid-JSON.
@@ -203,6 +207,7 @@ export class LLMWrapper {
       this.#jsonObjectMode = true;
 
     this.#tokenReporter = new TokenUsageReporter(config.tokenReporterURL, parameters.clientId ?? null);
+    this.#source = parameters.source ?? null;
 
     switch (this.model.kind) {
         case ModelType.GEMINI:
@@ -737,7 +742,7 @@ export class LLMWrapper {
     }
 
     const completion = await this.#openRouterAPI.chat.send({ chatRequest });
-    this.#tokenReporter.report({ provider: Provider.OPENROUTER, model, usage: completion.usage, clientKey: this.#clientKey });
+    this.#tokenReporter.report({ provider: Provider.OPENROUTER, model, usage: completion.usage, clientKey: this.#clientKey, source: this.#source });
 
     const message = completion.choices?.[0]?.message ?? {};
     const content = typeof message.content === 'string'
@@ -812,7 +817,7 @@ export class LLMWrapper {
     }
 
     const completion = await this.#deepseekAPI.chat.completions.create(chatRequest);
-    this.#tokenReporter.report({ provider: Provider.DEEPSEEK, model, usage: completion.usage, clientKey: this.#clientKey });
+    this.#tokenReporter.report({ provider: Provider.DEEPSEEK, model, usage: completion.usage, clientKey: this.#clientKey, source: this.#source });
 
     const message = completion.choices?.[0]?.message ?? {};
     let content = typeof message.content === 'string' ? message.content : '';
@@ -870,7 +875,7 @@ export class LLMWrapper {
     }
 
     const completion = await this.#openAIAPI.chat.completions.create(completionParams);
-    this.#tokenReporter.report({ provider: Provider.OPENAI, model, usage: completion.usage, clientKey: this.#clientKey });
+    this.#tokenReporter.report({ provider: Provider.OPENAI, model, usage: completion.usage, clientKey: this.#clientKey, source: this.#source });
     const message = completion.choices[0].message;
     // Reasoning models (e.g. GLM-5) emit chain-of-thought in reasoning_content and
     // leave content null. Try to extract a valid JSON block from the reasoning text
@@ -919,7 +924,7 @@ export class LLMWrapper {
     }
 
     const result = await this.#geminiAPI.models.generateContent(requestConfig);
-    this.#tokenReporter.report({ provider: Provider.GOOGLE, model, usage: result.usageMetadata, clientKey: this.#clientKey });
+    this.#tokenReporter.report({ provider: Provider.GOOGLE, model, usage: result.usageMetadata, clientKey: this.#clientKey, source: this.#source });
 
     // Convert Gemini response to OpenAI format
     return {
@@ -989,7 +994,7 @@ export class LLMWrapper {
     // a non-streaming call, so we always stream here and collect the final message
     // (same shape as messages.create).
     const completion = await this.#anthropicAPI.messages.stream(completionParams).finalMessage();
-    this.#tokenReporter.report({ provider: Provider.ANTHROPIC, model, usage: completion.usage, clientKey: this.#clientKey });
+    this.#tokenReporter.report({ provider: Provider.ANTHROPIC, model, usage: completion.usage, clientKey: this.#clientKey, source: this.#source });
 
     // A truncated response produces invalid JSON downstream; surface the real
     // cause instead of letting it fail later as an opaque "Bad JSON" parse error.

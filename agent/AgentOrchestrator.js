@@ -247,6 +247,15 @@ export class AgentOrchestrator {
     // Load configuration
     this.configManager = new AgentConfigurationManager(agentConfig);
 
+    // Who every token spent from here on is billed to. Published to the session as
+    // well as kept here, because the spenders are scattered: this class's own turns,
+    // the SessionManager's summarizer, the tools, the engines those tools call, and
+    // the RAG embedder all report usage, and all of them can reach the session. Set
+    // before the tool providers are built so nothing can read it half-initialized;
+    // an agent switch builds a new orchestrator and overwrites it.
+    this.agentName = this.configManager.getAgentName();
+    sessionManager.setAgentName(sessionId, this.agentName);
+
     // One media store for the whole worker, injected rather than made per consumer.
     // Four things inside this process need it -- both tool providers, the built-in
     // generate_image and view_media tools, and this class's own hydration of image
@@ -3678,7 +3687,7 @@ ${lines.join('\n')}`);
         resolvedModel = null;
       }
     }
-    this.tokenReporter.report({ provider, model: resolvedModel, usage, clientKey: false }).catch(() => {});
+    this.tokenReporter.report({ provider, model: resolvedModel, usage, clientKey: false, source: this.agentName }).catch(() => {});
   }
 
 

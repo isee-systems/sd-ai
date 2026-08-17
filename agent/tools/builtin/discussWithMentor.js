@@ -34,7 +34,7 @@ export function createDiscussWithMentorTool(sessionManager, sessionId, sendToCli
         }
 
         const underlyingModel = selectEngineModel(agentProfile, difficulty, 'nonBuild');
-        const baseParameters = { ...parameters, clientId: session.clientId, underlyingModel };
+        const baseParameters = { ...parameters, clientId: session.clientId, source: session.agentName, underlyingModel };
         const sessionTempDir = sessionManager.getSessionTempDir(sessionId);
         const feedbackPath = join(sessionTempDir, 'feedback.json');
         const feedbackContent = existsSync(feedbackPath)

@@ -35,7 +35,7 @@ const OPEN_ROUTER_SLUG_REGEX = /\//;
  * reference images — which is what referenceMediaIds needs, and Imagen does not
  * take them.
  */
-export function createGeminiImageGenerator(clientId) {
+export function createGeminiImageGenerator(clientId, source) {
   let client = null;
 
   return {
@@ -68,7 +68,7 @@ export function createGeminiImageGenerator(clientId) {
       // and, usually, thinking tokens.
       if (response.usageMetadata) {
         new TokenUsageReporter(config.tokenReporterURL, clientId)
-          .report({ provider: Provider.GOOGLE, model, usage: response.usageMetadata, clientKey: false })
+          .report({ provider: Provider.GOOGLE, model, usage: response.usageMetadata, clientKey: false, source })
           .catch(() => {});
       }
 
@@ -89,7 +89,7 @@ export function createGeminiImageGenerator(clientId) {
 }
 
 /** OpenRouter image generation, for a slug-style model id. */
-export function createOpenRouterImageGenerator(clientId) {
+export function createOpenRouterImageGenerator(clientId, source) {
   let client = null;
 
   return {
@@ -125,7 +125,7 @@ export function createOpenRouterImageGenerator(clientId) {
 
       if (completion?.usage) {
         new TokenUsageReporter(config.tokenReporterURL, clientId)
-          .report({ provider: Provider.OPENROUTER, model, usage: completion.usage, clientKey: false })
+          .report({ provider: Provider.OPENROUTER, model, usage: completion.usage, clientKey: false, source })
           .catch(() => {});
       }
 
@@ -148,10 +148,10 @@ export function createOpenRouterImageGenerator(clientId) {
 }
 
 /** Picks the generator that matches the configured model id. */
-export function createImageGeneratorFor(model, clientId) {
+export function createImageGeneratorFor(model, clientId, source) {
   return OPEN_ROUTER_SLUG_REGEX.test(model)
-    ? createOpenRouterImageGenerator(clientId)
-    : createGeminiImageGenerator(clientId);
+    ? createOpenRouterImageGenerator(clientId, source)
+    : createGeminiImageGenerator(clientId, source);
 }
 
 export function createGenerateImageTool(sessionManager, sessionId, mediaStore, agentProfile, generator = null) {
@@ -197,7 +197,8 @@ fabrication. Ask the user for those instead.`,
           references.push({ mimeType: meta.mimeType, base64: mediaStore.readBase64(mediaId) });
         }
 
-        const engine = generator ?? createImageGeneratorFor(model, sessionManager.getSession(sessionId)?.clientId);
+        const session = sessionManager.getSession(sessionId);
+        const engine = generator ?? createImageGeneratorFor(model, session?.clientId, session?.agentName ?? null);
         const { images, text, finishReason } = await engine.generate({ model, prompt, aspectRatio, references });
 
         if (images.length === 0) {

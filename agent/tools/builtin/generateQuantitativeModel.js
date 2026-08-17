@@ -39,7 +39,8 @@ export function createGenerateQuantitativeModelTool(sessionManager, sessionId, s
           supportsModules: session.supportsModules && (parameters?.allowModules ?? true),
           supportsSubTypes: session.supportsSubTypes && (parameters?.allowSubTypes ?? true),
           underlyingModel,
-          clientId: session.clientId
+          clientId: session.clientId,
+          source: session.agentName
         };
 
         const result = await callQuantitativeEngine(prompt, currentModel, mergedParameters);

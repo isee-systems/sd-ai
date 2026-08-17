@@ -45,8 +45,12 @@ class TokenUsageReporter {
    * @param {string} params.model - Specific model name, e.g. 'claude-sonnet-4-6' or 'gemini-3-flash-preview'
    * @param {Object} params.usage - Raw usage object from the LLM provider
    * @param {boolean} params.clientKey - True when the API key in use was supplied by the end user; false when it came from the server's .env.
+   * @param {string|null} params.source - Name of the agent whose work spent these tokens
+   *   (AgentConfigurationManager.getAgentName(), e.g. 'merlin'), including calls an agent
+   *   makes through an engine tool. Null when no agent was involved: an engine reached
+   *   directly through the /generate API, or an eval driving a brain itself.
    */
-  async report({ provider, model, usage, clientKey }) {
+  async report({ provider, model, usage, clientKey, source }) {
     if (!usage) return;
 
     const isAnthropic = provider === Provider.ANTHROPIC;
@@ -126,10 +130,14 @@ class TokenUsageReporter {
     
     const clientTag = this.clientId ? ` client=${this.clientId}` : '';
     const clientKeyTag = clientKey ? ' [clientKey]' : '';
+    // Absent for an engine nobody's agent asked for, which is exactly the case the
+    // null `source` records — no tag rather than `source=null`.
+    const sourceTag = source ? ` source=${source}` : '';
 
     if (isAnthropic) {
       logger.log(
         `[usage:${provider}]` +
+        sourceTag +
         clientTag +
         clientKeyTag +
         ` input=${fmt(tokens.inputTokens, costs?.inputTokens)}` +
@@ -144,6 +152,7 @@ class TokenUsageReporter {
       // cached/reasoning), so both providers share it.
       logger.log(
         `[usage:${provider}]` +
+        sourceTag +
         clientTag +
         clientKeyTag +
         ` input=${fmt(tokens.inputTokens, costs?.inputTokens)}` +
@@ -158,6 +167,7 @@ class TokenUsageReporter {
       // costs locally — just log raw token counts plus the provider-reported total.
       logger.log(
         `[usage:${provider}]` +
+        sourceTag +
         clientTag +
         clientKeyTag +
         ` input=${tokens.inputTokens}` +
@@ -169,6 +179,7 @@ class TokenUsageReporter {
     } else {
       logger.log(
         `[usage:${provider}]` +
+        sourceTag +
         clientTag +
         clientKeyTag +
         ` input=${fmt(tokens.inputTokens, costs?.inputTokens)}` +
@@ -193,7 +204,11 @@ class TokenUsageReporter {
       tokens,
       cost: costs?.total ?? null,
       timestamp: new Date().toISOString(),
-      clientKey
+      clientKey,
+      // Coalesced rather than passed through: JSON.stringify drops an undefined
+      // value entirely, and a caller that says nothing means "no agent", which the
+      // receiver must see as an explicit null.
+      source: source ?? null
     };
 
     try {

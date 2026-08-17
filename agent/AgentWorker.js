@@ -195,7 +195,7 @@ class AgentWorker {
           // disk. Files carried across an agent switch keep their extracted text
           // + embeddings (no re-embedding — just re-registered); files whose
           // bytes were written before any worker existed get processed now.
-          this.#ragStore = new RagStore(createGeminiEmbedder(msg.clientId));
+          this.#ragStore = new RagStore(createGeminiEmbedder(this.#sessionManager, SESSION_ID, msg.clientId));
           this.#sessionManager.ragStore = this.#ragStore;
           const freshlyProcessed = await this.#ragStore.reconcile(this.#sessionManager, SESSION_ID, msg.attachedFiles || []);
           for (const meta of freshlyProcessed) {

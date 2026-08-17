@@ -1339,8 +1339,8 @@ describe('startConversationOpenAiCompatibleManual — usage reporting', () => {
     await orc.startConversationOpenAiCompatibleManual('build me a model');
 
     expect(reports(orc)).toEqual([
-      { provider: 'openai', model: TEST_NATIVE_PROVIDERS.openai.model, usage: FIRST_USAGE, clientKey: false },
-      { provider: 'openai', model: TEST_NATIVE_PROVIDERS.openai.model, usage: SECOND_USAGE, clientKey: false },
+      { provider: 'openai', model: TEST_NATIVE_PROVIDERS.openai.model, usage: FIRST_USAGE, clientKey: false, source: 'socrates' },
+      { provider: 'openai', model: TEST_NATIVE_PROVIDERS.openai.model, usage: SECOND_USAGE, clientKey: false, source: 'socrates' },
     ]);
   });
 

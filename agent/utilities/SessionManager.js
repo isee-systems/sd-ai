@@ -246,6 +246,13 @@ export class SessionManager {
       context: {},
       clientId: null,
 
+      // Who is spending this session's tokens, as the `source` of every usage
+      // report: the normalized name of the agent currently driving the session
+      // (set by AgentOrchestrator, replaced on an agent switch). Null until an
+      // agent is selected — file processing and any other pre-agent work is
+      // reported with no source, the same as a bare engine call.
+      agentName: null,
+
       // Model token tracking
       modelTokenCount: 0,
 
@@ -302,6 +309,7 @@ export class SessionManager {
       clientTools: [],
       context: {},
       clientId: null,
+      agentName: null,
       modelTokenCount: 0,
       pendingToolCalls: new Map(),
       conversationContext: [],
@@ -312,6 +320,19 @@ export class SessionManager {
     this.sessions.set(sessionId, session);
     logger.log(`Session registered: ${sessionId}`);
     return sessionId;
+  }
+
+  /**
+   * Record which agent is driving this session, so every LLM call made on its
+   * behalf — its own turns, its summarization, its tools, and the engines those
+   * tools call — is reported under one name. Called by AgentOrchestrator as it
+   * takes the session over; an agent switch overwrites it.
+   */
+  setAgentName(sessionId, agentName) {
+    const session = this.sessions.get(sessionId);
+    if (session) {
+      session.agentName = agentName;
+    }
   }
 
   /**
@@ -690,6 +711,10 @@ Conversation history:
 ${conversationText}`;
 
       const clientId = this.getSession(sessionId)?.clientId ?? null;
+      // Read here rather than at the start of the switch: on an agent switch the
+      // summary is built for the incoming agent, and by this point it is the one
+      // registered on the session.
+      const source = this.getSession(sessionId)?.agentName ?? null;
       const reporter = new TokenUsageReporter(config.tokenReporterURL, clientId);
 
       let summaryText;
@@ -703,7 +728,7 @@ ${conversationText}`;
           model,
           contents: [{ role: 'user', parts: [{ text: summaryPrompt }] }]
         });
-        reporter.report({ provider: Provider.GOOGLE, model, usage: response.usageMetadata, clientKey: false }).catch(() => {});
+        reporter.report({ provider: Provider.GOOGLE, model, usage: response.usageMetadata, clientKey: false, source }).catch(() => {});
         summaryText = response.text || response.candidates?.[0]?.content?.parts?.[0]?.text || '';
       } else if (isNative) {
         if (!this.openAiCompatibleClients[provider]) {
@@ -717,7 +742,7 @@ ${conversationText}`;
           ...maxOutputTokensParam(provider, 1024),
           ...reasoningParams(provider),
         });
-        reporter.report({ provider: usageProviderFor(provider), model, usage: completion.usage, clientKey: false }).catch(() => {});
+        reporter.report({ provider: usageProviderFor(provider), model, usage: completion.usage, clientKey: false, source }).catch(() => {});
         summaryText = completion.choices?.[0]?.message?.content ?? '';
       } else if (isOpenRouter) {
         if (!this.openRouter) {
@@ -732,7 +757,7 @@ ${conversationText}`;
             maxCompletionTokens: 1024,
           }
         });
-        reporter.report({ provider: Provider.OPENROUTER, model, usage: completion.usage, clientKey: false }).catch(() => {});
+        reporter.report({ provider: Provider.OPENROUTER, model, usage: completion.usage, clientKey: false, source }).catch(() => {});
         const message = completion.choices?.[0]?.message;
         if (typeof message?.content === 'string') {
           summaryText = message.content;
@@ -752,7 +777,7 @@ ${conversationText}`;
           max_tokens: 1024,
           messages: [{ role: 'user', content: summaryPrompt }]
         });
-        reporter.report({ provider: Provider.ANTHROPIC, model, usage: response.usage, clientKey: false }).catch(() => {});
+        reporter.report({ provider: Provider.ANTHROPIC, model, usage: response.usage, clientKey: false, source }).catch(() => {});
         summaryText = response.content[0].text;
       }
 

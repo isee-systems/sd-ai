@@ -84,8 +84,12 @@ router.post("/:engine/generate", async (req, res) => {
 
     const prompt = req.body.prompt;
   
+    // `source` names the agent a call was made for in the token usage report, and
+    // this route is by definition not one: everything else in the body is forwarded
+    // to the engine verbatim, so without dropping it a caller could bill their
+    // /generate traffic to whichever agent they named.
     const engineSpecificParameters = Object.fromEntries(Object.entries(req.body).filter(([k, v]) => {
-       return ["prompt", "currentModel"].indexOf(k) == -1
+       return ["prompt", "currentModel", "source"].indexOf(k) == -1
     }));
 
     instance.additionalParameters().forEach((param) => {

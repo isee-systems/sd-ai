@@ -66,9 +66,10 @@ function dot(a, b) {
 /**
  * Build the production embedder backed by a Gemini embedding model. Reuses the
  * GEMINI_API_KEY already present in the worker; reports token usage best-effort
- * through the shared TokenUsageReporter.
+ * through the shared TokenUsageReporter. The session is passed only so each report
+ * can name the agent that is currently spending — see the `source` read below.
  */
-export function createGeminiEmbedder(clientId) {
+export function createGeminiEmbedder(sessionManager, sessionId, clientId) {
   let client = null;
   return {
     async embed(texts) {
@@ -78,6 +79,10 @@ export function createGeminiEmbedder(clientId) {
         client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       }
       const reporter = new TokenUsageReporter(config.tokenReporterURL, clientId);
+      // Read per call, not captured: the embedder is built when the worker starts,
+      // which is before any agent has been selected. Embedding a file the client
+      // attached before that legitimately reports no source.
+      const source = sessionManager.getSession(sessionId)?.agentName ?? null;
       const out = new Array(texts.length);
       // One embedContent call per text (single-string `contents` cannot aggregate),
       // run in bounded-concurrency waves; results written back by index.
@@ -90,7 +95,7 @@ export function createGeminiEmbedder(clientId) {
             config: { outputDimensionality: config.ragEmbeddingDimensions }
           });
           if (response.usageMetadata) {
-            reporter.report({ provider: Provider.GOOGLE, model: config.ragEmbeddingModel, usage: response.usageMetadata, clientKey: false }).catch(() => {});
+            reporter.report({ provider: Provider.GOOGLE, model: config.ragEmbeddingModel, usage: response.usageMetadata, clientKey: false, source }).catch(() => {});
           }
           out[i + j] = l2normalize(response.embeddings[0].values);
         }));

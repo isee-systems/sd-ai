@@ -38,6 +38,15 @@ export class VisualizationEngine {
   }
 
   /**
+   * The agent to bill this visualization's LLM calls to. Read per call rather than
+   * cached beside clientId: this engine is built with the tool provider, and the
+   * clientId is fixed for the session's life while the agent driving it is not.
+   */
+  #agentSource() {
+    return this.sessionManager.getSession(this.sessionId)?.agentName ?? null;
+  }
+
+  /**
    * Validate that a file path is within the session temp directory
    * This prevents path traversal attacks (e.g., ../../etc/passwd)
    * @param {string} filePath - The file path to validate
@@ -179,7 +188,7 @@ ${JSON.stringify(loopsForPrompt, null, 2)}
 
 Remember: output ONLY the SVG document, drawn at ${width}x${height}, reproducing every variable and link exactly.`;
 
-    const vizLLM = new LLMWrapper({ clientId: this.clientId, underlyingModel: options.underlyingModel });
+    const vizLLM = new LLMWrapper({ clientId: this.clientId, source: this.#agentSource(), underlyingModel: options.underlyingModel });
     const { temperature, underlyingModel: parsedModel, reasoningEffort } = vizLLM.getLLMParameters(0.2);
 
     const messages = [
@@ -388,7 +397,7 @@ Generate ONLY working Python code, no explanations.`;
     try {
       // Construct a properly-configured LLMWrapper so getLLMParameters can parse the model
       // name and extract any thinking-level suffix (e.g., 'gemini-3-flash-preview low').
-      const vizLLM = new LLMWrapper({ clientId: this.clientId, underlyingModel: options.underlyingModel });
+      const vizLLM = new LLMWrapper({ clientId: this.clientId, source: this.#agentSource(), underlyingModel: options.underlyingModel });
       const { temperature, underlyingModel: parsedModel, reasoningEffort } = vizLLM.getLLMParameters(0.1);
 
       // Create messages array.

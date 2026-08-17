@@ -29,7 +29,7 @@ export function createGenerateQualitativeModelTool(sessionManager, sessionId, se
 
         const underlyingModel = selectEngineModel(agentProfile, difficulty, 'build');
         const currentModel = sessionManager.getClientModel(sessionId);
-        const result = await callQualitativeEngine(prompt, currentModel, { ...parameters, underlyingModel, clientId: session.clientId });
+        const result = await callQualitativeEngine(prompt, currentModel, { ...parameters, underlyingModel, clientId: session.clientId, source: session.agentName });
 
         if (!result.success) {
           return createErrorResponse(result.error);

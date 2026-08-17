@@ -33,7 +33,7 @@ export function createGenerateLtmNarrativeTool(sessionManager, sessionId, sendTo
         }
 
         const underlyingModel = selectEngineModel(agentProfile, difficulty, 'nonBuild');
-        const baseParameters = { ...parameters, clientId: session.clientId, underlyingModel };
+        const baseParameters = { ...parameters, clientId: session.clientId, source: session.agentName, underlyingModel };
         const sessionTempDir = sessionManager.getSessionTempDir(sessionId);
         const feedbackPath = join(sessionTempDir, 'feedback.json');
         let feedbackContent = existsSync(feedbackPath)
