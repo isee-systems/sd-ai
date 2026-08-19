@@ -260,9 +260,16 @@ export const evaluate = function(generatedResponse, groundTruth) {
         return 0;
     };
 
+    //ground truth names are pluralized, since that is the form they appear in within the english
+    //given to the LLM. a generated name which differs only by pluralization is still the same variable
+    const nameMatches = function(a, b) {
+        const aName = a.toLowerCase();
+        const bName = b.toLowerCase();
+        return aName === bName || pluralize(aName) === bName || aName === pluralize(bName);
+    };
+
     const relationshipMatches = function(a, b) {
-        return (a.from.toLowerCase() === b.from.toLowerCase() &&
-            a.to.toLowerCase() === b.to.toLowerCase());
+        return (nameMatches(a.from, b.from) && nameMatches(a.to, b.to));
     };
 
     const cleanedSortedAI = fromAI.map((relationship) => {

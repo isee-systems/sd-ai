@@ -200,6 +200,10 @@ export const evaluate = function(generatedResponse, groundTruth) {
         return utils.evalsVariableNameMatches(a.name, b.name);
     };
 
+    const stockNameMatchesPlural = function(a, b) {
+        return utils.evalsVariableNameMatches(a.name, pluralize(b.name));
+    };
+
     const failures = []; //type, details
     const stocks = extractStocks(generatedModel); //get all the stocks
 
@@ -207,16 +211,30 @@ export const evaluate = function(generatedResponse, groundTruth) {
     const sortedTruthStocks = [...groundTruthStocks].sort(comparator);
     const sortedCurrentModelStocks = [...currentModelStocks].sort(comparator);
 
-    const removed = sortedTruthStocks.filter((element) => { return !sortedAIStocks.some((aiStock) => stockNameMatches(aiStock, element))});
+    const removed = sortedTruthStocks.filter((element) => {
+        return !(
+            sortedAIStocks.some((aiStock) => stockNameMatches(aiStock, element)) ||
+            sortedAIStocks.some((aiStock) => stockNameMatchesPlural(aiStock, element))
+        )
+    });
 
     const added = sortedAIStocks.filter((element) => {
-        const isNotInGroundTruth = !sortedTruthStocks.some((gtStock) => stockNameMatches(element, gtStock));
-        const isNotInCurrentModel = !sortedCurrentModelStocks.some((cmStock) => stockNameMatches(element, cmStock));
+        const isNotInGroundTruth = !(
+            sortedTruthStocks.some((gtStock) => stockNameMatches(element, gtStock)) ||
+            sortedTruthStocks.some((gtStock) => stockNameMatchesPlural(element, gtStock))
+        );
+        const isNotInCurrentModel = !(
+            sortedCurrentModelStocks.some((cmStock) => stockNameMatches(element, cmStock)) ||
+            sortedCurrentModelStocks.some((cmStock) => stockNameMatchesPlural(element, cmStock))
+        );
         return isNotInGroundTruth && isNotInCurrentModel;
     });
 
     const missingCurrentModelStocks = sortedCurrentModelStocks.filter((element) => {
-        return !sortedAIStocks.some((aiStock) => stockNameMatches(aiStock, element));
+        return !(
+            sortedAIStocks.some((aiStock) => stockNameMatches(aiStock, element)) ||
+            sortedAIStocks.some((aiStock) => stockNameMatchesPlural(aiStock, element))
+        );
     });
 
     const addedStr = added.map((stock) => { return stock.name }).join(", ");
@@ -255,7 +273,7 @@ export const evaluate = function(generatedResponse, groundTruth) {
 
     // Validate current model stocks are preserved with correct properties
     for (const currentModelStock of sortedCurrentModelStocks) {
-        let aiStock = sortedAIStocks.find((aiStock) => stockNameMatches(aiStock, currentModelStock));
+        let aiStock = sortedAIStocks.find((aiStock) => stockNameMatches(aiStock, currentModelStock) || stockNameMatchesPlural(aiStock, currentModelStock));
         if (!aiStock) {
             failures.push({
                 type: "Pre-existing stock missing",
@@ -300,7 +318,7 @@ export const evaluate = function(generatedResponse, groundTruth) {
     }
 
     for (const groundTruthStock of sortedTruthStocks) {
-        let aiStock = sortedAIStocks.find((aiStock) => stockNameMatches(aiStock, groundTruthStock));
+        let aiStock = sortedAIStocks.find((aiStock) => stockNameMatches(aiStock, groundTruthStock) || stockNameMatchesPlural(aiStock, groundTruthStock));
         if (!aiStock)
             continue; //some error in the test itself
 

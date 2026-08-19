@@ -253,9 +253,16 @@ const extractFlow = function(flowSpec, possibleNames, generatedModel) {
     })
 };
 
+//ground truth names are pluralized, since that is the form they appear in within the english
+//given to the LLM. module qualified names hold several words, so pluralize each word before
+//comparing to tolerate a generated name which differs only by pluralization.
+const pluralizeWords = function(name) {
+    return name.toLowerCase().replace(/[a-z]+/g, (word) => pluralize(word));
+};
+
 const compareNames = function(aiName, groundTruthName) {
-    const value =  aiName.toLowerCase().includes(groundTruthName.toLowerCase());
-    return value;
+    return aiName.toLowerCase().includes(groundTruthName.toLowerCase()) ||
+        pluralizeWords(aiName).includes(pluralizeWords(groundTruthName));
 };
 
 export const evaluate = function(generatedResponse, groundTruth) {

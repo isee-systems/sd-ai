@@ -119,6 +119,13 @@ const compareNames = function(aiName, groundTruthName) {
     return aiName.toLowerCase().includes(groundTruthName.toLowerCase());
 };
 
+//the english fed to the LLM pluralizes every variable name, so generated names come back
+//pluralized while the ground truth is singular. irregular plurals (i.e. "priary" -> "priaries")
+//don't contain the singular ground truth name as a substring, so check the plural form too.
+const compareNamesPlural = function(aiName, groundTruthName) {
+    return compareNames(aiName, pluralize(groundTruthName));
+};
+
 export const evaluate = function(generatedResponse, groundTruth) {
     const generatedModel = generatedResponse?.model || {};
     const groundTruthRelationships = groundTruth.relationships;
@@ -142,7 +149,9 @@ export const evaluate = function(generatedResponse, groundTruth) {
     };
 
     const relationshipMatches = function(a, b) {
-        return (compareNames(a.from, b.from) && compareNames(a.to, b.to));
+        const fromMatches = compareNames(a.from, b.from) || compareNamesPlural(a.from, b.from);
+        const toMatches = compareNames(a.to, b.to) || compareNamesPlural(a.to, b.to);
+        return (fromMatches && toMatches);
     };
 
     const cleanedSortedAI = fromAI.map((relationship) => {
