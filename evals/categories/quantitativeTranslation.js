@@ -196,14 +196,28 @@ export const evaluate = function(generatedResponse, groundTruth) {
         return utils.evalsVariableNameMatches(a.name, b.name);
     };
 
+    const stockNameMatchesPlural = function(a, b) {
+        return utils.evalsVariableNameMatches(a.name, pluralize(b.name));
+    };
+
     const failures = []; //type, details
     const stocks = extractStocks(generatedModel); //get all the stocks
 
     const sortedAIStocks = [...stocks].sort(comparator); //sort for comparison purposes by name
     const sortedTruthStocks = [...groundTruthStocks].sort(comparator);
 
-    const removed = sortedTruthStocks.filter((element) => { return !sortedAIStocks.some((aiStock) => stockNameMatches(aiStock, element))});
-    const added = sortedAIStocks.filter((element) => { return !sortedTruthStocks.some((gtStock) => stockNameMatches(element, gtStock))});
+    const removed = sortedTruthStocks.filter((element) => { 
+        return !(
+            sortedAIStocks.some((aiStock) => stockNameMatches(aiStock, element)) ||
+            sortedAIStocks.some((aiStock) => stockNameMatchesPlural(aiStock, element))
+        )
+    });
+    const added = sortedAIStocks.filter((element) => { 
+        return !(
+            sortedTruthStocks.some((gtStock) => stockNameMatches(element, gtStock)) ||
+            sortedTruthStocks.some((gtStock) => stockNameMatchesPlural(element, gtStock))
+        )
+    });
 
     const addedStr = added.map((stock) => { return stock.name }).join(", ");
     const removedStr = removed.map((stock) => { return stock.name }).join(", ");
