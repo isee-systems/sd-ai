@@ -12,6 +12,7 @@ involving both intra-module and cross-module processes.
 import pluralize from 'pluralize';
 import numberToWords from 'number-to-words';
 import utils from '../../utilities/utils.js';
+import { nameContains } from '../utilities/nameMatching.js';
 
 //generic prompt and problem statement used for all tests
 const prompt = 
@@ -253,16 +254,13 @@ const extractFlow = function(flowSpec, possibleNames, generatedModel) {
     })
 };
 
-//ground truth names are pluralized, since that is the form they appear in within the english
-//given to the LLM. module qualified names hold several words, so pluralize each word before
-//comparing to tolerate a generated name which differs only by pluralization.
-const pluralizeWords = function(name) {
-    return name.toLowerCase().replace(/[a-z]+/g, (word) => pluralize(word));
-};
-
+//ground truth names are pluralized, since that is the form they appear in within the english given
+//to the LLM, and the prompt asks for pluralized module names on top of that. the LLM may still
+//singularize a name or regularize a plural pluralize() spells irregularly, so nameContains sees
+//past a pluralization difference in any word of a module qualified name. it can't be done by
+//pluralizing both sides, since pluralize() can't round trip every one of the gibberish nouns
 const compareNames = function(aiName, groundTruthName) {
-    return aiName.toLowerCase().includes(groundTruthName.toLowerCase()) ||
-        pluralizeWords(aiName).includes(pluralizeWords(groundTruthName));
+    return nameContains(aiName, groundTruthName);
 };
 
 export const evaluate = function(generatedResponse, groundTruth) {

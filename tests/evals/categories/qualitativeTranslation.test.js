@@ -287,4 +287,61 @@ describe('CausalTranslation Evaluate', () => {
       expect(groundTruth).toEqual(beforeGroundTruth);
     });
   });
+
+  describe('pluralization tolerance', () => {
+    //the english given to the LLM pluralizes every variable name, so the ground truth here is
+    //plural and the generated names may come back in whichever form the LLM settled on
+    const groundTruth = [
+      { from: 'priaries', to: 'whatajigs', polarity: '+' }
+    ];
+
+    it.each([
+      ['the plural the prose used', 'priaries'],
+      ['the singular behind an irregular plural', 'priary'],
+      ['a regularized plural', 'priarys']
+    ])('should accept %s', (description, name) => {
+      const generatedResponse = {
+        model: {
+          relationships: [
+            { from: name, to: 'whatajigs', polarity: '+' }
+          ]
+        }
+      };
+
+      const failures = evaluate(generatedResponse, groundTruth);
+      expect(failures).toEqual([]);
+    });
+
+    it('should accept either number of a noun pluralize leaves alone', () => {
+      //pluralize() reads "loopnova" as an already plural latin noun and leaves "phildiscals" alone,
+      //so the prose shows both unchanged and the LLM may pluralize or singularize them itself
+      const generatedResponse = {
+        model: {
+          relationships: [
+            { from: 'loopnovas', to: 'phildiscal', polarity: '+' }
+          ]
+        }
+      };
+
+      const failures = evaluate(generatedResponse, [
+        { from: 'loopnova', to: 'phildiscals', polarity: '+' }
+      ]);
+      expect(failures).toEqual([]);
+    });
+
+    it('should still reject a different variable', () => {
+      const generatedResponse = {
+        model: {
+          relationships: [
+            { from: 'younjurings', to: 'whatajigs', polarity: '+' }
+          ]
+        }
+      };
+
+      const failures = evaluate(generatedResponse, groundTruth);
+      expect(failures.map((failure) => failure.type)).toEqual(
+        expect.arrayContaining(['Fake relationships found', 'Real relationships not found'])
+      );
+    });
+  });
 });

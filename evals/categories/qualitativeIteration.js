@@ -9,7 +9,7 @@ specific numerical values, focusing on directional relationships and their polar
 }
 
 import pluralize from 'pluralize';
-import utils from '../../utilities/utils.js';
+import { nameContains } from '../utilities/nameMatching.js';
 import { validateEvaluationResult } from '../evaluationSchema.js';
 
 //generic prompt and problem statement used for all tests
@@ -115,15 +115,14 @@ const generateTest = function(name, relationships, currentModel) {
     };
 };
 
+//the english fed to the LLM pluralizes every variable name while the ground truth is singular, so
+//generated names come back in whichever form the LLM settled on. nameContains sees past a
+//pluralization difference whichever way it runs, which matters for the nouns pluralize() can't
+//round trip: an irregular plural ("priary" -> "priaries") doesn't contain the singular, and a noun
+//which already looks plural ("phildiscals") is left alone by pluralize() but may still be
+//singularized by the LLM.
 const compareNames = function(aiName, groundTruthName) {
-    return aiName.toLowerCase().includes(groundTruthName.toLowerCase());
-};
-
-//the english fed to the LLM pluralizes every variable name, so generated names come back
-//pluralized while the ground truth is singular. irregular plurals (i.e. "priary" -> "priaries")
-//don't contain the singular ground truth name as a substring, so check the plural form too.
-const compareNamesPlural = function(aiName, groundTruthName) {
-    return compareNames(aiName, pluralize(groundTruthName));
+    return nameContains(aiName, groundTruthName);
 };
 
 export const evaluate = function(generatedResponse, groundTruth) {
@@ -149,9 +148,7 @@ export const evaluate = function(generatedResponse, groundTruth) {
     };
 
     const relationshipMatches = function(a, b) {
-        const fromMatches = compareNames(a.from, b.from) || compareNamesPlural(a.from, b.from);
-        const toMatches = compareNames(a.to, b.to) || compareNamesPlural(a.to, b.to);
-        return (fromMatches && toMatches);
+        return (compareNames(a.from, b.from) && compareNames(a.to, b.to));
     };
 
     const cleanedSortedAI = fromAI.map((relationship) => {

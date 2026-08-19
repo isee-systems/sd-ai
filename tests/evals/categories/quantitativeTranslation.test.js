@@ -649,4 +649,62 @@ describe('QuantitativeTranslation Evaluate', () => {
       expect(firstResult).toEqual(secondResult);
     });
   });
+
+  describe('pluralization tolerance', () => {
+    //the english given to the LLM pluralizes every stock name while the ground truth is singular
+    const groundTruth = {
+      timeUnit: 'day',
+      stocks: [
+        { name: 'priary', initialValue: 20 }
+      ]
+    };
+
+    it.each([
+      ['the singular the ground truth uses', 'priary'],
+      ['the irregular plural the prose used', 'priaries'],
+      ['a regularized plural', 'priarys']
+    ])('should accept a stock named with %s', (description, name) => {
+      const generatedResponse = {
+        model: {
+          specs: { timeUnits: 'day' },
+          variables: [
+            { type: 'stock', name: name, equation: '20' }
+          ]
+        }
+      };
+
+      const failures = evaluate(generatedResponse, groundTruth);
+      expect(failures).toEqual([]);
+    });
+
+    it('should accept a pluralized time unit', () => {
+      const generatedResponse = {
+        model: {
+          specs: { timeUnits: 'days' },
+          variables: [
+            { type: 'stock', name: 'priaries', equation: '20' }
+          ]
+        }
+      };
+
+      const failures = evaluate(generatedResponse, groundTruth);
+      expect(failures).toEqual([]);
+    });
+
+    it('should still reject a different stock', () => {
+      const generatedResponse = {
+        model: {
+          specs: { timeUnits: 'day' },
+          variables: [
+            { type: 'stock', name: 'younjurings', equation: '20' }
+          ]
+        }
+      };
+
+      const failures = evaluate(generatedResponse, groundTruth);
+      expect(failures.map((failure) => failure.type)).toEqual(
+        expect.arrayContaining(['Fake stock found', 'Real stocks not found'])
+      );
+    });
+  });
 });

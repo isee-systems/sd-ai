@@ -509,4 +509,96 @@ describe('QuantitativeIteration Evaluate', () => {
       expect(failures).toEqual([]);
     });
   });
+
+  describe('pluralization tolerance', () => {
+    //the english given to the LLM pluralizes the name of every stock it asks for, while the ground
+    //truth and the model being iterated on are both singular
+    const groundTruth = {
+      timeUnit: 'day',
+      stocks: [
+        { name: 'priary', initialValue: 20 }
+      ],
+      currentModel: {
+        variables: [
+          { type: 'stock', name: 'existing_inventory', equation: '50' }
+        ],
+        specs: { timeUnits: 'day' }
+      }
+    };
+
+    it.each([
+      ['the singular the ground truth uses', 'priary', 'existing_inventory'],
+      ['the irregular plural the prose used', 'priaries', 'existing_inventory'],
+      ['a regularized plural', 'priarys', 'existing_inventory'],
+      ['a pluralized pre-existing name', 'priaries', 'existing_inventories']
+    ])('should accept a stock named with %s', (description, name, existingName) => {
+      const generatedResponse = {
+        model: {
+          specs: { timeUnits: 'day' },
+          variables: [
+            { type: 'stock', name: name, equation: '20' },
+            { type: 'stock', name: existingName, equation: '50' }
+          ]
+        }
+      };
+
+      const failures = evaluate(generatedResponse, groundTruth);
+      expect(failures).toEqual([]);
+    });
+
+    it('should accept a pluralized time unit', () => {
+      const generatedResponse = {
+        model: {
+          specs: { timeUnits: 'days' },
+          variables: [
+            { type: 'stock', name: 'priaries', equation: '20' },
+            { type: 'stock', name: 'existing_inventory', equation: '50' }
+          ]
+        }
+      };
+
+      const failures = evaluate(generatedResponse, groundTruth);
+      expect(failures).toEqual([]);
+    });
+
+    it('should still reject a different stock', () => {
+      const generatedResponse = {
+        model: {
+          specs: { timeUnits: 'day' },
+          variables: [
+            { type: 'stock', name: 'younjurings', equation: '20' },
+            { type: 'stock', name: 'existing_inventory', equation: '50' }
+          ]
+        }
+      };
+
+      const failures = evaluate(generatedResponse, groundTruth);
+      expect(failures.map((failure) => failure.type)).toEqual(
+        expect.arrayContaining(['Fake stock found', 'Real stocks not found'])
+      );
+    });
+  });
+
+  describe('generated background knowledge', () => {
+    it('should name pre-existing model variables exactly as the model names them', () => {
+      for (const tests of Object.values(groups)) {
+        for (const test of tests) {
+          const currentModelNames = (test.currentModel.variables || []).map((variable) => variable.name);
+
+          for (const stock of test.expectations.stocks) {
+            const flows = [...(stock.inflows || []), ...(stock.outflows || [])];
+
+            for (const flow of flows) {
+              if (!currentModelNames.includes(flow.of))
+                continue;
+
+              //pluralizing a pre-existing name would point the prose at a variable which isn't
+              //in the model the LLM was handed
+              expect(test.prompt).toContain(flow.of + " ");
+            }
+          }
+        }
+      }
+    });
+  });
 });

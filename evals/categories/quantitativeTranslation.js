@@ -11,6 +11,7 @@ involving fixed, proportional, and interdependent flows.`;
 import pluralize from 'pluralize';
 import numberToWords from 'number-to-words';
 import utils from '../../utilities/utils.js';
+import { namesMatch } from '../utilities/nameMatching.js';
 import { validateEvaluationResult } from '../evaluationSchema.js';
 
 //generic prompt and problem statement used for all tests
@@ -192,12 +193,12 @@ export const evaluate = function(generatedResponse, groundTruth) {
         return 0;
     };
 
+    //the english fed to the LLM pluralizes every variable name while the ground truth is singular,
+    //so generated names come back in whichever form the LLM settled on and namesMatch has to see
+    //past the difference. it can't be done by pluralizing the ground truth, since pluralize()
+    //can't round trip every one of the gibberish nouns
     const stockNameMatches = function(a, b) {
-        return utils.evalsVariableNameMatches(a.name, b.name);
-    };
-
-    const stockNameMatchesPlural = function(a, b) {
-        return utils.evalsVariableNameMatches(a.name, pluralize(b.name));
+        return namesMatch(a.name, b.name);
     };
 
     const failures = []; //type, details
@@ -206,24 +207,14 @@ export const evaluate = function(generatedResponse, groundTruth) {
     const sortedAIStocks = [...stocks].sort(comparator); //sort for comparison purposes by name
     const sortedTruthStocks = [...groundTruthStocks].sort(comparator);
 
-    const removed = sortedTruthStocks.filter((element) => { 
-        return !(
-            sortedAIStocks.some((aiStock) => stockNameMatches(aiStock, element)) ||
-            sortedAIStocks.some((aiStock) => stockNameMatchesPlural(aiStock, element))
-        )
-    });
-    const added = sortedAIStocks.filter((element) => { 
-        return !(
-            sortedTruthStocks.some((gtStock) => stockNameMatches(element, gtStock)) ||
-            sortedTruthStocks.some((gtStock) => stockNameMatchesPlural(element, gtStock))
-        )
-    });
+    const removed = sortedTruthStocks.filter((element) => { return !sortedAIStocks.some((aiStock) => stockNameMatches(aiStock, element))});
+    const added = sortedAIStocks.filter((element) => { return !sortedTruthStocks.some((gtStock) => stockNameMatches(element, gtStock))});
 
     const addedStr = added.map((stock) => { return stock.name }).join(", ");
     const removedStr = removed.map((stock) => { return stock.name }).join(", ");
     const groundTruthStr = sortedTruthStocks.map((stock) => { return stock.name }).join(", ");
 
-    if (!generatedModel.specs?.timeUnits || !utils.evalsVariableNameMatches(generatedModel.specs.timeUnits, groundTruth.timeUnit)) {
+    if (!generatedModel.specs?.timeUnits || !namesMatch(generatedModel.specs.timeUnits, groundTruth.timeUnit)) {
         failures.push({
             type: "Incorrect time unit discovered",
             details: "Incorrect time unit discovered. Expected " + (generatedModel.specs?.timeUnits || "undefined") + " to be " + groundTruth.timeUnit
@@ -245,7 +236,7 @@ export const evaluate = function(generatedResponse, groundTruth) {
     }
 
     for (const groundTruthStock of sortedTruthStocks) {
-        let aiStock = sortedAIStocks.find((aiStock) => stockNameMatches(aiStock, groundTruthStock) || stockNameMatchesPlural(aiStock, groundTruthStock));
+        let aiStock = sortedAIStocks.find((aiStock) => stockNameMatches(aiStock, groundTruthStock));
         if (!aiStock)
             continue; //some error in the test itself
 

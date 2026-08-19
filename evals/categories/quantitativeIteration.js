@@ -11,6 +11,7 @@ involving fixed, proportional, and interdependent flows, while preserving the pr
 import pluralize from 'pluralize';
 import numberToWords from 'number-to-words';
 import utils from '../../utilities/utils.js';
+import { namesMatch } from '../utilities/nameMatching.js';
 import { validateEvaluationResult } from '../evaluationSchema.js';
 
 //generic prompt and problem statement used for all tests
@@ -45,7 +46,14 @@ const generateTest = function(name, timeUnit, stocks, currentModel) {
 
     let english = contexts[Math.floor(Math.random() * contexts.length)] + ", ";
 
-    
+    //flows may draw on a variable which already exists in the model the LLM is being handed. those
+    //are named by the model, not by the prose, so pluralizing them would point the english at a
+    //variable which isn't there ("base_stock_y" reads as "base_stock_ies")
+    const currentModelNames = new Set((currentModel.variables || []).map((variable) => { return variable.name }));
+    const flowSourceName = function(name) {
+        return currentModelNames.has(name) ? name : pluralize(name);
+    };
+
     stocks.forEach((stock, index) => {
         if (index > 0) english += " Meanwhile, ";
         
@@ -62,7 +70,7 @@ const generateTest = function(name, timeUnit, stocks, currentModel) {
                 } else {
                     const percentage = (f.rate * 100);
                     if (f.of !== stock.name) {
-                        flowEnglish += `${percentage}% of the current ${pluralize(f.of)} count`;
+                        flowEnglish += `${percentage}% of the current ${flowSourceName(f.of)} count`;
                     } else {
                         flowEnglish += `${percentage}% growth relative to its current size`;
                     }
@@ -82,7 +90,7 @@ const generateTest = function(name, timeUnit, stocks, currentModel) {
                 } else {
                     const percentage = (f.rate * 100);
                     if (f.of !== stock.name) {
-                        flowEnglish += `${percentage}% of whatever ${pluralize(f.of)} are currently available`;
+                        flowEnglish += `${percentage}% of whatever ${flowSourceName(f.of)} are currently available`;
                     } else {
                         flowEnglish += `${percentage}% of its current amount`;
                     }
@@ -196,12 +204,12 @@ export const evaluate = function(generatedResponse, groundTruth) {
         return 0;
     };
 
+    //the english fed to the LLM pluralizes the name of every stock it asks for while the ground
+    //truth is singular, so generated names come back in whichever form the LLM settled on and
+    //namesMatch has to see past the difference. it can't be done by pluralizing the ground truth,
+    //since pluralize() can't round trip every one of the gibberish nouns
     const stockNameMatches = function(a, b) {
-        return utils.evalsVariableNameMatches(a.name, b.name);
-    };
-
-    const stockNameMatchesPlural = function(a, b) {
-        return utils.evalsVariableNameMatches(a.name, pluralize(b.name));
+        return namesMatch(a.name, b.name);
     };
 
     const failures = []; //type, details
@@ -212,29 +220,17 @@ export const evaluate = function(generatedResponse, groundTruth) {
     const sortedCurrentModelStocks = [...currentModelStocks].sort(comparator);
 
     const removed = sortedTruthStocks.filter((element) => {
-        return !(
-            sortedAIStocks.some((aiStock) => stockNameMatches(aiStock, element)) ||
-            sortedAIStocks.some((aiStock) => stockNameMatchesPlural(aiStock, element))
-        )
+        return !sortedAIStocks.some((aiStock) => stockNameMatches(aiStock, element));
     });
 
     const added = sortedAIStocks.filter((element) => {
-        const isNotInGroundTruth = !(
-            sortedTruthStocks.some((gtStock) => stockNameMatches(element, gtStock)) ||
-            sortedTruthStocks.some((gtStock) => stockNameMatchesPlural(element, gtStock))
-        );
-        const isNotInCurrentModel = !(
-            sortedCurrentModelStocks.some((cmStock) => stockNameMatches(element, cmStock)) ||
-            sortedCurrentModelStocks.some((cmStock) => stockNameMatchesPlural(element, cmStock))
-        );
+        const isNotInGroundTruth = !sortedTruthStocks.some((gtStock) => stockNameMatches(element, gtStock));
+        const isNotInCurrentModel = !sortedCurrentModelStocks.some((cmStock) => stockNameMatches(element, cmStock));
         return isNotInGroundTruth && isNotInCurrentModel;
     });
 
     const missingCurrentModelStocks = sortedCurrentModelStocks.filter((element) => {
-        return !(
-            sortedAIStocks.some((aiStock) => stockNameMatches(aiStock, element)) ||
-            sortedAIStocks.some((aiStock) => stockNameMatchesPlural(aiStock, element))
-        );
+        return !sortedAIStocks.some((aiStock) => stockNameMatches(aiStock, element));
     });
 
     const addedStr = added.map((stock) => { return stock.name }).join(", ");
@@ -250,7 +246,7 @@ export const evaluate = function(generatedResponse, groundTruth) {
         });
     }
 
-    if (!generatedModel.specs?.timeUnits || !utils.sameVars(generatedModel.specs.timeUnits, groundTruth.timeUnit)) {
+    if (!generatedModel.specs?.timeUnits || !namesMatch(generatedModel.specs.timeUnits, groundTruth.timeUnit)) {
         failures.push({
             type: "Incorrect time unit discovered",
             details: "Incorrect time unit discovered. Expected " + (generatedModel.specs?.timeUnits || "undefined") + " to be " + groundTruth.timeUnit
@@ -273,7 +269,7 @@ export const evaluate = function(generatedResponse, groundTruth) {
 
     // Validate current model stocks are preserved with correct properties
     for (const currentModelStock of sortedCurrentModelStocks) {
-        let aiStock = sortedAIStocks.find((aiStock) => stockNameMatches(aiStock, currentModelStock) || stockNameMatchesPlural(aiStock, currentModelStock));
+        let aiStock = sortedAIStocks.find((aiStock) => stockNameMatches(aiStock, currentModelStock));
         if (!aiStock) {
             failures.push({
                 type: "Pre-existing stock missing",
@@ -318,7 +314,7 @@ export const evaluate = function(generatedResponse, groundTruth) {
     }
 
     for (const groundTruthStock of sortedTruthStocks) {
-        let aiStock = sortedAIStocks.find((aiStock) => stockNameMatches(aiStock, groundTruthStock) || stockNameMatchesPlural(aiStock, groundTruthStock));
+        let aiStock = sortedAIStocks.find((aiStock) => stockNameMatches(aiStock, groundTruthStock));
         if (!aiStock)
             continue; //some error in the test itself
 

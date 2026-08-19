@@ -401,4 +401,53 @@ describe('QualitativeIteration Evaluate', () => {
       expect(failures).toEqual([]);
     });
   });
+
+  describe('pluralization tolerance', () => {
+    //the english given to the LLM pluralizes every variable name while the ground truth and the
+    //current model are singular, so the generated names may come back in either form
+    const groundTruth = {
+      relationships: [
+        { from: 'priary', to: 'whatajig', polarity: '+' }
+      ],
+      currentModel: {
+        relationships: [
+          { from: 'phildiscals', to: 'ku', polarity: '-' }
+        ]
+      }
+    };
+
+    it.each([
+      ['the singular the ground truth uses', 'priary', 'phildiscals', 'ku'],
+      ['the irregular plural the prose used', 'priaries', 'phildiscals', 'kus'],
+      ['a singularized noun which already looked plural', 'priaries', 'phildiscal', 'kus']
+    ])('should accept %s', (description, from, existingFrom, existingTo) => {
+      const generatedResponse = {
+        model: {
+          relationships: [
+            { from: from, to: 'whatajigs', polarity: '+' },
+            { from: existingFrom, to: existingTo, polarity: '-' }
+          ]
+        }
+      };
+
+      const failures = evaluate(generatedResponse, groundTruth);
+      expect(failures).toEqual([]);
+    });
+
+    it('should still reject a different variable', () => {
+      const generatedResponse = {
+        model: {
+          relationships: [
+            { from: 'younjurings', to: 'whatajigs', polarity: '+' },
+            { from: 'phildiscals', to: 'ku', polarity: '-' }
+          ]
+        }
+      };
+
+      const failures = evaluate(generatedResponse, groundTruth);
+      expect(failures.map((failure) => failure.type)).toEqual(
+        expect.arrayContaining(['Fake relationships found', 'Real relationships not found'])
+      );
+    });
+  });
 });
