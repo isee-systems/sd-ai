@@ -357,7 +357,9 @@ export class BuiltInToolProvider {
       }));
     }
 
-    logger.log(`Built ${adkTools.length} ADK tools for mode=${mode}`);
+    // Debug, not log: the ADK route resolves this before every model request now
+    // (see createAdkLiveToolset), so an info-level line here would narrate every pass.
+    logger.debug(`Built ${adkTools.length} ADK tools for mode=${mode}`);
     return adkTools;
   }
 

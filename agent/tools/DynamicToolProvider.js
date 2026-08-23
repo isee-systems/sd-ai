@@ -446,7 +446,8 @@ ${lines.join('\n')}`;
       }));
     }
 
-    logger.log(`Built ${adkTools.length} ADK client tools`);
+    // Debug for the same reason as the built-in side — this now runs once per pass.
+    logger.debug(`Built ${adkTools.length} ADK client tools`);
     return adkTools;
   }
 }

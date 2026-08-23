@@ -4,8 +4,8 @@ import { countTokens } from '@anthropic-ai/tokenizer';
  * The one place that decides whether a built-in tool is offered to the model.
  *
  * Every provider route builds its own tool list — the Agent SDK's MCP server, ADK,
- * the two manual loops, OpenRouter's agent and its manual twin — and each used to
- * repeat the same three checks inline. Seven copies of a predicate is seven chances
+ * the four manual loops, and OpenRouter's agent — and each used to repeat the same
+ * three checks inline. Seven copies of a predicate is seven chances
  * for a fourth condition to land in six of them, and a tool that stays advertised
  * on one route after being withdrawn everywhere else is exactly the kind of bug
  * that only shows up on the provider nobody tested. Add a condition here and every
@@ -114,10 +114,16 @@ export function measureModelTokens(session) {
  * Whether a tool should be in the agent's tool list right now: allowed for this
  * session AND usable against the model as it currently stands.
  *
- * What every route builds its declaration list from. The one caller that cannot use
- * it is the SDK's MCP registration, which has to register a tool it intends to
- * withhold so it has something to re-enable later — it composes the same two
- * predicates itself.
+ * What a route builds its declaration list from WHEN it can rebuild that list before
+ * every model request: the four manual loops, and the ADK route via the toolset at the
+ * bottom of this file. Two routes cannot, and neither uses this:
+ *
+ * - the Claude Agent SDK's MCP registration, which has to register a tool it intends
+ *   to withhold so it has something to re-enable later, and so composes the same two
+ *   predicates itself;
+ * - the OpenRouter agent SDK, which is handed one tool array per run and offers no
+ *   hook to replace it, and so advertises the isToolAvailable superset and leans on
+ *   the call-time gate. See #buildOpenRouterTools.
  */
 export function isToolActive(toolDef, options = {}) {
   return isToolAvailable(toolDef, options) && !modelStateGate(toolDef, options.session);
@@ -136,12 +142,20 @@ export function isToolActive(toolDef, options = {}) {
  * spent the rest of that turn believing it had no way to edit an equation, because
  * edit_variables had been filtered out when the turn began.
  *
- * Callers use this two ways. Routes that can rebuild a tool list — the manual loops,
- * and every route at the top of a turn — treat a refusal as "withhold this tool"
- * (see isToolActive). The SDK's MCP server, which is built once per query and cannot
- * be rebuilt while the query runs, registers the tool and toggles it instead, which
- * MCP reports to the client as a tools/list change. Either way the handler re-checks
- * when it runs, since no list is perfectly current at the instant of the call.
+ * Callers use this three ways, one per shape of route:
+ *
+ * - Routes that rebuild their declaration list before every model request — the four
+ *   manual loops, and the ADK route through createAdkLiveToolset — treat a refusal as
+ *   "withhold this tool" (see isToolActive).
+ * - The Claude Agent SDK's MCP server is built once per query and cannot be rebuilt
+ *   while the query runs, so it registers the tool and toggles it instead, which MCP
+ *   reports to the client as a tools/list change.
+ * - The OpenRouter agent SDK can do neither: one array per run, no hook to replace it.
+ *   It advertises the superset and lets the refusal below do the work, because a tool
+ *   wrongly offered costs one call while a tool wrongly withheld costs the run.
+ *
+ * All three rely on the handler re-checking when it runs, since no list is perfectly
+ * current at the instant of the call.
  *
  * @param {Object} toolDef  Entry from BuiltInToolProvider's tool collection
  * @param {Object} session  The session record, read live — not a snapshot
@@ -165,4 +179,56 @@ export function modelStateGate(toolDef, session) {
   }
 
   return null;
+}
+
+/**
+ * A toolset whose contents ADK re-resolves before every model request.
+ *
+ * Lives here rather than beside the ADK route because it is the ADK answer to the
+ * question this file exists to ask. The route builds its agent once per turn, so a
+ * plain `tools: [...]` array is frozen for the whole turn: whatever passed
+ * isToolActive when the turn began is what the model keeps seeing, however much the
+ * tool call it just made changed the answer. That is the same trap the SDK route hit
+ * and solved by toggling MCP registrations — see modelStateGate above.
+ *
+ * ADK's own answer is BaseToolset. LlmAgent.runOneStepAsync builds a fresh LlmRequest
+ * per model call and resolves every entry of `tools` through convertToolUnionToTools,
+ * which calls `getTools()` on anything that is not already a BaseTool. Handing it a
+ * toolset instead of an array therefore moves the filtering decision from
+ * once-per-turn to once-per-pass, which is where it belongs.
+ *
+ * Lazy like every other @google/adk symbol in this codebase: the class cannot be
+ * declared until the module is loaded, and loading it costs ~500ms that a session on
+ * any other provider must not pay. Memoized at module scope so the import lands once
+ * per worker process.
+ *
+ * @param {() => Promise<Array>} resolveTools  Called before every model request; returns
+ *        the ADK FunctionTools the model should see right now.
+ */
+let _AdkLiveToolset;
+
+export async function createAdkLiveToolset(resolveTools) {
+  if (!_AdkLiveToolset) {
+    const { BaseToolset } = await import('@google/adk');
+
+    _AdkLiveToolset = class AdkLiveToolset extends BaseToolset {
+      constructor(resolve) {
+        // No static toolFilter: the resolver already returns exactly the live set, and
+        // a second predicate here would be a second place to keep in sync.
+        super([]);
+        this.resolve = resolve;
+      }
+
+      async getTools() {
+        return this.resolve();
+      }
+
+      // Nothing to release — these tools hold no connections or handles of their own.
+      // Required because BaseToolset declares it abstract, and Runner calls close() on
+      // every toolset it can reach when an agent server winds down.
+      async close() {}
+    };
+  }
+
+  return new _AdkLiveToolset(resolveTools);
 }

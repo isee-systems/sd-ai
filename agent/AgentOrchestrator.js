@@ -56,7 +56,7 @@ import {
   reasoningParams,
   usageProviderFor
 } from './utilities/nativeProviders.js';
-import { isToolActive } from './tools/toolAvailability.js';
+import { isToolActive, isToolAvailable, createAdkLiveToolset } from './tools/toolAvailability.js';
 import { APP_ROOT, createSdkFilesystemGuard } from './tools/pathConfinement.js';
 import { createSdkNetworkGuard } from './tools/networkConfinement.js';
 import { join } from 'path';
@@ -755,9 +755,18 @@ export class AgentOrchestrator {
       }
 
       // Build allowed tools list with MCP prefixes, filtered by mode, sandbox grant
-      // and client capability — the same predicate getMcpServer registers by, so this
-      // list can never name a tool the server did not register. Model-size gating is
-      // not part of either: it happens when the tool is called (modelStateGate).
+      // and client capability — isToolAvailable, which is the exact predicate
+      // getMcpServer registers by, so this list can never name a tool the server did
+      // not register and can never omit one it did.
+      //
+      // Model-state gating is deliberately NOT applied here, and this is the one route
+      // where that distinction is load-bearing. The list is built once per query and
+      // cannot be rebuilt while the query runs; the live answer comes from the MCP
+      // server, which registers a gated tool disabled and has syncModelStateGates flip
+      // it as the model changes. Filtering with isToolActive here would freeze the
+      // turn's opening model state into two places the toggle cannot reach: this list,
+      // and the prompt rewrite below, which would then go on naming a revived tool by
+      // an unprefixed name the model cannot call.
       const allBuiltInTools = this.builtInToolProvider.getTools();
       const toolSession = this.sessionManager.getSession(this.sessionId);
       const builtInToolNames = this.builtInToolProvider.getToolNames()
@@ -765,7 +774,7 @@ export class AgentOrchestrator {
           if (SDK_FILE_TOOL_TWINS.has(name)) return false; // SDK provides native Read/Write/Edit
           const toolDef = allBuiltInTools.tools[name];
           if (toolDef?.nonSdkOnly) return false;
-          return isToolActive(toolDef, { mode, session: toolSession, canWriteToLocalSandbox });
+          return isToolAvailable(toolDef, { mode, session: toolSession, canWriteToLocalSandbox });
         })
         .map(name => `mcp__builtin__${name}`);
       let allowedTools = [
@@ -2138,10 +2147,23 @@ ${lines.join('\n')}`);
     let maxIterationsHit = false;
 
     try {
-      const builtInAdkTools = await this.builtInToolProvider.getAdkTools(mode);
-      // The same set the roster was built against a few lines up, so what this
-      // registers and what the prompt announces are decided by one rule, not two.
-      const clientAdkTools = await this.dynamicToolProvider.getAdkTools(this.#builtInToolNameSet());
+      // Names, not instances: the tool objects are now rebuilt per model request (see
+      // the toolset below), so nothing built here survives long enough to identify a
+      // call by identity. The set is fixed for the session either way.
+      const builtInAdkToolNames = this.#builtInToolNameSet();
+
+      // A toolset rather than an array, so ADK re-resolves it before EVERY request
+      // instead of once per turn — see createAdkLiveToolset. Both providers resolve
+      // inside it: one rule, applied at one moment, for everything the model can see.
+      // Client tools are re-listed alongside the built-ins even though nothing about
+      // them can change mid-turn, because splitting the two would mean two answers to
+      // "what is live right now" and only one of them kept current.
+      const adkToolset = await createAdkLiveToolset(async () => [
+        ...await this.builtInToolProvider.getAdkTools(mode),
+        // The same set the roster was built against a few lines up, so what this
+        // registers and what the prompt announces are decided by one rule, not two.
+        ...await this.dynamicToolProvider.getAdkTools(builtInAdkToolNames)
+      ]);
 
       const pendingCallIds = new Map();
 
@@ -2158,7 +2180,7 @@ ${lines.join('\n')}`);
         // placeholders are not safe from it. The function form sets
         // requireStateInjection=false, so the prompt reaches Gemini verbatim.
         instruction: () => systemPrompt,
-        tools: [...builtInAdkTools, ...clientAdkTools],
+        tools: [adkToolset],
         generateContentConfig: {
           // Spread so a level that defines no effort sends no thinkingConfig at all.
           ...(geminiThinking ? { thinkingConfig: geminiThinking } : {})
@@ -2202,7 +2224,7 @@ ${lines.join('\n')}`);
           const callId = `adk_${Date.now()}_${Math.random().toString(36).substr(2, 7)}`;
           const key = `${tool.name}::${JSON.stringify(args)}`;
           pendingCallIds.set(key, callId);
-          const isBuiltIn = builtInAdkTools.some(t => t.name === tool.name);
+          const isBuiltIn = builtInAdkToolNames.has(tool.name);
           await this.#sendSlowToolMessageHelper(tool.name, args);
           await this.sendToClient(createToolCallNotificationMessage(
             this.sessionId, callId, tool.name, args, isBuiltIn
@@ -2677,8 +2699,6 @@ ${lines.join('\n')}`);
     const maxIterations = this.configManager.getMaxIterations();
 
     try {
-      const orTools = await this.#buildOpenRouterTools(mode);
-
       let userPromptText = userMessage;
       if (previousAgentContext?.length > 0) {
         const contextToReplay = previousAgentContext.slice(0, -1).map(toAnthropicMessage);
@@ -2697,7 +2717,6 @@ ${lines.join('\n')}`);
       // An explicit 'system'-role item is passed through verbatim.
       const baseRequest = {
         model,
-        tools: orTools,
         stopWhen: stepCountIs(maxIterations),
         // The stop button's only lever on this route — the anthropic and gemini
         // routes hand their signal to the SDK the same way. Without it
@@ -2719,6 +2738,14 @@ ${lines.join('\n')}`);
         if (this.stopRequested) break;
         this.#openRouterSdkFailureDetail = null;
 
+        // Rebuilt per queued message rather than once for the whole conversation:
+        // this is the only moment on this route where a new list can reach the
+        // model, and the message being drained may well have been typed BECAUSE
+        // the user changed the model in their own application while the agent was
+        // working. `callModel` runs its entire tool loop against the array handed
+        // to it, so what is decided here holds until this run ends.
+        const orTools = await this.#buildOpenRouterTools(mode);
+
         // Drive everything off the SDK's event broadcaster so we see items
         // from every turn — including the INITIAL response (whose output never
         // reaches onTurnEnd) and any text the model emits alongside tool
@@ -2730,6 +2757,7 @@ ${lines.join('\n')}`);
         // parsed-argument tool calls for live notifications before execution.
         const result = callModel(openRouterClient, {
           ...baseRequest,
+          tools: orTools,
           input
         });
 
@@ -3449,6 +3477,23 @@ ${lines.join('\n')}`);
   /**
    * Wrap built-in and dynamic tools in @openrouter/agent's `tool()` factory so
    * the agent loop auto-executes them.
+   *
+   * The one route that cannot re-advertise mid-run. `callModel` destructures `tools`
+   * once at entry, converts it to wire format once, and sends that same array on every
+   * turn of its internal loop; there is no per-turn hook that can replace it (tools is
+   * not one of the async-resolvable request fields, and no lifecycle hook reaches the
+   * outgoing declaration list). So this list is fixed from here until the run ends.
+   *
+   * Which is why it filters on isToolAvailable and not isToolActive. When a list cannot
+   * be corrected, the two ways of being wrong are not symmetric: a tool advertised
+   * while its model-state gate is closed costs one call, answered by a refusal that
+   * says what to do instead ("build the structure first with generate_quantitative_model
+   * ...") — while a tool withheld because the gate was closed when the run began stays
+   * invisible for the whole run, including the entire stretch after the agent's own
+   * generate_* call opened it. That second failure is the one this route kept hitting.
+   * The gate still holds: every gated handler re-checks it at call time
+   * (BuiltInToolProvider#applyModelStateGates), so nothing runs against a model it
+   * cannot run against.
    */
   async #buildOpenRouterTools(mode) {
     const { tool: orTool } = await loadOpenRouterAgent();
@@ -3460,7 +3505,8 @@ ${lines.join('\n')}`);
 
     for (const [toolName, toolDef] of Object.entries(builtInTools.tools)) {
       if (seen.has(toolName)) continue;
-      if (!isToolActive(toolDef, { mode, session, canWriteToLocalSandbox: this.configManager.canWriteToLocalSandbox() })) continue;
+      // isToolAvailable, not isToolActive — see the note above this method.
+      if (!isToolAvailable(toolDef, { mode, session, canWriteToLocalSandbox: this.configManager.canWriteToLocalSandbox() })) continue;
       seen.add(toolName);
 
       tools.push(orTool({

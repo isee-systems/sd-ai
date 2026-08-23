@@ -7,7 +7,7 @@
  * itself; BuiltInToolProvider.test.js pins that the registration path actually
  * calls it.
  */
-import { isToolAvailable, mediaCapability, modelStateGate, modelHasContent } from '../../../agent/tools/toolAvailability.js';
+import { isToolAvailable, mediaCapability, modelStateGate, modelHasContent, createAdkLiveToolset } from '../../../agent/tools/toolAvailability.js';
 
 const SINK_TOOL = { name: 'write_interface_media', media: { inputs: ['image'] } };
 const SOURCE_TOOL = { name: 'capture_interface_preview', media: { returnsMedia: true } };
@@ -160,5 +160,35 @@ describe('modelStateGate', () => {
     expect(modelHasContent({ relationships: [{ from: 'a', to: 'b' }] })).toBe(false);
     expect(modelHasContent({ variables: [{ name: 'a' }] })).toBe(true);
     expect(modelHasContent(null)).toBe(false);
+  });
+});
+
+describe('createAdkLiveToolset', () => {
+  // The ADK route builds its LlmAgent once per turn, so an array of tools is frozen
+  // for the turn. ADK re-resolves a BaseToolset before every model request instead,
+  // which is the only reason the route can withhold and restore a tool mid-turn.
+  it('presents as a toolset ADK will re-resolve, not as a tool', async () => {
+    const { isBaseToolset } = await import('@google/adk');
+    const toolset = await createAdkLiveToolset(async () => []);
+    expect(isBaseToolset(toolset)).toBe(true);
+  });
+
+  it('asks the resolver again on every pass, rather than caching the first answer', async () => {
+    let modelHasVariables = false;
+    const toolset = await createAdkLiveToolset(async () =>
+      modelHasVariables ? [{ name: 'edit_variables' }] : [{ name: 'generate_quantitative_model' }]);
+
+    expect((await toolset.getTools()).map(t => t.name)).toEqual(['generate_quantitative_model']);
+
+    // What a generate_* call does to the session, from the toolset's point of view.
+    modelHasVariables = true;
+
+    expect((await toolset.getTools()).map(t => t.name)).toEqual(['edit_variables']);
+  });
+
+  it('closes without touching anything, since it owns no resources', async () => {
+    // Runner calls close() on every toolset it can reach when an agent server winds
+    // down; the tools here are plain FunctionTools over in-process handlers.
+    await expect(createAdkLiveToolset(async () => []).then(t => t.close())).resolves.toBeUndefined();
   });
 });
