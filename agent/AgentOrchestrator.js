@@ -68,6 +68,20 @@ import { join } from 'path';
 // config.js edit (see config.openRouterAgentProviders).
 const OPENROUTER_PROVIDERS = new Set(Object.keys(config.openRouterAgentProviders));
 
+// Every event that terminates one turn of the OpenRouter SDK's tool loop. All three
+// carry the same materialized response object, and therefore that turn's `usage`:
+// `response.completed` for a turn that ran to the end, `response.incomplete` for one
+// the provider cut short (max_output_tokens, a filtered generation, a truncated
+// stream), and `response.failed` for one that errored after the model had already
+// generated. Incomplete and failed responses are billed exactly like completed ones —
+// @openrouter/agent notes that an incomplete response "is materialized, has a
+// generation id, and consumed tokens" — so all three feed the usage accumulator.
+const OPENROUTER_TERMINAL_RESPONSE_EVENTS = new Set([
+  'response.completed',
+  'response.failed',
+  'response.incomplete',
+]);
+
 // The Agent SDK's write half, withheld from any agent that has not opted in via
 // can_write_to_local_sandbox.
 //
@@ -192,12 +206,16 @@ export class AgentOrchestrator {
   #geminiAdkReportedUsageMetadata = new WeakSet();
   // Running usage total for the OpenRouter conversation currently in flight, shared
   // by both loops (a session runs one of them, never both). OpenRouter bills one HTTP
-  // request at a time — the SDK loop sees a `response.completed` per turn, the manual
-  // loop a usage block per chat.send — so no single usage object is the run's total
+  // request at a time — the SDK loop sees a terminal response event per turn, the
+  // manual loop a usage block per chat.send — so no single usage object is the run's total
   // and they are summed as they arrive. Flushed and cleared at every exit from either
   // loop: normal completion, user stop, abort and error alike, so a run that ends
   // early still reports every token it spent up to that point.
   #openRouterPendingUsage = null;
+  // The model the pending usage was spent on, captured as it accumulates so a flush
+  // needs nothing from the call site. stopIteration() is the reason: it can report
+  // what a run has spent without being inside the run, or knowing which one it is.
+  #openRouterPendingUsageModel = null;
   // Upstream error block from a `response.failed` event on the OpenRouter SDK
   // stream. The SDK's own handler for that event reads `event.message`, which
   // does not exist — the detail lives at `event.response.error` — so it throws a
@@ -2681,6 +2699,15 @@ ${lines.join('\n')}`);
         model,
         tools: orTools,
         stopWhen: stepCountIs(maxIterations),
+        // The stop button's only lever on this route — the anthropic and gemini
+        // routes hand their signal to the SDK the same way. Without it
+        // stopIteration() aborts a controller @openrouter/agent never sees: the
+        // tool loop keeps requesting turns and keeps calling client tools that
+        // the stopped front end is no longer answering, so the run never unwinds,
+        // the finally below never runs, and everything it spent goes unreported.
+        // The SDK composes this into the in-flight API request AND into every
+        // tool execution it races, so both halves of a wedged turn come loose.
+        signal: this.abortController.signal,
       };
 
       let input = [
@@ -2741,86 +2768,103 @@ ${lines.join('\n')}`);
           const countedResponseIds = new Set();
           try {
             for await (const event of result.getFullResponsesStream()) {
-              // One `response.completed` per turn of the tool loop, each carrying
-              // what that turn alone billed — so they are summed into the run's
-              // total, not overwritten. Deduped by response id because the SDK can
-              // reissue an event (see the item dedup below) and a second copy would
-              // bill the same turn twice. Handled BEFORE the stop check so the turn
-              // in flight when the user hits stop is still counted.
-              if (event?.type === 'response.completed' && event.response?.usage) {
-                const responseId = event.response.id;
-                if (!responseId || !countedResponseIds.has(responseId)) {
-                  if (responseId) countedResponseIds.add(responseId);
-                  this.#accumulateOpenRouterUsage(event.response.usage);
+              // One terminal event per turn of the tool loop
+              // (OPENROUTER_TERMINAL_RESPONSE_EVENTS), each carrying what that turn
+              // alone billed — so they are summed into the run's total, not
+              // overwritten. Completed, incomplete and failed all count: the last two
+              // are the turns a stop or an upstream error ends on, and the provider
+              // bills them the same. Deduped by response id across all three because
+              // the SDK can reissue an event (see the item dedup below) and a second
+              // copy would bill the same turn twice. Handled BEFORE the stop check so
+              // the turn in flight when the user hits stop is still counted.
+              if (OPENROUTER_TERMINAL_RESPONSE_EVENTS.has(event?.type)) {
+                const response = event.response;
+                if (response?.usage) {
+                  const responseId = response.id;
+                  if (!responseId || !countedResponseIds.has(responseId)) {
+                    if (responseId) countedResponseIds.add(responseId);
+                    this.#accumulateOpenRouterUsage(response.usage, model);
+                  }
                 }
-                continue;
-              }
 
-              // The only place the upstream reason is visible. Capture it before
-              // the SDK turns this same event into a detail-free throw. Logged
-              // here too: on a follow-up turn the SDK rejects immediately, and
-              // this is the record of what the provider actually said.
-              if (event?.type === 'response.failed') {
-                const err = event.response?.error;
-                let detail;
-                try {
-                  detail = typeof err === 'string' ? err : JSON.stringify(err);
-                } catch {
-                  detail = String(err);
+                // A failed response is also the only place the upstream reason is
+                // visible. Capture it before the SDK turns this same event into a
+                // detail-free throw. Logged here too: on a follow-up turn the SDK
+                // rejects immediately, and this is the record of what the provider
+                // actually said.
+                if (event.type === 'response.failed') {
+                  const err = response?.error;
+                  let detail;
+                  try {
+                    detail = typeof err === 'string' ? err : JSON.stringify(err);
+                  } catch {
+                    detail = String(err);
+                  }
+                  this.#openRouterSdkFailureDetail = detail ?? 'no error block on the failed response';
+                  logger.error(`OpenRouter SDK: response.failed from ${model}: ${this.#openRouterSdkFailureDetail}`);
                 }
-                this.#openRouterSdkFailureDetail = detail ?? 'no error block on the failed response';
-                logger.error(`OpenRouter SDK: response.failed from ${model}: ${this.#openRouterSdkFailureDetail}`);
                 continue;
               }
 
               // After a stop, keep draining the stream rather than abandoning it.
               // The request already in flight is not cancelled, so its turns finish
               // and bill regardless; staying on the stream is what lets their
-              // `response.completed` events reach the accumulator above. This costs
-              // no extra waiting — getResponse() below is blocked on the same work
-              // either way. Everything client-facing is skipped from here on.
+              // terminal events reach the accumulator above. This costs no extra
+              // waiting — getResponse() below is blocked on the same work either
+              // way. Everything client-facing is skipped from here on.
               if (this.stopRequested) continue;
 
-              // Tool execution completed — emit the completion message.
-              if (event?.type === 'tool.call_output') {
-                const out = event.output;
-                if (!out?.callId || completedToolCallIds.has(out.callId)) continue;
-                completedToolCallIds.add(out.callId);
-                const text = typeof out.output === 'string'
-                  ? out.output
-                  : Array.isArray(out.output)
-                    ? out.output.filter(o => o.type === 'input_text').map(o => o.text || '').join('\n')
-                    : String(out.output ?? '');
-                const isError = out.status === 'incomplete';
-                const displayName = toolCallNames.get(out.callId) || 'tool';
-                const responseType = this.#getResponseType(displayName);
-                logger.log(`OpenRouter SDK: tool call completed: ${displayName}`);
-                await this.sendToClient(createToolCallCompletedMessage(
-                  this.sessionId, out.callId, displayName,
-                  [{ type: 'text', text }], isError, responseType
-                ));
-                continue;
-              }
+              // Forwarding to the client is isolated from the drain: a send that
+              // rejects (most often the socket going away, which is how a run stops
+              // when the user closes the tab) must not abandon the stream. The turns
+              // still in flight bill whether or not anyone is listening, and their
+              // terminal events above are the only record of what they cost.
+              try {
+                // Tool execution completed — emit the completion message.
+                if (event?.type === 'tool.call_output') {
+                  const out = event.output;
+                  if (!out?.callId || completedToolCallIds.has(out.callId)) continue;
+                  completedToolCallIds.add(out.callId);
+                  const text = typeof out.output === 'string'
+                    ? out.output
+                    : Array.isArray(out.output)
+                      ? out.output.filter(o => o.type === 'input_text').map(o => o.text || '').join('\n')
+                      : String(out.output ?? '');
+                  const isError = out.status === 'incomplete';
+                  const displayName = toolCallNames.get(out.callId) || 'tool';
+                  const responseType = this.#getResponseType(displayName);
+                  logger.log(`OpenRouter SDK: tool call completed: ${displayName}`);
+                  await this.sendToClient(createToolCallCompletedMessage(
+                    this.sessionId, out.callId, displayName,
+                    [{ type: 'text', text }], isError, responseType
+                  ));
+                  continue;
+                }
 
-              // A complete output item from any turn (initial or follow-up):
-              // message text, reasoning, function_call, function_call_output.
-              if (event?.type === 'response.output_item.done' && event.item) {
-                const item = event.item;
-                // Cache the tool name keyed by callId BEFORE dedup — the
-                // matching tool.call_output later in this same stream looks it
-                // up to label the completion message. function_call always
-                // arrives here before its corresponding tool.call_output.
-                if (item.type === 'function_call' && item.callId && item.name) {
-                  toolCallNames.set(item.callId, item.name);
+                // A complete output item from any turn (initial or follow-up):
+                // message text, reasoning, function_call, function_call_output.
+                if (event?.type === 'response.output_item.done' && event.item) {
+                  const item = event.item;
+                  // Cache the tool name keyed by callId BEFORE dedup — the
+                  // matching tool.call_output later in this same stream looks it
+                  // up to label the completion message. function_call always
+                  // arrives here before its corresponding tool.call_output.
+                  if (item.type === 'function_call' && item.callId && item.name) {
+                    toolCallNames.set(item.callId, item.name);
+                  }
+                  // Dedup by item id when the SDK supplies one — output_item.done
+                  // can fire more than once for a logical item across reissues.
+                  if (item.id) {
+                    if (seenItemIds.has(item.id)) continue;
+                    seenItemIds.add(item.id);
+                  }
+                  await this.#handleOpenRouterItem(item, notifiedToolCallIds, completedToolCallIds);
+                  continue;
                 }
-                // Dedup by item id when the SDK supplies one — output_item.done
-                // can fire more than once for a logical item across reissues.
-                if (item.id) {
-                  if (seenItemIds.has(item.id)) continue;
-                  seenItemIds.add(item.id);
+              } catch (err) {
+                if (!this.stopRequested) {
+                  logger.warn(`OpenRouter SDK: failed to forward a ${event?.type} event to the client: ${err?.message ?? err}`);
                 }
-                await this.#handleOpenRouterItem(item, notifiedToolCallIds, completedToolCallIds);
-                continue;
               }
             }
           } catch (err) {
@@ -2851,7 +2895,7 @@ ${lines.join('\n')}`);
 
         // Report what every turn of this tool loop billed, once per iteration of
         // the outer queued-message loop.
-        this.#flushOpenRouterUsage(model);
+        this.#flushOpenRouterUsage();
 
         if (this.stopRequested) break;
 
@@ -2893,7 +2937,7 @@ ${lines.join('\n')}`);
     } finally {
       // A user stop, an abort or an error skips the in-loop flush above, so the
       // tokens the run spent before it ended are reported here instead.
-      this.#flushOpenRouterUsage(model);
+      this.#flushOpenRouterUsage();
       this.#openRouterSdkFailureDetail = null;
       this.abortController = null;
     }
@@ -2904,12 +2948,10 @@ ${lines.join('\n')}`);
    * counterpart to startConversationAnthropicManual for any OpenRouter brand.
    */
   async startConversationOpenRouterManual(userMessage) {
-    let llmUsed = null;
     try {
       const session = this.sessionManager.getSession(this.sessionId);
       const model = this.#resolveOpenRouterModel();
       const openRouterClient = await this.#getOpenRouter();
-      llmUsed = model;
 
       this.sessionManager.addToConversationHistory(this.sessionId, {
         role: 'user',
@@ -2979,7 +3021,7 @@ ${lines.join('\n')}`);
             // the run's total rather than replacing it. Recorded before the stop
             // check below, so a stop landing between this response and the next
             // iteration still counts the turn the user was charged for.
-            this.#accumulateOpenRouterUsage(completion?.usage);
+            this.#accumulateOpenRouterUsage(completion?.usage, model);
 
             if (this.stopRequested) break;
 
@@ -3029,7 +3071,7 @@ ${lines.join('\n')}`);
     } finally {
       // One exit for all of them — natural end, user stop, max iterations, a failed
       // request, a setup error — so however the loop ended, what it spent is reported.
-      if (llmUsed) this.#flushOpenRouterUsage(llmUsed);
+      this.#flushOpenRouterUsage();
     }
   }
 
@@ -3587,6 +3629,14 @@ ${lines.join('\n')}`);
     this.stopRequested = true;
     this.#pendingMessages = [];
     this.abortController?.abort();
+    // Report what the OpenRouter run has spent so far right here, rather than only
+    // from the flush on the way out of the loop. The tokens are already on the bill
+    // at this point, and the way out is not guaranteed: a run can wedge on a turn
+    // whose abort the provider or a tool never honors, and then no exit path ever
+    // runs. Costs nothing when there is no OpenRouter run in flight, and cannot
+    // double-bill — the flush clears what it reported, so the loop's own flush picks
+    // up only whatever accumulates after this point.
+    this.#flushOpenRouterUsage();
   }
 
 
@@ -3645,8 +3695,9 @@ ${lines.join('\n')}`);
    * USD for that one request, so it sums like the token counts do; it stays null when
    * no response carried one, which is how the reporter tells "free" from "unknown".
    */
-  #accumulateOpenRouterUsage(usage) {
+  #accumulateOpenRouterUsage(usage, model) {
     if (!usage) return;
+    this.#openRouterPendingUsageModel = model;
     const details = usage.promptTokensDetails ?? usage.inputTokensDetails;
     const total = this.#openRouterPendingUsage ?? {
       promptTokens: 0,
@@ -3664,12 +3715,15 @@ ${lines.join('\n')}`);
 
   /**
    * Report the running OpenRouter total and clear it, so a later flush on the same
-   * conversation cannot bill the same tokens a second time.
+   * conversation cannot bill the same tokens a second time. Safe to call from
+   * anywhere at any time — with nothing pending it is a no-op, and it reads the
+   * model off the accumulator rather than from the caller.
    */
-  #flushOpenRouterUsage(model) {
+  #flushOpenRouterUsage() {
     if (!this.#openRouterPendingUsage) return;
-    this.#logApiUsage(Provider.OPENROUTER, this.#openRouterPendingUsage, model);
+    this.#logApiUsage(Provider.OPENROUTER, this.#openRouterPendingUsage, this.#openRouterPendingUsageModel);
     this.#openRouterPendingUsage = null;
+    this.#openRouterPendingUsageModel = null;
   }
 
   #logApiUsage(provider, usage, model = null) {

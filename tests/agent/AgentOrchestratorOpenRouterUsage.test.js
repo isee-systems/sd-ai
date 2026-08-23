@@ -70,8 +70,33 @@ function responseCompleted(id, usage) {
   return { type: 'response.completed', response: { id, usage } };
 }
 
+// A turn the provider cut short — a stop landing mid-generation, max_output_tokens,
+// a filtered generation. Materialized, and billed exactly like a completed one.
+function responseIncomplete(id, usage, reason = 'max_output_tokens') {
+  return { type: 'response.incomplete', response: { id, usage, status: 'incomplete', incompleteDetails: { reason } } };
+}
+
+// A turn that errored after the model had already generated: still billed.
+function responseFailed(id, usage, error = { code: 500, message: 'upstream said no' }) {
+  return { type: 'response.failed', response: { id, usage, status: 'failed', error } };
+}
+
 function reportedUsage(orc) {
   return orc.tokenReporter.report.mock.calls.map(([call]) => call);
+}
+
+// A run can report more than once: a stop reports what is on the bill at the moment
+// it lands (the run may never unwind to report it later), and the loop's own exit
+// reports whatever accrued after that. What has to hold is that every token appears
+// exactly once across the reports.
+function totalReported(orc) {
+  return reportedUsage(orc).reduce((total, { usage }) => ({
+    promptTokens: total.promptTokens + usage.promptTokens,
+    completionTokens: total.completionTokens + usage.completionTokens,
+    cachedTokens: total.cachedTokens + usage.promptTokensDetails.cachedTokens,
+    cacheWriteTokens: total.cacheWriteTokens + usage.promptTokensDetails.cacheWriteTokens,
+    cost: usage.cost == null ? total.cost : (total.cost ?? 0) + usage.cost,
+  }), { promptTokens: 0, completionTokens: 0, cachedTokens: 0, cacheWriteTokens: 0, cost: null });
 }
 
 function completionStatuses(orc) {
@@ -132,16 +157,13 @@ describe('OpenRouter manual loop — usage reporting', () => {
     expect(send).toHaveBeenCalledTimes(2);
     expect(completionStatuses(orc).at(-1)).toBe('awaiting_user');
 
-    const reports = reportedUsage(orc);
-    expect(reports).toHaveLength(1);
-    expect(reports[0].provider).toBe('openrouter');
-    expect(reports[0].model).toBe(MODEL);
-    expect(reports[0].usage).toEqual({
-      promptTokens: 300,
-      completionTokens: 50,
-      promptTokensDetails: { cachedTokens: 110, cacheWriteTokens: 5 },
-      cost: 0.003,
-    });
+    expect(reportedUsage(orc).every(r => r.provider === 'openrouter' && r.model === MODEL)).toBe(true);
+    const total = totalReported(orc);
+    expect(total.promptTokens).toBe(300);
+    expect(total.completionTokens).toBe(50);
+    expect(total.cachedTokens).toBe(110);
+    expect(total.cacheWriteTokens).toBe(5);
+    expect(total.cost).toBeCloseTo(0.003, 10);
   });
 
   it('reports the sum of every turn on a run that ends by itself', async () => {
@@ -232,16 +254,12 @@ describe('OpenRouter SDK loop — usage reporting', () => {
     expect(completionStatuses(orc).at(-1)).toBe('awaiting_user');
     expect(orc.stopRequested).toBe(false);
 
-    const reports = reportedUsage(orc);
-    expect(reports).toHaveLength(1);
-    expect(reports[0].provider).toBe('openrouter');
-    expect(reports[0].model).toBe(MODEL);
-    expect(reports[0].usage).toEqual({
-      promptTokens: 300,
-      completionTokens: 50,
-      promptTokensDetails: { cachedTokens: 110, cacheWriteTokens: 0 },
-      cost: 0.003,
-    });
+    expect(reportedUsage(orc).every(r => r.provider === 'openrouter' && r.model === MODEL)).toBe(true);
+    const total = totalReported(orc);
+    expect(total.promptTokens).toBe(300);
+    expect(total.completionTokens).toBe(50);
+    expect(total.cachedTokens).toBe(110);
+    expect(total.cost).toBeCloseTo(0.003, 10);
   });
 
   it('bills a reissued response.completed once, not twice', async () => {
@@ -297,5 +315,145 @@ describe('OpenRouter SDK loop — usage reporting', () => {
     const reports = reportedUsage(orc);
     expect(reports).toHaveLength(1);
     expect(reports[0].usage.promptTokens).toBe(100);
+  });
+
+  it('bills a turn the provider cut short', async () => {
+    // The turn the stop lands on does not come back as `response.completed` — the
+    // provider materializes it as incomplete. It consumed tokens all the same.
+    callModel.mockReturnValueOnce(modelResult(async function* () {
+      yield responseCompleted('resp_1', responsesUsage(100, 20, 0.001));
+      orc.stopIteration();
+      yield responseIncomplete('resp_2', responsesUsage(200, 30, 0.002));
+    }));
+
+    await orc.startConversationOpenRouterSDK('build me a model');
+
+    expect(completionStatuses(orc).at(-1)).toBe('awaiting_user');
+    const total = totalReported(orc);
+    expect(total.promptTokens).toBe(300);
+    expect(total.completionTokens).toBe(50);
+    expect(total.cost).toBeCloseTo(0.003, 10);
+  });
+
+  it('bills a turn that failed after the model had generated', async () => {
+    callModel.mockReturnValueOnce(modelResult(
+      async function* () {
+        yield responseCompleted('resp_1', responsesUsage(100, 20, 0.001));
+        yield responseFailed('resp_2', responsesUsage(200, 30, 0.002));
+      },
+      { getResponse: async () => { throw new Error('Response failed'); } }
+    ));
+
+    await orc.startConversationOpenRouterSDK('build me a model');
+
+    const reports = reportedUsage(orc);
+    expect(reports).toHaveLength(1);
+    expect(reports[0].usage.promptTokens).toBe(300);
+    expect(reports[0].usage.cost).toBe(0.003);
+    // The failure detail the SDK drops is still attached to the client-facing error.
+    const errors = orc.sendToClient.mock.calls.map(([m]) => m).filter(m => m.type === 'error');
+    expect(errors.at(-1).error).toContain('upstream said no');
+  });
+
+  it('bills a failed turn that carried no usage without inventing one', async () => {
+    callModel.mockReturnValueOnce(modelResult(
+      async function* () {
+        yield responseFailed('resp_1', undefined);
+      },
+      { getResponse: async () => { throw new Error('Response failed'); } }
+    ));
+
+    await orc.startConversationOpenRouterSDK('build me a model');
+
+    expect(orc.tokenReporter.report).not.toHaveBeenCalled();
+  });
+
+  it('hands the SDK the run signal, and aborts it when the user stops', async () => {
+    // Without this the stop button has no lever on this route at all: the tool loop
+    // keeps requesting turns against a front end that has stopped answering.
+    let sdkSignal;
+    callModel.mockImplementationOnce((_client, request) => {
+      sdkSignal = request.signal;
+      return modelResult(async function* () {
+        yield responseCompleted('resp_1', responsesUsage(100, 20, 0.001));
+        expect(sdkSignal.aborted).toBe(false);
+        orc.stopIteration();
+        expect(sdkSignal.aborted).toBe(true);
+      });
+    });
+
+    await orc.startConversationOpenRouterSDK('build me a model');
+
+    expect(sdkSignal).toBeInstanceOf(AbortSignal);
+    expect(sdkSignal.aborted).toBe(true);
+  });
+
+  it('reports what a stopped run spent even when the run never unwinds', async () => {
+    // The failure from the field: the loop wedges on a turn nobody answers, so no
+    // exit path — not the break, not the catch, not the finally — ever runs. The
+    // stop itself has to put what is already on the bill through the reporter.
+    let streamReachedTheStall;
+    const stalled = new Promise(resolve => { streamReachedTheStall = resolve; });
+
+    callModel.mockReturnValueOnce(modelResult(
+      async function* () {
+        yield responseCompleted('resp_1', responsesUsage(100, 20, 0.001));
+        streamReachedTheStall();
+        await new Promise(() => {});
+      },
+      { getResponse: () => new Promise(() => {}) }
+    ));
+
+    // Deliberately not awaited — this run never settles, which is the whole point.
+    orc.startConversationOpenRouterSDK('build me a model');
+    await stalled;
+
+    expect(orc.tokenReporter.report).not.toHaveBeenCalled();
+    orc.stopIteration();
+
+    const reports = reportedUsage(orc);
+    expect(reports).toHaveLength(1);
+    expect(reports[0].provider).toBe('openrouter');
+    expect(reports[0].model).toBe(MODEL);
+    expect(reports[0].usage.promptTokens).toBe(100);
+    expect(reports[0].usage.completionTokens).toBe(20);
+    expect(reports[0].usage.cost).toBe(0.001);
+  });
+
+  it('does not bill the same tokens twice when the stop reports and the run then unwinds', async () => {
+    callModel.mockReturnValueOnce(modelResult(async function* () {
+      yield responseCompleted('resp_1', responsesUsage(100, 20, 0.001));
+      orc.stopIteration();
+      yield responseCompleted('resp_2', responsesUsage(200, 30, 0.002));
+    }));
+
+    await orc.startConversationOpenRouterSDK('build me a model');
+
+    // Two reports — the stop's and the loop's — carving up one bill, not repeating it.
+    const total = totalReported(orc);
+    expect(total.promptTokens).toBe(300);
+    expect(total.completionTokens).toBe(50);
+    expect(total.cost).toBeCloseTo(0.003, 10);
+  });
+
+  it('bills every turn even when the client socket goes away mid-run', async () => {
+    // The user closed the tab: sendToClient rejects. The turns already in flight
+    // bill whether or not anyone is listening, so the drain has to survive it.
+    orc.sendToClient = jest.fn().mockRejectedValue(new Error('socket closed'));
+
+    callModel.mockReturnValueOnce(modelResult(async function* () {
+      yield responseCompleted('resp_1', responsesUsage(100, 20, 0.001));
+      yield { type: 'response.output_item.done', item: { id: 'item_1', type: 'message', content: [{ type: 'output_text', text: 'nobody hears this' }] } };
+      yield responseCompleted('resp_2', responsesUsage(200, 30, 0.002));
+    }));
+
+    // The closing agent_complete send rejects too, so the run rethrows to
+    // startConversation's handler — after the finally has reported what it spent.
+    await expect(orc.startConversationOpenRouterSDK('build me a model')).rejects.toThrow('socket closed');
+
+    const reports = reportedUsage(orc);
+    expect(reports).toHaveLength(1);
+    expect(reports[0].usage.promptTokens).toBe(300);
+    expect(reports[0].usage.cost).toBe(0.003);
   });
 });
