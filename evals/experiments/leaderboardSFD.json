@@ -101,10 +101,10 @@
                 "baselineTokenUsage": 10000
             }
         },
-        "quantitative-glm-5.2": {
+        "quantitative-glm-5.3": {
             "engine": "quantitative",
             "additionalParameters": {
-                "underlyingModel": "z-ai/glm-5.2"
+                "underlyingModel": "z-ai/glm-5.3"
             },
             "limits": {
                 "baselineTokenUsage": 10000

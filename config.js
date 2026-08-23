@@ -58,7 +58,7 @@ const config = {
         /*{label: "Deepseek v4 Pro (API)", value: 'deepseek-v4-pro'},
         {label: "Deepseek v4 Flash (API)", value: 'deepseek-v4-flash'},*/
         {label: "Kimi K3", value: 'moonshotai/kimi-k3'},
-        {label: "GLM 5.2", value: 'z-ai/glm-5.2'},
+        {label: "GLM 5.3", value: 'z-ai/glm-5.3'},
     ],
 
     /*
@@ -139,8 +139,8 @@ const config = {
         },
         zai: {
             displayName: 'GLM',
-            model: 'z-ai/glm-5.2',
-            summaryModel: 'z-ai/glm-5.2'
+            model: 'z-ai/glm-5.3',
+            summaryModel: 'z-ai/glm-5.3'
         }
     },
     /*
