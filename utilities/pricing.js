@@ -204,8 +204,8 @@ export const openai = {
   // so the tier is selected on total inputTokens. Cached (read) input bills at
   // 10% of input; cacheWriteTokens (tokens written to cache) bills at 1.25x input.
   'gpt-5.6-sol': [
-    { maxInputTokens: 272000, inputTokens: 5.00, cachedTokens: 0.50, cacheWriteTokens: 6.25, outputTokens: 30.00 },
-    {                         inputTokens: 10.00, cachedTokens: 1.00, cacheWriteTokens: 12.50, outputTokens: 45.00 },
+    { maxInputTokens: 272000, inputTokens: 4.00, cachedTokens: 0.40, cacheWriteTokens: 5.00, outputTokens: 20.00 },
+    {                         inputTokens: 8.00, cachedTokens: 0.80, cacheWriteTokens: 10.00, outputTokens: 30.00 },
   ],
   'gpt-5.6-terra': [
     { maxInputTokens: 272000, inputTokens: 2.00, cachedTokens: 0.20, cacheWriteTokens: 2.50, outputTokens: 12.00 },
