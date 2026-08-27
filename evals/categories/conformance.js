@@ -6,7 +6,7 @@
  * Therefore, to test each of these conformance attributes, we take two base prompts: the first that asks the LLMs to create a feedback-based explanation for the American Revolutionary War, and a second that asks the LLMs to create a feedback-based explanation for road rage. We then append to that base each of the specific conformance commands:
  *
  * 1.  Your response must include the variables   
- *   -  (Revolution case) "Taxation", "Anti-British Sentiment" and "Colonial Identity"
+ *   -  (Revolution case) "Taxation", "Anti British Sentiment" and "Colonial Identity"
  *   -  (Road rage case) “Traffic Congestion”, “Driver Stress”, and “Accidents” 
  *      
  * 2.  Your response must include \[at least|no more than\] X variables. 
@@ -387,10 +387,10 @@ const specificConformanceElements = {
     }
   },
   "American Revolution": {
-    text: 'Your response must include the variables "Taxation", "Anti-British Sentiment" and "Colonial Identity".',
+    text: 'Your response must include the variables "Taxation", "Anti British Sentiment" and "Colonial Identity".',
     name: "include requested variables",
     expectations: {
-      variables: ["taxation", "anti-british sentiment", "colonial identity"]
+      variables: ["taxation", "anti british sentiment", "colonial identity"]
     }
   }
 };
