@@ -1,5 +1,6 @@
 import logger from './logger.js';
 import { getPricing } from './pricing.js';
+import { recordCallCost } from './costAccounting.js';
 import config from '../config.js';
 
 export const Provider = Object.freeze({
@@ -126,6 +127,13 @@ class TokenUsageReporter {
     }
 
     const costs = this.#calculateCost(provider, model, tokens);
+
+    // Contribute to whatever cost-accounting scope encloses this call — an eval
+    // measuring one test, and nothing in production. Deliberately before the first
+    // await below: the scope is read from the async context of the caller, and an
+    // await here would be the point where that stops being guaranteed.
+    recordCallCost({ provider, model, cost: costs?.total ?? null });
+
     const fmt = (n, cost) => cost != null ? `${n}($${cost.toFixed(6)})` : `${n}`;
     
     const clientTag = this.clientId ? ` client=${this.clientId}` : '';

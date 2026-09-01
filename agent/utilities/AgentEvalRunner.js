@@ -146,8 +146,9 @@ function rejectPending(map, requestId, error) {
  *
  * @param {string} prompt - The user prompt
  * @param {Object} currentModel - The current SD model (sdjson)
- * @param {Object} parameters - Engine parameters including agentName, agentMode, provider, mode,
- *                              problemStatement, backgroundKnowledge, feedbackContent
+ * @param {Object} parameters - Engine parameters including agentName, agentMode, provider,
+ *                              intelligence, toolModels, mode, problemStatement,
+ *                              backgroundKnowledge, feedbackContent
  * @returns {{ lastModel: Object|null, explanation: string }}
  */
 export async function runAgent(prompt, currentModel, parameters) {
@@ -155,6 +156,8 @@ export async function runAgent(prompt, currentModel, parameters) {
     agentName = 'merlin',
     agentMode,
     provider = 'anthropic',
+    intelligence,
+    toolModels,
     mode = 'sfd',
     problemStatement,
     backgroundKnowledge,
@@ -356,12 +359,18 @@ export async function runAgent(prompt, currentModel, parameters) {
   const userMessage = parts.join('\n\n');
 
   // 6. Run the agent
+  // `intelligence` picks the conversation model off the provider's ladder; `toolModels`
+  // pins what the engine tools run on. An experiment sets both so a result row is
+  // attributable to one model rather than to a Claude agent calling Gemini engines,
+  // which is what the shared config.agentToolModels default lane would give it.
   const orchestrator = new AgentOrchestrator(
     sessionManager,
     sessionId,
     sendToClient,
     { markdownContent },
-    provider
+    provider,
+    intelligence ?? null,
+    toolModels
   );
 
   await Promise.all([

@@ -51,6 +51,81 @@ CLI (command line interface) app that runs within sd-ai project to measure outpu
         - Replace `123` with any 3-character experiment ID of your choice.
 
 
+# Leaderboard Generations
+- there is **one results file per leaderboard** — `evals/results/leaderboard_<board>_full_results.json`
+  for `cld`, `sfd` and `discussion` — holding exactly one current result per test
+- the benchmark itself changes (categories added, buggy tests fixed), so results are tagged with the
+  generation of the benchmark that produced them. Generations are declared in
+  `evals/leaderboardGenerations.js`:
+    - `v1` — the original benchmark. Rows predating generations have **no** `generation` field at all,
+      and that absence *is* v1, which is why adding generations rewrote none of the existing results
+    - `v2` — Anthropic line-up plus the Merlin agent, with per-test cost recorded
+- **a newer result replaces the older one for the same test.** Re-running a test under v2 supersedes
+  its v1 row rather than sitting beside it — the newer measurement is simply the better one. The tag
+  records which generation each surviving row came from
+- so a leaderboard is normally a **mix**: engines re-run under v2 carry v2 numbers, the rest still
+  carry v1 numbers, and the site's Results column shows which is which per engine
+- a generation may carry a `caveat`, shown on the site above the table whenever any of its results are
+  still present. v1 has one: some of its evals had bugs that depressed engine scores
+- `GET /api/v1/leaderboard/:mode` serves the whole file; `?generation=v2` narrows the rows to the ones
+  measured under that generation
+
+## Publishing results with `evals:collect`
+`npm run evals` writes `<id>_<experiment>_full_results.json` into the project root — that is one
+execution. A leaderboard is the accumulation of many, so fold each run in with:
+
+```
+npm run evals:collect -- --leaderboard sfd --generation v2 xnt_anthropicSFD_full_results.json
+```
+
+- **appends** rows the leaderboard doesn't have, and **replaces** rows it does, matching on
+  (engine config, category, group, test name). Generation is deliberately not part of that match, which
+  is what makes a v2 result supersede its v1 predecessor
+- rerunning one engine config, or backfilling one new category, is therefore safe against a published
+  file: everything the run didn't cover keeps whatever result it already had
+- `--replace-configs` first drops every existing row for each engine config in the run, whatever
+  generation produced it. Use it when the rerun is the whole truth for those configs — a config that
+  dropped a category would otherwise keep stale rows for it, which an append/replace cannot detect
+- `--dry-run` reports the change and writes nothing; `--yes` skips the confirmation prompt
+- accepts several run files at once
+- the summary it prints breaks each config down by generation (`v1:43 v2:3`), so it is easy to see what
+  is still on old numbers
+- afterwards, rebuild the site data: `cd frontend && npm run generate`
+
+## Starting a new generation
+1. add an entry to `LEADERBOARD_GENERATIONS` in `evals/leaderboardGenerations.js`
+2. run the experiments
+3. `npm run evals:collect -- --leaderboard <board> --generation <id> <run file>` for each
+4. `cd frontend && npm run generate` — the new generation appears automatically and the older
+   ones are unchanged
+
+# Cost
+- every test records what it cost to produce its answer, in `cost` on each result row:
+    - `total`: USD for the generation behind this test
+    - `calls`: how many LLM calls went into it
+    - `byModel`: the same broken down per `provider/model`
+    - `unpricedCalls`: calls we could not price — non-zero means `total` is a lower bound
+    - `reusedGeneration`: true when this test reused a sibling's cached generation (see "Caching Engine Responses")
+- the figure is the **whole** price of the response, however deep the work went:
+    - a plain engine's own LLM call
+    - an agent engine's conversation turns **plus** every engine it drives through a tool
+- a per-engine-config table prints at the end of a run and is written to `<experiment>_cost.csv`
+- `verbose: 2` prints the cost of each test as it finishes
+
+## How totals are computed
+- only the test that actually triggered a generation counts toward a total; siblings that
+  reused it still show that generation's full cost on their own row, for visibility
+- summing `cost.total` across **all** rows therefore over-counts — filter to
+  `reusedGeneration === false` first, which is what the summary table and the website do
+
+## Pitfalls
+- a model missing from `pricing.js` does not fail loudly in the total: `getPricing` falls back to
+  that provider's default rates (with a loud log line) and the cost comes out approximate
+- `unpricedCalls` only counts calls with no price at all, which in practice means an OpenRouter
+  response that carried no `usage.cost`
+- results produced before cost tracking have no `cost` field; the website renders those as `—`
+  rather than `$0.00`
+
 # Managing Rate Limits 
 - many engines run via 3rd-party LLM providers who are aggressive about rate limiting
 - we allow 3 parameters in `limits` for slowing the execution of evals for a given engine config:

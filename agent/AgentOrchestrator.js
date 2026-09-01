@@ -235,7 +235,7 @@ export class AgentOrchestrator {
     cache_read_input_tokens: 0,
   };
 
-  constructor(sessionManager, sessionId, sendToClient, agentConfig, provider = config.agentDefaultProvider, intelligence = null) {
+  constructor(sessionManager, sessionId, sendToClient, agentConfig, provider = config.agentDefaultProvider, intelligence = null, toolModels) {
     this.sessionManager = sessionManager;
     this.sessionId = sessionId;
     this.sendToClient = sendToClient;
@@ -250,7 +250,17 @@ export class AgentOrchestrator {
     // the tools capture it in a closure at registration time but read it inside the
     // handler — which is what lets a mid-conversation change reach the next tool
     // call without re-registering every tool.
-    this.agentProfile = { provider: this.provider, intelligence: this.intelligence };
+    //
+    // `toolModels`, when a caller supplies one, pins the engine-tool lane for the
+    // whole session and outranks every config lookup (see selectEngineModel). No
+    // product path passes it; it is how the eval runner holds the engine models
+    // fixed across an experiment. The key is omitted when unset so a normal
+    // session's profile keeps exactly the shape it had before.
+    this.agentProfile = {
+      provider: this.provider,
+      intelligence: this.intelligence,
+      ...(toolModels ? { toolModels } : {})
+    };
 
     // SDK-specific properties (for SDK mode)
     this.abortController = null;

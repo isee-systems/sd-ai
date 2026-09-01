@@ -2,46 +2,86 @@ import express from 'express'
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import {
+  LEADERBOARD_MODES,
+  LEADERBOARD_GENERATIONS,
+  leaderboardResultsFilename,
+  findGeneration,
+  generationsIn,
+  generationOf,
+} from '../../evals/leaderboardGenerations.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 const router = express.Router()
 
-// Get leaderboard data for a specific mode (cld or sfd)
+const RESULTS_DIR = path.join(__dirname, '../../evals/results')
+
+function resultsPath (mode) {
+  return path.join(RESULTS_DIR, leaderboardResultsFilename(mode))
+}
+
+// Get leaderboard data for a specific mode (cld, sfd or discussion).
+//
+// One file per board holds every generation, so the default is the whole thing —
+// unchanged from before generations existed. `?generation=v2` filters the rows down to
+// one generation for a caller that only wants the current board.
 router.get('/:mode', async (req, res) => {
   try {
     const { mode } = req.params
+    const requestedGeneration = req.query.generation
 
     // `mode` lands in a filename that is then path.join'd. A percent-encoded
     // separator survives route matching and is decoded before we see it, so
     // `x%2f..%2f..%2fetc%2fpasswd` would join out of evals/results entirely.
-    // Restricting to a bare word keeps it a single path component.
-    if (!/^[a-z0-9]+$/i.test(mode)) {
+    // Matching against the known list keeps it a single path component.
+    const normalizedMode = String(mode).toLowerCase()
+    if (!LEADERBOARD_MODES.includes(normalizedMode)) {
       return res.status(404).json({
         success: false,
         message: `Leaderboard data not found for mode: ${mode}`
       })
     }
 
-    const filename = `leaderboard_${mode.toLowerCase()}_full_results.json`
-    const filePath = path.join(__dirname, '../../evals/results', filename)
-    
-    // Check if file exists
+    const filePath = resultsPath(normalizedMode)
     if (!fs.existsSync(filePath)) {
       return res.status(404).json({
         success: false,
         message: `Leaderboard data not found for mode: ${mode}`
       })
     }
-    
-    // Read and parse the JSON file
-    const fileContent = fs.readFileSync(filePath, 'utf8')
-    const data = JSON.parse(fileContent)
-    
+
+    const data = JSON.parse(fs.readFileSync(filePath, 'utf8'))
+    const results = data.results ?? []
+    const present = generationsIn(results)
+
+    if (requestedGeneration === undefined) {
+      return res.json({
+        success: true,
+        generations: present,
+        currentGeneration: present[present.length - 1] ?? null,
+        data: data
+      })
+    }
+
+    // Resolved against the declared list rather than trusted as a filter value, so an
+    // unknown id is a clear 404 instead of a silently empty leaderboard.
+    const generation = findGeneration(String(requestedGeneration))
+    if (!generation || !present.includes(generation.id)) {
+      return res.status(404).json({
+        success: false,
+        message: `No "${requestedGeneration}" results for mode: ${normalizedMode}`,
+        generations: present
+      })
+    }
+
     res.json({
       success: true,
-      data: data
+      generations: present,
+      currentGeneration: present[present.length - 1] ?? null,
+      generation: generation.id,
+      data: { ...data, results: results.filter((r) => generationOf(r) === generation.id) }
     })
   } catch (error) {
     console.error('Error fetching leaderboard data:', error)
@@ -53,37 +93,50 @@ router.get('/:mode', async (req, res) => {
   }
 })
 
-// Get list of available leaderboard modes
+const MODE_TITLES = {
+  cld: 'Causal Loop Diagrams',
+  sfd: 'Stock & Flow Diagrams',
+  discussion: 'Discussion'
+}
+
+// Get list of available leaderboard modes, and the generations each one has.
 router.get('/', async (req, res) => {
   try {
-    const resultsDir = path.join(__dirname, '../../evals/results')
-    
-    if (!fs.existsSync(resultsDir)) {
+    if (!fs.existsSync(RESULTS_DIR)) {
       return res.json({
         success: true,
         modes: [],
         message: 'No leaderboard results available'
       })
     }
-    
-    const files = fs.readdirSync(resultsDir)
-    const leaderboardFiles = files.filter(file => 
-      file.startsWith('leaderboard') && file.endsWith('_full_results.json')
-    )
-    
-    const modes = leaderboardFiles.map(file => {
-      const match = file.match(/leaderboard([A-Z]+)_full_results\.json/)
-      return match ? match[1].toLowerCase() : null
-    }).filter(Boolean)
-    
+
+    // Derived from the known mode list and what is on disk. The previous version
+    // pattern-matched filenames with a regex that could not match them (it expected
+    // `leaderboardCLD_...`, the files are `leaderboard_cld_...`), so this endpoint
+    // always reported zero modes.
+    //
+    // Which generations a board actually contains is deliberately NOT reported here:
+    // it would mean parsing every results file (tens of MB each) on a request whose
+    // whole job is to be a cheap index. `GET /:mode` reports it, having read the file.
+    const available = LEADERBOARD_MODES
+      .filter((mode) => fs.existsSync(resultsPath(mode)))
+      .map((mode) => ({
+        mode,
+        title: MODE_TITLES[mode] ?? mode,
+        endpoint: `/api/v1/leaderboard/${mode}`,
+        generations: LEADERBOARD_GENERATIONS.map((g) => ({
+          id: g.id,
+          label: g.label,
+          description: g.description,
+          ...(g.caveat ? { caveat: g.caveat } : {}),
+          endpoint: `/api/v1/leaderboard/${mode}?generation=${g.id}`
+        }))
+      }))
+
     res.json({
       success: true,
-      modes,
-      available: modes.map(mode => ({
-        mode,
-        title: mode === 'cld' ? 'Causal Loop Diagrams' : 'Stock & Flow Diagrams',
-        endpoint: `/api/v1/leaderboard/${mode}`
-      }))
+      modes: available.map((a) => a.mode),
+      available
     })
   } catch (error) {
     console.error('Error listing leaderboard modes:', error)

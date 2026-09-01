@@ -11,12 +11,12 @@ import config from '../../../config.js';
 import { resolveToolLane } from '../../utilities/intelligenceLevels.js';
 
 /**
- * Normalize what the tool providers hand us into `{provider, intelligence}`.
+ * Normalize what the tool providers hand us into `{provider, intelligence, toolModels}`.
  *
  * The orchestrator passes a live profile OBJECT so a mid-conversation intelligence
  * change reaches the next tool call without re-registering anything. A bare provider
  * string is still accepted — every existing test and any direct caller predates the
- * profile — and resolves to the default level.
+ * profile — and resolves to the default level with no lane override.
  */
 function toProfile(agentProfile) {
   return typeof agentProfile === 'string'
@@ -29,14 +29,18 @@ function toProfile(agentProfile) {
  * difficulty, and engine kind ('build' for quantitative/qualitative,
  * 'nonBuild' for seldon/ltm/mentor).
  *
- * Lanes are resolved by intelligenceLevels.resolveToolLane, which walks
- * level.toolModels -> agentToolModels[provider][level] -> agentToolModels.default[level]
- * -> the defaultLevel lane. Providers without their own entry fall back to the
- * `default` lane, so an unrecognized or newly added provider doesn't break the call.
+ * A lane carried on the profile itself wins outright. Nothing in the product sets
+ * one — it exists so a caller that owns the whole run, currently only the eval
+ * runner, can pin the engine models for an experiment without moving the config
+ * every session reads. Everything else resolves through
+ * intelligenceLevels.resolveToolLane, which walks level.toolModels ->
+ * agentToolModels[provider][level] -> agentToolModels.default[level] -> the
+ * defaultLevel lane. Providers without their own entry fall back to the `default`
+ * lane, so an unrecognized or newly added provider doesn't break the call.
  */
 export function selectEngineModel(agentProfile, difficulty, kind) {
-  const { provider, intelligence } = toProfile(agentProfile);
-  const lane = resolveToolLane(provider, intelligence);
+  const { provider, intelligence, toolModels } = toProfile(agentProfile);
+  const lane = toolModels ?? resolveToolLane(provider, intelligence);
   const laneForKind = lane?.[kind] ?? lane?.nonBuild;
   return laneForKind?.[difficulty] ?? laneForKind?.normal;
 }

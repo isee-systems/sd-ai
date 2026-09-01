@@ -45,6 +45,22 @@ class Engine {
         description: 'Model type: sfd or cld'
       },
       {
+        name: 'intelligence',
+        type: 'string',
+        required: false,
+        uiElement: 'text',
+        label: 'Intelligence',
+        description: 'Intelligence level id from the provider ladder in config.agentIntelligence (e.g. standard, high, maximum). Picks the conversation model. Defaults to the provider default level.'
+      },
+      {
+        name: 'toolModels',
+        type: 'json',
+        required: false,
+        uiElement: 'hidden',
+        label: 'Tool Models',
+        description: 'Engine-tool lane override, shaped like an agentToolModels lane: { build: { normal, hard }, nonBuild: { normal, hard } }. Pins what the engine tools run on for this whole run instead of resolving the shared config lane.'
+      },
+      {
         name: 'problemStatement',
         type: 'string',
         required: false,

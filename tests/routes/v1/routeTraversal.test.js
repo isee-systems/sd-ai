@@ -181,4 +181,55 @@ describe('leaderboard mode traversal (GET /:mode)', () => {
     // request got past the name check rather than being rejected as malformed.
     expect([200, 404]).toContain(response.status);
   }, TIMEOUT);
+
+  // `generation` reaches the same filename, so it needs the same treatment as `mode`:
+  // resolved against the known list, never interpolated from what the caller sent.
+  it.each([
+    '..%2f..%2f..%2fpackage',
+    'v1%2f..%2f..%2fconfig',
+    'V1',
+    'v99',
+  ])('404s the unknown generation %s without reading a file', async (generation) => {
+    const response = await request(app).get(`/sfd?generation=${generation}`);
+
+    expect(response.status).toBe(404);
+    expect(response.body.success).toBe(false);
+  }, TIMEOUT);
+
+  it('404s a known generation with no rows in the file', async () => {
+    // v2 is declared but nothing has been collected into it yet, so it must be reported
+    // as absent rather than served as an empty leaderboard.
+    const response = await request(app).get('/sfd?generation=v2');
+
+    if (response.status === 404) {
+      expect(response.body.success).toBe(false);
+      expect(response.body.generations).toEqual(expect.any(Array));
+    } else {
+      // Once v2 results are collected this legitimately becomes a 200.
+      expect(response.status).toBe(200);
+      expect(response.body.generation).toBe('v2');
+      expect(response.body.data.results.length).toBeGreaterThan(0);
+    }
+  }, TIMEOUT);
+
+  it('rejects a mode that is not a real leaderboard', async () => {
+    const response = await request(app).get('/notamode');
+
+    expect(response.status).toBe(404);
+    expect(response.body.success).toBe(false);
+  }, TIMEOUT);
+
+  it('lists the modes that have results', async () => {
+    // Regression: the previous implementation matched filenames against
+    // /leaderboard([A-Z]+)_full_results\.json/, which cannot match the real
+    // `leaderboard_cld_full_results.json`, so this endpoint always returned no modes.
+    const response = await request(app).get('/');
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.modes).toEqual(expect.arrayContaining(['cld', 'sfd', 'discussion']));
+    for (const entry of response.body.available) {
+      expect(entry.generations.length).toBeGreaterThan(0);
+    }
+  }, TIMEOUT);
 });

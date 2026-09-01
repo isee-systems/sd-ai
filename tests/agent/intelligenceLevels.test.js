@@ -168,6 +168,18 @@ describe('intelligence ladder — engine tool lanes', () => {
       config.agentIntelligence = original;
     }
   });
+
+  it('prefers a lane carried on the profile over every config lookup', () => {
+    // How an eval pins the engine models for a run: the experiment names the lane and
+    // it must beat the level's own toolModels, the provider entry and the shared table
+    // alike, so a result row is attributable to the model the experiment asked for.
+    const pinned = { build: { normal: 'pinned-a', hard: 'pinned-b' }, nonBuild: { normal: 'pinned-c', hard: 'pinned-d' } };
+    const profile = { provider: 'anthropic', intelligence: 'standard', toolModels: pinned };
+    expect(selectEngineModel(profile, 'normal', 'build')).toBe('pinned-a');
+    expect(selectEngineModel(profile, 'hard', 'nonBuild')).toBe('pinned-d');
+    // And the level no longer moves it — that is the point of pinning.
+    expect(selectEngineModel({ ...profile, intelligence: 'maximum' }, 'normal', 'build')).toBe('pinned-a');
+  });
 });
 
 describe('intelligence ladder — config shape guards', () => {
@@ -592,6 +604,23 @@ describe('intelligence ladder — changing level mid-conversation', () => {
 
     expect(orc.builtInToolProvider.agentProfile).toBe(orc.agentProfile);
     expect(selectEngineModel(orc.agentProfile, 'normal', 'build')).not.toBe(before);
+  });
+
+  it('carries a constructor-supplied tool lane onto the live profile', () => {
+    process.env.ANTHROPIC_API_KEY = 'dummy';
+    const pinned = { build: { normal: 'pinned-a', hard: 'pinned-a' }, nonBuild: { normal: 'pinned-a', hard: 'pinned-a' } };
+    orc = new AgentOrchestrator(
+      sessionManager, sessionId, jest.fn().mockResolvedValue(undefined), CONFIG, 'anthropic', 'standard', pinned
+    );
+    expect(selectEngineModel(orc.agentProfile, 'normal', 'build')).toBe('pinned-a');
+    // A level change still applies to the conversation model but must not unpin the tools.
+    orc.setIntelligence('maximum');
+    expect(selectEngineModel(orc.agentProfile, 'normal', 'build')).toBe('pinned-a');
+  });
+
+  it('leaves the profile shape untouched when no lane is supplied', () => {
+    orc = makeOrc('anthropic', 'standard');
+    expect(orc.agentProfile).toEqual({ provider: 'anthropic', intelligence: 'standard' });
   });
 
   it('drops the Gemini context cache when the model changes', async () => {

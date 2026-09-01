@@ -33,6 +33,13 @@ function Leaderboard() {
   const config = leaderboardConfig[mode];
   const leaderboardData = leaderboards[mode] || null;
 
+  // Generations present in this board, and whether any of them carries a warning about
+  // its own results. A newer run overwrites the older result for a test, so a board is
+  // a single current table — the generation only records which benchmark version each
+  // surviving row came from.
+  const generations = leaderboardData?.generations ?? [];
+  const caveated = generations.filter((g) => g.caveat && g.count > 0);
+
   const backLink = (
     <div className="mb-4">
       <Link to="/engines" className="text-blue-600 hover:text-blue-800 no-underline">
@@ -61,6 +68,20 @@ function Leaderboard() {
           {config.title} Leaderboard
         </h1>
         <p className="text-base text-gray-600 mb-4">{config.description}</p>
+
+        {/* A generation whose own results are known to be unreliable says so on the
+            page, not just in the repo. A number shown without its caveat gets quoted
+            without it. */}
+        {caveated.map((g) => (
+          <div
+            key={g.id}
+            className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded text-sm text-amber-900"
+          >
+            <strong>{g.label} results:</strong> {g.caveat} {g.count} of the{' '}
+            {generations.reduce((n, x) => n + x.count, 0)} results on this board are still
+            from {g.label} — the Results column marks which engines they belong to.
+          </div>
+        ))}
       </div>
 
       <div>
@@ -72,8 +93,8 @@ function Leaderboard() {
                 {
                   name: 'Rank',
                   selector: (row) => {
-                    const sortedEngines = [...leaderboardData.engines].sort((a, b) => b.score - a.score);
-                    return sortedEngines.findIndex((engine) => engine.configName === row.configName) + 1;
+                    const sorted = [...leaderboardData.engines].sort((a, b) => b.score - a.score);
+                    return sorted.findIndex((e) => e.configName === row.configName) + 1;
                   },
                   sortable: true,
                   width: '80px',
@@ -127,9 +148,10 @@ function Leaderboard() {
                       </button>
                     </div>
                   ),
-                  selector: (row) => row[category] || 0,
+                  selector: (row) => row[category] ?? -1,
                   sortable: true,
-                  format: (row) => (row[category] ?? 0).toFixed(3),
+                  format: (row) =>
+                    row[category] == null ? '—' : row[category].toFixed(3),
                   minWidth: '200px',
                   wrap: true,
                 })),
@@ -141,6 +163,70 @@ function Leaderboard() {
                   width: '180px',
                   wrap: true,
                 },
+                {
+                  name: 'Avg Cost / Test',
+                  // Results produced before evals captured cost have none. Sorting them
+                  // below every priced engine keeps "cheapest first" meaningful; the cell
+                  // still renders an em dash so unknown never reads as free.
+                  selector: (row) => (row.costPerTest ?? Number.MAX_VALUE),
+                  sortable: true,
+                  cell: (row) =>
+                    row.costPerTest == null ? (
+                      <span className="text-gray-400" title="These results predate cost tracking">
+                        —
+                      </span>
+                    ) : (
+                      <span
+                        title={
+                          `$${row.costTotal.toFixed(2)} total across the benchmark` +
+                          (row.costUnpricedCalls > 0
+                            ? ` — at least, ${row.costUnpricedCalls} call(s) used a model with no published pricing`
+                            : '')
+                        }
+                      >
+                        ${row.costPerTest.toFixed(4)}
+                        {row.costUnpricedCalls > 0 && <span className="text-amber-600">*</span>}
+                      </span>
+                    ),
+                  width: '160px',
+                  wrap: true,
+                },
+                ...(generations.length > 1
+                  ? [{
+                      name: 'Results',
+                      // Which benchmark generation this engine's numbers come from. Only
+                      // worth a column once a board holds more than one, and it shows the
+                      // mix rather than a single label because a partly re-run engine
+                      // genuinely is part-old.
+                      selector: (row) => (row.generations ?? []).join(','),
+                      sortable: true,
+                      width: '130px',
+                      cell: (row) => {
+                        const ids = row.generations ?? [];
+                        return (
+                          <span
+                            className="flex flex-wrap gap-1"
+                            title={Object.entries(row.generationCounts ?? {})
+                              .map(([id, n]) => `${n} result(s) from ${id}`)
+                              .join(', ')}
+                          >
+                            {ids.map((id) => (
+                              <span
+                                key={id}
+                                className={`inline-block px-2 py-1 text-xs font-medium rounded whitespace-nowrap ${
+                                  caveated.some((g) => g.id === id)
+                                    ? 'bg-amber-100 text-amber-800'
+                                    : 'bg-indigo-50 text-indigo-700'
+                                }`}
+                              >
+                                {id}
+                              </span>
+                            ))}
+                          </span>
+                        );
+                      },
+                    }]
+                  : []),
               ]}
               data={leaderboardData.engines}
               defaultSortFieldId={3}
@@ -213,11 +299,16 @@ function Leaderboard() {
                     marker: {
                       size: 12,
                       opacity: 0.7,
-                      color: leaderboardData.engines.map((e) =>
-                        e.engineName === 'qualitative-zero'
-                          ? 'rgba(102, 102, 102, 0.8)'
-                          : 'rgba(186, 72, 72, 0.82)'
-                      ),
+                      // Engines still carrying results from a caveated generation are
+                      // drawn in that warning colour, so the chart doesn't present a
+                      // flagged score as though it were on equal footing.
+                      color: leaderboardData.engines.map((e) => {
+                        if (e.engineName === 'qualitative-zero') return 'rgba(102, 102, 102, 0.8)';
+                        const flagged = (e.generations ?? []).some((id) =>
+                          caveated.some((g) => g.id === id)
+                        );
+                        return flagged ? 'rgba(217, 143, 38, 0.82)' : 'rgba(186, 72, 72, 0.82)';
+                      }),
                       line: { width: 0 },
                     },
                     textfont: { size: 10 },

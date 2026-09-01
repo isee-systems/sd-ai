@@ -17,6 +17,14 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { execSync } from 'child_process';
+import {
+  LEADERBOARD_MODES,
+  LEADERBOARD_GENERATIONS,
+  leaderboardResultsFilename,
+  generationsIn,
+  generationOf,
+  findGeneration,
+} from '../../evals/leaderboardGenerations.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -320,6 +328,11 @@ async function generateAgents() {
 // full-results files to the small per-engine aggregate the UI actually renders.
 function processLeaderboard(data) {
   const engineStats = {};
+  // Cost and generation are tracked in their own maps rather than on engineStats: the
+  // category list below is inferred from "every key that isn't a known non-category",
+  // so an extra key there would be rendered as a benchmark column.
+  const costStats = {};
+  const generationStats = {};
   const categories = new Set();
   const categoryFirstTests = {};
 
@@ -348,6 +361,24 @@ function processLeaderboard(data) {
     engineStats[engineConfigName][test.category].passes += test.pass ? 1 : 0;
     engineStats[engineConfigName][test.category].count += 1;
     engineStats[engineConfigName].speeds.push(test.duration);
+
+    // A newer result overwrites an older one, so a config only partly re-run holds a
+    // mix. Counting per generation is what lets the table say which rows are still on
+    // older numbers instead of implying the whole config was measured at once.
+    const gen = generationOf(test);
+    const genCounts = (generationStats[engineConfigName] ??= {});
+    genCounts[gen] = (genCounts[gen] ?? 0) + 1;
+
+    const cost = (costStats[engineConfigName] ??= { total: 0, priced: 0, unpricedCalls: 0, tests: 0 });
+    cost.tests += 1;
+    if (test.cost) {
+      cost.priced += 1;
+      // Only originator rows are summed. A sibling test that reused a cached generation
+      // carries that generation's full cost on its own row, so adding it would bill one
+      // engine call once per sibling.
+      if (!test.cost.reusedGeneration) cost.total += test.cost.total;
+      cost.unpricedCalls += test.cost.unpricedCalls;
+    }
   }
 
   const engines = Object.entries(engineStats).map(([configName, stats]) => {
@@ -367,7 +398,28 @@ function processLeaderboard(data) {
     const speed =
       stats.speeds.reduce((sum, a) => sum + a, 0) / stats.speeds.length / 1000;
 
-    return { configName, engineName: stats.engineName, llmModel: stats.llmModel, speed, score, ...scores };
+    // Total spend spread over every test, so the figure is comparable between engines
+    // that ran different numbers of tests. Null — not zero — for results produced before
+    // evals captured cost, so the UI can say "unknown" rather than "free".
+    const cost = costStats[configName];
+    const hasCost = cost && cost.priced > 0;
+    const costTotal = hasCost ? cost.total : null;
+    const costPerTest = hasCost ? cost.total / cost.tests : null;
+
+    const generationCounts = generationStats[configName] ?? {};
+    const presentGenerations = generationsIn(
+      Object.entries(generationCounts).flatMap(([id, n]) => Array(n).fill({ generation: id }))
+    );
+
+    return {
+      configName, engineName: stats.engineName, llmModel: stats.llmModel, speed, score,
+      generationCounts,
+      generations: presentGenerations,
+      costTotal, costPerTest,
+      // Non-zero means a model had no pricing.js entry, so the two figures above understate.
+      costUnpricedCalls: hasCost ? cost.unpricedCalls : 0,
+      ...scores,
+    };
   });
 
   engines.sort((a, b) => b.score - a.score);
@@ -375,18 +427,55 @@ function processLeaderboard(data) {
   return { engines, categories: Array.from(categories), categoryFirstTests };
 }
 
+// One file per leaderboard. A newer result overwrites the older one for the same test,
+// so the file already holds exactly one current answer per test and needs no bucketing —
+// it is aggregated whole. The generation tag rides along per engine so the table can
+// flag which engines are still carrying older numbers.
 function generateLeaderboards() {
-  const modes = ['cld', 'sfd', 'discussion'];
   const out = {};
-  for (const mode of modes) {
-    const fp = path.join(REPO_ROOT, 'evals', 'results', `leaderboard_${mode}_full_results.json`);
+  for (const mode of LEADERBOARD_MODES) {
+    const fp = path.join(REPO_ROOT, 'evals', 'results', leaderboardResultsFilename(mode));
     if (!fs.existsSync(fp)) {
       console.warn(`  ! no leaderboard results for "${mode}"`);
       out[mode] = null;
       continue;
     }
+
     const data = JSON.parse(fs.readFileSync(fp, 'utf8'));
-    out[mode] = processLeaderboard(data);
+    const processed = processLeaderboard(data);
+
+    const counts = {};
+    for (const row of data.results) {
+      const id = generationOf(row);
+      counts[id] = (counts[id] ?? 0) + 1;
+    }
+
+    const generations = generationsIn(data.results).map((id) => {
+      const declared = findGeneration(id);
+      if (!declared) {
+        // Surfaced rather than dropped: an undeclared id is almost always a typo in a
+        // collect command, and silently ignoring it would look like data loss.
+        console.warn(`  ! "${mode}" has results tagged "${id}", which is not in LEADERBOARD_GENERATIONS`);
+      }
+      return {
+        id,
+        label: declared?.label ?? id,
+        description: declared?.description ?? null,
+        caveat: declared?.caveat ?? null,
+        count: counts[id],
+      };
+    });
+
+    console.log(
+      `  ${mode}: ${processed.engines.length} engines, ` +
+      `${generations.map((g) => `${g.id} (${g.count} results)`).join(', ')}`
+    );
+    out[mode] = {
+      ...processed,
+      generations,
+      // generationsIn orders by the registry, so the last present one is the newest.
+      currentGeneration: generations[generations.length - 1]?.id ?? null,
+    };
   }
   return out;
 }

@@ -16,6 +16,7 @@ import prompts from "prompts";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 
+import { withCostAccounting } from "../utilities/costAccounting.js";
 import { printTable, pivotAndUnstack, uniqueFileId } from "./helpers.js";
 import {
   BASELINE_TOKEN_USAGE,
@@ -361,6 +362,11 @@ const runSingleTest = async (
     ]);
     const startTime = Date.now();
     let generationPromise = generationCache.get(generationKey);
+    // Whether this test is a sibling reusing a generation another test paid for. It
+    // still reports that generation's full cost below, but only the originator's row
+    // counts toward an experiment total — otherwise one engine call is billed once
+    // per sibling and the total is inflated.
+    const reusedGeneration = !!generationPromise;
     if (!generationPromise) {
       generationPromise = (async () => {
         await requestLimiter.removeTokens(1);
@@ -376,15 +382,19 @@ const runSingleTest = async (
             chalk.blue(`Rate limit passed ${name}, awaiting engine response`)
           );
 
-        return instance.generate(
+        // Every LLM call made while generating lands in this scope, however deep:
+        // a plain engine's own call, and for an agent engine its conversation turns
+        // plus every engine it drives through a tool. So `accounting` is the whole
+        // price of producing this response, not just the outermost request.
+        return withCostAccounting(() => instance.generate(
           test.testParams["prompt"],
           test.testParams["currentModel"],
           additionalParameters
-        );
+        ));
       })();
       generationCache.set(generationKey, generationPromise);
     }
-    let generateResponse = await generationPromise;
+    const { value: generateResponse, accounting } = await generationPromise;
 
     // A failed generation must not be cached: drop it so a retry (breakOnError) or a later sibling
     // regenerates rather than inheriting the failure.
@@ -471,6 +481,23 @@ const runSingleTest = async (
     testWithResult = structuredClone(test);
     testWithResult["duration"] = Date.now() - startTime;
     testWithResult["generatedResponse"] = generateResponse || {};
+    testWithResult["cost"] = {
+      // USD for the generation behind this test. `unpricedCalls` is what keeps this
+      // honest: a model with no pricing.js entry contributes nothing to the total, so
+      // a non-zero count here means `total` is a lower bound rather than the bill.
+      total: accounting.totalCost,
+      calls: accounting.calls,
+      unpricedCalls: accounting.unpricedCalls,
+      byModel: accounting.byModel,
+      reusedGeneration,
+    };
+
+    if (experiment.verbose === 2)
+      console.log(
+        chalk.blue(`Cost for ${name}: $${accounting.totalCost.toFixed(6)} over ${accounting.calls} LLM call(s)`) +
+        (accounting.unpricedCalls > 0 ? chalk.yellow(` (${accounting.unpricedCalls} unpriced — total is a lower bound)`) : "") +
+        (reusedGeneration ? chalk.gray(" [reused a sibling test's generation]") : "")
+      );
 
     if (experiment.verbose === 2) {
       console.log(
@@ -582,6 +609,49 @@ fs.writeFileSync(
     (v) => v.count()
   ).toCSV()
 );
+
+// Cost per engine config. Only originator rows are summed — a sibling reusing a cached
+// generation carries that generation's full cost on its own row for visibility, but
+// adding it here would bill one engine call once per sibling.
+const costByEngineConfig = {};
+results.forEach((result) => {
+  const cost = result["cost"];
+  if (!cost || cost.reusedGeneration) return;
+  const entry = (costByEngineConfig[result["engineConfigName"]] ??= {
+    generations: 0, llmCalls: 0, unpricedCalls: 0, total: 0,
+  });
+  entry.generations += 1;
+  entry.llmCalls += cost.calls;
+  entry.unpricedCalls += cost.unpricedCalls;
+  entry.total += cost.total;
+});
+
+const costRows = Object.entries(costByEngineConfig).map(([engineConfigName, e]) => ({
+  engineConfigName,
+  generations: e.generations,
+  llmCalls: e.llmCalls,
+  "cost ($)": e.total.toFixed(4),
+  "$/generation": (e.total / (e.generations || 1)).toFixed(4),
+  // Loud rather than absent: a non-zero count means the cost column understates.
+  "unpriced calls": e.unpricedCalls,
+}));
+
+if (costRows.length > 0) {
+  const grandTotal = Object.values(costByEngineConfig).reduce((a, e) => a + e.total, 0);
+  const unpriced = Object.values(costByEngineConfig).reduce((a, e) => a + e.unpricedCalls, 0);
+  console.log();
+  console.log(chalk.blue("Cost:"));
+  const costFrame = new dataForge.DataFrame({ values: costRows });
+  printTable(costFrame);
+  console.log(chalk.bold(`Total: $${grandTotal.toFixed(4)}`));
+  if (unpriced > 0) {
+    console.log(chalk.yellow(
+      `Warning: ${unpriced} LLM call(s) used a model with no pricing.js entry — the totals above are a lower bound.`
+    ));
+  }
+  console.log();
+  fs.writeFileSync(`${experimentResultsName}_cost.csv`, await costFrame.toCSV());
+}
 
 const summary = pivotAndUnstack(
   results.withSeries({
