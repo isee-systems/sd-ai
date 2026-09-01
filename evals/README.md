@@ -99,6 +99,35 @@ npm run evals:collect -- --leaderboard sfd --generation v2 xnt_anthropicSFD_full
 4. `cd frontend && npm run generate` — the new generation appears automatically and the older
    ones are unchanged
 
+# Errors and Retries
+- a provider 503/429/timeout says nothing about the engine under test, so an errored generation is
+  never scored as a failure — it is retried up to **3 times** (4 attempts total) with exponential
+  backoff (2s, 4s, 8s)
+- if a test still fails after every attempt, **the run stops**. It does not drop the test and carry
+  on: a leaderboard missing a test scores that engine over a smaller set than the others, which is a
+  silently wrong number rather than an obviously absent one
+- on stopping:
+    - every completed test stays in `<experiment>_in_progress.jsonl`
+    - **no** `full_results.json` or summary is written — there is nothing publishable yet
+    - the failing tests are printed for review, grouped by engine config, with every attempt's error
+    - the same detail is written to `<experiment>_errors.json`
+    - the process exits non-zero, so a calling script stops rather than publishing a partial board
+- **resume by re-running the same experiment.** It picks up the in-progress file, reuses everything
+  already completed, and only re-attempts what is missing:
+
+```
+npm run evals -- -e evals/experiments/anthropicSFD.json
+```
+
+- tests already in flight when the stop is triggered are allowed to finish — they are paid for
+  either way, and completing them leaves the resume less to redo. Tests still queued behind the rate
+  limiter are skipped without spending
+- a test's recorded `cost` covers **every** attempt, including failed ones, and carries
+  `failedAttempts` when there were any
+- an engine that throws instead of returning `{err}` is treated the same way, rather than taking down
+  the whole run
+- a successful run clears both the in-progress file and any `_errors.json` left by the run it resumed
+
 # Cost
 - every test records what it cost to produce its answer, in `cost` on each result row:
     - `total`: USD for the generation behind this test
