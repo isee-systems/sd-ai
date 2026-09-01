@@ -30,6 +30,13 @@ const CONFIG = { path: path.join(__dirname, '../../agent/config/socrates.md') };
 // The values the agent sent before intelligence levels existed. Written as literals
 // rather than read from config, because the whole point is to detect a config edit that
 // silently moves what a legacy client gets.
+// The top rung's model, read from config rather than pinned. The assertions using it are
+// about the ladder moving the model at all, not about which model it lands on, so bumping
+// a model id in config.js should not require a test edit. LEGACY below is the opposite
+// case and stays hardcoded on purpose: those values ARE the pre-feature contract.
+const MAXIMUM_MODEL = config.agentIntelligence.providers.anthropic
+  .find((l) => l.id === 'maximum').model;
+
 const LEGACY = {
   anthropicModel: 'claude-sonnet-5',
   anthropicEffort: 'medium',
@@ -448,7 +455,7 @@ describe('intelligence ladder — provider request shapes', () => {
     await orc.startConversationAnthropicManual('hi');
 
     const req = create.mock.calls[0][0];
-    expect(req.model).toBe('claude-fable-5');
+    expect(req.model).toBe(MAXIMUM_MODEL);
     expect('output_config' in req).toBe(false);
   });
 
@@ -537,7 +544,7 @@ describe('intelligence ladder — changing level mid-conversation', () => {
     await orc.startConversationAnthropicManual('second');
 
     expect(create.mock.calls[0][0].model).toBe('claude-sonnet-5');
-    expect(create.mock.calls[1][0].model).toBe('claude-fable-5');
+    expect(create.mock.calls[1][0].model).toBe(MAXIMUM_MODEL);
   });
 
   it('finishes an in-flight turn on the model it started with', async () => {
@@ -569,7 +576,7 @@ describe('intelligence ladder — changing level mid-conversation', () => {
 
     // ...and the change is not lost — it applies to the next turn.
     await orc.startConversationAnthropicManual('again');
-    expect(create.mock.calls[create.mock.calls.length - 1][0].model).toBe('claude-fable-5');
+    expect(create.mock.calls[create.mock.calls.length - 1][0].model).toBe(MAXIMUM_MODEL);
   });
 
   it('leaves conversation history and the orchestrator instance intact', async () => {

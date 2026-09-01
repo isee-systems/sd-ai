@@ -46,6 +46,7 @@ const config = {
         {label: "Gemini 3.7-flash medium", value: 'gemini-3.7-flash medium'},
         {label: "Gemini 3.7-flash low", value: 'gemini-3.7-flash low'},
         {label: "Gemini 3.6-flash", value: 'gemini-3.6-flash'},
+        {label: "Claude Fable 5.1", value: 'claude-fable-5-1'},
         {label: "Claude Fable 5", value: 'claude-fable-5'},
         {label: "Claude Opus 5", value: 'claude-opus-5'},
         {label: "Claude Sonnet 5", value: 'claude-sonnet-5'},
@@ -192,7 +193,7 @@ const config = {
                 // No effort: Fable always thinks, and we want its own default depth.
                 { id: 'maximum', label: 'Maximum',
                   description: 'The most capable model available. Use it for the hardest problems.',
-                  model: 'claude-fable-5' }
+                  model: 'claude-fable-5-1' }
             ],
             google: [
                 { id: 'standard', label: 'Standard',

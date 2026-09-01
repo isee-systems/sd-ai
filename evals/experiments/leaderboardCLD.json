@@ -65,10 +65,10 @@
                 "baselineTokenUsage": 10000
             }
         },
-        "qualitative-claude-fable-5": {
+        "qualitative-claude-fable-5-1": {
             "engine": "qualitative",
             "additionalParameters": {
-                "underlyingModel": "claude-fable-5"
+                "underlyingModel": "claude-fable-5-1"
             },
             "limits": {
                 "baselineTokenUsage": 10000
