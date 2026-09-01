@@ -352,7 +352,9 @@ export async function runAgent(prompt, currentModel, parameters) {
   }
   if (backgroundKnowledge) {
     parts.push(
-      `Please be sure to consider the following critically important background information when you give your answer. You MUST use ONLY this background information to answer — do not draw on your own training knowledge or make assumptions beyond what is explicitly stated here. You MUST use the exact variable names as written — do not rename, paraphrase, or substitute any variable name that is explicitly referenced in this information.\n\n${backgroundKnowledge}`
+      `Please be sure to consider the following critically important background information when you give your answer. You MUST use ONLY this background information to answer — do not draw on your own training knowledge or make assumptions beyond what is explicitly stated here. You MUST use the exact variable names as written — do not rename, paraphrase, or substitute any variable name that is explicitly referenced in this information.
+
+NAMING RULE — the term goes in the NAME, not only the units. When the background information names the thing being accumulated, counted or measured — especially an unusual, invented or domain-specific word — that word MUST appear in the NAME of the variable representing it. Recording the term only as the variable's unit and giving the variable a generic name instead is incorrect. For example, if the background says an inventory holds twenty widgets, the stock must be named for the widgets (\"widgets\", or \"widget inventory\") and NOT named \"Inventory\" with units of widgets. Prefer the background's own distinctive wording over a generic label every time; units are additional to that name, never a substitute for it.\n\n${backgroundKnowledge}`
     );
   }
   parts.push(prompt);

@@ -3,17 +3,22 @@ import { describe, test, expect, jest, beforeAll, beforeEach } from '@jest/globa
 // ─── Module-level message sequence used by the AgentOrchestrator mock ────────
 // Tests set this before calling runAgent; the mock factory closes over it.
 let messageSequence = [];
+// The composed user message and constructor args from the most recent runAgent call.
+let lastUserMessage = null;
+let lastConstructorArgs = null;
 
 // Mocks must be declared at the top level before any dynamic import of the
 // module under test, so Jest can intercept the module registry.
 jest.unstable_mockModule('../../agent/AgentOrchestrator.js', () => ({
   AgentOrchestrator: class MockOrchestrator {
-    constructor(_sm, _sid, sendFn, _config, _provider) {
+    constructor(_sm, _sid, sendFn, _config, provider, intelligence, toolModels) {
       this._send = sendFn;
+      lastConstructorArgs = { provider, intelligence, toolModels };
     }
-    async startConversation(_msg) {
-      for (const msg of messageSequence) {
-        await this._send(msg);
+    async startConversation(msg) {
+      lastUserMessage = msg;
+      for (const msg2 of messageSequence) {
+        await this._send(msg2);
       }
     }
   },
@@ -323,5 +328,62 @@ describe('sendToClient mock handler', () => {
 
     // Just verify it doesn't hang (no timeout) — the session resolves the pending request
     await expect(runAgent('test prompt', currentModel, baseParams)).resolves.toBeDefined();
+  });
+});
+
+// ─── composed user message ───────────────────────────────────────────────────
+
+describe('the message runAgent composes', () => {
+  beforeEach(() => {
+    messageSequence = [{ type: 'agent_complete', status: 'ok' }];
+    lastUserMessage = null;
+    lastConstructorArgs = null;
+  });
+
+  test('carries the naming rule whenever background knowledge is supplied', async () => {
+    // Regression guard for a real leaderboard failure: given background prose like
+    // "the baseline inventory shows twenty frimbulators", the agent named the stock
+    // "Inventory" and put "frimbulators" in the units. The ground truth matcher is
+    // containment-based, so a name carrying none of the term matches nothing and the
+    // test scored zero while the same model passed as a plain engine. The rule below is
+    // what tells the agent the term belongs in the NAME; losing it silently reintroduces
+    // that failure across every gibberish-variable test.
+    await runAgent('build me a model', { variables: [], relationships: [] }, {
+      agentName: 'merlin',
+      provider: 'anthropic',
+      mode: 'sfd',
+      backgroundKnowledge: 'the baseline inventory shows twenty frimbulators',
+    });
+
+    expect(lastUserMessage).toContain('the baseline inventory shows twenty frimbulators');
+    expect(lastUserMessage).toContain('NAMING RULE');
+    expect(lastUserMessage).toMatch(/MUST appear in the NAME/);
+    expect(lastUserMessage).toMatch(/never a substitute/);
+  });
+
+  test('omits the background section entirely when none is supplied', async () => {
+    await runAgent('build me a model', { variables: [], relationships: [] }, {
+      agentName: 'merlin',
+      provider: 'anthropic',
+      mode: 'sfd',
+    });
+
+    expect(lastUserMessage).toBe('build me a model');
+    expect(lastUserMessage).not.toContain('NAMING RULE');
+  });
+
+  test('passes intelligence and toolModels through to the orchestrator', async () => {
+    // The experiment files drive both of these; a silent drop would run every agent row
+    // on the provider default model with the shared config tool lane instead.
+    const toolModels = { build: { normal: 'm', hard: 'm' }, nonBuild: { normal: 'm', hard: 'm' } };
+    await runAgent('build me a model', { variables: [], relationships: [] }, {
+      agentName: 'merlin',
+      provider: 'anthropic',
+      intelligence: 'maximum',
+      toolModels,
+      mode: 'sfd',
+    });
+
+    expect(lastConstructorArgs).toEqual({ provider: 'anthropic', intelligence: 'maximum', toolModels });
   });
 });

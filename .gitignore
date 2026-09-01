@@ -4,6 +4,7 @@
 /*_summary.csv
 /*_results.json
 /*_in_progress.jsonl
+/*_cost.csv
 
 #code coverage report
 coverage/
