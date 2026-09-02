@@ -14,7 +14,18 @@ const loadClaudeAgentSdk = async () => _claudeAgentSdk ??= await import('@anthro
 let _googleGenai;
 const loadGoogleGenai = async () => _googleGenai ??= await import('@google/genai');
 let _googleAdk;
-const loadGoogleAdk = async () => _googleAdk ??= await import('@google/adk');
+// @google/adk logs every outbound request at INFO, and it cannot be turned off with
+// config: its winston levels are numbered the other way round from winston's own
+// convention (info=1, error=3), so the `level: 'error'` it configures admits INFO
+// rather than filtering it. Hand it the library's no-op logger when we are meant to be
+// quiet — done here, at the one place the module is loaded, so it is silenced before
+// the first request goes out. Failures still reach the eval through the thrown error.
+const loadGoogleAdk = async () => {
+  if (_googleAdk) return _googleAdk;
+  _googleAdk = await import('@google/adk');
+  if (logger.isTestMode) _googleAdk.setLogger(null);
+  return _googleAdk;
+};
 let _openRouterSdk;
 const loadOpenRouterSdk = async () => _openRouterSdk ??= await import('@openrouter/sdk');
 let _openRouterAgent;
@@ -2168,6 +2179,11 @@ ${lines.join('\n')}`);
       // Client tools are re-listed alongside the built-ins even though nothing about
       // them can change mid-turn, because splitting the two would mean two answers to
       // "what is live right now" and only one of them kept current.
+      //
+      // What this list must never do is SHRINK around a name the model is still
+      // holding: ADK ends the invocation on a call it cannot resolve, so the
+      // model-state gates are enforced when a tool runs here, not by omission.
+      // getAdkTools has the whole story.
       const adkToolset = await createAdkLiveToolset(async () => [
         ...await this.builtInToolProvider.getAdkTools(mode),
         // The same set the roster was built against a few lines up, so what this

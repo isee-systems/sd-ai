@@ -166,7 +166,10 @@ describe('modelStateGate', () => {
 describe('createAdkLiveToolset', () => {
   // The ADK route builds its LlmAgent once per turn, so an array of tools is frozen
   // for the turn. ADK re-resolves a BaseToolset before every model request instead,
-  // which is the only reason the route can withhold and restore a tool mid-turn.
+  // which is the only reason the list the model sees tracks the session rather than a
+  // snapshot of it. Model-state gating is not part of what it re-resolves — see
+  // getAdkTools, which advertises the superset because ADK kills the invocation on a
+  // call it cannot resolve.
   it('presents as a toolset ADK will re-resolve, not as a tool', async () => {
     const { isBaseToolset } = await import('@google/adk');
     const toolset = await createAdkLiveToolset(async () => []);

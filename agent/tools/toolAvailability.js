@@ -115,8 +115,9 @@ export function measureModelTokens(session) {
  * session AND usable against the model as it currently stands.
  *
  * What a route builds its declaration list from WHEN it can rebuild that list before
- * every model request: the four manual loops, and the ADK route via the toolset at the
- * bottom of this file. Two routes cannot, and neither uses this:
+ * every model request AND can survive being wrong about it: the four manual loops,
+ * which answer a call to a name they no longer offer with an ordinary "Tool not found"
+ * result. Three routes do not use this:
  *
  * - the Claude Agent SDK's MCP registration, which has to register a tool it intends
  *   to withhold so it has something to re-enable later, and so composes the same two
@@ -124,6 +125,9 @@ export function measureModelTokens(session) {
  * - the OpenRouter agent SDK, which is handed one tool array per run and offers no
  *   hook to replace it, and so advertises the isToolAvailable superset and leans on
  *   the call-time gate. See #buildOpenRouterTools.
+ * - the ADK route, which CAN rebuild its list per request but cannot survive an
+ *   unresolvable call: ADK throws out of its own function dispatch and the invocation
+ *   ends. It advertises the superset for that reason. See getAdkTools.
  */
 export function isToolActive(toolDef, options = {}) {
   return isToolAvailable(toolDef, options) && !modelStateGate(toolDef, options.session);
@@ -144,15 +148,20 @@ export function isToolActive(toolDef, options = {}) {
  *
  * Callers use this three ways, one per shape of route:
  *
- * - Routes that rebuild their declaration list before every model request — the four
- *   manual loops, and the ADK route through createAdkLiveToolset — treat a refusal as
- *   "withhold this tool" (see isToolActive).
+ * - The four manual loops rebuild their declaration list before every model request and
+ *   treat a refusal as "withhold this tool" (see isToolActive). They can, because a call
+ *   to a name they did not offer comes back to the model as "Tool not found".
  * - The Claude Agent SDK's MCP server is built once per query and cannot be rebuilt
  *   while the query runs, so it registers the tool and toggles it instead, which MCP
  *   reports to the client as a tools/list change.
- * - The OpenRouter agent SDK can do neither: one array per run, no hook to replace it.
- *   It advertises the superset and lets the refusal below do the work, because a tool
- *   wrongly offered costs one call while a tool wrongly withheld costs the run.
+ * - The OpenRouter and ADK routes advertise the superset and let the refusal below do
+ *   the work, because a tool wrongly offered costs one call while a tool wrongly
+ *   withheld costs the run. OpenRouter has no choice — one array per run, no hook to
+ *   replace it. ADK could rebuild per request but must not withhold: it throws
+ *   `Function <name> is not found in the toolsDict` for a call it cannot resolve, and
+ *   that kills the invocation. Both rely entirely on the refusal reaching the model as
+ *   a tool result, which is what makes the wording below load-bearing rather than
+ *   advisory — it is the only thing telling the agent what to do instead.
  *
  * All three rely on the handler re-checking when it runs, since no list is perfectly
  * current at the instant of the call.
@@ -186,10 +195,17 @@ export function modelStateGate(toolDef, session) {
  *
  * Lives here rather than beside the ADK route because it is the ADK answer to the
  * question this file exists to ask. The route builds its agent once per turn, so a
- * plain `tools: [...]` array is frozen for the whole turn: whatever passed
- * isToolActive when the turn began is what the model keeps seeing, however much the
- * tool call it just made changed the answer. That is the same trap the SDK route hit
- * and solved by toggling MCP registrations — see modelStateGate above.
+ * plain `tools: [...]` array is frozen for the whole turn: whatever the session looked
+ * like when the turn began is what the model keeps seeing for the rest of it.
+ *
+ * What it deliberately does NOT re-resolve is the model-state gates. Withholding is
+ * only safe on a route that can answer a call to a name it stopped offering, and ADK
+ * cannot: getToolAndContext throws `Function <name> is not found in the toolsDict`,
+ * the invocation ends there, and the agent loses the turn rather than a call. So
+ * getAdkTools resolves the isToolAvailable superset here and lets the call-time gate
+ * refuse in words the model can act on — see modelStateGate above. Re-resolving still
+ * earns its place for everything else the list is built from, which is read off the
+ * live session rather than a snapshot taken when the turn opened.
  *
  * ADK's own answer is BaseToolset. LlmAgent.runOneStepAsync builds a fresh LlmRequest
  * per model call and resolves every entry of `tools` through convertToolUnionToTools,

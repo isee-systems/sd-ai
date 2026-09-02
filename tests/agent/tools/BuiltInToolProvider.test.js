@@ -195,6 +195,31 @@ describe('BuiltInToolProvider — model-state gating', () => {
     expect(gate).toBeNull();
   });
 
+  // The ADK route is the one place withholding is not merely conservative but fatal:
+  // @google/adk throws `Function <name> is not found in the toolsDict` out of its own
+  // dispatch and the invocation ends there. Two eval runs died exactly this way — the
+  // agent emptied the variables it was restructuring, edit_variables dropped out of the
+  // next request's list, and the very next call to it took the whole run down. The
+  // prompt names these tools unconditionally, so the list must too.
+  it('keeps model-gated tools in the ADK list in both directions', async () => {
+    const empty = (await makeProvider({ clientModel: EMPTY_MODEL }).getAdkTools('sfd')).map(t => t.name);
+    expect(empty).toContain('edit_variables');
+    expect(empty).toContain('generate_quantitative_model');
+
+    const huge = (await makeProvider({
+      clientModel: ONE_VARIABLE, modelTokenCount: config.agentMaxTokensForEngines + 1
+    }).getAdkTools('sfd')).map(t => t.name);
+    expect(huge).toContain('edit_variables');
+    expect(huge).toContain('generate_quantitative_model');
+  });
+
+  it('still applies the session-fixed gates to the ADK list', async () => {
+    // The superset is isToolAvailable's, not everything: mode is fixed for the session,
+    // so a cld-only tool has no name the model could reach for in an sfd session.
+    const names = (await makeProvider({ clientModel: EMPTY_MODEL }).getAdkTools('sfd')).map(t => t.name);
+    expect(names).not.toContain('generate_qualitative_model');
+  });
+
   it('refuses an engine call once the model outgrows the engines, mid-turn', async () => {
     const result = await callTool(
       { clientModel: ONE_VARIABLE, modelTokenCount: config.agentMaxTokensForEngines + 1 },

@@ -1100,9 +1100,11 @@ added there takes effect everywhere rather than on the routes someone remembered
 
 ### Model-state gates
 
-`maxModelTokens` and `requiresModelContent` are decided by a second predicate, `modelStateGate`, and
-a tool they rule out is **withheld** — kept out of the agent's tool list entirely, not offered and
-then refused. `isToolActive` composes the two, and every route's declaration list is built from it.
+`maxModelTokens` and `requiresModelContent` are decided by a second predicate, `modelStateGate`.
+Where the route can safely withhold, a tool they rule out is **withheld** — kept out of the agent's
+tool list entirely, not offered and then refused; `isToolActive` composes the two predicates for
+those routes. Withholding is safe only where a call to a name the route stopped offering can still
+be answered, which is not true everywhere (see the table below).
 
 What makes them a separate predicate is that they are not answered once. A session's mode and grants
 hold for its whole life; the model changes *inside* a turn — a `generate_*` call, a targeted edit, an
@@ -1118,8 +1120,9 @@ How the list keeps up depends on what the route can rebuild:
 | Route | Mechanism |
 |---|---|
 | Anthropic SDK (`sdk` mode) | The MCP server is built once per query and cannot be re-registered, so a gated tool is **registered and then disabled**. MCP omits a disabled tool from `tools/list` and refuses a call to it, and `BuiltInToolProvider.syncModelStateGates()` toggles it as the model moves — which MCP reports to the client as a `notifications/tools/list_changed`, and the Agent SDK's client re-fetches on it. Registering only the live tools would leave nothing to revive. |
-| Manual loops (Anthropic, Gemini, OpenRouter, OpenAI-compatible) | Declarations are rebuilt **every iteration**, so the list tracks whatever the previous tool call did to the model. Filtering is a pass over a fixed map — it costs nothing next to the request it precedes. |
-| Gemini ADK, OpenRouter agent | Rebuilt per turn. Within a turn the call-time backstop below is what holds. |
+| Manual loops (Anthropic, Gemini, OpenRouter, OpenAI-compatible) | Declarations are rebuilt **every iteration**, so the list tracks whatever the previous tool call did to the model. Filtering is a pass over a fixed map — it costs nothing next to the request it precedes. A call to a name that has since been withheld comes back to the model as `Tool not found`. |
+| Gemini ADK | The list is re-resolved before **every model request** (`createAdkLiveToolset`), but the model-state gates are deliberately not applied to it: the route advertises the `isToolAvailable` superset and refuses at call time. ADK throws `Function <name> is not found in the toolsDict` out of its own dispatch for a call it cannot resolve, which ends the invocation — so on this route a wrongly withheld tool costs the whole run, while a wrongly offered one costs a single call. |
+| OpenRouter agent | One tool array per run with no hook to replace it, so it advertises the same superset and leans on the call-time refusal. |
 
 The trigger is `SessionManager.onModelChange`, fired from `updateClientModel` — the one funnel every
 model change passes through. The orchestrator subscribes for the SDK route. It has to be a
@@ -1130,7 +1133,9 @@ as a new model.
 Behind all of that, the handler wrapper re-checks the gate when a tool actually runs and returns an
 error envelope naming the tool to use instead. No list is perfectly current at the instant of a call
 — a model can move between the request being built and the call landing — and that backstop is what
-keeps a stale list from producing a bad edit rather than a correctable message.
+keeps a stale list from producing a bad edit rather than a correctable message. On ADK and the
+OpenRouter agent it is not a backstop but the whole mechanism, which is why its wording has to name
+the tool to reach for next: it is the only thing the agent gets.
 
 Model size is measured lazily: `updateClientModel` drops the cached count, and `measureModelTokens`
 re-measures for whoever reads it next. A model changes far more often than the count is read, so

@@ -2,7 +2,7 @@ import { VisualizationEngine } from '../utilities/VisualizationEngine.js';
 import { MediaStore } from '../utilities/MediaStore.js';
 import { toolResultToText, toMcpContentResult, mediaBlocksOf } from '../utilities/ToolResultFormatter.js';
 import { sanitizeSchemaForGemini } from './builtin/toolHelpers.js';
-import { isToolAvailable, isToolActive, modelStateGate } from './toolAvailability.js';
+import { isToolAvailable, modelStateGate } from './toolAvailability.js';
 
 // Lazy-loaded provider SDK symbols. Each tool provider serves multiple agent
 // loops (SDK, ADK, manual) but only one is selected per session — eagerly
@@ -135,8 +135,9 @@ export class BuiltInToolProvider {
    * registration instead means MCP recomputes tools/list and notifies the client
    * (autoRefresh, debounced), so the tool appears in the agent's next request.
    *
-   * A no-op on every other route: their maps are empty because they rebuild their
-   * declarations per turn (and per iteration, in the manual loops) from isToolActive.
+   * A no-op on every other route: their maps are empty because the manual loops rebuild
+   * their declarations from isToolActive on every iteration, and ADK and OpenRouter
+   * advertise the isToolAvailable superset and gate at call time instead.
    */
   syncModelStateGates() {
     if (this.#mcpModelStateTools.size === 0) return;
@@ -334,7 +335,21 @@ export class BuiltInToolProvider {
 
     for (const [toolName, toolDef] of Object.entries(toolCollection.tools)) {
       if (toolDef.nonSdkOnly) continue;
-      if (!isToolActive(toolDef, { mode, session, canWriteToLocalSandbox: this.canWriteToLocalSandbox })) continue;
+      // isToolAvailable, NOT isToolActive: the model-shaped gates are enforced when the
+      // tool RUNS on this route, never by omission from the list. ADK's own function
+      // dispatch throws `Function <name> is not found in the toolsDict` for a call it
+      // cannot resolve, and that error ends the whole invocation — the agent gets no
+      // tool result, no chance to pick something else, and the run dies mid-task. A
+      // name the model can reach for is therefore one it must always be able to call:
+      // the system prompt names edit_variables and the generate_* engines
+      // unconditionally, so a model that has just emptied its variables (or grown past
+      // the engine ceiling) will still call the tool that vanished from its list.
+      // A wrongly offered tool costs one call — the call-time gate in
+      // #applyModelStateGates answers it with a sentence naming what to do instead,
+      // which ADK feeds back as a function response. A wrongly withheld one cost three
+      // eval attempts and a dollar. Same trade the OpenRouter route makes, for a
+      // harsher reason: see modelStateGate in toolAvailability.js.
+      if (!isToolAvailable(toolDef, { mode, session, canWriteToLocalSandbox: this.canWriteToLocalSandbox })) continue;
 
       adkTools.push(new FunctionTool({
         name: toolName,
