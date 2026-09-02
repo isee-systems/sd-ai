@@ -487,9 +487,17 @@ function generateLeaderboards() {
     const processed = processLeaderboard(data);
 
     const counts = {};
+    // Distinct categories and tests per generation. The benchmark grew between rounds, and
+    // by different amounts on different boards — SFD went from 5 categories to 12 while CLD
+    // stayed at 4 — so whether a later generation is scored over harder ground is a fact
+    // about each board, not a blanket claim the UI can make for all of them.
+    const catsPerGen = {};
+    const testsPerGen = {};
     for (const row of data.results) {
       const id = generationOf(row);
       counts[id] = (counts[id] ?? 0) + 1;
+      (catsPerGen[id] ??= new Set()).add(row.category);
+      (testsPerGen[id] ??= new Set()).add(`${row.category}/${row.group}/${row.testParams.name}`);
     }
 
     const generations = generationsIn(data.results).map((id) => {
@@ -505,6 +513,8 @@ function generateLeaderboards() {
         description: declared?.description ?? null,
         caveat: declared?.caveat ?? null,
         count: counts[id],
+        categoryCount: catsPerGen[id]?.size ?? 0,
+        testCount: testsPerGen[id]?.size ?? 0,
       };
     });
 

@@ -87,6 +87,7 @@ function Leaderboard() {
   // Both default to excluded — see the filter bar below for why.
   const [showLocal, setShowLocal] = useState(false);
   const [showBaseline, setShowBaseline] = useState(false);
+  const [showOlder, setShowOlder] = useState(false);
 
   const config = leaderboardConfig[mode];
   const leaderboardData = leaderboards[mode] || null;
@@ -125,15 +126,31 @@ function Leaderboard() {
   // someone comparing engines wants to read past, so they are excluded by default and
   // one click away.
   const allEngines = leaderboardData.engines;
-  const localCount = allEngines.filter((e) => e.isLocal).length;
-  const baselineCount = allEngines.filter((e) => e.engineName === 'qualitative-zero').length;
-  const hasFilters = localCount > 0 || baselineCount > 0;
+  const current = leaderboardData.currentGeneration;
+  const isOlder = (engine) => !(engine.generations ?? []).includes(current);
+
+  const passLocal = (engine) => showLocal || !engine.isLocal;
+  const passBaseline = (engine) => showBaseline || engine.engineName !== 'qualitative-zero';
+  const passGeneration = (engine) => showOlder || !isOlder(engine);
 
   const visible = allEngines.filter(
-    (engine) =>
-      (showLocal || !engine.isLocal) &&
-      (showBaseline || engine.engineName !== 'qualitative-zero')
+    (engine) => passLocal(engine) && passBaseline(engine) && passGeneration(engine)
   );
+
+  // Each chip's count is the size of its class among engines the OTHER chips already
+  // admit — not the raw total. On this board every local and baseline engine is also an
+  // older-generation one, so a raw total would promise 54 rows that toggling cannot
+  // reveal while the generation filter is on.
+  const countIn = (inClass, ...others) =>
+    allEngines.filter((e) => inClass(e) && others.every((p) => p(e))).length;
+  const localCount = countIn((e) => e.isLocal, passBaseline, passGeneration);
+  const baselineCount = countIn((e) => e.engineName === 'qualitative-zero', passLocal, passGeneration);
+  const olderCount = countIn(isOlder, passLocal, passBaseline);
+
+  const hasLocal = allEngines.some((e) => e.isLocal);
+  const hasBaseline = allEngines.some((e) => e.engineName === 'qualitative-zero');
+  const hasOlder = allEngines.some(isOlder);
+  const hasFilters = hasLocal || hasBaseline || hasOlder;
 
   // Sorted once. The rank used to be recomputed inside the cell renderer, which re-sorted
   // the whole board for every row it drew. Ranks are positions within the current filter,
@@ -146,6 +163,14 @@ function Leaderboard() {
   // screenshots of the same board hard to compare.
   const categories = [...leaderboardData.categories].sort((a, b) =>
     camelCaseToWords(a).localeCompare(camelCaseToWords(b))
+  );
+
+  // A generation's warning belongs on the page only while its rows are on the page. With
+  // the earlier-versions filter off (the default) there are no v1 rows to warn about, and
+  // a caveat about numbers the reader cannot see is noise that trains them to skip the
+  // banner for the times it does matter.
+  const visibleCaveats = caveated.filter((g) =>
+    ranked.some((engine) => (engine.generations ?? []).includes(g.id))
   );
 
   const isCaveated = (engine) =>
@@ -268,14 +293,30 @@ function Leaderboard() {
         {/* A generation whose own results are known to be unreliable says so on the
             page, not just in the repo. A number shown without its caveat gets quoted
             without it. */}
-        {caveated.map((g) => (
-          <div
-            key={g.id}
-            className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded text-sm text-amber-900"
-          >
-            <strong>{g.label} results:</strong> {g.caveat}
-          </div>
-        ))}
+        {visibleCaveats.map((g) => {
+          // Only claimed where the numbers back it. The benchmark grew by different
+          // amounts per board: SFD went 5 categories -> 12, while CLD stayed at 4, so on
+          // CLD this sentence would be false.
+          const now = generations.find((x) => x.id === leaderboardData.currentGeneration);
+          const harder = now && now.id !== g.id && now.testCount > g.testCount;
+          return (
+            <div
+              key={g.id}
+              className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded text-sm text-amber-900"
+            >
+              <strong>{g.label} results:</strong> {g.caveat}
+              {harder && (
+                <>
+                  {' '}
+                  {now.label} also runs more evaluations than {g.label} — {now.testCount} tests
+                  across {now.categoryCount} categories, against {g.testCount} across{' '}
+                  {g.categoryCount} — and the added ones are harder, so {now.label} scores may
+                  read lower than {g.label} scores for the same engine.
+                </>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {hasFilters && (
@@ -284,7 +325,16 @@ function Leaderboard() {
             Showing <strong className="text-gray-800">{ranked.length}</strong> of{' '}
             {allEngines.length} engines
           </span>
-          {localCount > 0 && (
+          {hasOlder && (
+            <FilterChip
+              on={showOlder}
+              onClick={() => setShowOlder(!showOlder)}
+              title={`Engines whose results predate the current generation (${current}). Their scores were measured on a different set of tests and are not comparable.`}
+            >
+              Include results from earlier benchmark versions ({olderCount})
+            </FilterChip>
+          )}
+          {hasLocal && (
             <FilterChip
               on={showLocal}
               onClick={() => setShowLocal(!showLocal)}
@@ -293,7 +343,7 @@ function Leaderboard() {
               Locally-hosted ({localCount})
             </FilterChip>
           )}
-          {baselineCount > 0 && (
+          {hasBaseline && (
             <FilterChip
               on={showBaseline}
               onClick={() => setShowBaseline(!showBaseline)}
@@ -302,11 +352,12 @@ function Leaderboard() {
               Baseline control ({baselineCount})
             </FilterChip>
           )}
-          {(showLocal || showBaseline) && (
+          {(showLocal || showBaseline || showOlder) && (
             <button
               onClick={() => {
                 setShowLocal(false);
                 setShowBaseline(false);
+                setShowOlder(false);
               }}
               className="text-sm text-blue-600 hover:text-blue-800 underline"
             >

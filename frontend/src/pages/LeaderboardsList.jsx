@@ -30,12 +30,23 @@ function LeaderboardsList() {
 
       <div className="grid gap-4 sm:gap-5 md:grid-cols-3">
         {boards.map(({ mode, meta, data }) => {
-          const engines = data?.engines ?? [];
+          // Current generation only, throughout. Scores from different generations are
+          // measured over different test sets, so a "leader" picked across all of them is
+          // not a ranking of anything — and a card naming a current-generation leader
+          // beside an all-generations engine count reads as though the leader beat them
+          // all. The counts are scoped to match.
+          const generations = data?.generations ?? [];
+          const current = data?.currentGeneration ?? null;
+          const currentGeneration = generations.find((g) => g.id === current);
+          // Every engine/model pairing the board has ever scored, across generations —
+          // this counts the breadth of what has been benchmarked, so it is not scoped to
+          // the current generation the way the leader below is.
+          const allEngines = data?.engines ?? [];
+          const engines = allEngines.filter((e) => (e.generations ?? []).includes(current));
           const top = engines.reduce(
             (best, e) => (best == null || e.score > best.score ? e : best),
             null
           );
-          const generations = data?.generations ?? [];
 
           return (
             <Link
@@ -46,29 +57,33 @@ function LeaderboardsList() {
               <h2 className="text-lg font-bold text-gray-800 mb-1">{meta.title}</h2>
               <p className="text-sm text-gray-600 mb-3 flex-grow">{meta.blurb}</p>
 
-              {data == null ? (
-                <p className="text-sm text-gray-400">No results yet.</p>
+              {data == null || engines.length === 0 ? (
+                <p className="text-sm text-gray-400">No current-generation results yet.</p>
               ) : (
                 <>
                   <dl className="text-sm text-gray-600 mb-3">
-                    <div className="flex justify-between py-0.5">
-                      <dt>Engines</dt>
-                      <dd className="font-medium text-gray-800">{engines.length}</dd>
+                    <div className="flex justify-between gap-3 py-0.5">
+                      {/* A row is one engine paired with one model, not one engine — the
+                          same engine appears many times over different LLMs. */}
+                      <dt>Engines + LLM combinations</dt>
+                      <dd className="font-medium text-gray-800">{allEngines.length}</dd>
                     </div>
                     <div className="flex justify-between py-0.5">
                       <dt>Categories</dt>
-                      <dd className="font-medium text-gray-800">{data.categories.length}</dd>
+                      <dd className="font-medium text-gray-800">
+                        {currentGeneration?.categoryCount ?? data.categories.length}
+                      </dd>
                     </div>
                     <div className="flex justify-between py-0.5">
-                      <dt>Results</dt>
+                      <dt>Tests each</dt>
                       <dd className="font-medium text-gray-800">
-                        {generations.reduce((n, g) => n + g.count, 0).toLocaleString()}
+                        {(currentGeneration?.testCount ?? 0).toLocaleString()}
                       </dd>
                     </div>
                   </dl>
 
                   {top && (
-                    <div className="border-t border-gray-100 pt-2 mb-2">
+                    <div className="border-t border-gray-100 pt-2">
                       <div className="text-xs text-gray-500">Leader</div>
                       <div className="text-sm font-medium text-gray-800">{top.configName}</div>
                       <div className="text-sm text-gray-600">
@@ -77,21 +92,6 @@ function LeaderboardsList() {
                     </div>
                   )}
 
-                  <div className="flex flex-wrap gap-1">
-                    {generations.map((g) => (
-                      <span
-                        key={g.id}
-                        className={`inline-block px-2 py-0.5 text-xs font-medium rounded ${
-                          g.caveat
-                            ? 'bg-amber-100 text-amber-800'
-                            : 'bg-indigo-50 text-indigo-700'
-                        }`}
-                        title={g.description ?? undefined}
-                      >
-                        {g.label}
-                      </span>
-                    ))}
-                  </div>
                 </>
               )}
             </Link>
