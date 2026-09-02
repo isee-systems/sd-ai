@@ -18,6 +18,34 @@ import {
 /** Row labels have to fit a fixed gutter; the full name is always in the hover. */
 const truncate = (s) => (s.length > 42 ? `${s.slice(0, 41)}…` : s);
 
+/**
+ * A filter toggle. Reads as a checkbox rather than a button: these are inclusions the
+ * reader turns back on, and an unlabelled pressed/unpressed button leaves it ambiguous
+ * which state is the filtered one.
+ */
+const FilterChip = ({ on, onClick, children, title }) => (
+  <button
+    onClick={onClick}
+    title={title}
+    aria-pressed={on}
+    className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-sm rounded-full border ${
+      on
+        ? 'bg-blue-50 border-blue-300 text-blue-900 hover:bg-blue-100'
+        : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
+    }`}
+  >
+    <span
+      className={`inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm border text-[10px] leading-none ${
+        on ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-gray-400 text-transparent'
+      }`}
+      aria-hidden="true"
+    >
+      ✓
+    </span>
+    {children}
+  </button>
+);
+
 const Panel = ({ title, subtitle, children }) => (
   <section className="mb-6 sm:mb-8">
     <h2 className="text-xl sm:text-2xl font-bold mb-1 text-gray-800">{title}</h2>
@@ -56,6 +84,9 @@ function Leaderboard() {
   // The full matrix is still the source of truth, so it stays one click away — collapsed
   // by default because it is the wide, side-scrolling view the charts exist to replace.
   const [showRaw, setShowRaw] = useState(false);
+  // Both default to excluded — see the filter bar below for why.
+  const [showLocal, setShowLocal] = useState(false);
+  const [showBaseline, setShowBaseline] = useState(false);
 
   const config = leaderboardConfig[mode];
   const leaderboardData = leaderboards[mode] || null;
@@ -86,9 +117,28 @@ function Leaderboard() {
     );
   }
 
+  /* ---------------------------------------------------------------------- filters */
+
+  // `qualitative-zero` is the no-prompt-engineering control rather than an engine, and the
+  // locally-hosted rows are largely sampling sweeps of the same weights at different
+  // seeds and quantisations. Both are worth keeping on the board and neither is what
+  // someone comparing engines wants to read past, so they are excluded by default and
+  // one click away.
+  const allEngines = leaderboardData.engines;
+  const localCount = allEngines.filter((e) => e.isLocal).length;
+  const baselineCount = allEngines.filter((e) => e.engineName === 'qualitative-zero').length;
+  const hasFilters = localCount > 0 || baselineCount > 0;
+
+  const visible = allEngines.filter(
+    (engine) =>
+      (showLocal || !engine.isLocal) &&
+      (showBaseline || engine.engineName !== 'qualitative-zero')
+  );
+
   // Sorted once. The rank used to be recomputed inside the cell renderer, which re-sorted
-  // the whole board for every row it drew.
-  const ranked = [...leaderboardData.engines].sort((a, b) => b.score - a.score);
+  // the whole board for every row it drew. Ranks are positions within the current filter,
+  // which is what a filtered table is claiming to show.
+  const ranked = [...visible].sort((a, b) => b.score - a.score);
   const rankOf = new Map(ranked.map((engine, i) => [engine.configName, i + 1]));
 
   // Alphabetical rather than first-seen: the order a category happens to appear in the
@@ -223,12 +273,48 @@ function Leaderboard() {
             key={g.id}
             className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded text-sm text-amber-900"
           >
-            <strong>{g.label} results:</strong> {g.caveat} {g.count} of the{' '}
-            {generations.reduce((n, x) => n + x.count, 0)} results on this board are still
-            from {g.label} — the Results column marks which engines they belong to.
+            <strong>{g.label} results:</strong> {g.caveat}
           </div>
         ))}
       </div>
+
+      {hasFilters && (
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <span className="text-sm text-gray-600">
+            Showing <strong className="text-gray-800">{ranked.length}</strong> of{' '}
+            {allEngines.length} engines
+          </span>
+          {localCount > 0 && (
+            <FilterChip
+              on={showLocal}
+              onClick={() => setShowLocal(!showLocal)}
+              title="Models run locally through LM Studio / llama.cpp — identified by the seed, quantisation and context size recorded in the config name"
+            >
+              Locally-hosted ({localCount})
+            </FilterChip>
+          )}
+          {baselineCount > 0 && (
+            <FilterChip
+              on={showBaseline}
+              onClick={() => setShowBaseline(!showBaseline)}
+              title="qualitative-zero: the control that measures a plain, non-prompt-engineered LLM on the same tasks"
+            >
+              Baseline control ({baselineCount})
+            </FilterChip>
+          )}
+          {(showLocal || showBaseline) && (
+            <button
+              onClick={() => {
+                setShowLocal(false);
+                setShowBaseline(false);
+              }}
+              className="text-sm text-blue-600 hover:text-blue-800 underline"
+            >
+              Reset
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Headline numbers only. Everything per-category moved to the heatmap below, which
           is what keeps this table inside the page width. */}

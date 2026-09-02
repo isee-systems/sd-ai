@@ -342,6 +342,24 @@ function modelsForConfig(engineConfig) {
   return [];
 }
 
+/**
+ * Whether a config was run against a locally-hosted model rather than a hosted API.
+ *
+ * Local runs are launched through LM Studio / llama.cpp, and the config name records the
+ * knobs that only exist there: an explicit seed, a quantisation, a context size. No
+ * hosted-API config carries any of them — `qualitative-qwen3.5-397b` is the same weights
+ * served over an API, and stays on the board. The model id is checked too, for the runs
+ * whose weights were loaded straight off a disk path.
+ *
+ * This is a property of the run, so it is settled here rather than re-derived by pattern
+ * matching in the UI.
+ */
+function isLocallyHosted(configName, llmModels) {
+  if (/-seed\d+/i.test(configName)) return true;
+  if (/(^|[-_])(gguf|mlx|q4_k_m|q4ks|q6k|iq4nl)([-_]|$)/i.test(configName)) return true;
+  return llmModels.some((model) => model.startsWith('/') || /(^|[-_])mlx([-_]|\d|$)/i.test(model));
+}
+
 // Port of the Leaderboard page's processLeaderboardData: reduce the (huge)
 // full-results files to the small per-engine aggregate the UI actually renders.
 function processLeaderboard(data) {
@@ -435,6 +453,7 @@ function processLeaderboard(data) {
       // the flattened string the charts and the engine pages already read.
       llmModels: stats.llmModels,
       llmModel: stats.llmModels.length ? stats.llmModels.join(' + ') : 'N/A',
+      isLocal: isLocallyHosted(configName, stats.llmModels),
       speed, score,
       generationCounts,
       generations: presentGenerations,
