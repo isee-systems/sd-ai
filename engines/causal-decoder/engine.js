@@ -2,6 +2,7 @@ import { execFile, spawnSync } from "node:child_process";
 import util from "node:util";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import logger from "../../utilities/logger.js";
 
 const execFileP = util.promisify(execFile);
 
@@ -150,7 +151,7 @@ class Engine {
       );
 
       if (stderr && stderr.length) {
-        console.warn(
+        logger.warn(
           "[causal-decoder] PY STDERR:",
           stderr.toString().slice(0, 500)
         );
