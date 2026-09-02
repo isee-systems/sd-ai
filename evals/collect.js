@@ -197,6 +197,8 @@ if (!argv.yes) {
 }
 
 fs.mkdirSync(RESULTS_DIR, { recursive: true });
-fs.writeFileSync(targetPath, JSON.stringify({ results: merged.results }, null, 2));
+// Minified on purpose: 2-space indent tripled these boards, and the discussion
+// board blew past GitHub's 100 MB per-file limit that way. Nothing reads them by eye.
+fs.writeFileSync(targetPath, JSON.stringify({ results: merged.results }));
 console.log(chalk.green(`Wrote evals/results/${targetName}`));
 console.log("Rebuild the site data to publish: cd frontend && npm run generate");
