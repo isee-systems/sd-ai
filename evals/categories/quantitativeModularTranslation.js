@@ -263,6 +263,37 @@ const compareNames = function(aiName, groundTruthName) {
     return nameContains(aiName, groundTruthName);
 };
 
+/**
+ * Whether a stock starts at the expected value.
+ *
+ * A stock may hold the number directly or name a constant that holds it, and naming the
+ * constant is the better modelling practice of the two. In a modular model that constant is
+ * module-qualified ("balacks.initial_balacks") while the stock's equation refers to it by
+ * the bare name the module scope gives it, so resolving the reference has to see past the
+ * prefix. Comparing the two as raw strings, as this did, failed every stock initialised
+ * from a named constant and every "100" written "100.0".
+ *
+ * @param {Object} aiStock The generated stock
+ * @param {number} expected The ground truth initial value
+ * @param {Object} generatedModel The whole generated model, for resolving a reference
+ * @returns {boolean} True when the stock starts at the expected value
+ */
+const initialValueMatches = function(aiStock, expected, generatedModel) {
+    if (parseFloat(aiStock.equation) === expected)
+        return true;
+
+    // Resolve by the unqualified name too: within a module a stock refers to its siblings
+    // without the module prefix, so "initial_balacks" and "balacks.initial_balacks" are the
+    // same variable seen from two places.
+    const unqualified = (name) => { return name.includes(".") ? name.slice(name.lastIndexOf(".") + 1) : name };
+    const referenced = (generatedModel.variables || []).find((v) => {
+        return utils.sameVars(v.name, aiStock.equation) ||
+               utils.sameVars(unqualified(v.name), unqualified(aiStock.equation || ""));
+    });
+
+    return !!referenced && parseFloat(referenced.equation) === expected;
+};
+
 export const evaluate = function(generatedResponse, groundTruth) {
     const generatedModel = generatedResponse?.model || {};
     const groundTruthStocks = groundTruth.stocks;
@@ -354,7 +385,7 @@ export const evaluate = function(generatedResponse, groundTruth) {
         if (!aiStock)
             continue; //some error in the test itself
 
-        if (aiStock.equation !== groundTruthStock.initialValue.toString()) {
+        if (!initialValueMatches(aiStock, groundTruthStock.initialValue, generatedModel)) {
             failures.push({
                 type: "Incorrect initial value discovered",
                 details: "Incorrect initial value discovered. Expected " + aiStock.equation + " to be " + groundTruthStock.initialValue.toString()

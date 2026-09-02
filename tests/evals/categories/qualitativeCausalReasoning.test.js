@@ -367,6 +367,91 @@ describe('QualitativeCausalReasoning Evaluate', () => {
     });
   });
 
+  describe('influence carried through a chain', () => {
+    // The expert knowledge these tests supply describes influence in chains — "disease
+    // transmission drives infection rates, which create pressure for policy interventions" —
+    // and requiring a single edge failed every engine on the COVID test for writing the
+    // chain the background actually described.
+    const cld = (variables, relationships) => { return { model: { variables, relationships } } };
+
+    const transmissionToPressure = {
+      expectedVariableGroups: [{
+        name: 'Pandemic intervention dynamics',
+        requiredRelationships: [{ from: 'disease transmission', to: 'political pressure', polarity: '+' }]
+      }]
+    };
+
+    it('accepts a two-link chain with the required net polarity', () => {
+      const failures = evaluate(cld(
+        [{ name: 'disease transmission' }, { name: 'infection rates' }, { name: 'political pressure' }],
+        [
+          { from: 'disease transmission', to: 'infection rates', polarity: '+' },
+          { from: 'infection rates', to: 'political pressure', polarity: '+' }
+        ]
+      ), transmissionToPressure);
+
+      expect(failures).toEqual([]);
+    });
+
+    it('composes two negative links into the positive influence asked for', () => {
+      const failures = evaluate(cld(
+        [{ name: 'disease transmission' }, { name: 'public confidence' }, { name: 'political pressure' }],
+        [
+          { from: 'disease transmission', to: 'public confidence', polarity: '-' },
+          { from: 'public confidence', to: 'political pressure', polarity: '-' }
+        ]
+      ), transmissionToPressure);
+
+      expect(failures).toEqual([]);
+    });
+
+    it('rejects a chain whose net polarity is the opposite of the one required', () => {
+      const failures = evaluate(cld(
+        [{ name: 'disease transmission' }, { name: 'public confidence' }, { name: 'political pressure' }],
+        [
+          { from: 'disease transmission', to: 'public confidence', polarity: '-' },
+          { from: 'public confidence', to: 'political pressure', polarity: '+' }
+        ]
+      ), transmissionToPressure);
+
+      expect(failures).toHaveLength(1);
+      expect(failures[0].type).toBe('Missing key variable group');
+    });
+
+    it('rejects a chain longer than the bound, so the requirement keeps its meaning', () => {
+      // Four links. Unbounded, a dense CLD connects almost any pair of variables and the
+      // requirement would stop asserting anything. Names are deliberately distinct words:
+      // the name matcher is containment-based, so a variable called "a" matches every name
+      // with an "a" in it and would short-circuit the chain.
+      const chain = ['disease transmission', 'hospital admissions', 'news coverage', 'public worry', 'political pressure'];
+      const failures = evaluate(cld(
+        chain.map((name) => { return { name } }),
+        chain.slice(0, -1).map((from, i) => { return { from, to: chain[i + 1], polarity: '+' } })
+      ), transmissionToPressure);
+
+      expect(failures).toHaveLength(1);
+    });
+
+    it('still rejects two variables with no causal route between them', () => {
+      const failures = evaluate(cld(
+        [{ name: 'disease transmission' }, { name: 'political pressure' }],
+        [{ from: 'political pressure', to: 'disease transmission', polarity: '-' }]
+      ), transmissionToPressure);
+
+      expect(failures).toHaveLength(1);
+      expect(failures[0].details).toContain('disease transmission → political pressure (+)');
+    });
+
+    it('a direct edge still satisfies the requirement', () => {
+      const failures = evaluate(cld(
+        [{ name: 'disease transmission' }, { name: 'political pressure' }],
+        [{ from: 'disease transmission', to: 'political pressure', polarity: '+' }]
+      ), transmissionToPressure);
+
+      expect(failures).toEqual([]);
+    });
+  });
+
   describe('edge cases', () => {
     it('should handle empty model', () => {
       const generatedResponse = {

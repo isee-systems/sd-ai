@@ -1,4 +1,4 @@
-import { evaluate } from '../../../evals/categories/quantitativeModularReasoning.js';
+import { evaluate, groups } from '../../../evals/categories/quantitativeModularReasoning.js';
 
 describe('QuantitativeModularReasoning Evaluate', () => {
   describe('module validation', () => {
@@ -252,4 +252,43 @@ describe('QuantitativeModularReasoning Evaluate', () => {
       expect(failures[0].details).toContain(`Relationship between "wolf.count" and "rabbit.predation" is invalid (different modules without ghosting)`);
     });*/
   });
+});
+
+
+describe('the modular test definitions themselves', () => {
+  // A required relationship naming a module the test never declares can never be satisfied,
+  // so the test fails for every engine forever and reads as a capability gap. That is what
+  // "chickens.death rate -> chicken.deaths" did: four required relationships pointed at a
+  // module called "chicken" in a test whose modules are lions, foxes and chickens, and all
+  // seven v2 engine configs failed the group.
+  const moduleOf = (name) => { return name.includes('.') ? name.slice(0, name.lastIndexOf('.')) : null };
+
+  for (const [groupName, tests] of Object.entries(groups)) {
+    for (const t of tests) {
+      const declared = new Set(t.expectations.expectedModules || []);
+      if (declared.size === 0) continue;
+
+      it(`${groupName}/${t.name} only names modules it declares`, () => {
+        const qualified = [];
+        for (const process of (t.expectations.expectedProcesses || [])) {
+          for (const stock of (process.requiredStocks || [])) qualified.push(stock);
+          for (const flow of (process.requiredFlows || [])) qualified.push(flow);
+          for (const variable of (process.requiredVariables || [])) {
+            qualified.push(variable.name);
+            if (variable.crossLevelGhostOf) qualified.push(variable.crossLevelGhostOf);
+          }
+          for (const rel of (process.requiredRelationships || [])) {
+            qualified.push(rel.from);
+            qualified.push(rel.to);
+          }
+        }
+
+        const undeclared = [...new Set(
+          qualified.map(moduleOf).filter((m) => { return m !== null && !declared.has(m) })
+        )];
+
+        expect(undeclared).toEqual([]);
+      });
+    }
+  }
 });

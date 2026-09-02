@@ -68,14 +68,50 @@ const findVariable = function(variables, name) {
 };
 
 /**
- * Compare two equations (allowing for minor formatting differences)
+ * Compare two equations.
+ *
+ * The comparison is textual because an SD equation's *form* is part of what this category
+ * measures — DELAY3(Infection, tau) and Exposed/tau compute similar things and only one of
+ * them is the pipeline delay the prompt asked to preserve. But two forms of the same
+ * literal, and two orderings of the same sum, say nothing about the modelling, and scoring
+ * them as errors put false failures on the board: `1.7e+07` was marked wrong for being
+ * written `17000000`, and a correct sum was marked wrong for listing its terms in a
+ * different order.
+ *
+ * @param {String} eq1 The generated equation
+ * @param {String} eq2 The expected equation
+ * @returns {boolean} True when the two equations are the same equation
  */
 const compareEquations = function(eq1, eq2) {
     const normalize = (eq) => {
         if (eq === undefined || eq === null) return '';
         return eq.toString().replace(/\s+/g, '').toLowerCase();
     };
-    return normalize(eq1) === normalize(eq2);
+
+    const a = normalize(eq1);
+    const b = normalize(eq2);
+    if (a === b)
+        return true;
+
+    // Two spellings of one number. Number() rather than parseFloat: parseFloat("1x") is 1,
+    // which would call an equation equal to a constant it merely starts with.
+    const numA = Number(a);
+    const numB = Number(b);
+    if (a !== '' && b !== '' && Number.isFinite(numA) && Number.isFinite(numB))
+        return numA === numB;
+
+    // A sum of the same terms in a different order. Only plain sums qualify: once any other
+    // operator is present the order of the terms can change what the equation computes.
+    const sumTerms = (eq) => {
+        if (!eq.includes('+') || /[-*\/^()]/.test(eq)) return null;
+        return eq.split('+').map((term) => { return term.trim() }).sort();
+    };
+    const termsA = sumTerms(a);
+    const termsB = sumTerms(b);
+    if (termsA && termsB && termsA.length === termsB.length)
+        return termsA.every((term, i) => { return term === termsB[i] });
+
+    return false;
 };
 
 /**
@@ -261,7 +297,7 @@ export const evaluate = async function(generatedResponse, groundTruth) {
     // Check if explanation mentions the expected errors using LLM
     const errorExplanations = groundTruth.errorExplanations || [];
     if (errorExplanations.length > 0 && failures.length === 0) {
-        const explanation = generatedResponse?.supportingInfo.explanation || '';
+        const explanation = generatedResponse?.supportingInfo?.explanation || '';
         const explanationFailures = await checkErrorExplanations(explanation, errorExplanations);
         failures.push(...explanationFailures);
     }

@@ -250,6 +250,61 @@ describe('QuantitativeErrorFixing Evaluate', () => {
     });
   });
 
+  describe('equations that are the same equation written differently', () => {
+    // Every case here was a real v2 failure. This category is about the form of a
+    // formulation, so the comparison stays textual — but a literal spelled two ways, and a
+    // sum listed in two orders, say nothing about the formulation and were scored as errors.
+    const compare = async (generated, expected) => {
+      const failures = await evaluate(
+        { model: { variables: [{ name: 'v', type: 'variable', equation: generated }] } },
+        { correctModel: { variables: [{ name: 'v', type: 'variable', equation: expected }] }, errorExplanations: [] }
+      );
+      return failures;
+    };
+
+    it('accepts a constant written without scientific notation', async () => {
+      expect(await compare('17000000', '1.7e+07')).toEqual([]);
+      expect(await compare('1.7e+07', '17000000')).toEqual([]);
+      expect(await compare('100.0', '100')).toEqual([]);
+    });
+
+    it('accepts the terms of a sum in a different order', async () => {
+      expect(await compare(
+        'Presymptomatic_infectious+Symptomatic_infectious+Asymptomatic_infectious',
+        'Symptomatic_infectious + Presymptomatic_infectious + Asymptomatic_infectious'
+      )).toEqual([]);
+    });
+
+    it('still rejects a different constant', async () => {
+      const failures = await compare('17000001', '1.7e+07');
+      expect(failures).toHaveLength(1);
+      expect(failures[0].type).toBe('Incorrect equation');
+    });
+
+    it('still rejects a sum over different terms', async () => {
+      expect(await compare('a+b', 'a+c')).toHaveLength(1);
+    });
+
+    it('does not reorder anything but a plain sum', async () => {
+      // Subtraction and division are not commutative, so term order is meaning.
+      expect(await compare('C+A-B', 'A-B+C')).toHaveLength(1);
+      expect(await compare('b/a', 'a/b')).toHaveLength(1);
+    });
+
+    it('still rejects a pipeline delay rewritten as a first-order drain', async () => {
+      // The prompt asks the engine to preserve pipeline versus exponential delay style, so
+      // this difference is exactly what the category exists to catch.
+      expect(await compare(
+        'Exposed_population/(Average_COVID_incubation_time/Days_per_week)',
+        'DELAY3(Infection, Average_COVID_incubation_time/Days_per_week)'
+      )).toHaveLength(1);
+    });
+
+    it('still rejects an equation whose operator is malformed', async () => {
+      expect(await compare('Susceptible_population//Total_population', 'Susceptible_population/Total_population')).toHaveLength(1);
+    });
+  });
+
   describe('stock inflow/outflow validation', () => {
     it('should pass when stock has correct inflows and outflows', async () => {
       const generatedResponse = {

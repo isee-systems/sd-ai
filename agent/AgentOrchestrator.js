@@ -50,6 +50,7 @@ import { BuiltInToolProvider, SDK_FILE_TOOL_TWINS } from './tools/BuiltInToolPro
 import { DynamicToolProvider } from './tools/DynamicToolProvider.js';
 import {
   createAgentTextMessage,
+  createAgentProgressMessage,
   createToolCallNotificationMessage,
   createToolCallCompletedMessage,
   createAgentCompleteMessage,
@@ -1428,61 +1429,7 @@ model tools.`;
         ));
 
         // Send additional text notification for slow tools
-        if (block.name === 'create_visualization') {
-          const vizType = block.input.useAICustom ? 'AI-generated custom' : (block.input.type || 'standard');
-          const title = block.input.title || 'visualization';
-          await this.sendToClient(createAgentTextMessage(
-            this.sessionId,
-            `Creating ${vizType} visualization: "${title}"... This may take a moment.`,
-            false
-          ));
-        } else if (block.name === 'draw_causal_loop_diagram') {
-          await this.sendToClient(createAgentTextMessage(
-            this.sessionId,
-            `Drawing causal loop diagram: "${block.input.title || 'Causal Loop Diagram'}"... This may take a moment.`,
-            false
-          ));
-        } else if (block.name === 'get_variable_data') {
-          const varCount = block.input.variableNames?.length || 0;
-          const runCount = block.input.runIds?.length || 0;
-          await this.sendToClient(createAgentTextMessage(
-            this.sessionId,
-            `Retrieving data for ${varCount} variable${varCount !== 1 ? 's' : ''} from ${runCount} run${runCount !== 1 ? 's' : ''}...`,
-            false
-          ));
-        } else if (block.name === 'get_feedback_information') {
-          const runCount = block.input.runIds?.length || 0;
-          const runText = runCount === 0 ? 'all runs' : `${runCount} run${runCount !== 1 ? 's' : ''}`;
-          await this.sendToClient(createAgentTextMessage(
-            this.sessionId,
-            `Analyzing feedback loops for ${runText}... This may take a moment.`,
-            false
-          ));
-        } else if (block.name === 'run_model') {
-          await this.sendToClient(createAgentTextMessage(
-            this.sessionId,
-            `Running model simulation...`,
-            false
-          ));
-        } else if (block.name === 'discuss_model_with_seldon') {
-          await this.sendToClient(createAgentTextMessage(
-            this.sessionId,
-            `Consulting Seldon for expert analysis...`,
-            false
-          ));
-        } else if (block.name === 'discuss_model_across_runs') {
-          await this.sendToClient(createAgentTextMessage(
-            this.sessionId,
-            `Analyzing model behavior across runs...`,
-            false
-          ));
-        } else if (block.name === 'discuss_with_mentor') {
-          await this.sendToClient(createAgentTextMessage(
-            this.sessionId,
-            `Consulting Seldon mentor for guidance...`,
-            false
-          ));
-        }
+        await this.#sendSlowToolMessageHelper(block.name, block.input);
 
         // Execute tool
         const toolResult = await this.executeToolCallHelper(block, builtInTools, dynamicTools);
@@ -2401,25 +2348,25 @@ ${lines.join('\n')}`);
   async #sendSlowToolMessageHelper(toolName, args) {
     if (toolName === 'create_visualization') {
       const vizType = args?.useAICustom ? 'AI-generated custom' : (args?.type || 'standard');
-      await this.sendToClient(createAgentTextMessage(this.sessionId, `Creating ${vizType} visualization: "${args?.title || 'visualization'}"... This may take a moment.`, false));
+      await this.sendToClient(createAgentProgressMessage(this.sessionId, `Creating ${vizType} visualization: "${args?.title || 'visualization'}"... This may take a moment.`));
     } else if (toolName === 'draw_causal_loop_diagram') {
-      await this.sendToClient(createAgentTextMessage(this.sessionId, `Drawing causal loop diagram: "${args?.title || 'Causal Loop Diagram'}"... This may take a moment.`, false));
+      await this.sendToClient(createAgentProgressMessage(this.sessionId, `Drawing causal loop diagram: "${args?.title || 'Causal Loop Diagram'}"... This may take a moment.`));
     } else if (toolName === 'get_variable_data') {
       const varCount = args?.variableNames?.length || 0;
       const runCount = args?.runIds?.length || 0;
-      await this.sendToClient(createAgentTextMessage(this.sessionId, `Retrieving data for ${varCount} variable${varCount !== 1 ? 's' : ''} from ${runCount} run${runCount !== 1 ? 's' : ''}...`, false));
+      await this.sendToClient(createAgentProgressMessage(this.sessionId, `Retrieving data for ${varCount} variable${varCount !== 1 ? 's' : ''} from ${runCount} run${runCount !== 1 ? 's' : ''}...`));
     } else if (toolName === 'get_feedback_information') {
       const runCount = args?.runIds?.length || 0;
       const runText = runCount === 0 ? 'all runs' : `${runCount} run${runCount !== 1 ? 's' : ''}`;
-      await this.sendToClient(createAgentTextMessage(this.sessionId, `Analyzing feedback loops for ${runText}... This may take a moment.`, false));
+      await this.sendToClient(createAgentProgressMessage(this.sessionId, `Analyzing feedback loops for ${runText}... This may take a moment.`));
     } else if (toolName === 'run_model') {
-      await this.sendToClient(createAgentTextMessage(this.sessionId, `Running model simulation...`, false));
+      await this.sendToClient(createAgentProgressMessage(this.sessionId, `Running model simulation...`));
     } else if (toolName === 'discuss_model_with_seldon') {
-      await this.sendToClient(createAgentTextMessage(this.sessionId, `Consulting Seldon for expert analysis...`, false));
+      await this.sendToClient(createAgentProgressMessage(this.sessionId, `Consulting Seldon for expert analysis...`));
     } else if (toolName === 'discuss_model_across_runs') {
-      await this.sendToClient(createAgentTextMessage(this.sessionId, `Analyzing model behavior across runs...`, false));
+      await this.sendToClient(createAgentProgressMessage(this.sessionId, `Analyzing model behavior across runs...`));
     } else if (toolName === 'discuss_with_mentor') {
-      await this.sendToClient(createAgentTextMessage(this.sessionId, `Consulting Seldon mentor for guidance...`, false));
+      await this.sendToClient(createAgentProgressMessage(this.sessionId, `Consulting Seldon mentor for guidance...`));
     }
   }
 

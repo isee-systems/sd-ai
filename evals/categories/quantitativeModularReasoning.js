@@ -663,10 +663,10 @@ export const groups = {
                         { from: "foxes.predation rate", to: "foxes.deaths" },
                         { from: "foxes.lions count", to: "foxes.deaths" },
 
-                        { from: "chickens.death rate", to: "chicken.deaths" },
-                        { from: "chickens.count", to: "chicken.deaths" },
-                        { from: "chickens.predation rate", to: "chicken.deaths" },
-                        { from: "chickens.foxes count", to: "chicken.deaths" },
+                        { from: "chickens.death rate", to: "chickens.deaths" },
+                        { from: "chickens.count", to: "chickens.deaths" },
+                        { from: "chickens.predation rate", to: "chickens.deaths" },
+                        { from: "chickens.foxes count", to: "chickens.deaths" },
 
                         { from: "foxes.deaths", to: "foxes.count", polarity: "-" },
                         { from: "chickens.deaths", to: "chickens.count", polarity: "-" },

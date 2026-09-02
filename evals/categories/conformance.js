@@ -27,6 +27,7 @@
  * @module categories/conformance
  */
 
+import utils from '../../utilities/utils.js';
 import { validateEvaluationResult } from '../evaluationSchema.js';
 
 /**
@@ -99,16 +100,42 @@ Distracted Driving: Using a phone, texting, or eating while driving can increase
 
 /**
  * From a list of relationships extract all of the variables
+ *
+ * Keyed by normalized name so two spellings of one variable count once, but each key keeps
+ * the name as the model wrote it, because a failure that reports "colonialidentity" is
+ * telling the reader about the comparison rather than about their model.
  * @param {Array<Object>} list List of relationships in form of {from: <string>, to: <string> }
- * @returns {Set<String>} A set of variables containing all of the from and to variables.
+ * @returns {Map<String,String>} Normalized variable name to the spelling first seen for it
  */
 const extractVariables = (list) => {
-  const set = new Set();
+  const found = new Map();
   for (const r of list) {
-    set.add(r.from.toLowerCase());
-    set.add(r.to.toLowerCase());
+    for (const name of [r.from, r.to]) {
+      const key = utils.evalsNormalizeVariableName(name);
+      if (!found.has(key)) found.set(key, name);
+    }
   }
-  return set;
+  return found;
+};
+
+/**
+ * Put every relationship endpoint into one namespace before anything counts them.
+ *
+ * This category derives its variable list and its loop graph from relationship endpoints,
+ * and it builds that list from two sources at once: the model's own relationships and the
+ * ones implied by each stock's inflows and outflows. A model that writes "Colonial Identity"
+ * in one and "Colonial_Identity" in the other is not a model with two variables, but that is
+ * what a literal comparison sees — and it was scored as one, failing a max-variables test on
+ * three phantom variables. The same split severs the loop graph into disconnected pieces and
+ * undercounts feedback.
+ *
+ * @param {Array<Object>} list Relationships in the form {from, to, polarity}
+ * @returns {Array<Object>} The same relationships with normalized endpoint names
+ */
+const normalizeRelationshipNames = (list) => {
+  return list.map((r) => {
+    return { ...r, from: utils.evalsNormalizeVariableName(r.from), to: utils.evalsNormalizeVariableName(r.to) };
+  });
 };
 
 /**
@@ -461,25 +488,30 @@ export const makeRelationshipsFromStocks = function(variables) {
  * @returns {Array<Object>} A list of failures with type and details.
  */
 export const evaluate = function(generatedResponse, requirements) {
-  let fromAI = (generatedResponse.model?.relationships || []).concat(makeRelationshipsFromStocks(generatedResponse.model?.variables));
-  const vars = extractVariables(fromAI);
+  const declared = (generatedResponse.model?.relationships || [])
+    .concat(makeRelationshipsFromStocks(generatedResponse.model?.variables));
+  const vars = extractVariables(declared);
   const feedbackLoopCountLimit = getFeedbackLoopCountLimit(requirements);
+  // Loop counting needs one namespace too: a model that spells a variable both ways splits
+  // its own causal graph into disconnected pieces and undercounts its feedback. Normalizing
+  // happens inside the branch so a requirement about variables alone still walks the
+  // relationships exactly once.
   const loopCount = feedbackLoopCountLimit === null
     ? { count: 0, capped: false }
-    : countLoopsInternal(fromAI, { maxCycles: feedbackLoopCountLimit });
+    : countLoopsInternal(normalizeRelationshipNames(declared), { maxCycles: feedbackLoopCountLimit });
   const loops = loopCount.count;
   const fails = [];
   const hasMinFeedback = Number.isFinite(requirements.minFeedback);
   const hasMaxFeedback = Number.isFinite(requirements.maxFeedback);
 
-  if (requirements.variables) {
-    const lowerCaseVariables = requirements.variables.map((v) => { return v.toLowerCase() });
+  const presentVariables = Array.from(vars.values()).join(", ");
 
-    for (const v of lowerCaseVariables) {
-      if (!vars.has(v)) {
+  if (requirements.variables) {
+    for (const v of requirements.variables) {
+      if (!vars.has(utils.evalsNormalizeVariableName(v))) {
         fails.push({
           type: "Missing required variable",
-          details: `Missing ${v}; present: ${Array.from(vars).join(", ")}`
+          details: `Missing ${v.toLowerCase()}; present: ${presentVariables}`
         });
       }
     }
@@ -488,14 +520,14 @@ export const evaluate = function(generatedResponse, requirements) {
   if (requirements.minVariables && vars.size < requirements.minVariables) {
     fails.push({
       type: "Too few variables",
-      details: `Found ${vars.size} variables: ${Array.from(vars).join(", ")}`
+      details: `Found ${vars.size} variables: ${presentVariables}`
     });
   }
 
   if (requirements.maxVariables && vars.size > requirements.maxVariables) {
     fails.push({
       type: "Too many variables",
-      details: `Found ${vars.size} variables: ${Array.from(vars).join(", ")}`
+      details: `Found ${vars.size} variables: ${presentVariables}`
     });
   }
 

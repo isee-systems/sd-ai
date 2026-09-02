@@ -136,6 +136,19 @@ export const evaluate = async function(generatedResponse, expectations) {
 
 /**
  * The groups of tests to be evaluated as a part of this category
+ *
+ * Each expected fact states ONE checkable claim. The judge is asked whether a statement is
+ * clearly supported and answers true or false for the whole statement, so a fact that
+ * conjoins several claims fails entirely when the explanation covers all but one of them —
+ * an engine that named sales effectiveness seven times and capacity expansion eight still
+ * scored zero on the fact asking for those and revenue expansion together. Splitting the
+ * conjunctions is what makes the answer "which of these did it explain", which is the thing
+ * this category exists to measure.
+ *
+ * For the same reason the dominance facts name the periods rather than enumerating their
+ * exact year ranges: an explanation that identifies U1 as the brief transition-phase loop
+ * has understood the dominance analysis, whether or not it reproduces four date ranges from
+ * the supplied data verbatim.
  */
 export const groups = {
     "simpleFeedbackExplanation": [
@@ -143,7 +156,9 @@ export const groups = {
             "Arms race dynamics explanation",
             armsRaceModel,
             [
-                "There are three feedback loops in this model. Two balancing (negative) feedback loops, and a single reinforcing (positive) feedback loop.",
+                "There are three feedback loops in this model.",
+                "Two of the three feedback loops are balancing (negative).",
+                "One of the three feedback loops is reinforcing (positive).",
                 "Before time 7.625 the system's behavior is dominated by balancing (negative) feedback loops.",
                 "After time 7.625, the system's behavior is dominated by the reinforcing (positive) feedback loop.",
             ]
@@ -152,7 +167,9 @@ export const groups = {
             "Bass diffusion dynamics explanation",
             bassDiffusionModel,
             [
-                "There are two feedback loops in this model. A balancing (negative) feedback loop and a reinforcing (positive) feedback loop.",
+                "There are two feedback loops in this model.",
+                "One of the two feedback loops is balancing (negative).",
+                "One of the two feedback loops is reinforcing (positive).",
                 "Before time 9.625 the system's behavior is dominated by the reinforcing (positive) feedback loop.",
                 "After time 9.625, the system's behavior is dominated by the balancing (negative) feedback loop.",
             ]
@@ -161,9 +178,12 @@ export const groups = {
             "Inventory workforce dynamics explanation",
             inventoryWorforceModel,
             [
-                "There are three balancing feedback loops in this model, all are balancing. One involves both inventory and workforce, one just workforce",
+                "There are three feedback loops in this model, and all three are balancing.",
+                "One of the balancing feedback loops involves both inventory and workforce.",
+                "One of the balancing feedback loops involves workforce only.",
                 "The balancing feedback process involving both inventory and workforce is primarily responsible for the oscillation in behavior",
-                "The balancing feedback process involving just workforce represents the worker adjustment process and is also involved with the oscillation in behavior",
+                "The balancing feedback process involving just workforce represents the worker adjustment process.",
+                "The balancing feedback process involving just workforce is also involved with the oscillation in behavior.",
             ]
         ),
         generateTest(
@@ -182,21 +202,28 @@ export const groups = {
             marketGrowthModel,
             [
                 "The model produces oscillations",
-                "Sales effectiveness, revenue expansion and capacity expansion are the keys to growing the business",
+                "Sales effectiveness is one of the keys to growing the business.",
+                "Revenue expansion is one of the keys to growing the business.",
+                "Capacity expansion is one of the keys to growing the business.",
                 "Reinforcing feedback loops involving the sales force and revenue drive growth",
-                "Growth is constrained by capacity and delivery delays, balancing feedback loops involving delivery delays are in part responsible for the observed oscillations",
-                "In the long run the business saturates due to balancing feedback loops that stabilize growth in in sales, and sales effectiveness"
+                "Growth is constrained by capacity and by delivery delays.",
+                "Balancing feedback loops involving delivery delays are in part responsible for the observed oscillations.",
+                "In the long run the business saturates rather than growing without limit.",
+                "The saturation is caused by balancing feedback loops that stabilize growth in sales and in sales effectiveness."
             ]
         ),
         generateTest(
             "Maibab predator prey and food dynamics explanation",
             maibabModel,
             [
-                "System behavior is governed by predator–prey feedback. The oscillations are driven mainly by the reinforcing loop R1 and the balancing loops B1 and B2, which together create classic predator–prey cycles.",
-                "Growth and collapse phases alternate across the timeline. Periods dominated by R1 (e.g., 1810–1818, 1881–1893, 1957–1964) trigger rapid deer population growth, which are then followed by crashes or stabilization when B1 and B2 take over.",
-                "U1 briefly dominates during transitions (e.g., 1830–1834, 1865–1869, 1906–1909, 1941–1944), marking rapid predator adjustments that reset the system before returning to balancing control.",
-                "After 1972, balancing loops dominate continuously, and from 1980 to 2300, B1 and B2 maintain control."
+                "System behavior is governed by predator\u2013prey feedback.",
+                "The oscillations are driven mainly by the reinforcing loop R1 and the balancing loops B1 and B2, which together create classic predator\u2013prey cycles.",
+                "Growth and collapse phases alternate across the timeline.",
+                "Periods dominated by R1 trigger rapid deer population growth, which are then followed by crashes or stabilization when B1 and B2 take over.",
+                "U1 dominates only briefly, during the transitions between phases, marking rapid predator adjustments that reset the system before it returns to balancing control.",
+                "After 1972, balancing loops dominate continuously.",
+                "From 1980 to 2300, B1 and B2 maintain control."
             ]
         )
     ]
-}; 
+};

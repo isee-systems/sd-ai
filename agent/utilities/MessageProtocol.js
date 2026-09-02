@@ -379,6 +379,27 @@ export function createAgentTextMessage(sessionId, content, isThinking = false) {
   };
 }
 
+/**
+ * "Running model simulation..." and its siblings — the notices sent before a slow tool so
+ * the user is not left staring at nothing.
+ *
+ * These are agent_text so a client renders them in the transcript exactly as before, but
+ * they are the harness talking about the agent, not the agent talking. Only some provider
+ * loops emit them (the Anthropic SDK path emits none), so anything that treats the text
+ * stream as the agent's answer sees a different answer per provider unless it can tell the
+ * two apart. isProgress is that marker; clients that ignore it behave as they always did.
+ */
+export function createAgentProgressMessage(sessionId, content) {
+  return {
+    type: 'agent_text',
+    sessionId,
+    content,
+    isThinking: false,
+    isProgress: true,
+    timestamp: new Date().toISOString()
+  };
+}
+
 export function createToolCallNotificationMessage(sessionId, callId, toolName, args, isBuiltIn) {
   return {
     type: 'tool_call_notification',

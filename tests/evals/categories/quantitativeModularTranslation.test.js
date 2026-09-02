@@ -115,6 +115,49 @@ describe('QuantitativeModularTranslation Evaluate', () => {
       expect(failures.map((failure) => failure.type)).toContain('Incorrect initial value discovered');
     });
 
+    it('accepts an initial value written with a decimal point', () => {
+      const generatedResponse = generateResponse(identity);
+      generatedResponse.model.variables[0].equation = '20.0';
+
+      expect(evaluate(generatedResponse, groundTruth)).toEqual([]);
+    });
+
+    it('accepts a stock initialised from a named constant inside its own module', () => {
+      // Naming the constant is the better modelling practice of the two, and in a modular
+      // model the constant is module-qualified while the stock refers to it by the bare name
+      // its module scope gives it. Compared as raw strings, every such stock failed.
+      const generatedResponse = generateResponse(identity);
+      generatedResponse.model.variables[0].equation = 'initial_frimbulators';
+      generatedResponse.model.variables.push({
+        type: 'variable',
+        name: 'frimbulators.initial_frimbulators',
+        equation: '20'
+      });
+
+      expect(evaluate(generatedResponse, groundTruth)).toEqual([]);
+    });
+
+    it('still rejects a named constant holding the wrong value', () => {
+      const generatedResponse = generateResponse(identity);
+      generatedResponse.model.variables[0].equation = 'initial_frimbulators';
+      generatedResponse.model.variables.push({
+        type: 'variable',
+        name: 'frimbulators.initial_frimbulators',
+        equation: '999'
+      });
+
+      const failures = evaluate(generatedResponse, groundTruth);
+      expect(failures.map((failure) => failure.type)).toContain('Incorrect initial value discovered');
+    });
+
+    it('still rejects an equation naming a constant that does not exist', () => {
+      const generatedResponse = generateResponse(identity);
+      generatedResponse.model.variables[0].equation = 'initial_frimbulators';
+
+      const failures = evaluate(generatedResponse, groundTruth);
+      expect(failures.map((failure) => failure.type)).toContain('Incorrect initial value discovered');
+    });
+
     it('should detect an incorrect time unit', () => {
       const generatedResponse = generateResponse(identity);
       generatedResponse.model.specs.timeUnits = 'week';
