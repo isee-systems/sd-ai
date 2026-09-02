@@ -32,6 +32,15 @@ force-acceleration relationships, thermodynamic behavior, and physically realist
 const MIN_OSCILLATOR_FIT_R_SQUARED = 0.90;
 const MAX_VELOCITY_COEFFICIENT_NOISE = 1e-4;
 
+// Simulation series are as long as the model's time grid, and a model with a tiny dt yields
+// hundreds of thousands of points. Spreading an array that size into Math.min/Math.max blows
+// V8's argument limit ("Maximum call stack size exceeded"), so fold over it instead.
+// Folding with the two-argument Math.min/Math.max keeps the old spread semantics exactly,
+// NaN propagation and empty-array sentinels included.
+const seriesMin = (values) => values.reduce((min, value) => Math.min(min, value), Infinity);
+const seriesMax = (values) => values.reduce((max, value) => Math.max(max, value), -Infinity);
+const seriesMaxAbs = (values) => values.reduce((max, value) => Math.max(max, Math.abs(value)), -Infinity);
+
 const solveTwoPredictorLeastSquares = (feature1, feature2, target) => {
     let s11 = 0;
     let s12 = 0;
@@ -186,8 +195,8 @@ export const validateNewtonsLaws = (simulationResults, model) => {
 
     // Check for physically realistic oscillation
     // A pendulum should oscillate around zero (or some equilibrium)
-    const angleMin = Math.min(...angle);
-    const angleMax = Math.max(...angle);
+    const angleMin = seriesMin(angle);
+    const angleMax = seriesMax(angle);
     const angleRange = angleMax - angleMin;
 
     if (angleRange < 0.01) {
@@ -253,8 +262,8 @@ export const validateNewtonsLaws = (simulationResults, model) => {
     }
 
     // Check for unbounded growth (non-physical)
-    const firstHalfMax = Math.max(...angle.slice(0, Math.floor(angle.length / 2)).map(Math.abs));
-    const secondHalfMax = Math.max(...angle.slice(Math.floor(angle.length / 2)).map(Math.abs));
+    const firstHalfMax = seriesMaxAbs(angle.slice(0, Math.floor(angle.length / 2)));
+    const secondHalfMax = seriesMaxAbs(angle.slice(Math.floor(angle.length / 2)));
 
     // Allow some damping but not exponential growth
     if (secondHalfMax > 2 * firstHalfMax) {
@@ -470,8 +479,8 @@ export const validateSpringMassLaws = (simulationResults, model) => {
     }
 
     // Check for physically realistic oscillation
-    const posMin = Math.min(...position);
-    const posMax = Math.max(...position);
+    const posMin = seriesMin(position);
+    const posMax = seriesMax(position);
     const posRange = posMax - posMin;
 
     if (posRange < 0.001) {
@@ -534,8 +543,8 @@ export const validateSpringMassLaws = (simulationResults, model) => {
     }
 
     // Check for unbounded growth (non-physical)
-    const firstHalfMax = Math.max(...position.slice(0, Math.floor(position.length / 2)).map(Math.abs));
-    const secondHalfMax = Math.max(...position.slice(Math.floor(position.length / 2)).map(Math.abs));
+    const firstHalfMax = seriesMaxAbs(position.slice(0, Math.floor(position.length / 2)));
+    const secondHalfMax = seriesMaxAbs(position.slice(Math.floor(position.length / 2)));
 
     if (secondHalfMax > 2 * firstHalfMax) {
         fails.push({
@@ -614,9 +623,9 @@ const validateGasLaws = (simulationResults, model) => {
     }
 
     // Check for physically realistic values (no negative pressure, volume, or temperature)
-    const minPressure = Math.min(...pressure);
-    const minVolume = Math.min(...volume);
-    const minTemperature = Math.min(...temperature);
+    const minPressure = seriesMin(pressure);
+    const minVolume = seriesMin(volume);
+    const minTemperature = seriesMin(temperature);
 
     if (minPressure < 0) {
         fails.push({
@@ -640,9 +649,9 @@ const validateGasLaws = (simulationResults, model) => {
     }
 
     // Check for unbounded growth
-    const pressureRatio = Math.max(...pressure) / Math.min(...pressure.filter(p => p > 0));
-    const volumeRatio = Math.max(...volume) / Math.min(...volume.filter(v => v > 0));
-    const temperatureRatio = Math.max(...temperature) / Math.min(...temperature.filter(t => t > 0));
+    const pressureRatio = seriesMax(pressure) / seriesMin(pressure.filter(p => p > 0));
+    const volumeRatio = seriesMax(volume) / seriesMin(volume.filter(v => v > 0));
+    const temperatureRatio = seriesMax(temperature) / seriesMin(temperature.filter(t => t > 0));
 
     if (pressureRatio > 1000 || volumeRatio > 1000 || temperatureRatio > 1000) {
         fails.push({
