@@ -36,7 +36,7 @@ export const LEADERBOARD_GENERATIONS = [
     {
         id: 'v2',
         label: 'v2',
-        description: 'Anthropic line-up (Opus 5 / Sonnet 5 / Fable 5) plus the Merlin agent, with per-test cost recorded.',
+        description: 'Latest evals run on the engines plus the Merlin agent, with per-test cost recorded.',
     },
 ];
 
