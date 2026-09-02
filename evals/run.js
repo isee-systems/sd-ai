@@ -408,7 +408,6 @@ const runSingleTest = async (
       test.testParams["currentModel"],
       additionalParameters,
     ]);
-    const startTime = Date.now();
 
     // Attempt loop. Retries live here rather than in a recursive call with shared state:
     // the previous version threaded one errorTracker through every test of an engine
@@ -420,6 +419,15 @@ const runSingleTest = async (
     // Every attempt's tokens were really bought, so the row is charged for all of them —
     // reporting only the successful attempt would understate what the leaderboard cost.
     const spend = { totalCost: 0, calls: 0, unpricedCalls: 0, byModel: {} };
+    // Engine time, summed over attempts on the same rule as spend: a test that generated
+    // three times really did occupy the engine three times.
+    //
+    // This deliberately excludes everything before the engine call — the rate-limiter
+    // queue and the backoff hold. Those are properties of how the run was scheduled, not
+    // of the engine: with tests queued behind a shared limiter, a test's wait grows with
+    // how many others were queued ahead of it, so including it made `duration` scale with
+    // the size of the experiment and stop being comparable between runs.
+    let generationMs = 0;
 
     for (let attempt = 0; attempt <= MAX_GENERATION_RETRIES; attempt++) {
       let generationPromise = generationCache.get(generationKey);
@@ -460,24 +468,32 @@ const runSingleTest = async (
           // a plain engine's own call, and for an agent engine its conversation turns
           // plus every engine it drives through a tool. So `accounting` is the whole
           // price of producing this response, not just the outermost request.
-          return withCostAccounting(() => instance.generate(
+          // The stopwatch starts here: both rate limiters and the backoff hold are above.
+          const generationStart = Date.now();
+          const generated = await withCostAccounting(() => instance.generate(
             test.testParams["prompt"],
             test.testParams["currentModel"],
             additionalParameters
           ));
+          // Siblings awaiting this same promise report the generation they are grading,
+          // which is the number they should carry — they did no engine work of their own.
+          return { ...generated, generationMs: Date.now() - generationStart };
         })();
         generationCache.set(generationKey, generationPromise);
       }
 
       let accounting = null;
+      let attemptMs = 0;
       try {
-        ({ value: generateResponse, accounting } = await generationPromise);
+        ({ value: generateResponse, accounting, generationMs: attemptMs } = await generationPromise);
       } catch (err) {
         // An engine that throws instead of returning {err} would otherwise reject
         // Promise.all and take down the whole run. Treat it as any other failure.
         generateResponse = { err: err?.message ?? String(err) };
       }
       addSpend(spend, accounting);
+      // A skipped or thrown attempt carries no timing; it also did no engine work.
+      generationMs += attemptMs ?? 0;
 
       if (!generateResponse || !generateResponse.err) break;
 
@@ -546,7 +562,9 @@ const runSingleTest = async (
     }
 
     testWithResult = structuredClone(test);
-    testWithResult["duration"] = Date.now() - startTime;
+    // Engine time only — see generationMs above. Not schedule-to-done: that included the
+    // rate-limiter queue, which is why this used to grow with the number of tests in a run.
+    testWithResult["duration"] = generationMs;
     testWithResult["generatedResponse"] = generateResponse || {};
     testWithResult["cost"] = {
       // USD for the generation behind this test, summed over every attempt it took.
