@@ -6,6 +6,7 @@ import {
   loadCategoryTests,
   buildTestEntry,
   loadTestsForEngine,
+  createEngineBackoff,
 } from '../../evals/runHelpers.js';
 
 describe('Run Helpers', () => {
@@ -265,6 +266,68 @@ describe('Run Helpers', () => {
 
       const groups = new Set(result.map(e => e.group));
       expect(groups).toEqual(new Set(['groupA', 'groupB', 'groupC', 'groupD']));
+    });
+  });
+
+  describe('createEngineBackoff', () => {
+    // Elapsed-time assertions use generous lower bounds and a wide upper bound: setTimeout
+    // is allowed to fire late, so only "did it wait at all" and "did it wait roughly the
+    // right amount" are meaningful.
+    const elapsed = async (fn) => {
+      const start = Date.now();
+      await fn();
+      return Date.now() - start;
+    };
+
+    it('should not wait when no hold is recorded', async () => {
+      const backoff = createEngineBackoff();
+      expect(await elapsed(() => backoff.wait('engine-a'))).toBeLessThan(20);
+    });
+
+    it('should wait out a hold', async () => {
+      const backoff = createEngineBackoff();
+      backoff.hold('engine-a', 80);
+      expect(await elapsed(() => backoff.wait('engine-a'))).toBeGreaterThanOrEqual(70);
+    });
+
+    it('should hold every caller for the same engine config', async () => {
+      const backoff = createEngineBackoff();
+      backoff.hold('engine-a', 80);
+      const waits = await Promise.all([
+        elapsed(() => backoff.wait('engine-a')),
+        elapsed(() => backoff.wait('engine-a')),
+        elapsed(() => backoff.wait('engine-a')),
+      ]);
+      waits.forEach(w => expect(w).toBeGreaterThanOrEqual(70));
+    });
+
+    it('should not hold a different engine config', async () => {
+      const backoff = createEngineBackoff();
+      backoff.hold('engine-a', 200);
+      expect(await elapsed(() => backoff.wait('engine-b'))).toBeLessThan(20);
+    });
+
+    it('should extend a hold rather than shorten it', async () => {
+      const backoff = createEngineBackoff();
+      backoff.hold('engine-a', 120);
+      backoff.hold('engine-a', 20);
+      expect(await elapsed(() => backoff.wait('engine-a'))).toBeGreaterThanOrEqual(100);
+    });
+
+    it('should keep waiting when a hold is extended mid-wait', async () => {
+      const backoff = createEngineBackoff();
+      backoff.hold('engine-a', 60);
+      const waiting = elapsed(() => backoff.wait('engine-a'));
+      // Pushes the deadline out while the first wait is already sleeping on the old one.
+      setTimeout(() => backoff.hold('engine-a', 90), 30);
+      expect(await waiting).toBeGreaterThanOrEqual(105);
+    });
+
+    it('should fall through once a hold has expired', async () => {
+      const backoff = createEngineBackoff();
+      backoff.hold('engine-a', 30);
+      await backoff.wait('engine-a');
+      expect(await elapsed(() => backoff.wait('engine-a'))).toBeLessThan(20);
     });
   });
 });

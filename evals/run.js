@@ -17,6 +17,7 @@ import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 
 import { withCostAccounting } from "../utilities/costAccounting.js";
+import { ANTHROPIC_REFUSAL_PREFIX } from "../utilities/LLMWrapper.js";
 import { printTable, pivotAndUnstack, uniqueFileId } from "./helpers.js";
 import {
   BASELINE_TOKEN_USAGE,
@@ -25,6 +26,7 @@ import {
   applyDefaultLimits,
   loadCategoryTests,
   loadTestsForEngine,
+  createEngineBackoff,
 } from "./runHelpers.js";
 
 import "dotenv/config";
@@ -134,17 +136,28 @@ const tests = Object.fromEntries(
 // A provider 503/429/timeout is a fact about the provider, not about the engine under
 // test, so an errored generation is retried rather than scored as a failure.
 //
-// If it still fails after every retry the run STOPS. It does not drop the test and carry
-// on: a leaderboard missing a test scores that engine over a smaller set than the others,
-// which is a silently wrong number rather than an obviously absent one. Stopping leaves
-// the completed work in <experiment>_in_progress.jsonl, so re-running the same experiment
-// resumes from there and only re-attempts what is missing.
+// If it still fails after every retry, that ENGINE CONFIG stops. It does not drop the
+// test and carry on: a leaderboard missing a test scores that engine over a smaller set
+// than the others, which is a silently wrong number rather than an obviously absent one.
+//
+// The stop is scoped to the engine config that failed, not the whole run. One provider
+// being down says nothing about the others, and halting them too used to throw away every
+// test still queued behind their rate limiters — hundreds of tests that would have
+// finished fine. The other configs now run to completion, so the resume has far less to
+// redo. The run as a whole still refuses to publish (see failedTests below): completed
+// work stays in <experiment>_in_progress.jsonl and re-running the same experiment resumes
+// from there, re-attempting only what is missing.
 const MAX_GENERATION_RETRIES = 3;
 const RETRY_BASE_DELAY_MS = 2000;
 
-// Set once any test exhausts its retries. Checked at the point of spending so tests still
-// queued behind the rate limiter don't buy tokens for a run that is already stopping.
-let stopRequested = false;
+// Engine configs that have had a test exhaust its retries. Checked at the point of
+// spending so tests still queued behind that config's rate limiter don't buy tokens for a
+// config that is already stopping — while tests of every other config carry on.
+const stoppedEngineConfigs = new Set();
+
+// Retry backoff, held per engine config rather than per test — see createEngineBackoff.
+const engineBackoff = createEngineBackoff();
+
 const failedTests = [];
 
 console.log(chalk.blue("Experiment Configuration:"));
@@ -318,9 +331,16 @@ const runEngineTests = async ([engineConfigName, engineTests]) => {
     );
   }
 
-  engineBar.update({ inProgress: "[Done]" });
+  // The bar counts skipped tests as progress, so a stopped config still ends at 100%.
+  // Saying [Done] there is what makes a halted run read as a complete one.
+  const stopped = stoppedEngineConfigs.has(engineConfigName);
+  engineBar.update({ inProgress: stopped ? "[STOPPED - resume to finish]" : "[Done]" });
   if (experiment.verbose > 0)
-    console.log(chalk.blue(`Finished all tests for: ${engineConfigName}`));
+    console.log(chalk.blue(
+      stopped
+        ? `Stopped early for: ${engineConfigName} (remaining tests skipped, resume to finish)`
+        : `Finished all tests for: ${engineConfigName}`
+    ));
 
   return testRuns;
 };
@@ -416,7 +436,15 @@ const runSingleTest = async (
           // Checked after the wait, not before it: every parallel test clears the code
           // above within milliseconds of the run starting, so a check before the wait
           // would already have passed by the time anything failed.
-          if (stopRequested) return { value: { skipped: true }, accounting: null };
+          if (stoppedEngineConfigs.has(test.engineConfigName))
+            return { value: { skipped: true }, accounting: null };
+
+          // Another test of this config is backing off; wait it out before adding load.
+          // Re-check the stop afterwards — the hold is long enough for that same test to
+          // have exhausted its retries while we sat here.
+          await engineBackoff.wait(test.engineConfigName);
+          if (stoppedEngineConfigs.has(test.engineConfigName))
+            return { value: { skipped: true }, accounting: null };
 
           const engine = await import(
             `../engines/${test["engineConfig"]["engine"]}/engine.js`
@@ -453,8 +481,8 @@ const runSingleTest = async (
 
       if (!generateResponse || !generateResponse.err) break;
 
-      // Stopping already; don't burn retries on top of it.
-      if (stopRequested) break;
+      // This engine config is stopping already; don't burn retries on top of it.
+      if (stoppedEngineConfigs.has(test.engineConfigName)) break;
 
       // A failed generation must not be cached: drop it so this retry, or a later
       // sibling, regenerates rather than inheriting the failure.
@@ -465,18 +493,21 @@ const runSingleTest = async (
         // Backing off matters more than retrying: a 429 or an overloaded provider is
         // exactly what a fixed short delay walks straight back into.
         const delay = RETRY_BASE_DELAY_MS * 2 ** attempt;
+        // Hold every test of this engine config, not just this one — see createEngineBackoff.
+        engineBackoff.hold(test.engineConfigName, delay);
         if (experiment.verbose > 0)
           console.log(chalk.yellow(
             `Error on "${name}" (attempt ${attempt + 1}/${MAX_GENERATION_RETRIES + 1}), ` +
-            `retrying in ${delay / 1000}s: ${JSON.stringify(generateResponse.err).slice(0, 200)}`
+            `holding ${test.engineConfigName} for ${delay / 1000}s: ` +
+            `${JSON.stringify(generateResponse.err).slice(0, 200)}`
           ));
-        await new Promise((resolve) => setTimeout(resolve, delay));
+        await engineBackoff.wait(test.engineConfigName);
       }
     }
 
-    // Never started, because the run was already stopping when this test reached the
-    // front of the rate-limiter queue. Not a result and not a failure — the resume will
-    // pick it up.
+    // Never started, because this test's engine config was already stopping when it
+    // reached the front of the rate-limiter queue. Not a result and not a failure — the
+    // resume will pick it up.
     if (generateResponse && generateResponse.skipped) {
       inProgress.delete(name);
       engineBar.increment(1, { inProgress: printProgress(inProgress) });
@@ -484,13 +515,21 @@ const runSingleTest = async (
     }
 
     if (generateResponse && generateResponse.err) {
-      // Every attempt failed. Stop the run rather than dropping the test: the completed
-      // work is already in the in-progress file, so the right move is to leave it there
-      // for a resume instead of publishing a leaderboard with a hole in it.
+      // Every attempt failed. Stop this engine config rather than dropping the test: the
+      // completed work is already in the in-progress file, so the right move is to leave it
+      // there for a resume instead of publishing a leaderboard with a hole in it. Every
+      // other engine config keeps running — this one's provider is the thing that failed.
       //
       // Tests already in flight are deliberately not cancelled — they have been paid for,
       // and letting them finish means the resume has less to redo.
-      stopRequested = true;
+      //
+      // A safety-classifier refusal is the exception: it says this one prompt was declined,
+      // not that the provider is unhealthy, and every other test of the config would have
+      // run fine. Stopping on it cost quantitative-claude-sonnet-5 28 of its 93 rows in one
+      // leaderboard run over a single benign prompt, so record the failure and carry on.
+      if (!generateResponse.err.includes(ANTHROPIC_REFUSAL_PREFIX)) {
+        stoppedEngineConfigs.add(test.engineConfigName);
+      }
       failedTests.push({
         engineConfigName: test.engineConfigName,
         engine: test.engineConfig.engine,
@@ -617,8 +656,17 @@ if (failedTests.length > 0) {
   const byConfig = {};
   for (const f of failedTests) (byConfig[f.engineConfigName] ??= []).push(f);
 
+  // Scored rows per config, so the "stopped after N of M" line below reports what actually
+  // landed rather than the progress bar's count, which includes the tests it skipped.
+  const scoredByConfig = {};
+  for (const r of responses) scoredByConfig[r.engineConfigName] = (scoredByConfig[r.engineConfigName] ?? 0) + 1;
+
   for (const [configName, failures] of Object.entries(byConfig)) {
-    console.log(chalk.red(chalk.bold(`  ${configName} (${failures[0].engine})`)));
+    const scored = scoredByConfig[configName] ?? 0;
+    const planned = tests[configName]?.length ?? 0;
+    console.log(chalk.red(chalk.bold(
+      `  ${configName} (${failures[0].engine}) — stopped after ${scored} of ${planned} tests`
+    )));
     for (const f of failures) {
       console.log(chalk.red(`    ${f.category} / ${f.group} / ${f.name}`));
       for (const attempt of f.attempts) {
@@ -631,6 +679,9 @@ if (failedTests.length > 0) {
   const errorFile = `${experimentResultsName}_errors.json`;
   fs.writeFileSync(errorFile, JSON.stringify({ failed: failedTests }, null, 2));
 
+  const finished = Object.keys(tests).filter(name => !stoppedEngineConfigs.has(name));
+  if (finished.length > 0)
+    console.log(chalk.green(`Ran to completion: ${finished.join(", ")}`));
   console.log(chalk.yellow(`${completed} completed test(s) kept in ${experimentResultsName}${inProgressFileSuffix}`));
   console.log(chalk.yellow(`Full error detail written to ${errorFile}`));
   console.log(chalk.yellow(`Resume with: npm run evals -- -e ${argv.experiment}`));

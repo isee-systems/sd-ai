@@ -23,6 +23,13 @@ export const ModelType = Object.freeze({
 const OPEN_ROUTER_SLUG_REGEX = /\//;
 
 
+// How a refused request identifies itself once it has been flattened to an error
+// string by an engine. Exported so callers can tell "the classifier declined this
+// one prompt" from "the provider is broken" without matching on prose — the eval
+// harness stops a whole engine config for the latter and only this test for the
+// former.
+export const ANTHROPIC_REFUSAL_PREFIX = 'Anthropic declined the request';
+
 export class ModelCapabilities {
   hasStructuredOutput= true;
   hasSystemMode = true;
@@ -126,10 +133,11 @@ export class LLMWrapper {
   // bare engine call — /generate, or an eval driving a brain — which is what tells the
   // two apart in the usage report; the agent's tools set it explicitly.
   #source = null;
-  // Per-model cache of the Anthropic model's maximum output tokens, resolved
-  // lazily from the Models API so we never impose an arbitrary cap that could
-  // truncate a large generation mid-JSON.
-  #anthropicMaxTokensByModel = new Map();
+  // Per-model cache of what the Models API says about an Anthropic model: its
+  // maximum output tokens, resolved lazily so we never impose an arbitrary cap
+  // that could truncate a large generation mid-JSON, and whether it accepts
+  // refusal fallbacks.
+  #anthropicModelInfoByModel = new Map();
 
   model = new ModelCapabilities(LLMWrapper.BUILD_DEFAULT_MODEL);
 
@@ -935,14 +943,29 @@ export class LLMWrapper {
   async #createClaudeChatCompletion(messages, model, zodSchema = null, temperature = null, reasoningEffort = null) {
     const claudeMessages = this.convertMessagesToClaudeFormat(messages);
 
+    const modelInfo = await this.#resolveAnthropicModelInfo(model);
+
     const completionParams = {
       model,
       messages: claudeMessages.messages,
       // The Messages API requires max_tokens, so we can't omit it — but we don't
       // want an arbitrary cap that truncates a large generation mid-JSON. Honor a
       // caller-supplied limit, otherwise use the model's own maximum output.
-      max_tokens: this.#maxTokens ?? await this.#resolveAnthropicMaxTokens(model)
+      max_tokens: this.#maxTokens ?? modelInfo.maxTokens
     };
+
+    // A safety classifier can decline a request outright (see the refusal check
+    // below). Our prompts are benign modelling tasks, but the eval suites feed
+    // invented nonsense words into inventory prose, which trips the bio classifier
+    // often enough to fail whole test rows. `fallbacks: "default"` re-runs a
+    // declined request on Anthropic's recommended substitute inside the same call,
+    // routed by refusal category, so a false positive costs a hop rather than the
+    // generation. Only the scalar form works with this beta header — the array
+    // form takes `server-side-fallback-2026-06-01` and 400s under this one.
+    if (modelInfo.supportsFallbacks) {
+      completionParams.betas = ['server-side-fallback-2026-07-01'];
+      completionParams.fallbacks = 'default';
+    }
 
     if (claudeMessages.system) {
       completionParams.system = claudeMessages.system;
@@ -993,13 +1016,29 @@ export class LLMWrapper {
     // Stream and reassemble: max_tokens above ~16K risks the SDK HTTP timeout on
     // a non-streaming call, so we always stream here and collect the final message
     // (same shape as messages.create).
-    const completion = await this.#anthropicAPI.messages.stream(completionParams).finalMessage();
-    this.#tokenReporter.report({ provider: Provider.ANTHROPIC, model, usage: completion.usage, clientKey: this.#clientKey, source: this.#source });
+    const completion = await this.#anthropicAPI.beta.messages.stream(completionParams).finalMessage();
+    // Bill against the model that actually answered, not the one we asked for: a
+    // refusal fallback is served by a different model at its own rates, and
+    // top-level `model` on the response names whichever one produced this message.
+    this.#tokenReporter.report({ provider: Provider.ANTHROPIC, model: completion.model ?? model, usage: completion.usage, clientKey: this.#clientKey, source: this.#source });
 
     // A truncated response produces invalid JSON downstream; surface the real
     // cause instead of letting it fail later as an opaque "Bad JSON" parse error.
     if (completion.stop_reason === 'max_tokens') {
       throw new Error(`Anthropic response truncated at max_tokens (${completionParams.max_tokens}) for model ${model}; increase max_tokens`);
+    }
+
+    // A refusal is an HTTP 200 whose content is unusable: either no text block at
+    // all (declined before generating) or a partial one cut off mid-JSON (declined
+    // part-way through). Both used to fall through to the text-block scan below and
+    // surface downstream as "no recognized format" or "Bad JSON", which named the
+    // symptom and hid the cause. Report it as a refusal instead — every brain
+    // already turns that field into a ResponseFormatError carrying this message.
+    // Reached only when the fallback model declined too, since `fallbacks` above
+    // rescues the request otherwise.
+    if (completion.stop_reason === 'refusal') {
+      const category = completion.stop_details?.category;
+      return { refusal: `${ANTHROPIC_REFUSAL_PREFIX} (model=${completion.model ?? model}${category ? `, category=${category}` : ''})` };
     }
 
     // Don't assume content[0] is the text block. When thinking is enabled the
@@ -1028,24 +1067,34 @@ export class LLMWrapper {
     return { content };
   }
 
-  // Resolve a model's maximum output tokens from the Models API (cached per
-  // model). Falls back to 32000 if the lookup fails (e.g. the model isn't listed
-  // by the endpoint), which still comfortably exceeds typical generations.
-  async #resolveAnthropicMaxTokens(model) {
-    if (this.#anthropicMaxTokensByModel.has(model)) {
-      return this.#anthropicMaxTokensByModel.get(model);
+  // Resolve what we need to know about a model from the Models API (cached per
+  // model): its output cap, and whether it accepts refusal fallbacks. Falls back
+  // to 32000 output tokens and no fallbacks if the lookup fails (e.g. the model
+  // isn't listed by the endpoint) — 32000 still comfortably exceeds typical
+  // generations, and a request without `fallbacks` is the pre-existing behavior.
+  async #resolveAnthropicModelInfo(model) {
+    if (this.#anthropicModelInfoByModel.has(model)) {
+      return this.#anthropicModelInfoByModel.get(model);
     }
-    let maxTokens = 32000;
+    const resolved = { maxTokens: 32000, supportsFallbacks: false };
     try {
-      const info = await this.#anthropicAPI.models.retrieve(model);
+      // `allowed_fallback_models` is published only under the server-side-fallback
+      // beta header; without it every model comes back looking like it has none.
+      const info = await this.#anthropicAPI.models.retrieve(model, {
+        headers: { 'anthropic-beta': 'server-side-fallback-2026-06-01' }
+      });
       if (Number.isInteger(info?.max_tokens) && info.max_tokens > 0) {
-        maxTokens = info.max_tokens;
+        resolved.maxTokens = info.max_tokens;
       }
+      // Asking which models a refusal may route to is also how we learn whether
+      // this one takes the parameter at all — Sonnet 5 reports an empty list and
+      // 400s on `fallbacks`, while Opus 5 and Fable name their substitutes.
+      resolved.supportsFallbacks = (info?.allowed_fallback_models ?? []).length > 0;
     } catch {
-      // Models endpoint unavailable or model not listed — keep the safe default.
+      // Models endpoint unavailable or model not listed — keep the safe defaults.
     }
-    this.#anthropicMaxTokensByModel.set(model, maxTokens);
-    return maxTokens;
+    this.#anthropicModelInfoByModel.set(model, resolved);
+    return resolved;
   }
 
   convertMessagesToGeminiFormat(messages) {

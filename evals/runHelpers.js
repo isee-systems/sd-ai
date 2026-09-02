@@ -40,6 +40,36 @@ function loadTestsForEngine(allTests, engineConfig, engineConfigName) {
   });
 }
 
+// Backoff, scoped per engine config. A retrying test's siblings are pointed at the same
+// provider, so backing one test off politely while the other thirty keep calling at full
+// rate is exactly what turns a single 429 into a wave of them. Holding the whole config
+// gives the provider real quiet time, and leaves every other config running at full speed.
+function createEngineBackoff() {
+  const until = new Map();
+
+  return {
+    // Extends an existing hold rather than shortening it: two tests failing at once should
+    // leave the config paused for the longer of the two delays.
+    hold(engineConfigName, ms) {
+      const deadline = Date.now() + ms;
+      if (deadline > (until.get(engineConfigName) ?? 0)) {
+        until.set(engineConfigName, deadline);
+      }
+    },
+
+    // Loops rather than sleeping once, because a concurrent failure can push the hold
+    // further out while this caller is already waiting on it. Costs nothing on a healthy
+    // config: with no hold recorded the first check falls through without awaiting.
+    async wait(engineConfigName) {
+      for (;;) {
+        const remaining = (until.get(engineConfigName) ?? 0) - Date.now();
+        if (remaining <= 0) return;
+        await new Promise((resolve) => setTimeout(resolve, remaining));
+      }
+    },
+  };
+}
+
 export {
   BASELINE_TOKEN_USAGE,
   TOKENS_PER_MINUTE,
@@ -48,4 +78,5 @@ export {
   loadCategoryTests,
   buildTestEntry,
   loadTestsForEngine,
+  createEngineBackoff,
 };

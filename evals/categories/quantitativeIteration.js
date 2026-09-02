@@ -603,6 +603,11 @@ export const groups = {
                 timeUnits: "month"
             }
         }),
+        // The pre-existing stocks here are "depots", not "reservoirs". Gibberish nouns
+        // accumulating and depleting at percentage rates out of a named reservoir read to
+        // Anthropic's bio classifier as pathogen modelling: Claude Sonnet 5 declined this
+        // prompt on every one of six attempts with the reservoir wording (HTTP 200,
+        // stop_reason "refusal", category "bio") and answered every time with depot.
         generateTest("Add a second three stock system", "day", [
             {
                 name: nouns[13],
@@ -626,7 +631,7 @@ export const groups = {
                 name: nouns[15],
                 initialValue: 45,
                 inflows: [
-                    { rate: 0.08, of: "existing_reservoir_delta" }
+                    { rate: 0.08, of: "existing_depot_delta" }
                 ],
                 outflows: [
                     { rate: 0.3, of: nouns[15] }
@@ -635,14 +640,14 @@ export const groups = {
         ], {
             variables: [
                 {
-                    name: "existing_reservoir_gamma",
+                    name: "existing_depot_gamma",
                     type: "stock",
                     equation: "80",
                     inflows: ["supply_gamma"],
                     outflows: ["output_gamma"]
                 },
                 {
-                    name: "existing_reservoir_delta",
+                    name: "existing_depot_delta",
                     type: "stock",
                     equation: "45",
                     inflows: ["input_delta"],
@@ -656,12 +661,12 @@ export const groups = {
                 {
                     name: "output_gamma",
                     type: "flow",
-                    equation: "existing_reservoir_gamma * 0.06"
+                    equation: "existing_depot_gamma * 0.06"
                 },
                 {
                     name: "input_delta",
                     type: "flow",
-                    equation: "existing_reservoir_delta * 0.12"
+                    equation: "existing_depot_delta * 0.12"
                 },
                 {
                     name: "drain_delta",
@@ -670,8 +675,8 @@ export const groups = {
                 }
             ],
             relationships: [
-                { from: "existing_reservoir_gamma", to: "output_gamma", polarity: "+" },
-                { from: "existing_reservoir_delta", to: "input_delta", polarity: "+" }
+                { from: "existing_depot_gamma", to: "output_gamma", polarity: "+" },
+                { from: "existing_depot_delta", to: "input_delta", polarity: "+" }
             ],
             specs: {
                 timeUnits: "day"
