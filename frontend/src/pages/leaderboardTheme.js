@@ -46,27 +46,6 @@ export const camelCaseToWords = (s) => {
 };
 
 /**
- * Category labels wrap rather than truncate on the heatmap axis: a dozen of them across
- * the width leaves no room for one line, and a truncated label is a label you have to
- * hover to read.
- */
-export const wrapLabel = (s, perLine = 14) => {
-  const words = camelCaseToWords(s).split(' ');
-  const lines = [];
-  let line = '';
-  for (const word of words) {
-    if (line && (line + ' ' + word).length > perLine) {
-      lines.push(line);
-      line = word;
-    } else {
-      line = line ? `${line} ${word}` : word;
-    }
-  }
-  if (line) lines.push(line);
-  return lines.join('<br>');
-};
-
-/**
  * The ramp step nearest a 0..1 value, with the ink colour that stays legible on it.
  * Discrete steps rather than a smooth blend: in a table the exact number is already
  * printed in the cell, so the fill only has to make a column scannable, and banding does

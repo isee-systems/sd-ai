@@ -342,6 +342,14 @@ function modelsForConfig(engineConfig) {
   return [];
 }
 
+// Agent runs go through a harness engine (`test-agent-build`, `test-agent-discuss`) whose
+// id is the same for every agent and every board, so the engine name cannot say which
+// agent produced a row. The config names the agent, so that is recorded here and the site
+// is spared having to infer it from an id or a naming convention.
+function agentForConfig(engineConfig) {
+  return engineConfig.additionalParameters?.agentName ?? null;
+}
+
 /**
  * Whether a config was run against a locally-hosted model rather than a hosted API.
  *
@@ -376,6 +384,7 @@ function processLeaderboard(data) {
     const engineConfigName = test.engineConfigName;
     const engineName = test.engineConfig.engine;
     const llmModels = modelsForConfig(test.engineConfig);
+    const agentName = agentForConfig(test.engineConfig);
 
     if (!categoryFirstTests[test.category]) {
       categoryFirstTests[test.category] = {
@@ -386,7 +395,7 @@ function processLeaderboard(data) {
     }
 
     if (!engineStats[engineConfigName]) {
-      engineStats[engineConfigName] = { speeds: [], engineName, llmModels };
+      engineStats[engineConfigName] = { speeds: [], engineName, llmModels, agentName };
     }
 
     if (!(test.category in engineStats[engineConfigName])) {
@@ -422,7 +431,7 @@ function processLeaderboard(data) {
     let totalCount = 0;
     const scores = Object.fromEntries(
       Object.keys(stats)
-        .filter((e) => !['speeds', 'engineName', 'llmModels'].includes(e))
+        .filter((e) => !['speeds', 'engineName', 'llmModels', 'agentName'].includes(e))
         .map((category) => {
           totalPasses += stats[category].passes;
           totalCount += stats[category].count;
@@ -449,6 +458,8 @@ function processLeaderboard(data) {
 
     return {
       configName, engineName: stats.engineName,
+      // The agent this config ran, or null for a plain engine.
+      agentName: stats.agentName,
       // Both shapes: `llmModels` for the UI to render one badge per model, `llmModel` as
       // the flattened string the charts and the engine pages already read.
       llmModels: stats.llmModels,

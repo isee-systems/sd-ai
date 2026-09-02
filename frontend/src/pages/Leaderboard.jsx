@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import Plot from 'react-plotly.js';
 import DataTable from 'react-data-table-component';
+import { StyleSheetManager } from 'styled-components';
+import isPropValid from '@emotion/is-prop-valid';
 import leaderboards from '../generated/leaderboards.json';
 import { leaderboardConfig } from './leaderboardMeta';
 import {
@@ -11,7 +13,6 @@ import {
   CHROME,
   CHART_FONT,
   camelCaseToWords,
-  wrapLabel,
   rampStep,
 } from './leaderboardTheme';
 
@@ -72,6 +73,17 @@ const downloadCsv = (filename, rows) => {
   URL.revokeObjectURL(url);
 };
 
+/**
+ * react-data-table-component hands its column layout props — `grow`, `minWidth`,
+ * `maxWidth`, `hide` and friends — to styled-components v6, which unlike v5 no longer
+ * filters unknown props out of the DOM. The result is a console warning per column and
+ * an invalid attribute on the rendered div. The props are still wanted for the CSS, so
+ * they are blocked at the DOM boundary instead: styled-components keeps passing them to
+ * the style template, and only host elements get the filter.
+ */
+const forwardOnlyValidDomProps = (prop, target) =>
+  typeof target === 'string' ? isPropValid(prop) : true;
+
 const PLOT_CONFIG = {
   displayModeBar: false,
   responsive: true,
@@ -88,6 +100,10 @@ function Leaderboard() {
   const [showLocal, setShowLocal] = useState(false);
   const [showBaseline, setShowBaseline] = useState(false);
   const [showOlder, setShowOlder] = useState(false);
+  // Row order for the per-category grid. `key: null` is the board's own ranking; a
+  // category sorts the grid by that column, which is the only way to read "who is best at
+  // X" off a matrix whose rows are otherwise ordered by the overall score.
+  const [heatSort, setHeatSort] = useState({ key: null, dir: 'desc' });
 
   const config = leaderboardConfig[mode];
   const leaderboardData = leaderboards[mode] || null;
@@ -147,6 +163,16 @@ function Leaderboard() {
   const baselineCount = countIn((e) => e.engineName === 'qualitative-zero', passLocal, passGeneration);
   const olderCount = countIn(isOlder, passLocal, passBaseline);
 
+  // Most engines name their configs after themselves (`qualitative` -> `qualitative-opus-5`),
+  // so the engine name is the family label a reader wants. Agent rows do not work that way:
+  // every board's agent runs go through one harness engine (`test-agent-build`) whose id
+  // says nothing about which agent or which board, while the config name leads with the
+  // pair that does — `merlin-cld`, `merlin-sfd`, `merlin-discuss`. So agent rows are
+  // labelled from the config, and only the link keeps pointing at the real thing.
+  const labelFor = (engine) =>
+    engine.agentName ? engine.configName.split('-').slice(0, 2).join('-') : engine.engineName;
+  const engineLabelOf = new Map(allEngines.map((e) => [e.engineName, labelFor(e)]));
+
   const hasLocal = allEngines.some((e) => e.isLocal);
   const hasBaseline = allEngines.some((e) => e.engineName === 'qualitative-zero');
   const hasOlder = allEngines.some(isOlder);
@@ -183,15 +209,55 @@ function Leaderboard() {
   // the engine name scrolls away from the number you are reading. The same values as a
   // heatmap fit the page width whatever the category count, and comparing down a column
   // or across a row becomes a glance instead of a scroll.
-  const heatmapZ = ranked.map((engine) => categories.map((c) => engine[c] ?? null));
-  const heatmapHeight = Math.max(340, ranked.length * 26 + 190);
+  // A sort key from another board survives the route change, so it is checked against
+  // this board's categories rather than trusted.
+  const sortKey = categories.includes(heatSort.key) ? heatSort.key : null;
+
+  const byCategory = (a, b) => {
+    const av = a[sortKey];
+    const bv = b[sortKey];
+    // An engine that did not run a category has nothing to compare, so it sinks to the
+    // bottom in both directions rather than reading as a zero.
+    if (av == null || bv == null) return av == null ? (bv == null ? 0 : 1) : -1;
+    if (av !== bv) return heatSort.dir === 'desc' ? bv - av : av - bv;
+    // Ties fall back to the board order, so equal cells keep a stable, meaningful order.
+    return rankOf.get(a.configName) - rankOf.get(b.configName);
+  };
+
+  const heatRows = sortKey
+    ? [...ranked].sort(byCategory)
+    : heatSort.dir === 'desc'
+      ? ranked
+      : [...ranked].reverse();
+
+  // Two long config names can truncate to the same label, and a category axis merges rows
+  // that share one — the second engine's scores would draw on top of the first's. A
+  // trailing hair space per collision keeps them distinct to Plotly and identical on
+  // screen. Built off `ranked` so a row keeps its label whatever the sort is.
+  const labelCounts = new Map();
+  const rowLabelOf = new Map(
+    ranked.map((engine) => {
+      const base = truncate(engine.configName);
+      const seen = labelCounts.get(base) ?? 0;
+      labelCounts.set(base, seen + 1);
+      return [engine.configName, base + '\u200a'.repeat(seen)];
+    })
+  );
+
+  const heatmapZ = heatRows.map((engine) => categories.map((c) => engine[c] ?? null));
+  // The slanted headers stand out of the plot by their own length projected at 45°, and
+  // `automargin` takes that out of the chart box — so the box has to grow by it, or the
+  // rows get squeezed to nothing on a board with long category names.
+  const longestHeader = Math.max(...categories.map((c) => camelCaseToWords(c).length));
+  const headerBand = Math.round(((longestHeader * 6.2 + 20) / Math.SQRT2) + 20);
+  const heatmapHeight = Math.max(340, ranked.length * 26 + headerBand + 110);
 
   // A number in every cell is noise once the grid is large, and the skill's own rule is
   // selective labelling. Past ~20 engines the colour carries the comparison and the hover
   // carries the exact figure.
   const labelCells = ranked.length <= 20;
   const cellLabels = labelCells
-    ? ranked.flatMap((engine, row) =>
+    ? heatRows.flatMap((engine, row) =>
         categories
           .map((category, col) => {
             const value = engine[category];
@@ -239,7 +305,7 @@ function Leaderboard() {
       y: members.map((e) => e.costPerTest),
       text: members.map((e) => e.llmModel),
       customdata: members.map((e) => [e.configName, e.costTotal, e.costUnpricedCalls]),
-      name: family,
+      name: engineLabelOf.get(family) ?? family,
       mode: 'markers+text',
       type: 'scatter',
       textposition: 'top center',
@@ -288,7 +354,34 @@ function Leaderboard() {
         <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-2 sm:mb-3 text-gray-800">
           {config.title} Leaderboard
         </h1>
-        <p className="text-base text-gray-600 mb-4">{config.description}</p>
+        <p className="text-base text-gray-600 mb-3">{config.description}</p>
+        {/* Driven off the board's own categories rather than the copy, so the list is
+            always exactly the columns of the grid below, in the same order — a category
+            that gains a column but no description shows up as a bare heading rather than
+            silently going unexplained. Each heading links to one of its tests, which is
+            the next question a reader has after "what does this column mean". */}
+        <ul className="mb-3 space-y-1.5 text-sm text-gray-600 list-disc pl-5 marker:text-gray-400">
+          {categories.map((category) => {
+            const test = leaderboardData.categoryFirstTests[category];
+            const heading = camelCaseToWords(category);
+            return (
+              <li key={category}>
+                {test ? (
+                  <Link
+                    to={`/evals/${encodeURIComponent(test.category)}/${encodeURIComponent(test.group)}/${encodeURIComponent(test.testName)}`}
+                    className="font-semibold text-blue-600 hover:text-blue-800 no-underline"
+                  >
+                    {heading}
+                  </Link>
+                ) : (
+                  <span className="font-semibold text-gray-800">{heading}</span>
+                )}
+                {config.categoryNotes[category] && <> — {config.categoryNotes[category]}</>}
+              </li>
+            );
+          })}
+        </ul>
+        {config.note && <p className="text-sm text-gray-600 mb-4">{config.note}</p>}
 
         {/* A generation whose own results are known to be unreliable says so on the
             page, not just in the repo. A number shown without its caveat gets quoted
@@ -373,160 +466,186 @@ function Leaderboard() {
         title="Standings"
         subtitle="Overall score, plus cost and wall-clock time per test. Per-category scores are in the grid below."
       >
-        <DataTable
-          columns={[
-            {
-              name: '#',
-              selector: (row) => rankOf.get(row.configName),
-              sortable: true,
-              width: '64px',
-            },
-            {
-              name: 'Engine',
-              selector: (row) => row.configName,
-              sortable: true,
-              grow: 3,
-              minWidth: '260px',
-              cell: (row) => (
-                <div className="py-1">
-                  <Link
-                    to={`/engines/${row.engineName}`}
-                    className="text-blue-600 hover:text-blue-800 no-underline font-medium"
-                  >
-                    {row.engineName}
-                  </Link>
-                  <div className="text-xs text-gray-500 mt-0.5">{row.configName}</div>
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {(row.llmModels ?? []).length === 0 ? (
-                      <span
-                        className="inline-block px-2 py-0.5 text-xs bg-gray-100 text-gray-500 rounded"
-                        title="This engine drives no LLM of its own"
+        <StyleSheetManager shouldForwardProp={forwardOnlyValidDomProps}>
+          <DataTable
+            columns={[
+              {
+                name: '#',
+                selector: (row) => rankOf.get(row.configName),
+                sortable: true,
+                width: '64px',
+              },
+              {
+                name: 'Engine',
+                selector: (row) => row.configName,
+                sortable: true,
+                grow: 3,
+                minWidth: '260px',
+                cell: (row) => (
+                  <div className="py-1">
+                    {/* Two different kinds of thing share this column: engines, and agents
+                        driven through an engine that wraps them. They score on the same
+                        tests but they are not the same kind of entry, so each row says
+                        which it is rather than leaving it to be read off a name. */}
+                    <div className="flex items-center gap-1.5">
+                      <Link
+                        to={
+                          row.agentName
+                            ? `/agents/${row.agentName}`
+                            : `/engines/${row.engineName}`
+                        }
+                        className="text-blue-600 hover:text-blue-800 no-underline font-medium"
                       >
-                        no LLM
+                        {engineLabelOf.get(row.engineName)}
+                      </Link>
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide border ${
+                          row.agentName
+                            ? 'bg-violet-50 text-violet-700 border-violet-200'
+                            : 'bg-gray-100 text-gray-600 border-gray-200'
+                        }`}
+                        title={
+                          row.agentName
+                            ? `The ${row.agentName} agent, run through the ${row.engineName} engine`
+                            : `The ${row.engineName} engine`
+                        }
+                      >
+                        {row.agentName ? 'agent' : 'engine'}
                       </span>
-                    ) : (
-                      row.llmModels.map((model) => (
+                    </div>
+                    <div className="text-xs text-gray-500 mt-0.5">{row.configName}</div>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {(row.llmModels ?? []).length === 0 ? (
                         <span
-                          key={model}
-                          className="inline-block px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-600 rounded"
+                          className="inline-block px-2 py-0.5 text-xs bg-gray-100 text-gray-500 rounded"
+                          title="This engine drives no LLM of its own"
                         >
-                          {model}
+                          no LLM
                         </span>
-                      ))
-                    )}
+                      ) : (
+                        row.llmModels.map((model) => (
+                          <span
+                            key={model}
+                            className="inline-block px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-600 rounded"
+                          >
+                            {model}
+                          </span>
+                        ))
+                      )}
+                    </div>
                   </div>
-                </div>
-              ),
-            },
-            {
-              name: 'Score',
-              selector: (row) => row.score,
-              sortable: true,
-              format: (row) => `${(row.score * 100).toFixed(1)}%`,
-              width: '110px',
-            },
-            {
-              name: 'Cost / Test',
-              // Results produced before evals captured cost have none. Sorting them
-              // below every priced engine keeps "cheapest first" meaningful; the cell
-              // still renders an em dash so unknown never reads as free.
-              selector: (row) => row.costPerTest ?? Number.MAX_VALUE,
-              sortable: true,
-              width: '130px',
-              cell: (row) =>
-                row.costPerTest == null ? (
-                  <span className="text-gray-400" title="These results predate cost tracking">
-                    —
-                  </span>
-                ) : (
-                  <span
-                    title={
-                      `$${row.costTotal.toFixed(2)} total across the benchmark` +
-                      (row.costUnpricedCalls > 0
-                        ? ` — at least, ${row.costUnpricedCalls} call(s) used a model with no published pricing`
-                        : '')
-                    }
-                  >
-                    ${row.costPerTest.toFixed(4)}
-                    {row.costUnpricedCalls > 0 && <span className="text-amber-600">*</span>}
-                  </span>
                 ),
-            },
-            {
-              name: 'Time / Test',
-              selector: (row) => row.speed,
-              sortable: true,
-              format: (row) => `${row.speed.toFixed(1)}s`,
-              width: '130px',
-            },
-            ...(generations.length > 1
-              ? [{
-                  name: 'Results',
-                  // Which benchmark generation this engine's numbers come from. Only
-                  // worth a column once a board holds more than one, and it shows the
-                  // mix rather than a single label because a partly re-run engine
-                  // genuinely is part-old.
-                  selector: (row) => (row.generations ?? []).join(','),
-                  sortable: true,
-                  width: '120px',
-                  cell: (row) => (
+              },
+              {
+                name: 'Score',
+                selector: (row) => row.score,
+                sortable: true,
+                format: (row) => `${(row.score * 100).toFixed(1)}%`,
+                width: '110px',
+              },
+              {
+                name: 'Cost / Test',
+                // Results produced before evals captured cost have none. Sorting them
+                // below every priced engine keeps "cheapest first" meaningful; the cell
+                // still renders an em dash so unknown never reads as free.
+                selector: (row) => row.costPerTest ?? Number.MAX_VALUE,
+                sortable: true,
+                width: '130px',
+                cell: (row) =>
+                  row.costPerTest == null ? (
+                    <span className="text-gray-400" title="These results predate cost tracking">
+                      —
+                    </span>
+                  ) : (
                     <span
-                      className="flex flex-wrap gap-1"
-                      title={Object.entries(row.generationCounts ?? {})
-                        .map(([id, n]) => `${n} result(s) from ${id}`)
-                        .join(', ')}
+                      title={
+                        `$${row.costTotal.toFixed(2)} total across the benchmark` +
+                        (row.costUnpricedCalls > 0
+                          ? ` — at least, ${row.costUnpricedCalls} call(s) used a model with no published pricing`
+                          : '')
+                      }
                     >
-                      {(row.generations ?? []).map((id) => (
-                        <span
-                          key={id}
-                          className={`inline-block px-2 py-1 text-xs font-medium rounded ${
-                            caveated.some((g) => g.id === id)
-                              ? 'bg-amber-100 text-amber-800'
-                              : 'bg-indigo-50 text-indigo-700'
-                          }`}
-                        >
-                          {id}
-                        </span>
-                      ))}
+                      ${row.costPerTest.toFixed(4)}
+                      {row.costUnpricedCalls > 0 && <span className="text-amber-600">*</span>}
                     </span>
                   ),
-                }]
-              : []),
-          ]}
-          data={ranked}
-          defaultSortFieldId={1}
-          pagination={false}
-          highlightOnHover
-          striped
-          responsive
-          customStyles={{
-            table: { style: { minWidth: '100%', border: 'none' } },
-            headRow: {
-              style: {
-                backgroundColor: '#f9fafb',
-                borderBottom: '1px solid #d1d5db',
-                minHeight: '44px',
               },
-            },
-            headCells: {
-              style: {
-                padding: '8px 12px',
-                fontSize: '14px',
-                fontWeight: '600',
-                color: '#374151',
+              {
+                name: 'Time / Test',
+                selector: (row) => row.speed,
+                sortable: true,
+                format: (row) => `${row.speed.toFixed(1)}s`,
+                width: '130px',
               },
-            },
-            cells: {
-              style: {
-                padding: '10px 12px',
-                fontSize: '14px',
-                color: '#374151',
-                borderBottom: '1px solid #e5e7eb',
+              ...(generations.length > 1
+                ? [{
+                    name: 'Results',
+                    // Which benchmark generation this engine's numbers come from. Only
+                    // worth a column once a board holds more than one, and it shows the
+                    // mix rather than a single label because a partly re-run engine
+                    // genuinely is part-old.
+                    selector: (row) => (row.generations ?? []).join(','),
+                    sortable: true,
+                    width: '120px',
+                    cell: (row) => (
+                      <span
+                        className="flex flex-wrap gap-1"
+                        title={Object.entries(row.generationCounts ?? {})
+                          .map(([id, n]) => `${n} result(s) from ${id}`)
+                          .join(', ')}
+                      >
+                        {(row.generations ?? []).map((id) => (
+                          <span
+                            key={id}
+                            className={`inline-block px-2 py-1 text-xs font-medium rounded ${
+                              caveated.some((g) => g.id === id)
+                                ? 'bg-amber-100 text-amber-800'
+                                : 'bg-indigo-50 text-indigo-700'
+                            }`}
+                          >
+                            {id}
+                          </span>
+                        ))}
+                      </span>
+                    ),
+                  }]
+                : []),
+            ]}
+            data={ranked}
+            defaultSortFieldId={1}
+            pagination={false}
+            highlightOnHover
+            striped
+            responsive
+            customStyles={{
+              table: { style: { minWidth: '100%', border: 'none' } },
+              headRow: {
+                style: {
+                  backgroundColor: '#f9fafb',
+                  borderBottom: '1px solid #d1d5db',
+                  minHeight: '44px',
+                },
               },
-            },
-            rows: { style: { minHeight: '56px', '&:hover': { backgroundColor: '#f3f4f6' } } },
-          }}
-        />
+              headCells: {
+                style: {
+                  padding: '8px 12px',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  color: '#374151',
+                },
+              },
+              cells: {
+                style: {
+                  padding: '10px 12px',
+                  fontSize: '14px',
+                  color: '#374151',
+                  borderBottom: '1px solid #e5e7eb',
+                },
+              },
+              rows: { style: { minHeight: '56px', '&:hover': { backgroundColor: '#f3f4f6' } } },
+            }}
+          />
+        </StyleSheetManager>
       </Panel>
 
       {/* Per-category scores */}
@@ -560,12 +679,43 @@ function Leaderboard() {
           })}
         </div>
 
+        {/* Rows arrive in the board's own ranking, which answers "who is best overall" and
+            nothing else. Re-sorting on a column is what turns the grid into an answer to
+            "who is best at this one thing". */}
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          <label htmlFor="heatmap-sort" className="text-sm text-gray-600">
+            Sort rows by
+          </label>
+          <select
+            id="heatmap-sort"
+            value={sortKey ?? ''}
+            onChange={(e) => setHeatSort({ key: e.target.value || null, dir: 'desc' })}
+            className="px-2 py-1 text-sm border border-gray-300 rounded bg-white text-gray-800"
+          >
+            <option value="">Overall score</option>
+            {categories.map((category) => (
+              <option key={category} value={category}>
+                {camelCaseToWords(category)}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={() =>
+              setHeatSort((prev) => ({ ...prev, dir: prev.dir === 'desc' ? 'asc' : 'desc' }))
+            }
+            className="px-2 py-1 text-sm border border-gray-300 rounded bg-white text-gray-700 hover:bg-gray-50"
+            title="Reverse the row order"
+          >
+            {heatSort.dir === 'desc' ? 'High → low ▾' : 'Low → high ▴'}
+          </button>
+        </div>
+
         <Plot
           data={[
             {
               type: 'heatmap',
-              x: categories.map((c) => wrapLabel(c)),
-              y: ranked.map((e) => truncate(e.configName)),
+              x: categories.map((c) => camelCaseToWords(c)),
+              y: heatRows.map((e) => rowLabelOf.get(e.configName)),
               z: heatmapZ,
               zmin: 0,
               zmax: 1,
@@ -574,7 +724,7 @@ function Leaderboard() {
               // A 2px surface gap between fills, per the mark spec.
               xgap: 2,
               ygap: 2,
-              customdata: ranked.map((e) => categories.map(() => e.configName)),
+              customdata: heatRows.map((e) => categories.map(() => e.configName)),
               hovertemplate:
                 '<b>%{customdata}</b><br>%{x}<br>Score: %{z:.1%}<extra></extra>',
               colorbar: {
@@ -593,6 +743,11 @@ function Leaderboard() {
             xaxis: {
               type: 'category',
               side: 'top',
+              // A dozen category names across the width will not fit side by side at any
+              // font size, so they lean instead of wrapping — a slanted label stays one
+              // readable line, and `automargin` buys back whatever room the lean needs.
+              tickangle: -45,
+              automargin: true,
               tickfont: { ...CHART_FONT, size: 11, color: CHROME.textSecondary },
               ticks: '',
               showgrid: false,
@@ -600,6 +755,11 @@ function Leaderboard() {
             },
             yaxis: {
               type: 'category',
+              // Stated rather than inferred from the trace: a category axis keeps the
+              // order it was first drawn with across updates, which would pin the rows
+              // to whatever sort was active when the chart first rendered.
+              categoryorder: 'array',
+              categoryarray: heatRows.map((e) => rowLabelOf.get(e.configName)),
               // Plotly draws categories bottom-up; the board reads best-first.
               autorange: 'reversed',
               tickfont: { ...CHART_FONT, size: 11, color: CHROME.textSecondary },
@@ -607,7 +767,7 @@ function Leaderboard() {
               showgrid: false,
               zeroline: false,
             },
-            margin: { t: 90, r: 20, b: 20, l: 290 },
+            margin: { t: 20, r: 20, b: 20, l: 290 },
             font: CHART_FONT,
             plot_bgcolor: 'rgba(0,0,0,0)',
             paper_bgcolor: 'rgba(0,0,0,0)',
@@ -810,7 +970,9 @@ function Leaderboard() {
               x: ranked.map((e) => e.score),
               y: ranked.map((e) => e.speed),
               text: ranked.map((e) =>
-                e.engineName === 'qualitative-zero' ? `${e.llmModel}` : `${e.engineName} (${e.llmModel})`
+                e.engineName === 'qualitative-zero'
+                  ? `${e.llmModel}`
+                  : `${engineLabelOf.get(e.engineName)} (${e.llmModel})`
               ),
               customdata: ranked.map((e) => e.configName),
               mode: 'markers+text',
