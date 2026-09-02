@@ -17,7 +17,7 @@ function Home() {
           </p>
           {/* Engines, Agents, and Evaluations Introduction */}
           <div className="bg-gradient-to-r from-blue-50 to-green-50 p-8 sm:p-10 rounded-xl max-w-5xl mx-auto">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 sm:gap-12">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 sm:gap-12">
               <div className="text-center flex flex-col">
                 <p className="text-gray-600 leading-relaxed mb-4 flex-1">
                   SD-AI has a growing list of engines for tasks like creating causal loop diagrams and simulating models.
@@ -53,6 +53,18 @@ function Home() {
                   View Evaluations
                 </Link>
               </div>
+
+              <div className="text-center flex flex-col">
+                <p className="text-gray-600 leading-relaxed mb-4 flex-1">
+                  Those evals are scored and published as leaderboards, so you can see which engine performs best at each type of task.
+                </p>
+                <Link
+                  to="/leaderboards"
+                  className="inline-block px-6 py-3 bg-purple-600 text-white no-underline rounded-lg text-base font-semibold border-none cursor-pointer hover:bg-purple-700"
+                >
+                  View Leaderboards
+                </Link>
+              </div>
             </div>
           </div>
         </div>
@@ -74,7 +86,7 @@ function Home() {
             </li>
             <li className="flex items-start">
               <span className="text-blue-600 mr-3 mt-1">•</span>
-              <span>Create comprehensive leaderboards to answer the most important practical questions facing AI adoption: which engines perform best at a given type of task and how accurate will any engine be at my type of task right now?</span>
+              <span>Create comprehensive <Link to="/leaderboards" className="text-blue-600 hover:underline">leaderboards</Link> to answer the most important practical questions facing AI adoption: which engines perform best at a given type of task and how accurate will any engine be at my type of task right now?</span>
             </li>
             <li className="flex items-start">
               <span className="text-blue-600 mr-3 mt-1">•</span>

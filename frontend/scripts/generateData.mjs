@@ -324,6 +324,24 @@ async function generateAgents() {
 
 /* -------------------------------------------------------------- leaderboards */
 
+// The model(s) a config ran with. Most engines name one in `underlyingModel`. The agent
+// harness (`test-agent-build`) instead names a model per tool-and-difficulty slot under
+// `toolModels`, so there is no single field to read — the distinct set across those slots
+// is the honest answer. Usually that set has one member, but a config is free to mix (a
+// larger model for hard builds, say) and collapsing that to one name would misattribute
+// the score. An engine that drives no LLM at all yields an empty list.
+function modelsForConfig(engineConfig) {
+  const params = engineConfig.additionalParameters ?? {};
+  if (params.underlyingModel) return [params.underlyingModel];
+  if (params.toolModels) {
+    const named = Object.values(params.toolModels)
+      .flatMap((slot) => Object.values(slot ?? {}))
+      .filter(Boolean);
+    return [...new Set(named)];
+  }
+  return [];
+}
+
 // Port of the Leaderboard page's processLeaderboardData: reduce the (huge)
 // full-results files to the small per-engine aggregate the UI actually renders.
 function processLeaderboard(data) {
@@ -339,7 +357,7 @@ function processLeaderboard(data) {
   for (const test of data.results) {
     const engineConfigName = test.engineConfigName;
     const engineName = test.engineConfig.engine;
-    const llmModel = test.engineConfig.additionalParameters?.underlyingModel || 'N/A';
+    const llmModels = modelsForConfig(test.engineConfig);
 
     if (!categoryFirstTests[test.category]) {
       categoryFirstTests[test.category] = {
@@ -350,7 +368,7 @@ function processLeaderboard(data) {
     }
 
     if (!engineStats[engineConfigName]) {
-      engineStats[engineConfigName] = { speeds: [], engineName, llmModel };
+      engineStats[engineConfigName] = { speeds: [], engineName, llmModels };
     }
 
     if (!(test.category in engineStats[engineConfigName])) {
@@ -386,7 +404,7 @@ function processLeaderboard(data) {
     let totalCount = 0;
     const scores = Object.fromEntries(
       Object.keys(stats)
-        .filter((e) => !['speeds', 'engineName', 'llmModel'].includes(e))
+        .filter((e) => !['speeds', 'engineName', 'llmModels'].includes(e))
         .map((category) => {
           totalPasses += stats[category].passes;
           totalCount += stats[category].count;
@@ -412,7 +430,12 @@ function processLeaderboard(data) {
     );
 
     return {
-      configName, engineName: stats.engineName, llmModel: stats.llmModel, speed, score,
+      configName, engineName: stats.engineName,
+      // Both shapes: `llmModels` for the UI to render one badge per model, `llmModel` as
+      // the flattened string the charts and the engine pages already read.
+      llmModels: stats.llmModels,
+      llmModel: stats.llmModels.length ? stats.llmModels.join(' + ') : 'N/A',
+      speed, score,
       generationCounts,
       generations: presentGenerations,
       costTotal, costPerTest,

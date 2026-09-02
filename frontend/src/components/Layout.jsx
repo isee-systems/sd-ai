@@ -10,6 +10,7 @@ function Layout({ children }) {
     { path: '/engines', label: 'Engines', hasSubPages: true },
     { path: '/agents', label: 'Agents', hasSubPages: true },
     { path: '/evals', label: 'Evaluations', hasSubPages: true },
+    { path: '/leaderboards', label: 'Leaderboards', matchPrefix: '/leaderboard/' },
     { 
       path: '/get-involved', 
       label: 'Get Involved',
@@ -17,17 +18,23 @@ function Layout({ children }) {
     }
   ];
 
-  const isActive = (path, hasSubPages = false) => {
+  const isActive = (item) => {
     // Handle exact matches first
-    if (location.pathname === path) {
+    if (location.pathname === item.path) {
       return true;
     }
-    
+
     // Handle sub-routes for sections that have them
-    if (hasSubPages && location.pathname.startsWith(`${path}/`)) {
+    if (item.hasSubPages && location.pathname.startsWith(`${item.path}/`)) {
       return true;
     }
-    
+
+    // A section whose detail pages don't sit under its own path says so explicitly:
+    // the boards live at /leaderboard/<mode>, which is not a child of /leaderboards.
+    if (item.matchPrefix && location.pathname.startsWith(item.matchPrefix)) {
+      return true;
+    }
+
     return false;
   };
 
@@ -41,14 +48,14 @@ function Layout({ children }) {
       
       if (item.special) {
         return `${mobileBase} ${
-          isActive(item.path, item.hasSubPages) 
+          isActive(item) 
             ? 'text-white bg-gradient-to-r from-purple-600 to-blue-600' 
             : 'text-white bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700'
         }`;
       }
       
       return `${mobileBase} ${
-        isActive(item.path, item.hasSubPages) 
+        isActive(item) 
           ? 'text-white bg-gray-800' 
           : 'text-gray-300 hover:text-white'
       }`;
@@ -56,14 +63,14 @@ function Layout({ children }) {
     
     if (item.special) {
       return `${baseClasses} bg-gradient-to-r from-purple-600 to-blue-600 shadow-lg ${
-        isActive(item.path, item.hasSubPages) 
+        isActive(item) 
           ? 'text-white shadow-xl' 
           : 'text-white hover:shadow-xl hover:from-purple-700 hover:to-blue-700'
       }`;
     }
     
     return `${baseClasses} ${
-      isActive(item.path, item.hasSubPages) 
+      isActive(item) 
         ? 'text-white bg-gray-700' 
         : 'text-gray-300 hover:text-white hover:bg-gray-700'
     }`;
