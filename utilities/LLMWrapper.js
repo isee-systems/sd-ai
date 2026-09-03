@@ -248,8 +248,15 @@ export class LLMWrapper {
               throw new Error("To access this service you need to send an OpenRouter key");
             }
 
+            // Without a timeout the SDK attaches no AbortSignal at all, so a request
+            // OpenRouter accepts but never answers hangs forever: it neither resolves
+            // nor rejects, the runner's retry never fires, and the test holds its socket
+            // and rate-limit budget until the process is killed. Seven minutes is well
+            // clear of a legitimate slow generation and turns a silent stall into an
+            // error the existing retry/backoff already knows how to handle.
             this.#openRouterAPI = new OpenRouter({
                 apiKey: this.#openRouterKey,
+                timeoutMs: 7 * 60 * 1000,
             });
             break;
         case ModelType.DEEPSEEK:
