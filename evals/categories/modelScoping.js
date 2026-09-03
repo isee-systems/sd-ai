@@ -334,6 +334,28 @@ export const evaluate = async function(generatedResponse, expectations) {
 };
 
 /**
+ * Returns the methodology for this category: how its tests are built and run, what the evaluator
+ * checks, and how those checks combine into a verdict. Each `criteria[].name` is the exact failure
+ * `type` {@link evaluate} records when that criterion is not met. Rendered by the documentation
+ * site on every test page.
+ * @returns {{howItWorks: Array<string>, criteria: Array<{name: string, description: string}>, scoring: string}}
+ */
+export const methodology = () => ({
+    howItWorks: [
+        `Choosing the model boundary in light of the problem definition is one of the hardest and most consequential steps in system dynamics, and it is a decision that can be tested directly. Each case fixes a problem statement and background knowledge, then presents a numbered list of candidate mechanisms. Some genuinely belong in a model built for that problem; the rest are plausible-sounding distractors a competent modeler would leave out — they act on a very different time scale, are effectively constant over the relevant horizon, sit below the level of aggregation, or belong to an altogether different question.`,
+        `The engine is asked to state an explicit include-or-exclude decision for every numbered mechanism and to justify each one briefly. Mechanisms are listed in a fixed, deliberately interleaved order so position never leaks the answer, and the ground-truth decision is never shown to the engine. Difficulty rises across the three groups, from small few-mechanism systems to systems with delays, feedback, and more tempting distractors.`,
+        `Grading separates reading from judging. One structured-output call to a fixed judge model (the configured eval model, independent of the engine under test) reports, for each numbered mechanism, only the decision the engine's discussion actually reached — include, exclude, or unclear if it did not commit, did not mention the mechanism, or contradicted itself. The judge is explicitly forbidden from applying its own view of whether a mechanism belongs. Those readings are then compared against the ground truth in code, so the boundary call is settled by the test data rather than by the judge's opinion.`
+    ],
+    criteria: [
+        { name: 'In-boundary mechanism not included', description: 'A mechanism that materially drives the behavior this problem is about was excluded, or the engine never clearly decided to include it. Recorded once per mechanism, saying which way it went.' },
+        { name: 'Out-of-boundary mechanism not excluded', description: 'A mechanism outside an appropriate boundary for this problem was included, or the engine never clearly decided to exclude it. Recorded once per mechanism.' },
+        { name: 'No response produced', description: 'The engine returned no discussion text to assess; any engine error is recorded with the failure.' },
+        { name: 'Evaluation error', description: 'The judge call or the parsing of its structured output failed. Recorded as a failure rather than passed silently, so a broken judge never reads as a good answer.' }
+    ],
+    scoring: `A test passes only if every in-boundary mechanism is included and every out-of-boundary mechanism is excluded. An "unclear" reading fails either way, and that is the point: the category measures whether an engine can say what belongs and what does not, so hedging on a mechanism is not scored as a near miss.`
+});
+
+/**
  * The groups of tests to be evaluated as a part of this category. Difficulty rises from small,
  * few-mechanism systems (simple) to systems with delays, feedback, and more tempting distractors
  * (complex).

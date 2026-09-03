@@ -149,6 +149,27 @@ export const evaluate = async function(generatedResponse, expectations) {
     return validateEvaluationResult(failures);
 };
 
+/**
+ * Returns the methodology for this category: how its tests are built and run, what the evaluator
+ * checks, and how those checks combine into a verdict. Each `criteria[].name` is the exact failure
+ * `type` {@link evaluate} records when that criterion is not met. Rendered by the documentation
+ * site on every test page.
+ * @returns {{howItWorks: Array<string>, criteria: Array<{name: string, description: string}>, scoring: string}}
+ */
+export const methodology = () => ({
+    howItWorks: [
+        `This is the discussion-side counterpart to quantitative error fixing: the engine is handed a broken model and asked to talk about it rather than repair it. Each test loads one of the deliberately corrupted COVID epidemiological models, passes it as the current model along with its precomputed feedback analysis, and asks the engine to identify the formulation errors, explain why they are errors, and suggest how to fix them — explicitly telling it to respect the existing formulation style, pipeline versus exponential delays and so on.`,
+        `The three groups are the three families of injected error: delay formulations, lookup (graphical function) formulations, and sum/aggregation formulations. A test's expectations are the errors actually present in its model, each naming a variable and stating the problem with it, and grading asks the engine's prose one question only: which of those errors did it identify and explain?`,
+        `The engine's text and a numbered list of the expected errors go to a fixed judge model (the configured eval model, independent of the engine under test) in a single structured-output call that returns the numbers of the errors the text identifies and explains. The judge is told that exact wording is not required but that the text must name the variable and explain the nature of the error — so a paraphrase counts, and a vague gesture at "some delay problems" does not.`
+    ],
+    criteria: [
+        { name: 'Missing explanation', description: 'The response carried no text to assess.' },
+        { name: 'Error not explained', description: 'An error present in the model was not identified and explained. Recorded once per error the judge did not find, naming the variable and the problem that was missed.' },
+        { name: 'Evaluation error', description: 'The judge call or the parsing of its structured output failed. Recorded as a failure rather than passed silently, so a broken judge never reads as a good answer.' }
+    ],
+    scoring: `Every error in the model has to be caught: one unexplained error fails the test. Naming additional problems is not penalized, and the model itself is never inspected — this category grades the explanation alone, which is what separates it from quantitative error fixing, where a corrected model must come back.`
+});
+
 export const groups = {
     "covidDelayErrors": [
         generateCovidTest("COVID delay error 1", "COVID_delay_err1.json",

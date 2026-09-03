@@ -219,6 +219,30 @@ export const evaluate = function(generatedResponse, groundTruth) {
     return validateEvaluationResult(failures);
 };
 
+/**
+ * Returns the methodology for this category: how its tests are built and run, what the evaluator
+ * checks, and how those checks combine into a verdict. Each `criteria[].name` is the exact failure
+ * `type` {@link evaluate} records when that criterion is not met. Rendered by the documentation
+ * site on every test page.
+ * @returns {{howItWorks: Array<string>, criteria: Array<{name: string, description: string}>, scoring: string}}
+ */
+export const methodology = () => ({
+    howItWorks: [
+        `Real modeling work is iterative: a diagram already exists and has to be extended without being disturbed. Each test hands the engine an existing causal loop diagram as the current model and a plain-English description of relationships to add, and grades both halves of that job — whether the new relationships arrived, and whether the existing ones survived.`,
+        `Like causal translation, the tests are set in a gibberish universe so nothing can be answered from world knowledge, and the English and the ground-truth graph are generated together from the same specification. Names are pluralized in the prose and one of several phrasings is drawn at random per sentence.`,
+        `The four groups escalate what the addition has to do. "addToSimpleLoop" closes a loop that is one link short. "addToMediumNetwork" and "addToComplexNetwork" add loops to networks that already carry structure, including relationships that must be shared with loops already present. "addComplexToComplexNetwork" adds a whole further subsystem — the case where the engine has the most opportunity to disturb what was already there.`,
+        `Grading compares the returned relationships against two references at once: the relationships the description asked for, and the relationships of the model that was handed over. Endpoints are compared with pluralization-tolerant matching, and a generated name is allowed to be longer than the ground-truth one it stands for, since the pre-existing model names its own variables and an engine may qualify them.`,
+        `Crucially, relationships that belong to the model handed over are not counted as fabrications. Only links present in neither the requested set nor the current model are treated as invented, which is what allows the category to reward preserving prior structure instead of punishing it.`
+    ],
+    criteria: [
+        { name: 'Pre-existing relationships missing', description: 'Relationships from the model handed to the engine are absent from what came back — the iteration destroyed structure it was supposed to keep. Recorded once, listing them.' },
+        { name: 'Real relationships not found', description: 'Relationships the description asked for are missing from the answer. Recorded once, listing what was missing alongside the full ground truth.' },
+        { name: 'Fake relationships found', description: 'The answer contains relationships that are in neither the requested set nor the model handed over. Recorded once, listing the invented links.' },
+        { name: 'Incorrect polarity discovered', description: 'A requested relationship was found with the right endpoints but the wrong sign. Recorded once per relationship.' }
+    ],
+    scoring: `All four checks are independent and any single one fails the test, so an engine has to add everything asked for, invent nothing, get every polarity right, and leave the prior diagram intact. Reasoning fields attached to a relationship are stripped before comparison.`
+});
+
 export const groups = {
     "addToSimpleLoop": [
         generateTest("Complete a balancing loop", [

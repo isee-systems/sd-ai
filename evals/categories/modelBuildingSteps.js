@@ -171,6 +171,26 @@ export const evaluate = async function(generatedResponse, expectations) {
 };
 
 /**
+ * Returns the methodology for this category: how its tests are built and run, what the evaluator
+ * checks, and how those checks combine into a verdict. Each `criteria[].name` is the exact failure
+ * `type` {@link evaluate} records when that criterion is not met. Rendered by the documentation
+ * site on every test page.
+ * @returns {{howItWorks: Array<string>, criteria: Array<{name: string, description: string}>, scoring: string}}
+ */
+export const methodology = () => ({
+    howItWorks: [
+        `Each test gives the engine a problem statement and background knowledge for a classic system — an arms race, Bass diffusion, inventory management, or predator–prey — and asks for the steps to build a system dynamics model that addresses it. No model is supplied: the engine is being asked how it would go about building one, so the answer under test is a plan rather than a model.`,
+        `A test's expectations are the ground-truth steps for that system: the stocks to create, the flows to connect them, how each flow's rate is composed, and the parameters and delays the structure needs. They are the modeling elements a competent plan has to reach, not a script to be reproduced.`,
+        `Grading is a single structured-output call to a fixed judge model (the configured eval model, independent of the engine under test). The judge is given the engine's steps and the numbered ground-truth steps, and returns a covered/not-covered verdict and a short explanation for each ground-truth step. It is told explicitly that the generated steps need not be identical or in the same order but must capture the essential modeling elements, so a plan that merges two steps or sequences them differently still counts.`
+    ],
+    criteria: [
+        { name: 'Missing or inadequate step', description: 'A ground-truth step was not adequately covered by the plan the engine produced. Recorded once per uncovered step, with the step itself and the judge’s reason.' },
+        { name: 'Evaluation error', description: 'The judge call or the parsing of its structured output failed. Recorded as a failure rather than passed silently, so a broken judge never reads as a good answer.' }
+    ],
+    scoring: `Every ground-truth step must be covered: one uncovered step fails the test. Extra steps are not penalized — the question is coverage of the essential elements, not economy or an exact match.`
+});
+
+/**
  * The groups of tests to be evaluated as a part of this category
  */
 export const groups = {

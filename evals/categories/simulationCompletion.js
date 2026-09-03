@@ -227,6 +227,35 @@ export const evaluate = async function(generatedResponse, expectations) {
 };
 
 /**
+ * Returns the methodology for this category: how its tests are built and run, what the evaluator
+ * checks, and how those checks combine into a verdict. Each `criteria[].name` is the exact failure
+ * `type` {@link evaluate} records when that criterion is not met. Rendered by the documentation
+ * site on every test page.
+ * @returns {{howItWorks: Array<string>, criteria: Array<{name: string, description: string}>, scoring: string}}
+ */
+export const methodology = () => ({
+    howItWorks: [
+        `Every other quantitative category asks whether a model has the right structure. This one asks the far more basic question of whether the structure can be integrated at all. A model that references a variable it never defines, divides by zero, leaves a flow without an equation, or omits usable simulation specs is perfectly good JSON and fails the moment a simulator touches it — and those are exactly the failures this category catches.`,
+        `Six classic dynamic systems are used, rising in difficulty from a single stock to several interacting stocks with feedback and delays: population growth and a savings account; disease spread and inventory management; predator–prey dynamics and software project rework. The background knowledge deliberately supplies concrete initial conditions, parameter values, a time step and a time horizon, so a competent engine has everything it needs to assemble a well-posed model. That keeps the test on whether the engine can produce something that runs rather than on whether it can invent good numbers — the predator–prey case even states the small time step its oscillation needs for numerical stability.`,
+        `The prompt asks for a complete, simulatable stock-and-flow model: a numeric initial value on every stock, a well-defined equation on every flow and auxiliary, and simulation specs covering the full horizon described.`,
+        `Verification runs in four stages. Structure: the model must hold at least one stock and one flow, and its specs must give numeric start and stop times with the stop strictly later, so that "the end" of the run is well defined. Convertibility: it must convert to XMILE. Simulatability: PySD must load and run it while tracking every stock — the integrated state variables — by their XMILE-normalized names. Completion: the returned series must reach the model's own stop time, within one time step to absorb save grids that do not land exactly on it, and every stock trajectory must be finite from start to finish.`,
+        `The horizon checked is the model's own, not one imposed by the test: an engine that declares a shorter run is held to what it declared. Non-finite values are what catch a model that diverged — overflow, a division blowing up — before reaching the end.`
+    ],
+    criteria: [
+        { name: 'No model produced', description: 'The engine returned no model containing variables; any engine error is recorded with the failure.' },
+        { name: 'Not a stock-and-flow model', description: 'The model has no stocks or no flows, so there is nothing to integrate. The counts found are recorded.' },
+        { name: 'Missing simulation specs', description: 'The specs do not give numeric start and stop times with the stop strictly later than the start, so the run has no defined end.' },
+        { name: 'XMILE conversion error', description: 'The model could not be converted to XMILE for the simulator.' },
+        { name: 'Simulation error', description: 'PySD could not load or integrate the model. This is the criterion that catches undefined references, missing equations and division blow-ups.' },
+        { name: 'No simulation output', description: 'The simulator returned no time steps at all.' },
+        { name: 'Simulation did not reach end time', description: 'The last reported time step falls short of the model’s own stop time by more than one time step — the run was cut off.' },
+        { name: 'Missing stock trajectory', description: 'The simulator returned no trajectory for one of the model’s stocks. Recorded once per stock.' },
+        { name: 'Non-finite simulation values', description: 'A stock produced a non-finite value, naming the stock and the time it happened — the model diverged instead of simulating cleanly to the end. Recorded once per stock.' }
+    ],
+    scoring: `The early stages are fatal and stop the evaluation: no model, no stock-and-flow structure, no usable specs, a failed conversion, a failed run, or no output each end it there. Once a run completes, the reaching-the-end check and the finiteness check both run, and each stock is reported separately, so a diverging model can record several failures at once. Nothing about the model’s content is graded here — a runnable model that is wrong about its domain passes this category, and is measured by the reasoning and translation categories instead.`
+});
+
+/**
  * The groups of tests to be evaluated as a part of this category
  */
 export const groups = {

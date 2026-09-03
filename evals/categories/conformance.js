@@ -551,6 +551,30 @@ export const evaluate = function(generatedResponse, requirements) {
 };
 
 /**
+ * Returns the methodology for this category: how its tests are built and run, what the evaluator
+ * checks, and how those checks combine into a verdict. Each `criteria[].name` is the exact failure
+ * `type` {@link evaluate} records when that criterion is not met. Rendered by the documentation
+ * site on every test page.
+ * @returns {{howItWorks: Array<string>, criteria: Array<{name: string, description: string}>, scoring: string}}
+ */
+export const methodology = () => ({
+    howItWorks: [
+        `Conformance is instruction-following, so it has to be measured where more than one right answer exists. Two open-ended real-world cases carry every test — a feedback-based explanation of how the American Revolution came about, and one of road rage — each with a fixed problem statement and background knowledge. One conformance instruction is appended to that base, and it is the instruction, not the domain, that is under test. A synthetic ground-truth universe would not work here: it admits a single correct representation, so asking an engine to simplify or elaborate it would be asking for something wrong.`,
+        `Nine instructions are applied to each case, giving 18 tests in two groups. "specificConformance" names three variables the response must contain — Taxation, Anti British Sentiment and Colonial Identity for the Revolution; Traffic Congestion, Driver Stress and Accidents for road rage. "genericConformance" sets numeric limits: at least 10 or no more than 5 variables, at least 8 or no more than 4 feedback loops, and four instructions that constrain loops and variables at once. The values are chosen to be demanding at both ends, since simplifying on request is as much a test as elaborating.`,
+        `The response is read as a causal graph. Relationships are the model's own, plus one derived per stock flow — each inflow a positive link into its stock, each outflow a negative one — so a stock-and-flow answer is counted the same way a causal loop diagram is. Variables are the distinct endpoints of those relationships, normalized case- and separator-insensitively, so "Driver Stress", "driver_stress" and "driverstress" are one variable rather than three.`,
+        `Feedback loops are the elementary cycles of that graph, counted with Johnson's algorithm, and only when a test actually constrains them. Counting stops once it passes the limit that would settle the test, so a "too many feedback loops" failure may report a floor ("at least N") rather than an exact total.`
+    ],
+    criteria: [
+        { name: 'Missing required variable', description: 'A variable the instruction named is not among the model’s relationship endpoints. Recorded once per missing variable, alongside the variables that were present.' },
+        { name: 'Too few variables', description: 'The model holds fewer distinct variables than the instruction’s minimum.' },
+        { name: 'Too many variables', description: 'The model holds more distinct variables than the instruction’s maximum.' },
+        { name: 'Too few feedback loops', description: 'Fewer elementary cycles were found than the instruction’s minimum.' },
+        { name: 'Too many feedback loops', description: 'More elementary cycles were found than the instruction’s maximum.' }
+    ],
+    scoring: `Only the constraints a given test sets are checked, and each is independent — a test that limits both loops and variables can fail on either or both. Nothing about the substance of the explanation is graded here: a conformant answer passes whether or not it is a good account of the Revolution, and that separation is deliberate, since causal reasoning is measured by its own categories.`
+});
+
+/**
  * The groups of tests to be evaluated as a part of this category
  */
 export const groups = {

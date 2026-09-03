@@ -291,6 +291,30 @@ export const description = () => {
 };
 
 
+/**
+ * Returns the methodology for this category: how its tests are built and run, what the evaluator
+ * checks, and how those checks combine into a verdict. Each `criteria[].name` is the exact failure
+ * `type` {@link evaluate} records when that criterion is not met. Rendered by the documentation
+ * site on every test page.
+ * @returns {{howItWorks: Array<string>, criteria: Array<{name: string, description: string}>, scoring: string}}
+ */
+export const methodology = () => ({
+    howItWorks: [
+        `Where modular reasoning asks an engine to build a partitioned model from a description, this category asks it to restructure a model that already exists — the everyday work of reorganizing someone else's model without changing what it says. Each test hands over a complete model as the current model and asks for one specific transformation of it.`,
+        `The four groups are the four transformations: "modularize" turns a flat model into a modular one, "demodularize" flattens a modular model back out, "addModule" introduces a further module into a modular model, and "deleteModule" removes one. The domains are a predator–prey ecosystem and an urban dynamics model.`,
+        `Because the answer has to be checkable, each prompt fixes the naming convention exactly: which module names to use, how components are renamed as they move into a module (module membership is a dotted prefix, so "hare.births" is "births" inside "hare"), how ghosts are named when a value defined in one module is referenced from another, and that names of components staying outside modules are preserved. Prompts also ask that the key causal relationships and processes be preserved exactly, adding as few new variables as possible — restructuring, not rebuilding.`,
+        `Grading is the same machinery as modular reasoning. Expectations name the modules the result must contain and the processes it must carry, where a process combines stocks, flows, causal relationships with polarity, and typed variables — including, for the modular targets, the cross-level ghosts that make legitimate cross-module references. Names are matched lower-cased and ignoring spaces, underscores and hyphens, with either name allowed to contain the other, and type is checked alongside the name. Modules are compared as a set in both directions, so an answer partitioned its own way fails even if the structure inside is right.`
+    ],
+    criteria: [
+        { name: 'No stocks found', description: 'The result declares no stock variables, so it is not a quantitative stock-and-flow model.' },
+        { name: 'No flows found', description: 'The result declares no flow variables.' },
+        { name: 'Missing module', description: 'A module the transformation called for does not appear as a prefix on any variable — including, for the flattening tests, the requirement that no modules remain. Recorded once per module.' },
+        { name: 'Unexpected module', description: 'The result kept or created a module the transformation did not call for. Recorded once per module; for a flattening test this is what catches modules that were left in place.' },
+        { name: 'Missing key process', description: 'A process the original model carried is not adequately represented in the result. Recorded once per process, naming which required stocks, flows, relationships and typed variables were missing, including any expected cross-level ghost.' }
+    ],
+    scoring: `The module set must match exactly and every process carried over from the original must still be fully represented; any single failure fails the test. This category also holds a check, disabled in the code today, that would fail any direct link between two different modules that does not go through a ghost — it is left off deliberately, so cross-module links are not currently penalized on their own.`
+});
+
 export const groups = {
     "modularize": [
         generateTest(

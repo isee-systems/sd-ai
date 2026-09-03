@@ -285,6 +285,30 @@ export const description = () => {
 };
 
 /**
+ * Returns the methodology for this category: how its tests are built and run, what the evaluator
+ * checks, and how those checks combine into a verdict. Each `criteria[].name` is the exact failure
+ * `type` {@link evaluate} records when that criterion is not met. Rendered by the documentation
+ * site on every test page.
+ * @returns {{howItWorks: Array<string>, criteria: Array<{name: string, description: string}>, scoring: string}}
+ */
+export const methodology = () => ({
+    howItWorks: [
+        `Modules are how a stock-and-flow model stays readable as it grows, and organizing structure into them is a modeling skill in its own right. This category adds that skill to the quantitative causal reasoning task: each test supplies expert knowledge about a domain — predator–prey ecosystems, a consulting-business hierarchy, a population drawing on a limited resource — and asks for a model that is not only substantively right but partitioned exactly as instructed.`,
+        `The three groups vary how much partitioning is asked for: "noModules" wants the structure flat, "twoModules" and "threeModules" want it split across the named modules. Module membership is expressed in the variable name, as a dotted prefix, so "foxes.count" is the variable "count" inside the module "foxes".`,
+        `Expectations name both the modules the model must contain and the processes it must carry. Process requirements combine stocks, flows, causal relationships with polarity, and further typed variables, exactly as in quantitative causal reasoning — with one addition: a required variable may also name what it must be a cross-level ghost of, which is how a value defined in one module is legitimately referenced from another. That is what makes cross-module structure checkable rather than merely present.`,
+        `Names are matched flexibly — lower-cased with spaces, underscores and hyphens removed, and either name may contain the other — and type is checked alongside the name, so a required stock cannot be satisfied by an auxiliary. Modules are compared as a set, in both directions: a module missing from the answer and a module invented by it are both failures, because the instruction fixed the partition.`
+    ],
+    criteria: [
+        { name: 'No stocks found', description: 'The model declares no stock variables, so it is not a quantitative stock-and-flow model.' },
+        { name: 'No flows found', description: 'The model declares no flow variables.' },
+        { name: 'Missing module', description: 'A module the instruction named does not appear as a prefix on any variable. Recorded once per module.' },
+        { name: 'Unexpected module', description: 'The model created a module the instruction did not ask for. Recorded once per module — an answer partitioned its own way is not the answer requested.' },
+        { name: 'Missing key process', description: 'An expert-identified process is not adequately represented. Recorded once per process, naming which required stocks, flows, relationships and typed variables were missing, including any expected cross-level ghost.' }
+    ],
+    scoring: `The module set must match exactly and every expected process must be fully represented; any single failure fails the test. Extra structure inside the right modules is not penalized. This category holds a further check, disabled in the code today, that would fail any direct link between two different modules that does not go through a ghost — it is left off deliberately, so cross-module links are not currently penalized on their own.`
+});
+
+/**
  * The groups of tests to be evaluated as a part of this category
  */
 export const groups = {

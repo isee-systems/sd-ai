@@ -242,6 +242,30 @@ expert-identified stocks, flows, variables, and relationships across domains lik
 };
 
 /**
+ * Returns the methodology for this category: how its tests are built and run, what the evaluator
+ * checks, and how those checks combine into a verdict. Each `criteria[].name` is the exact failure
+ * `type` {@link evaluate} records when that criterion is not met. Rendered by the documentation
+ * site on every test page.
+ * @returns {{howItWorks: Array<string>, criteria: Array<{name: string, description: string}>, scoring: string}}
+ */
+export const methodology = () => ({
+    howItWorks: [
+        `This is the stock-and-flow counterpart to qualitative causal reasoning: not whether a model is well formed, but whether it is substantively right about a real system. Each test supplies expert knowledge about a domain — epidemic spread and healthcare capacity under public health, traffic congestion and induced demand under urban planning — and asks for a quantitative model capturing the key causal processes described in it.`,
+        `Expectations are expressed as processes. Each names some combination of the stocks it needs, the flows it needs, the causal relationships that must connect them (with polarity where it matters), and further variables required to be of a particular type. Grouping requirements into processes means a failure says which mechanism of the domain the model missed rather than just listing absent names.`,
+        `Names are matched flexibly: lower-cased with spaces, underscores and hyphens removed, and either name may contain the other, so "Infected Population" satisfies an expectation for "infected". Type is checked alongside the name, so a stock the expectations call for cannot be satisfied by an auxiliary with a matching name — the distinction between what accumulates and what is computed is the substance of a stock-and-flow model.`,
+        `Required relationships must be present as a direct link between variables the model declares, with the stated polarity. Unlike qualitative causal reasoning, no indirect chain is accepted here: in a quantitative model the intended influence is expected to be written where it acts.`,
+        `The model's declared time unit is checked too — the model's specs must name a unit containing the one the test expects, case-insensitively.`
+    ],
+    criteria: [
+        { name: 'No stocks found', description: 'The model declares no stock variables, so it is not a quantitative stock-and-flow model.' },
+        { name: 'No flows found', description: 'The model declares no flow variables.' },
+        { name: 'Incorrect time unit', description: 'The model’s simulation specs do not name the time unit the domain calls for.' },
+        { name: 'Missing key process', description: 'An expert-identified process is not adequately represented. Recorded once per process, naming exactly which required stocks, flows, relationships (with polarity) and typed variables were missing.' }
+    ],
+    scoring: `Every expected process must be fully represented: one missing element within a process fails that process, and one failed process fails the test. Extra structure is not penalized — a model may be richer than the expectations, it just may not be missing any of them.`
+});
+
+/**
  * The groups of tests to be evaluated as a part of this category
  */
 export const groups = {

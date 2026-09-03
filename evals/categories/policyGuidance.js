@@ -352,6 +352,29 @@ export const evaluate = async function(generatedResponse, expectations) {
 };
 
 /**
+ * Returns the methodology for this category: how its tests are built and run, what the evaluator
+ * checks, and how those checks combine into a verdict. Each `criteria[].name` is the exact failure
+ * `type` {@link evaluate} records when that criterion is not met. Rendered by the documentation
+ * site on every test page.
+ * @returns {{howItWorks: Array<string>, criteria: Array<{name: string, description: string}>, scoring: string}}
+ */
+export const methodology = () => ({
+    howItWorks: [
+        `The engine is put in the position of a tutor. Each case hands it a complete, pre-built model that behaves badly — an arms race that escalates without bound, a Bass diffusion that takes off too slowly, an inventory–workforce system that oscillates, or Forrester's market growth model whose growth stalls — together with the model's precomputed feedback-loop dominance analysis. The prompt speaks in a novice's voice, states the current behavior and the desirable behavior wanted instead, and asks for policies that would move the system there, why they work in terms of the model's feedback structure, and guiding questions that let the learner reason it out.`,
+        `Each case's ground truth is the well-established leverage story for that model, written as key policy insights and phrased conceptually rather than by variable name, so the check is whether the idea reached the learner. Every case also carries one further requirement that is not about content at all: the discussion must actually pose guiding questions rather than lecture.`,
+        `Grading is one structured-output call to a fixed judge model (the configured eval model, independent of the engine under test), scoring every insight and the guiding-questions requirement at once. An insight counts as covered whether it is stated outright or reached through a question, so genuine Socratic teaching is not penalized. Because every criterion for a case reads the same discussion, that judge pass is cached and runs once per distinct discussion rather than once per criterion.`,
+        `Each criterion is its own test row: a case with five key insights produces six tests — one per insight, plus the guiding-questions check — all sharing a single engine generation. The result is a per-insight score for each model rather than one all-or-nothing verdict, which is what makes it visible whether an engine misses one leverage point or teaches nothing at all.`
+    ],
+    criteria: [
+        { name: 'Missing key policy insight', description: 'The insight this test row is responsible for did not reach the novice — neither stated nor drawn out by a guiding question. The insight and the judge’s note are recorded with the failure.' },
+        { name: 'No guiding questions for the novice', description: 'On the guiding-questions test row: the discussion did not pose genuine questions to help the learner reason about the leverage points themselves.' },
+        { name: 'No response produced', description: 'The engine returned no discussion text to assess; any engine error is recorded with the failure.' },
+        { name: 'Evaluation error', description: 'The judge call or the parsing of its structured output failed. Recorded as a failure rather than passed silently, so a broken judge never reads as a good answer.' }
+    ],
+    scoring: `Each test row grades exactly one criterion and passes or fails on that alone, so a model's score is the fraction of its insights that landed, plus the guiding-questions row. Difficulty rises across the groups with the size and feedback complexity of the model the engine has to reason about.`
+});
+
+/**
  * The groups of tests to be evaluated as a part of this category. Difficulty rises with the size
  * and feedback complexity of the example model the engine must reason about.
  */

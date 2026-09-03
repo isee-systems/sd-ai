@@ -135,6 +135,26 @@ export const evaluate = async function(generatedResponse, expectations) {
 
 
 /**
+ * Returns the methodology for this category: how its tests are built and run, what the evaluator
+ * checks, and how those checks combine into a verdict. Each `criteria[].name` is the exact failure
+ * `type` {@link evaluate} records when that criterion is not met. Rendered by the documentation
+ * site on every test page.
+ * @returns {{howItWorks: Array<string>, criteria: Array<{name: string, description: string}>, scoring: string}}
+ */
+export const methodology = () => ({
+    howItWorks: [
+        `Each test hands the engine a complete, classic model — an arms race, Bass diffusion, an inventory–workforce system, predator–prey, Forrester's market growth model, or the Mai-Bab predator–prey-and-food model — together with that model's precomputed feedback-loop dominance analysis, and asks it to explain the model's behavior over time from that analysis. Supplying the dominance analysis is what makes the task an explanation task: the engine is not asked to derive which loops dominate when, it is asked to say what that means.`,
+        `A test's expectations are a list of facts an expert explanation of that model would carry: which loop drives which phase of the behavior, which loop takes over and when, what the resulting shape is. Each fact states exactly one checkable claim. Conjunctions are deliberately split, because the judge answers true or false about a whole statement — an explanation that covered two of three conjoined claims would otherwise score zero for all three — and the dominance facts name the periods rather than enumerating exact year ranges, since identifying a period's dominant loop is the understanding being measured, not reproducing dates verbatim.`,
+        `Grading runs one judge call per fact. The engine's text and a single statement go to a fixed judge model (the configured eval model, independent of the engine under test), which is asked whether the statement is clearly supported by that text and nothing else; anything unsupported or contradicted is false. Facts are therefore scored independently of each other and of the order in which the explanation happens to raise them.`
+    ],
+    criteria: [
+        { name: 'Missing expected fact', description: 'A fact an expert explanation would carry was not clearly supported by the engine’s text. Recorded once per fact, quoting the fact that was missing.' },
+        { name: 'Evaluation error', description: 'A judge call failed for some fact. Recorded as a failure rather than passed silently, so a broken judge never reads as a good answer.' }
+    ],
+    scoring: `Every fact must be present: one missing fact fails the test. There is no credit for partial coverage and no penalty for saying more than the facts require — an explanation may add correct material freely, as long as everything expected is in there.`
+});
+
+/**
  * The groups of tests to be evaluated as a part of this category
  *
  * Each expected fact states ONE checkable claim. The judge is asked whether a statement is

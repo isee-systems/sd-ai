@@ -296,6 +296,34 @@ export const evaluate = function(generatedResponse, groundTruth) {
     return validateEvaluationResult(failures);
 };
 
+/**
+ * Returns the methodology for this category: how its tests are built and run, what the evaluator
+ * checks, and how those checks combine into a verdict. Each `criteria[].name` is the exact failure
+ * `type` {@link evaluate} records when that criterion is not met. Rendered by the documentation
+ * site on every test page.
+ * @returns {{howItWorks: Array<string>, criteria: Array<{name: string, description: string}>, scoring: string}}
+ */
+export const methodology = () => ({
+    howItWorks: [
+        `This is causal translation with numbers attached: the engine must recover a simulating stock-and-flow structure from a written description. As in the qualitative version, variable names are gibberish nouns, so nothing can be answered from world knowledge — every stock, rate and initial value has to come from the text. The English description and the ground-truth structure are generated together from one specification, so they cannot disagree.`,
+        `Each specification names a time unit and a set of stocks, each with an initial value and its inflows and outflows. A flow is either fixed — a constant amount per time unit — or proportional, a percentage either of the stock it feeds or of another stock in the system, which is what creates interdependence between stocks and, when two stocks draw on each other, feedback. The prose renders all of this in ordinary business language ("we begin with sixty frimbulators… every day, this inventory gets replenished by 20% of the current whatajigs count"), with the phrasing drawn at random and numbers spelled out as words, so the numeral cannot simply be copied.`,
+        `The five groups scale the structure from a single stock up to five interacting stocks, including linear chains, feedback, convergent structures, and mixed fixed and proportional flows.`,
+        `Grading reads the returned model's stock variables and compares them to the ground truth as sets, matched on pluralization-tolerant names — the prose pluralizes every noun and the answer may come back in either form. Then, for each matched stock: the initial value must equal the ground truth, either directly as the stock's equation or through a variable the equation references; the number of inflows and the number of outflows must match exactly; and every flow in the specification must be found among the flow variables that stock names.`,
+        `Matching a flow means matching its arithmetic, not its name. A proportional flow is satisfied by a flow variable whose equation multiplies and contains the rate — or multiplies and draws on a cause variable whose own equation is that rate, which is how a well-formed model parameterizes it. A fixed flow is satisfied by an equation that is the constant, or that references a variable holding it. Engines are therefore free to name flows and parameters however they like, so long as the arithmetic is right.`,
+        `The model's declared time unit must also match the one the description used.`
+    ],
+    criteria: [
+        { name: 'Real stocks not found', description: 'Stocks the description called for are missing from the model. Recorded once, listing them alongside the full ground truth.' },
+        { name: 'Fake stock found', description: 'The model contains stocks the description never mentioned. Recorded once, listing them — inventing accumulations is as wrong as omitting them.' },
+        { name: 'Incorrect time unit discovered', description: 'The model’s simulation specs name a different time unit than the description used, or none at all.' },
+        { name: 'Incorrect initial value discovered', description: 'A stock’s initial value is not the one the description gave, whether written directly or through a variable it references. Recorded once per stock.' },
+        { name: 'Incorrect number of inflows discovered', description: 'A stock has more or fewer inflows than the description specified. Recorded once per stock; the flows themselves are only matched when the count agrees.' },
+        { name: 'Incorrect number of outflows discovered', description: 'A stock has more or fewer outflows than the description specified. Recorded once per stock.' },
+        { name: 'Failed to find flow matching specification', description: 'No flow on the stock has the arithmetic the description called for — the wrong rate or constant, or a rate that is not applied multiplicatively. Recorded once per unmatched flow, quoting the specification that went unmet.' }
+    ],
+    scoring: `The structure must match the description exactly: the right stocks and no others, the right initial values, the right number of flows on each stock, every flow computing what it should, and the right time unit. Any single failure fails the test. Names of flows and parameters are free, and so is any extra auxiliary structure used to compute the right numbers.`
+});
+
 export const groups = {
     "singleStock": [
         generateTest("Extract a single stock with one flow", "day", [

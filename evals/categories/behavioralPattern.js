@@ -232,6 +232,33 @@ const behavioralPatterns = [
 ];
 
 /**
+ * Returns the methodology for this category: how its tests are built and run, what the evaluator
+ * checks, and how those checks combine into a verdict. Each `criteria[].name` is the exact failure
+ * `type` {@link evaluate} records when that criterion is not met. Rendered by the documentation
+ * site on every test page.
+ * @returns {{howItWorks: Array<string>, criteria: Array<{name: string, description: string}>, scoring: string}}
+ */
+export const methodology = () => ({
+    howItWorks: [
+        `Each test names one behavior over time — exponential growth, exponential decay, logistic (S-curve) growth, logistic decay, or sustained oscillation — and asks the engine to build a model that produces it. The prompt requires a variable named exactly "output", which is the one series the evaluation reads, and the background knowledge explains the mechanism behind the pattern (which feedback loops dominate, and what a natural structure looks like). The point is whether the engine can realize a named behavior, not whether it can guess what was meant.`,
+        `Grading is behavioral rather than structural: no part of the model's shape is checked. The returned sd-json is converted to XMILE, simulated with PySD, and the resulting "output" trajectory is handed to the time-series-behavior-analysis classifier, which labels the series and reports how much probability it assigns to that shape. Any structure that genuinely produces the requested behavior is accepted.`,
+        `The test passes when the classifier's label is the behavior the test asked for and its confidence in that shape is at least 0.5. The confidence floor is what keeps an ambiguous series — one that could be read as either of two patterns — from counting as a clean example of the one requested.`
+    ],
+    criteria: [
+        { name: 'Missing model', description: 'The response carried no model, so there is nothing to simulate.' },
+        { name: 'Missing output variable', description: 'No variable in the model is named "output" (matched case-insensitively, exactly). The evaluation reads only that series, so the target behavior cannot be located.' },
+        { name: 'XMILE conversion error', description: 'The model could not be converted to XMILE for the simulator — usually a structural problem in the returned sd-json.' },
+        { name: 'Simulation error', description: 'PySD could not load or run the model, so no behavior was produced to classify.' },
+        { name: 'Invalid simulation output', description: 'The run produced no usable time series for "output".' },
+        { name: 'Behavior classification error', description: 'The classifier itself failed on the series it was given.' },
+        { name: 'Incorrect behavioral pattern', description: 'The simulated "output" was classified as a different behavior than the one requested. The detected label and its confidence are recorded with the failure.' },
+        { name: 'Low confidence in pattern detection', description: 'The classifier did pick the requested behavior, but with confidence below 0.5 — the series is not a convincing instance of the pattern.' },
+        { name: 'Unexpected evaluation error', description: 'Anything else thrown while evaluating, surfaced rather than swallowed so the test cannot pass by accident.' }
+    ],
+    scoring: `Five behaviors, one test each, in a single group. The checks run in order and each early one is fatal: a missing model, a missing "output", a failed conversion or a failed simulation ends the evaluation there, so a failing test normally records one failure rather than a list.`
+});
+
+/**
  * The groups of tests to be evaluated as a part of this category
  */
 export const groups = {

@@ -946,6 +946,46 @@ const gasLawTests = [
 ];
 
 /**
+ * Returns the methodology for this category: how its tests are built and run, what the evaluator
+ * checks, and how those checks combine into a verdict. Each `criteria[].name` is the exact failure
+ * `type` {@link evaluate} records when that criterion is not met. Rendered by the documentation
+ * site on every test page.
+ * @returns {{howItWorks: Array<string>, criteria: Array<{name: string, description: string}>, scoring: string}}
+ */
+export const methodology = () => ({
+    howItWorks: [
+        `Physics is the rare domain where a model can be checked against a law rather than against an opinion, and that is what this category exploits. Three groups cover three systems: pendulums (Newton's laws for rotational motion), spring-mass systems (Hooke's law and simple harmonic motion), and gases (the ideal gas law). Each group runs three variants — for the oscillators an undamped case, a damped case, and one taken outside the small-angle or small-displacement regime; for gases an isothermal, an isobaric and an isochoric process.`,
+        `Each prompt fixes the variable names the evaluation will read — "angle", "angular_velocity" and "angular_acceleration" for pendulums; "position", "velocity" and "acceleration" for spring-mass systems; "pressure", "volume" and "temperature" for gases — and the background knowledge states the governing equations outright. Nothing about the physics is hidden, so what is measured is whether the engine can build a structure that actually obeys the law it was handed.`,
+        `The returned model is converted to XMILE, simulated with PySD, and the resulting trajectories are tested against the law. Everything is checked numerically on the simulated series; no credit is given for a model that merely looks right. Which set of checks runs is chosen by the test's evaluation type.`,
+        `For both oscillators the acceleration series is regressed on a restoring term and a velocity term by least squares — sin(angle) for the pendulum, position for the spring — which recovers the equation of motion the model actually implements: the restoring coefficient must be negative (acceleration points back toward equilibrium), the fit must explain the series with R² of at least 0.90, and the velocity coefficient must not be positive, since a positive one is a term feeding energy into the system. Alongside that, the series must genuinely oscillate (a non-trivial range and at least two equilibrium crossings), the stated velocity must match the numerical derivative of the stated displacement to within 20% average relative error, and the amplitude must not grow unbounded (the second half's peak may not exceed twice the first half's).`,
+        `For gases the test is the ideal gas law itself: PV/T is computed over the run and its coefficient of variation must stay below 0.15, since PV/T is constant when n and R are. Pressure, volume and absolute temperature must all remain non-negative, at least one sampled instant must have all three strictly positive, and no variable may span more than a factor of 1000 between its minimum and maximum.`
+    ],
+    criteria: [
+        { name: 'Missing model', description: 'The response carried no model, so there is nothing to simulate.' },
+        { name: 'Missing required variables', description: 'The model does not define the variables the test named, or the simulation returned no series for one of them. Names are matched case-insensitively and ignoring spaces and underscores.' },
+        { name: 'XMILE conversion error', description: 'The model could not be converted to XMILE for the simulator.' },
+        { name: 'Simulation error', description: 'PySD could not load or run the model, so there is no behavior to check against the law.' },
+        { name: 'Inconsistent time series lengths', description: 'The returned series do not all cover the same time steps, so they cannot be compared point by point.' },
+        { name: 'No oscillation detected', description: 'The displacement barely moves across the whole run, so the model does not represent an oscillator at all.' },
+        { name: 'Insufficient oscillations', description: 'Fewer than two equilibrium crossings were found — not enough motion to characterize periodic behavior.' },
+        { name: "Newton's second law violation", description: 'For a pendulum, the best-fit sin(angle) coefficient in the recovered equation of motion is not negative, so angular acceleration does not point back toward equilibrium.' },
+        { name: "Hooke's law violation", description: 'For a spring-mass system, the best-fit position coefficient is not negative, so acceleration does not point back toward equilibrium.' },
+        { name: 'Equation of motion violation', description: 'The acceleration series could not be fitted to a restoring-force-plus-damping model, or the fit explains it with R² below 0.90 — the model is not moving under the equation it was asked for.' },
+        { name: 'Energy conservation violation', description: 'The recovered equation of motion carries a positive velocity coefficient, a term that adds energy to the system instead of dissipating or conserving it.' },
+        { name: 'Kinematic consistency violation', description: 'The velocity series is not the derivative of the displacement series: average relative error against the numerical derivative exceeds 20%.' },
+        { name: 'Unbounded growth', description: 'The oscillator’s amplitude more than doubles between the first and second halves of the run, or a gas variable spans more than a factor of 1000 — non-physical in either case.' },
+        { name: 'Ideal gas law violation', description: 'PV/T is not constant across the run: its coefficient of variation exceeds 0.15.' },
+        { name: 'Invalid gas state', description: 'No instant in the run has pressure, volume and temperature all strictly positive, so the ideal gas law cannot be evaluated.' },
+        { name: 'Non-physical pressure', description: 'Pressure goes negative at some point in the run.' },
+        { name: 'Non-physical volume', description: 'Volume goes negative at some point in the run.' },
+        { name: 'Non-physical temperature', description: 'Absolute temperature goes negative at some point in the run.' },
+        { name: 'Unexpected evaluation error', description: 'Anything else thrown while evaluating, surfaced rather than swallowed so the test cannot pass by accident.' },
+        { name: 'Unknown evaluation type', description: 'The test named an evaluation type this category has no validator for — a fault in the test definition rather than in the engine.' }
+    ],
+    scoring: `The setup checks are fatal and run in order: a missing model, missing variables, a failed conversion or a failed simulation ends the evaluation there. Once a run exists, every physics check applicable to that system runs and each violation is recorded separately, so a badly-formulated oscillator commonly fails several at once. Which criteria apply depends on the system: the oscillator checks and the gas checks never both run for the same test.`
+});
+
+/**
  * The groups of tests to be evaluated as a part of this category
  */
 export const groups = {

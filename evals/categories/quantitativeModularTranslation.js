@@ -434,6 +434,34 @@ export const evaluate = function(generatedResponse, groundTruth) {
     return failures 
 };
 
+/**
+ * Returns the methodology for this category: how its tests are built and run, what the evaluator
+ * checks, and how those checks combine into a verdict. Each `criteria[].name` is the exact failure
+ * `type` {@link evaluate} records when that criterion is not met. Rendered by the documentation
+ * site on every test page.
+ * @returns {{howItWorks: Array<string>, criteria: Array<{name: string, description: string}>, scoring: string}}
+ */
+export const methodology = () => ({
+    howItWorks: [
+        `This is quantitative causal translation with the answer required to be modular: the same gibberish-universe descriptions of stocks, initial values and fixed or proportional flows, but each component must become its own module, and any value one module borrows from another must be a properly named cross-level ghost. Nothing in the task can be answered from world knowledge — the structure has to come from the text — and the English and the ground truth are generated together from one specification.`,
+        `The prompt fixes the convention so the result is checkable: one module per component named for the object (pluralized), the quantity of the object held in a component called "count" inside it (so "whatajigs.count"), any flow name allowed, and a ghost of another module's count named for its full path with the period replaced by a space ("whatajigs.frimbulators count"). The ground truth is derived from the same convention, so an engine that follows the instruction and one that invents its own naming are distinguishable.`,
+        `The five groups scale from a single module up to five, including linear chains, feedback between modules, convergent structures, and mixed fixed and proportional flows. Every proportional flow that draws on another module is what forces a cross-level ghost to exist.`,
+        `Grading first compares the modular stocks — the "count" variables inside each module — to the ground truth as sets, matched on pluralization-tolerant names that also tolerate an engine using a longer name than the ground truth one. Then it checks the ghosts: for each expected cross-level reference, the model must hold a variable whose name matches and which declares itself a ghost of the right variable in the other module. A model that reaches across modules without ghosting therefore fails, which is precisely the modular discipline being measured.`,
+        `Each matched stock is then checked as in quantitative translation: the initial value must equal the ground truth, directly or through a variable the equation references (compared with and without the module prefix); the number of inflows and outflows must match exactly; and every flow in the specification must be found among the flows that stock names, matched on arithmetic — a proportional flow multiplying and carrying the rate, or drawing on a cause variable whose equation is the rate; a fixed flow equal to the constant or referencing a variable holding it. The declared time unit must match as well.`
+    ],
+    criteria: [
+        { name: 'Real stocks not found', description: 'Module counts the description called for are missing from the model. Recorded once, listing them alongside the full ground truth.' },
+        { name: 'Fake stock found', description: 'The model contains stocks the description never mentioned. Recorded once, listing them.' },
+        { name: 'Cross-level ghost variables not found', description: 'A value borrowed from another module is not present as a ghost of the right variable — either absent, misnamed, or a plain copy that does not declare what it ghosts. Recorded once, listing every expected ghost that was missing.' },
+        { name: 'Incorrect time unit discovered', description: 'The model’s simulation specs name a different time unit than the description used, or none at all.' },
+        { name: 'Incorrect initial value discovered', description: 'A module count’s initial value is not the one the description gave. Recorded once per stock.' },
+        { name: 'Incorrect number of inflows discovered', description: 'A stock has more or fewer inflows than the description specified. Recorded once per stock; flows are only matched when the count agrees.' },
+        { name: 'Incorrect number of outflows discovered', description: 'A stock has more or fewer outflows than the description specified. Recorded once per stock.' },
+        { name: 'Failed to find flow matching specification', description: 'No flow on the stock has the arithmetic the description called for. Recorded once per unmatched flow, quoting the specification that went unmet.' }
+    ],
+    scoring: `The modular structure must match the description exactly — the right module counts and no others, every cross-module reference ghosted correctly, the right initial values and flow counts, every flow computing what it should, and the right time unit. Any single failure fails the test. Flow and parameter names remain free, as does extra auxiliary structure used to arrive at the right numbers.`
+});
+
 export const groups = {
     "singleModule": [
         generateTest("Extract a single module system with one flow", "day", [

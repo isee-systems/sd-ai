@@ -228,11 +228,28 @@ async function generateEvals() {
       link = null;
     }
 
+    // How the category's tests are built and run, what its evaluator checks, and how those
+    // checks combine into a verdict. Rendered on every test page, and read from the category
+    // module rather than restated here so the explanation cannot drift from `evaluate`.
+    let methodology = null;
+    try {
+      methodology = mod.methodology ? mod.methodology() : null;
+    } catch (e) {
+      console.warn(`  ! eval category "${name}" methodology() threw: ${e.message}`);
+      methodology = null;
+    }
+    if (!methodology) {
+      // Surfaced rather than passed over: a category with no methodology renders a test page
+      // that cannot say how it is graded, which is the thing these pages exist to explain.
+      console.warn(`  ! eval category "${name}" exports no methodology()`);
+    }
+
     categories.push({
       name,
       groups,
       description,
       link,
+      methodology,
       source: `${GH_BASE}/evals/categories/${name}.js`,
       firstTestUrl,
     });

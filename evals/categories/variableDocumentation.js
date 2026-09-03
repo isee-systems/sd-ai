@@ -309,6 +309,30 @@ export const evaluate = async function(generatedResponse, expectations) {
 };
 
 /**
+ * Returns the methodology for this category: how its tests are built and run, what the evaluator
+ * checks, and how those checks combine into a verdict. Each `criteria[].name` is the exact failure
+ * `type` {@link evaluate} records when that criterion is not met. Rendered by the documentation
+ * site on every test page.
+ * @returns {{howItWorks: Array<string>, criteria: Array<{name: string, description: string}>, scoring: string}}
+ */
+export const methodology = () => ({
+    howItWorks: [
+        `A model nobody can read is not much use, so this category measures whether an engine documents what it builds. Seven build scenarios rise in difficulty from a single stock to systems with feedback and delays: population growth and a savings account; inventory management and disease spread; software project rework, a fishery boom and bust, and market growth constrained by capacity. Each prompt asks for a complete stock-and-flow model and asks explicitly that every variable be documented with what it represents and its role in the system, so the test measures follow-through on an instruction the engine was given.`,
+        `Grading inspects the returned model rather than any prose around it. It has two stages, coverage then quality.`,
+        `Coverage: every variable must carry a non-empty documentation string. Ghost variables are excluded — in a modular model the flat variable list also holds cross-module reference copies, and the real variable, which is present too, is the one that carries the documentation, so requiring it on a ghost would fail every modular model spuriously.`,
+        `Quality: with coverage established, a single structured-output call to a fixed judge model (the configured eval model, independent of the engine under test) verifies each variable's documentation in turn. The judge sees each variable's structural role — type, units, equation, flows — and the causal links running into and out of it, so it can tell whether the documentation actually describes that variable's place in the system rather than restating its name. It returns a pass/fail verdict and a reason per variable.`,
+        `Graphical-function variables are described to the judge with care: their equation field holds only the lookup input, so the lookup points are spelled out and the equation labelled as the input. Without that, documentation correctly describing a non-linear relationship read as contradicting a linear assignment, and was wrongly flagged.`
+    ],
+    criteria: [
+        { name: 'No model produced', description: 'The engine returned no model containing variables to document; any engine error is recorded with the failure.' },
+        { name: 'Missing documentation', description: 'A variable has no documentation at all. Recorded once per variable, with its name and type.' },
+        { name: 'Low quality documentation', description: 'A variable is documented but the judge found the documentation inaccurate, vague, or merely a restatement of the variable’s name. Recorded once per variable, with the judge’s reason.' },
+        { name: 'Evaluation error', description: 'The judge call or the parsing of its structured output failed. Recorded as a failure rather than passed silently, so a broken judge never reads as a good answer.' }
+    ],
+    scoring: `Every variable must be documented and every piece of documentation must hold up: one undocumented or one poorly documented variable fails the test. The stages are sequential — if any variable is undocumented the evaluation stops there and no quality judging is done, so a test that fails on coverage says nothing about the quality of the documentation that was present. Nothing about the model’s correctness is graded here; that is what the reasoning and simulation categories are for.`
+});
+
+/**
  * The groups of tests to be evaluated as a part of this category
  */
 export const groups = {

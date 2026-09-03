@@ -325,6 +325,28 @@ export const link = () => {
 }
 
 /**
+ * Returns the methodology for this category: how its tests are built and run, what the evaluator
+ * checks, and how those checks combine into a verdict. Each `criteria[].name` is the exact failure
+ * `type` {@link evaluate} records when that criterion is not met. Rendered by the documentation
+ * site on every test page.
+ * @returns {{howItWorks: Array<string>, criteria: Array<{name: string, description: string}>, scoring: string}}
+ */
+export const methodology = () => ({
+    howItWorks: [
+        `To measure causal translation objectively there has to be an unarguable ground truth, so these tests are set in a fabricated universe. Variable names are drawn from a fixed list of gibberish nouns, which means nothing in the task can be answered from the model's own knowledge of the world: every relationship in the answer has to come from the text it was given. Each test generates a graph of causal links and the plain-English description of that graph in the same pass, so the prose the engine reads and the ground truth it is scored against are guaranteed to say the same thing.`,
+        `Causal sentences are built from a cause variable, an effect variable, a polarity and a polarity direction. Direction is which end the sentence starts from — "up" describes an increase in the cause, "down" a decrease — and both are exercised, since "more X, more Y" and "fewer X, fewer Y" state the same positive link and both have to be read correctly. Names are pluralized in the prose, and one of several phrasings is drawn at random for each sentence, so the task cannot be solved by pattern-matching a single template.`,
+        `The three groups escalate the structure being described rather than the sentences. "singleRelationship" is a lone causal sentence in all four polarity and direction combinations. "singleFeedbackLoop" is one closed loop of 2 to 8 variables, seven lengths for each loop polarity, alternating direction link by link. "multipleFeedbackLoops" describes sets of two, three, and five overlapping loops of various lengths and polarities — the case where relationships must be shared between loops rather than listed independently.`,
+        `Grading compares the returned relationships to the ground truth set as sets, matched on endpoints. Names are compared through pluralization-tolerant matching — the prose pluralizes every noun and the answer may come back singular, plural, or with a plural the engine regularized itself, and all of those name the same variable. Polarity is then checked on every relationship that matched.`
+    ],
+    criteria: [
+        { name: 'Real relationships not found', description: 'Relationships stated in the description are missing from the answer. Recorded once, listing what was missing alongside the full ground truth.' },
+        { name: 'Fake relationships found', description: 'The answer contains relationships the description never stated. Recorded once, listing the invented links — precision matters as much as recall here, since a fabricated link is a wrong reading of the text.' },
+        { name: 'Incorrect polarity discovered', description: 'A relationship was found with the right endpoints but the wrong sign. Recorded once per relationship.' }
+    ],
+    scoring: `The answer must be exactly the ground truth set, with correct polarities: one missing link, one invented link, or one flipped sign fails the test. Reasoning fields the engine attaches to a relationship are stripped before comparison, so explaining an answer never affects its score.`
+});
+
+/**
  * The groups of tests to be evaluated as a part of this category
  */
 export const groups = {

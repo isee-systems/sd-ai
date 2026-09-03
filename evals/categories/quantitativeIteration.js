@@ -374,6 +374,39 @@ export const evaluate = function(generatedResponse, groundTruth) {
     return validateEvaluationResult(failures);
 };
 
+/**
+ * Returns the methodology for this category: how its tests are built and run, what the evaluator
+ * checks, and how those checks combine into a verdict. Each `criteria[].name` is the exact failure
+ * `type` {@link evaluate} records when that criterion is not met. Rendered by the documentation
+ * site on every test page.
+ * @returns {{howItWorks: Array<string>, criteria: Array<{name: string, description: string}>, scoring: string}}
+ */
+export const methodology = () => ({
+    howItWorks: [
+        `This is the stock-and-flow counterpart to qualitative iteration: a model already exists and must be extended without being damaged. Each test hands the engine an existing stock-and-flow model as the current model, plus a written description of the stocks and flows to add, and grades both halves of that job — whether the new structure arrived, and whether the old structure survived intact.`,
+        `As in quantitative translation, the tests are set in a gibberish universe so nothing can be answered from world knowledge, and the English and the ground truth are generated from one specification. Added stocks come with initial values and flows that are either fixed amounts per time unit or proportional rates, and a proportional flow may draw on a stock that is already in the model handed over — which is how the new structure is made to connect to the old rather than sit beside it. Variables that already exist are named in the prose exactly as the model names them, not pluralized, so the description points at the right variable.`,
+        `The five groups scale the addition from a single stock to five, including self-contained systems, branching structures and mixed flow types.`,
+        `Grading compares the returned stocks against two references at once: the stocks the description asked for, and the stocks of the model that was handed over. Names are matched with pluralization-tolerant matching in either direction. A stock belonging to the model handed over is never counted as a fabrication — only stocks present in neither reference are — so preserving prior structure is rewarded rather than punished.`,
+        `Each pre-existing stock is then checked for damage: it must still be there, its initial value must be unchanged (directly or through a variable its equation references), and it must retain at least as many inflows and outflows as it had. "At least" is deliberate — the description may attach new flows to an existing stock, so the check is that nothing was removed.`,
+        `Each requested stock is checked as in quantitative translation: initial value equal to the ground truth, an exact match on the number of inflows and outflows, and every flow in the specification found among the flows that stock names, matched on arithmetic — a proportional flow multiplying and carrying the rate, or drawing on a cause variable whose equation is the rate; a fixed flow equal to the constant or referencing a variable holding it. The declared time unit must match as well.`
+    ],
+    criteria: [
+        { name: 'Pre-existing model structure missing', description: 'Stocks from the model handed to the engine are absent from what came back. Recorded once, listing them.' },
+        { name: 'Pre-existing stock missing', description: 'The per-stock form of the same problem, recorded while checking each pre-existing stock for damage.' },
+        { name: 'Pre-existing stock initial value changed', description: 'A stock that was handed over came back with a different initial value — the iteration altered structure it was only supposed to extend.' },
+        { name: 'Pre-existing stock inflows missing', description: 'A pre-existing stock came back with fewer inflows than it had. Adding flows is allowed; losing them is not.' },
+        { name: 'Pre-existing stock outflows missing', description: 'A pre-existing stock came back with fewer outflows than it had.' },
+        { name: 'Real stocks not found', description: 'Stocks the description asked for are missing. Recorded once, listing them alongside the full ground truth.' },
+        { name: 'Fake stock found', description: 'The model contains stocks that are in neither the requested set nor the model handed over. Recorded once, listing them.' },
+        { name: 'Incorrect time unit discovered', description: 'The model’s simulation specs name a different time unit than the description used, or none at all.' },
+        { name: 'Incorrect initial value discovered', description: 'A requested stock’s initial value is not the one the description gave. Recorded once per stock.' },
+        { name: 'Incorrect number of inflows discovered', description: 'A requested stock has more or fewer inflows than specified. Recorded once per stock; flows are only matched when the count agrees.' },
+        { name: 'Incorrect number of outflows discovered', description: 'A requested stock has more or fewer outflows than specified. Recorded once per stock.' },
+        { name: 'Failed to find flow matching specification', description: 'No flow on the stock has the arithmetic the description called for. Recorded once per unmatched flow, quoting the specification that went unmet.' }
+    ],
+    scoring: `Every check is independent and any single one fails the test, so an engine has to add exactly what was asked for, with the right numbers, and leave the model it was given standing. Flow and parameter names are free, as is extra auxiliary structure used to compute the right values.`
+});
+
 export const groups = {
     "singleStock": [
         generateTest("Add a single stock with one flow", "day", [

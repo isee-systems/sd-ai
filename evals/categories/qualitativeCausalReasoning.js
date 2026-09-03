@@ -255,6 +255,28 @@ variable groups and relationships across domains like public health and organiza
 };
 
 /**
+ * Returns the methodology for this category: how its tests are built and run, what the evaluator
+ * checks, and how those checks combine into a verdict. Each `criteria[].name` is the exact failure
+ * `type` {@link evaluate} records when that criterion is not met. Rendered by the documentation
+ * site on every test page.
+ * @returns {{howItWorks: Array<string>, criteria: Array<{name: string, description: string}>, scoring: string}}
+ */
+export const methodology = () => ({
+    howItWorks: [
+        `Where causal translation asks whether an engine can transcribe relationships it is handed, this category asks whether the diagram it builds is substantively right about a real system. Each test supplies expert knowledge about a domain — COVID-19 pandemic response, a mental health crisis, digital transformation in an organization — and asks for a causal loop diagram capturing the key variables and causal processes in it. Real domains are used deliberately: the question is whether the diagram carries the conceptual elements that make it useful for policy analysis and systems thinking.`,
+        `Expectations are expressed as variable groups, each naming the variables that must be present and the causal influences that must connect them, with polarity. A group is a coherent piece of the system's story, so failing one says which part of the domain the diagram missed rather than just that something was absent.`,
+        `Variable names are matched flexibly: names are lower-cased with spaces, underscores and hyphens removed, and either name may contain the other, so "Infection Rate", "infection_rate" and "daily infection rate" all satisfy an expectation for "infection rate".`,
+        `Required influences are checked against the diagram read as a signed directed graph, and are satisfied by a chain of up to three links, not only a single edge. A path's polarity is the product of its links, so two negative links compose to a positive influence. The expert prose describes influence in chains — transmission drives infections, which create pressure for interventions — and a modeler who writes that chain out has represented the influence being asked for; the bound is what keeps the requirement meaningful, since in a dense diagram an unbounded search connects almost any two variables. Relationship endpoints must also resolve to variables the model actually declares.`
+    ],
+    criteria: [
+        { name: 'No variables found', description: 'The response contains no variables — not a causal loop diagram at all.' },
+        { name: 'No causal relationships found', description: 'The response declares variables but no causal relationships between them.' },
+        { name: 'Missing key variable group', description: 'A group of expert-identified elements is not adequately represented. Recorded once per group, naming exactly which required variables and which required influences (with polarity) were missing.' }
+    ],
+    scoring: `Every expected variable group must be fully represented: one missing variable or one missing influence within a group fails that group, and one failed group fails the test. Additional variables and relationships beyond the expectations are not penalized — the diagram may be richer than the ground truth, it just may not be missing any of it.`
+});
+
+/**
  * The groups of tests to be evaluated as a part of this category
  */
 export const groups = {

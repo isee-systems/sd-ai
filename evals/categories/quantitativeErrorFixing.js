@@ -305,6 +305,37 @@ export const evaluate = async function(generatedResponse, groundTruth) {
     return validateEvaluationResult(failures);
 };
 
+/**
+ * Returns the methodology for this category: how its tests are built and run, what the evaluator
+ * checks, and how those checks combine into a verdict. Each `criteria[].name` is the exact failure
+ * `type` {@link evaluate} records when that criterion is not met. Rendered by the documentation
+ * site on every test page.
+ * @returns {{howItWorks: Array<string>, criteria: Array<{name: string, description: string}>, scoring: string}}
+ */
+export const methodology = () => ({
+    howItWorks: [
+        `Debugging someone else's formulations is ordinary modeling work, and it is testable because the correct model can be written down first. A single correct COVID epidemiological model is the reference; each test hands the engine a copy of it with specific formulation errors injected, and asks for the errors to be found, fixed, and explained — what was wrong, why it was wrong, and how it was fixed.`,
+        `The prompt is deliberately constraining: respect the existing formulation style (pipeline versus exponential delays and so on), add no variables, rename nothing, and under no circumstances add relationships or feedback loops. Without that, an engine could "fix" the model by rebuilding it, and the repair could not be told apart from a rewrite.`,
+        `The three groups are the three families of injected error: delay formulations, lookup (graphical function) formulations, and sum/aggregation formulations. Each test's expectations carry both the correct model and the list of errors that were injected, each naming a variable and stating the problem with it.`,
+        `Grading compares the returned model against the correct model variable by variable. Every variable in the correct model must be present, with the same type; where the correct variable has an equation, the returned equation must match; stocks must retain every inflow and outflow the correct model gives them; and where the correct variable declares units, the returned units must match. Variable and flow names are compared ignoring case and whitespace, so formatting differences are not treated as errors.`,
+        `Equations are compared textually, because an equation's form is part of what this category measures: DELAY3(Infection, tau) and Exposed/tau compute similar things, and only one of them is the pipeline delay the prompt asked to preserve. Whitespace and case are ignored, and two allowances keep bookkeeping out of the score — the same number written two ways (1.7e+07 and 17000000) counts as equal, and so does a plain sum whose terms are listed in a different order.`,
+        `Only if the model is entirely correct does grading go on to the explanation. The engine's explanation and a numbered list of the injected errors go to a fixed judge model (the configured eval model, independent of the engine under test) in a structured-output call that returns which errors the text identifies and explains — exact wording is not required, but the variable must be named and the nature of the error explained. A silent repair therefore does not pass: the engine has to be able to say what was wrong.`
+    ],
+    criteria: [
+        { name: 'Model structure missing', description: 'The response carried no model with variables, so there is nothing to compare against the correct model.' },
+        { name: 'Missing variable', description: 'A variable the correct model contains is absent from the returned model. Recorded once per variable.' },
+        { name: 'Incorrect variable type', description: 'A variable came back as the wrong kind — a stock turned into an auxiliary, say. Recorded once per variable.' },
+        { name: 'Incorrect equation', description: 'A variable’s equation does not match the correct model’s, quoting both. This is where an unfixed error, or a fix that broke something else, shows up.' },
+        { name: 'Missing inflow', description: 'A stock lost an inflow the correct model gives it. Recorded once per flow.' },
+        { name: 'Missing outflow', description: 'A stock lost an outflow the correct model gives it. Recorded once per flow.' },
+        { name: 'Incorrect units', description: 'A variable’s units do not match the correct model’s.' },
+        { name: 'Missing explanation', description: 'The model came back correct but with no explanation text to assess.' },
+        { name: 'Error not explained', description: 'An injected error was not identified and explained in the engine’s prose. Recorded once per error the judge did not find, naming the variable and the problem.' },
+        { name: 'Evaluation error', description: 'The judge call or the parsing of its structured output failed. Recorded as a failure rather than passed silently, so a broken judge never reads as a good answer.' }
+    ],
+    scoring: `The model must match the correct model and the explanation must account for every injected error; any single failure fails the test. Structural checks run first and per variable, so one badly-handled variable reports its first problem and moves on. The explanation is only judged when the model is fully correct — a test that fails structurally reports structural failures alone, and the absence of explanation failures there does not mean the explanation was good.`
+});
+
 export const groups = {
     "covidDelayErrors": [
         generateCovidTest("COVID-19 delay error 1", "COVID_delay_err1.json",
