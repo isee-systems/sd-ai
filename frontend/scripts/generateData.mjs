@@ -20,11 +20,14 @@ import { execSync } from 'child_process';
 import {
   LEADERBOARD_MODES,
   LEADERBOARD_GENERATIONS,
-  leaderboardResultsFilename,
   generationsIn,
   generationOf,
   findGeneration,
 } from '../../evals/leaderboardGenerations.js';
+import {
+  leaderboardResultsPath,
+  readLeaderboardFile,
+} from '../../evals/leaderboardFile.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -484,17 +487,22 @@ function processLeaderboard(data) {
 // so the file already holds exactly one current answer per test and needs no bucketing —
 // it is aggregated whole. The generation tag rides along per engine so the table can
 // flag which engines are still carrying older numbers.
+//
+// The published boards are gzipped and read through `evals/leaderboardFile.js`, the same
+// way the API route reads them. Everything downstream of that — this aggregation, the
+// generated `leaderboards.json`, the React pages — is unchanged: the site never sees the
+// raw files, only the small pre-aggregated JSON written here.
 function generateLeaderboards() {
   const out = {};
   for (const mode of LEADERBOARD_MODES) {
-    const fp = path.join(REPO_ROOT, 'evals', 'results', leaderboardResultsFilename(mode));
+    const fp = leaderboardResultsPath(mode);
     if (!fs.existsSync(fp)) {
       console.warn(`  ! no leaderboard results for "${mode}"`);
       out[mode] = null;
       continue;
     }
 
-    const data = JSON.parse(fs.readFileSync(fp, 'utf8'));
+    const data = readLeaderboardFile(fp);
     const processed = processLeaderboard(data);
 
     const counts = {};

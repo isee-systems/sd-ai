@@ -1,26 +1,19 @@
 import express from 'express'
 import fs from 'fs'
-import path from 'path'
-import { fileURLToPath } from 'url'
 import {
   LEADERBOARD_MODES,
   LEADERBOARD_GENERATIONS,
-  leaderboardResultsFilename,
   findGeneration,
   generationsIn,
   generationOf,
 } from '../../evals/leaderboardGenerations.js'
-
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
+import {
+  LEADERBOARD_RESULTS_DIR,
+  leaderboardResultsPath,
+  readLeaderboardFile,
+} from '../../evals/leaderboardFile.js'
 
 const router = express.Router()
-
-const RESULTS_DIR = path.join(__dirname, '../../evals/results')
-
-function resultsPath (mode) {
-  return path.join(RESULTS_DIR, leaderboardResultsFilename(mode))
-}
 
 // Get leaderboard data for a specific mode (cld, sfd or discussion).
 //
@@ -44,7 +37,7 @@ router.get('/:mode', async (req, res) => {
       })
     }
 
-    const filePath = resultsPath(normalizedMode)
+    const filePath = leaderboardResultsPath(normalizedMode)
     if (!fs.existsSync(filePath)) {
       return res.status(404).json({
         success: false,
@@ -52,7 +45,9 @@ router.get('/:mode', async (req, res) => {
       })
     }
 
-    const data = JSON.parse(fs.readFileSync(filePath, 'utf8'))
+    // The published boards are gzipped; readLeaderboardFile is the only thing that
+    // knows that, so this reads the same as it did when they were plain JSON.
+    const data = readLeaderboardFile(filePath)
     const results = data.results ?? []
     const present = generationsIn(results)
 
@@ -102,7 +97,7 @@ const MODE_TITLES = {
 // Get list of available leaderboard modes, and the generations each one has.
 router.get('/', async (req, res) => {
   try {
-    if (!fs.existsSync(RESULTS_DIR)) {
+    if (!fs.existsSync(LEADERBOARD_RESULTS_DIR)) {
       return res.json({
         success: true,
         modes: [],
@@ -119,7 +114,7 @@ router.get('/', async (req, res) => {
     // it would mean parsing every results file (tens of MB each) on a request whose
     // whole job is to be a cheap index. `GET /:mode` reports it, having read the file.
     const available = LEADERBOARD_MODES
-      .filter((mode) => fs.existsSync(resultsPath(mode)))
+      .filter((mode) => fs.existsSync(leaderboardResultsPath(mode)))
       .map((mode) => ({
         mode,
         title: MODE_TITLES[mode] ?? mode,

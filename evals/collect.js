@@ -4,10 +4,13 @@
  * `npm run evals` writes `<id>_<experiment>_full_results.json` into the project root.
  * That file is one execution; a leaderboard is the accumulation of many. This is the
  * step between them — it stamps the run with the generation it belongs to and merges
- * it into `evals/results/leaderboard_<board>_full_results.json`, appending what is new
- * and replacing what it re-ran, leaving everything else alone. A result from a newer
- * generation replaces the older one for that test; the tag records which generation
- * each surviving row came from.
+ * it into `evals/results/leaderboard_<board>_full_results.json.gz`, appending what is
+ * new and replacing what it re-ran, leaving everything else alone. A result from a
+ * newer generation replaces the older one for that test; the tag records which
+ * generation each surviving row came from.
+ *
+ * The run file it reads is plain JSON; the published board it writes is gzipped, since
+ * that one only ever grows. `leaderboardFile.js` owns both halves of that.
  *
  *   npm run evals:collect -- --leaderboard sfd --generation v2 xnt_anthropicSFD_full_results.json
  *
@@ -16,7 +19,6 @@
  */
 import fs from "fs";
 import path from "path";
-import { fileURLToPath } from "url";
 
 import chalk from "chalk";
 import prompts from "prompts";
@@ -31,15 +33,17 @@ import {
   generationsIn,
 } from "./leaderboardGenerations.js";
 import {
+  leaderboardResultsPath,
+  readLeaderboardFile,
+  writeLeaderboardFile,
+} from "./leaderboardFile.js";
+import {
   mergeResults,
   stampGeneration,
   validateResults,
   summarizeByConfig,
   categoriesIn,
 } from "./collectHelpers.js";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const RESULTS_DIR = path.join(__dirname, "results");
 
 const argv = yargs(hideBin(process.argv))
   .usage("$0 --leaderboard <board> --generation <id> <run_full_results.json...>")
@@ -80,7 +84,7 @@ const argv = yargs(hideBin(process.argv))
 
 const generation = findGeneration(argv.generation);
 const targetName = leaderboardResultsFilename(argv.leaderboard);
-const targetPath = path.join(RESULTS_DIR, targetName);
+const targetPath = leaderboardResultsPath(argv.leaderboard);
 
 /* ------------------------------------------------------------------ load runs */
 
@@ -114,7 +118,7 @@ const stamped = stampGeneration(incoming, generation.id);
 
 let existing = [];
 if (fs.existsSync(targetPath)) {
-  const parsed = JSON.parse(fs.readFileSync(targetPath, "utf8"));
+  const parsed = readLeaderboardFile(targetPath);
   existing = parsed.results ?? [];
   console.log(
     `Target ${chalk.bold(targetName)}: ${existing.length} results ` +
@@ -196,9 +200,9 @@ if (!argv.yes) {
   }
 }
 
-fs.mkdirSync(RESULTS_DIR, { recursive: true });
-// Minified on purpose: 2-space indent tripled these boards, and the discussion
-// board blew past GitHub's 100 MB per-file limit that way. Nothing reads them by eye.
-fs.writeFileSync(targetPath, JSON.stringify({ results: merged.results }));
-console.log(chalk.green(`Wrote evals/results/${targetName}`));
+writeLeaderboardFile(targetPath, { results: merged.results });
+console.log(
+  chalk.green(`Wrote evals/results/${targetName}`) +
+    ` (${(fs.statSync(targetPath).size / 1024 / 1024).toFixed(1)} MB gzipped)`
+);
 console.log("Rebuild the site data to publish: cd frontend && npm run generate");

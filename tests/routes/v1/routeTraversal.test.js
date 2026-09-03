@@ -161,7 +161,7 @@ describe('leaderboard mode traversal (GET /:mode)', () => {
     app.use('/', leaderboardRouter);
   });
 
-  // `mode` is interpolated into `leaderboard_<mode>_full_results.json` and then
+  // `mode` is interpolated into `leaderboard_<mode>_full_results.json.gz` and then
   // path.join'd, so an encoded separator escapes evals/results entirely.
   it.each([
     'x%2f..%2f..%2f..%2f..%2fetc%2fpasswd',
@@ -222,7 +222,7 @@ describe('leaderboard mode traversal (GET /:mode)', () => {
   it('lists the modes that have results', async () => {
     // Regression: the previous implementation matched filenames against
     // /leaderboard([A-Z]+)_full_results\.json/, which cannot match the real
-    // `leaderboard_cld_full_results.json`, so this endpoint always returned no modes.
+    // `leaderboard_cld_full_results.json.gz`, so this endpoint always returned no modes.
     const response = await request(app).get('/');
 
     expect(response.status).toBe(200);

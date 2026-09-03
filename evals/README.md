@@ -46,13 +46,15 @@ CLI (command line interface) app that runs within sd-ai project to measure outpu
     - merging several methodically generated `careful` results into a larger result set
     - filtering down an experiment that ran many parameter combinations or LLMs to just the best or most interesting results
 - the easiest method is with the CLI JSON processing tool [JQ](https://jqlang.org/):
-    - `jq -c '.results[]' evals/results/leaderboard_cld_full_results.json > 123_careful_in_progress.jsonl`
+    - `gunzip -c evals/results/leaderboard_cld_full_results.json.gz | jq -c '.results[]' > 123_careful_in_progress.jsonl`
         - Replace `careful` with the name of the experiment you plan to run.
         - Replace `123` with any 3-character experiment ID of your choice.
+        - the published leaderboards are gzipped, hence the `gunzip -c`; the
+          `full_results.json` a run drops in the project root is plain JSON and needs none
 
 
 # Leaderboard Generations
-- there is **one results file per leaderboard** — `evals/results/leaderboard_<board>_full_results.json`
+- there is **one results file per leaderboard** — `evals/results/leaderboard_<board>_full_results.json.gz`
   for `cld`, `sfd` and `discussion` — holding exactly one current result per test
 - the benchmark itself changes (categories added, buggy tests fixed), so results are tagged with the
   generation of the benchmark that produced them. Generations are declared in
@@ -69,6 +71,20 @@ CLI (command line interface) app that runs within sd-ai project to measure outpu
   still present. v1 has one: some of its evals had bugs that depressed engine scores
 - `GET /api/v1/leaderboard/:mode` serves the whole file; `?generation=v2` narrows the rows to the ones
   measured under that generation
+
+## How the files are stored
+- the published boards are **gzipped** (`.json.gz`). They only ever grow — every round of every
+  engine accumulates into them — and uncompressed the discussion board was already ~47 MB, heading
+  for GitHub's 100 MB per-file hard limit. Gzipped, the three of them are ~19 MB instead of ~95 MB
+- **run files are not compressed.** `<id>_<experiment>_full_results.json` in the project root is one
+  execution, is read by hand and with `jq`, and is thrown away — only the accumulating published
+  boards under `evals/results/` are gzipped
+- `evals/leaderboardFile.js` is the only code that knows this. It exports
+  `leaderboardResultsPath(mode)`, `readLeaderboardFile(path)` and `writeLeaderboardFile(path, data)`,
+  and the three readers — `evals/collect.js`, `routes/v1/leaderboard.js` and
+  `frontend/scripts/generateData.mjs` — all go through it. Nothing downstream changes: the API still
+  serves plain JSON and the site still builds the same `leaderboards.json`
+- to look at one by hand: `gunzip -c evals/results/leaderboard_sfd_full_results.json.gz | jq ...`
 
 ## Publishing results with `evals:collect`
 `npm run evals` writes `<id>_<experiment>_full_results.json` into the project root — that is one
@@ -90,6 +106,9 @@ npm run evals:collect -- --leaderboard sfd --generation v2 xnt_anthropicSFD_full
 - accepts several run files at once
 - the summary it prints breaks each config down by generation (`v1:43 v2:3`), so it is easy to see what
   is still on old numbers
+- reads the run file as plain JSON and writes the board back gzipped, so the only way to publish
+  into a board is through this command — hand-editing a `.json.gz` is not a thing anyone will do
+  by accident
 - afterwards, rebuild the site data: `cd frontend && npm run generate`
 
 ## Starting a new generation

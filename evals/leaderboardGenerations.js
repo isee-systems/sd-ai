@@ -13,7 +13,7 @@
  * Ordered oldest first; the last one with rows present is treated as current.
  */
 
-/** The three leaderboards, matching the `leaderboard_<mode>_full_results.json` files. */
+/** The three leaderboards, matching the `leaderboard_<mode>_full_results.json.gz` files. */
 export const LEADERBOARD_MODES = ['cld', 'sfd', 'discussion'];
 
 /**
@@ -40,9 +40,13 @@ export const LEADERBOARD_GENERATIONS = [
     },
 ];
 
-/** The results filename for one leaderboard. One file per board, all generations in it. */
+/**
+ * The results filename for one leaderboard. One file per board, all generations in it.
+ *
+ * Gzipped — see `leaderboardFile.js`, which is the only place that reads or writes one.
+ */
 export function leaderboardResultsFilename(mode) {
-    return `leaderboard_${mode}_full_results.json`;
+    return `leaderboard_${mode}_full_results.json.gz`;
 }
 
 /** The generation a result row belongs to. */

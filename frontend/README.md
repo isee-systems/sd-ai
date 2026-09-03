@@ -22,7 +22,7 @@ A static documentation site for the SD-AI project, running at
   - **Evaluations** — every eval category in `evals/categories/`, down to each
     individual test's prompt and expectations.
   - **Leaderboards** — per-mode benchmark results, pre-aggregated at build time
-    from `evals/results/`.
+    from the gzipped board files in `evals/results/`.
 
 ## How the data is generated
 
@@ -33,6 +33,12 @@ methods the backend routes use (`supportedModes()`, `description()`, `link()`,
 writing JSON into `src/generated/` (which is git-ignored and regenerated on
 every build). The React pages import that JSON statically — there is no
 runtime API client.
+
+The leaderboard boards in `evals/results/` are stored gzipped (`.json.gz`,
+~19 MB rather than ~95 MB) and are read through `evals/leaderboardFile.js`, the
+same helper the backend route uses. That is a detail of the generator only: it
+aggregates each board down to the small `leaderboards.json` the pages import, so
+the React side never sees a raw results file, compressed or not.
 
 Because the generator imports modules from the repo root, the **root**
 dependencies must be installed (`npm ci` at the repo root) in addition to the
