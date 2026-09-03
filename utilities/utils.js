@@ -31,6 +31,12 @@ utils.prettyifyName = function(variable) {
 }
 
 utils.sameVars = function(a,b) {
+    // A generated model can omit a variable's name or equation entirely — weak models do
+    // it routinely — and xmileName() then throws on undefined. That exception escapes the
+    // category's evaluate() and takes down the whole eval run, turning one malformed
+    // response into a dead experiment. An absent name matches nothing, which is the only
+    // sensible reading and keeps the failure local to the test being graded.
+    if (typeof a !== 'string' || typeof b !== 'string') return false;
     return utils.caseFold(a) === utils.caseFold(b);
 }
 
