@@ -140,14 +140,19 @@ export const gemini = {
     cachedTokens: 0.15,
     outputTokens: 9.00,
   },
-  // 3.6 and 3.7 Flash share introductory pricing through 2026-12-31. On
-  // 2027-01-01 both double to 1.50 / 0.15 / 7.50 — update both entries then.
+  // 3.6, 3.7 and 3.8 Flash share introductory pricing through 2026-12-31. On
+  // 2027-01-01 all three double to 1.50 / 0.15 / 7.50 — update every entry then.
   'gemini-3.6-flash': {
     inputTokens: 0.75,
     cachedTokens: 0.075,
     outputTokens: 3.75,
   },
   'gemini-3.7-flash': {
+    inputTokens: 0.75,
+    cachedTokens: 0.075,
+    outputTokens: 3.75,
+  },
+  'gemini-3.8-flash': {
     inputTokens: 0.75,
     cachedTokens: 0.075,
     outputTokens: 3.75,
