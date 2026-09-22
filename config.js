@@ -48,7 +48,7 @@ const config = {
         {label: "Gemini 3.7-flash", value: 'gemini-3.7-flash'},
         {label: "Claude Fable 5.1", value: 'claude-fable-5-1'},
         {label: "Claude Fable 5", value: 'claude-fable-5'},
-        {label: "Claude Opus 5", value: 'claude-opus-5'},
+        {label: "Claude Opus 5.5", value: 'claude-opus-5-5'},
         {label: "Claude Sonnet 5", value: 'claude-sonnet-5'},
         {label: "Claude Haiku 4.5", value: 'claude-haiku-4-5'},
         {label: "Qwen3.8 Max", value: 'qwen/qwen3.8-max'},
@@ -189,7 +189,7 @@ const config = {
                   model: 'claude-sonnet-5', effort: 'medium' },
                 { id: 'high', label: 'High',
                   description: 'A more capable model with deeper reasoning.',
-                  model: 'claude-opus-5', effort: 'high' },
+                  model: 'claude-opus-5-5', effort: 'high' },
                 // No effort: Fable always thinks, and we want its own default depth.
                 { id: 'maximum', label: 'Maximum',
                   description: 'The most capable model available. Use it for the hardest problems.',

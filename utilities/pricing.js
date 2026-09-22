@@ -34,6 +34,16 @@ export const anthropic = {
     cacheReadInputTokens: 1.0,
     outputTokens: 50.00,
   },
+  'claude-opus-5-5': {
+    inputTokens: 4.00,
+    cacheCreation5mInputTokens: 5.00,
+    cacheCreation1hInputTokens: 8.00,
+    // 0.20 is 0.05x the base input price, not the 0.1x every model below uses. Per
+    // the pricing page: "Cache hits and refreshes on Claude Opus 5.5 are priced at
+    // 0.05x the base input price." Stated here because it looks like a typo otherwise.
+    cacheReadInputTokens: 0.20,
+    outputTokens: 20.00,
+  },
   'claude-opus-5': {
     inputTokens: 5.00,
     cacheCreation5mInputTokens: 6.25,
