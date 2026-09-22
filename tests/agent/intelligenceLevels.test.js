@@ -443,7 +443,9 @@ describe('intelligence ladder — provider request shapes', () => {
     await orc.startConversationAnthropicManual('hi');
 
     const req = create.mock.calls[0][0];
-    expect(req.model).toBe('claude-opus-5');
+    // Prefix, not an exact id: the assertion is that `high` lands on an Opus-class
+    // model, so a point bump (claude-opus-5 -> claude-opus-5-5) is not a test edit.
+    expect(req.model).toMatch(/^claude-opus/);
     expect(req.output_config).toEqual({ effort: 'high' });
   });
 
