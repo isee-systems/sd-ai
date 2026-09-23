@@ -615,6 +615,7 @@ export class WebSocketHandler {
         throw new Error('No agent selected. Send select_agent first.');
       }
       this.#worker.send({ type: 'chat', message: message.message });
+      this.#sessionManager.startTurn(this.#sessionId);
     } catch (error) {
       logger.error(`Error in chat for session ${this.#sessionId}:`, error);
       await this.#sendToClient(createErrorMessage(this.#sessionId, error.message, 'CHAT_ERROR'));
@@ -823,6 +824,8 @@ export class WebSocketHandler {
     const sessionId = this.#sessionId;
     this.#worker = null;
     liveWorkers.delete(w);
+    // Whatever turn this worker was running will never send its agent_complete.
+    this.#sessionManager.finishTurn(sessionId);
     if (w.connected) {
       try { w.send({ type: 'shutdown' }); } catch { /* already dead */ }
     }
@@ -921,6 +924,10 @@ export class WebSocketHandler {
 
           this.#ws.send(JSON.stringify(out));
 
+          if (out.type === 'agent_complete') {
+            this.#sessionManager.finishTurn(this.#sessionId);
+          }
+
           // From here until the client answers, a session running a tool is indistinguishable from
           // an abandoned one: the request has gone out, the worker is blocked on the reply, and
           // neither side sends anything. Registered after the send, and only on the branch that
@@ -959,7 +966,10 @@ export class WebSocketHandler {
     w.on('exit', (code, signal) => {
       logger.log(`[worker:${this.#sessionId}] exited (code=${code} signal=${signal})`);
       liveWorkers.delete(w);
-      if (this.#worker === w) this.#worker = null;
+      if (this.#worker === w) {
+        this.#worker = null;
+        this.#sessionManager.finishTurn(this.#sessionId);
+      }
     });
   }
 }

@@ -272,6 +272,13 @@ export class SessionManager {
       // which is not the instance that sweeps. See #liveClientToolDeadline.
       clientToolDeadlines: new Map(),
 
+      // When the client's current chat turn was handed to the worker, or null when no turn is in
+      // flight. Main process only, like the map above. It does not affect whether the sweep reaps
+      // the session; it decides whether a reap is logged as a client left without a reply. The
+      // worker is prewarmed on connect, so "socket open and worker alive" is true of every idle
+      // tab and cannot on its own mean anyone is waiting. See startTurn.
+      turnStartedAt: null,
+
       // Agent conversation context (for Claude Agent SDK)
       conversationContext: [],
 
@@ -326,6 +333,7 @@ export class SessionManager {
       modelTokenCount: 0,
       pendingToolCalls: new Map(),
       clientToolDeadlines: new Map(),
+      turnStartedAt: null,
       conversationContext: [],
       attachedFiles: new Map(),
       workerTeardown: null,
@@ -461,6 +469,39 @@ export class SessionManager {
     const session = this.sessions.get(sessionId);
     if (!session) return false;
     return session.clientToolDeadlines.delete(callId);
+  }
+
+  /**
+   * Record that a chat turn has been handed to the worker and the client is now waiting for its
+   * `agent_complete`.
+   *
+   * Only for the stale-session log. Without it the sweep could not tell a client waiting on a
+   * reply from a tab that was opened and left alone, since the worker is prewarmed on connect and
+   * both look like an open socket with a live worker. Every such idle tab was logged as a client
+   * left without a reply, which filled the production error log.
+   *
+   * @param {string} sessionId The session whose client sent the chat
+   * @returns {boolean} True when a session with that id exists
+   */
+  startTurn(sessionId) {
+    const session = this.sessions.get(sessionId);
+    if (!session) return false;
+    session.turnStartedAt = Date.now();
+    return true;
+  }
+
+  /**
+   * Record that the client is no longer waiting: the turn ended with `agent_complete`, or the
+   * worker running it has gone.
+   *
+   * @param {string} sessionId The session whose turn ended
+   * @returns {boolean} True when a session with that id exists
+   */
+  finishTurn(sessionId) {
+    const session = this.sessions.get(sessionId);
+    if (!session) return false;
+    session.turnStartedAt = null;
+    return true;
   }
 
   /**
@@ -1170,16 +1211,19 @@ ${conversationText}`;
       // and worth naming, because it is the case where a client is about to answer a call that has
       // nowhere to land.
       const awaitingTool = toolDeadline > now ? `, awaitingClientToolFor=${Math.round((toolDeadline - now)/1000/60)}m` : '';
+      const turnInFlight = session.turnStartedAt !== null;
+      const turnDetail = turnInFlight ? `, turnInFlightFor=${Math.round((now - session.turnStartedAt)/1000/60)}m` : '';
       const detail =
         `${sessionId} (trigger=${trigger}, age=${Math.round(age/1000/60)}m, ` +
         `inactive=${Math.round(inactivity/1000/60)}m, hasWorker=${hasWorker}, ` +
-        `wsReadyState=${session.ws?.readyState ?? 'none'}${awaitingTool})`;
-      // An open socket with a live worker is a session being killed out from under a client that
-      // is still connected and, as far as it knows, still waiting for an answer. That is a
-      // different event from reaping an abandoned session and it reads differently in the log,
-      // because the last time it happened it cost four conversations and was only identified
-      // afterwards by matching model-file timestamps against log lines that all said "log".
-      if (hasWorker && session.ws?.readyState === 1) {
+        `wsReadyState=${session.ws?.readyState ?? 'none'}${awaitingTool}${turnDetail})`;
+      // A turn in flight on an open socket with a live worker is a session being killed out from
+      // under a client that is still waiting for an answer. That is a different event from reaping
+      // an abandoned session and it reads differently in the log, because the last time it happened
+      // it cost four conversations and was only identified afterwards by matching model-file
+      // timestamps against log lines that all said "log". The turn check matters: the worker is
+      // prewarmed on connect, so an open socket and a live worker alone describe every idle tab.
+      if (hasWorker && session.ws?.readyState === 1 && turnInFlight) {
         logger.warn(`Cleaning up stale session WITH A LIVE CLIENT AND WORKER — the client is waiting and will get no reply: ${detail}`);
       } else {
         logger.log(`Cleaning up stale session: ${detail}`);

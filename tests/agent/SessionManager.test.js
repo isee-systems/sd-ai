@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { randomBytes } from 'crypto';
+import logger from '../../utilities/logger.js';
 
 describe('SessionManager', () => {
   let sessionManager;
@@ -476,6 +477,60 @@ describe('SessionManager', () => {
 
       expect(sm.sessions.has(sessionId)).toBe(false);
       expect(fs.existsSync(tempDir)).toBe(false);
+    });
+
+    describe('how a reap of a connected session with a live worker is logged', () => {
+      // The worker is prewarmed on connect, so an open socket and a live worker describe every tab
+      // that was opened and left alone. Those were all logged as a client left without a reply,
+      // which filled the production error log with sessions nobody was waiting on. Only a turn
+      // that has been sent and not yet answered means a client is waiting.
+      const connected = (sessionId) => {
+        const session = sm.sessions.get(sessionId);
+        session.ws = { readyState: 1, close: () => {} };
+        session.workerTeardown = async () => {};
+      };
+      let warn;
+      beforeEach(() => { warn = jest.spyOn(logger, 'warn').mockImplementation(() => {}); });
+      afterEach(() => { warn.mockRestore(); });
+      const warnedLiveClient = () => warn.mock.calls.some(([m]) => String(m).includes('WITH A LIVE CLIENT'));
+
+      it('does not warn for an idle tab with no turn in flight', async () => {
+        const sessionId = sm.createSession(null);
+        sm.initializeSession(sessionId, 'cld', {}, [], {}, '');
+        connected(sessionId);
+
+        await new Promise((r) => setTimeout(r, 80));
+        await sm.cleanupStaleSessions();
+
+        expect(sm.sessions.has(sessionId)).toBe(false);
+        expect(warnedLiveClient()).toBe(false);
+      });
+
+      it('does not warn once the turn has finished', async () => {
+        const sessionId = sm.createSession(null);
+        sm.initializeSession(sessionId, 'cld', {}, [], {}, '');
+        connected(sessionId);
+        expect(sm.startTurn(sessionId)).toBe(true);
+        expect(sm.finishTurn(sessionId)).toBe(true);
+
+        await new Promise((r) => setTimeout(r, 80));
+        await sm.cleanupStaleSessions();
+
+        expect(warnedLiveClient()).toBe(false);
+      });
+
+      it('warns when a turn is in flight', async () => {
+        const sessionId = sm.createSession(null);
+        sm.initializeSession(sessionId, 'cld', {}, [], {}, '');
+        connected(sessionId);
+        sm.startTurn(sessionId);
+
+        await new Promise((r) => setTimeout(r, 80));
+        await sm.cleanupStaleSessions();
+
+        expect(sm.sessions.has(sessionId)).toBe(false);
+        expect(warnedLiveClient()).toBe(true);
+      });
     });
 
     it('keeps a session that is being used, however long it stays quiet-free', async () => {
