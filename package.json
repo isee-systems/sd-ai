@@ -1,6 +1,6 @@
 {
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.3.228",
+    "@anthropic-ai/claude-agent-sdk": "^0.3.280",
     "@anthropic-ai/sdk": "^0.116.0",
     "@anthropic-ai/tokenizer": "^0.0.4",
     "@google/adk": "^1.6.0",
