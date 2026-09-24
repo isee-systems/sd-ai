@@ -855,6 +855,29 @@ describe('startConversation — prior-context dispatching (manual)', () => {
     expect(orc.startConversationAnthropicManual).toHaveBeenCalledWith('follow-up');
   });
 
+  it('hands the turn-start get_current_model result to the agent with the message', async () => {
+    const result = '{"message":"The model has been written to disk at: /session/model.sdjson.","modelPath":"/session/model.sdjson"}';
+    orc.builtInToolProvider.getTools = jest.fn().mockReturnValue({ tools: {
+      get_current_model: { handler: jest.fn().mockResolvedValue({ content: [{ type: 'text', text: result }], isError: false }) }
+    } });
+
+    await orc.startConversation('build it', null);
+
+    const [sent] = orc.startConversationAnthropicManual.mock.calls[0];
+    expect(sent.startsWith('build it\n\n[Model sync:')).toBe(true);
+    expect(sent).toContain(result);
+  });
+
+  it('sends the message alone when the turn-start fetch fails', async () => {
+    orc.builtInToolProvider.getTools = jest.fn().mockReturnValue({ tools: {
+      get_current_model: { handler: jest.fn().mockResolvedValue({ content: [{ type: 'text', text: 'timeout' }], isError: true }) }
+    } });
+
+    await orc.startConversation('build it', null);
+
+    expect(orc.startConversationAnthropicManual).toHaveBeenCalledWith('build it');
+  });
+
   it('does not crash and does not pop when previousAgentContext is null', async () => {
     await expect(orc.startConversation('hi', null)).resolves.toBeUndefined();
     expect(orc.startConversationAnthropicManual).toHaveBeenCalledWith('hi');

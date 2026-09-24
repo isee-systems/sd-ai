@@ -709,4 +709,35 @@ describe('LLMWrapper', () => {
       expect(params.systemRole).toBe('system');
     });
   });
+  describe('quantitative response schema', () => {
+    // Providers ration optional and nullable fields in structured outputs (Anthropic
+    // caps both, OpenAI strict mode forbids optional ones), so this schema must have
+    // none in any feature combination, however many sub-type settings are added.
+    test('has no optional or union-typed field in any feature combination', () => {
+      const wrapper = new LLMWrapper({ googleKey: 'test-google-key', underlyingModel: 'gemini-2.5-flash' });
+      for (const flags of [[false, false, false], [true, false, false], [false, true, false], [false, false, true], [true, true, true]]) {
+        const schema = wrapper.generateQuantitativeSDJSONResponseSchema(false, ...flags).toJSONSchema();
+        const problems = [];
+        const walk = (node, path) => {
+          if (!node || typeof node !== 'object') return;
+          if (node.anyOf || node.oneOf || Array.isArray(node.type)) problems.push(`${path} is a union`);
+          for (const [key, child] of Object.entries(node.properties ?? {})) {
+            if (!(node.required ?? []).includes(key)) problems.push(`${path}.${key} is optional`);
+            walk(child, `${path}.${key}`);
+          }
+          walk(node.items, `${path}[]`);
+        };
+        walk(schema, `$(${flags})`);
+        expect(problems).toEqual([]);
+      }
+    });
+
+    test('round-trips additionalProperties through the settings list', () => {
+      const additionalProperties = { processTime: 'transit time', exponential: false, fifoEnabled: true };
+      const settings = LLMWrapper.additionalPropertiesToSettings(additionalProperties);
+      expect(settings).toContainEqual({ property: 'exponential', value: 'false' });
+      expect(LLMWrapper.settingsToAdditionalProperties(settings)).toEqual(additionalProperties);
+      expect(LLMWrapper.settingsToAdditionalProperties([])).toBeUndefined();
+    });
+  });
 });

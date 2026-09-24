@@ -5,9 +5,9 @@ import { createUpdateModelMessage, UpdateModelResponseSchema } from '../../utili
 import { generateRequestId, createSuccessResponse, createErrorResponse } from './toolHelpers.js';
 import { LLMWrapper } from '../../../utilities/LLMWrapper.js';
 
-const variableBase = LLMWrapper.variableSchemaBase();
-const simSpecsBase = LLMWrapper.simSpecsSchemaBase();
-const relationshipBase = LLMWrapper.relationshipSchemaBase();
+const variableBase = LLMWrapper.variableSchemaBase(LLMWrapper.SCHEMA_STRINGS);
+const simSpecsBase = LLMWrapper.simSpecsSchemaBase(LLMWrapper.SCHEMA_STRINGS);
+const relationshipBase = LLMWrapper.relationshipSchemaBase(LLMWrapper.SCHEMA_STRINGS);
 
 // Variable names are stored with spaces; equations use underscores.
 const normName = n => typeof n === 'string' ? n.replace(/_/g, ' ') : n;
@@ -603,7 +603,7 @@ IMPORTANT: The modules array only defines the hierarchical structure. It does NO
     inputSchema: z.object({
       operation: z.enum(['add', 'update', 'remove']).describe('Operation to perform'),
       data: z.array(
-        LLMWrapper.moduleSchema().partial().required({ name: true })
+        LLMWrapper.moduleSchema(LLMWrapper.SCHEMA_STRINGS).partial().required({ name: true })
       ).describe('Array of module objects. Each requires name; for add/update also include parentModule; for remove only name is read.')
     }),
     handler: async ({ operation, data }) => {

@@ -348,6 +348,20 @@ describe('SDJsonToXMILE', () => {
             expect(xmile).toContain('<stop>100</stop>');
             expect(xmile).toContain('<dt>1</dt>');
         });
+
+        test('should write the integration method as the sim_specs method attribute', () => {
+            const sdJson = {
+                variables: [
+                    { name: 'test', type: 'variable', equation: '1' }
+                ],
+                relationships: [],
+                specs: { startTime: 0, stopTime: 10, dt: 0.1, integrationMethod: 'RK4' }
+            };
+
+            const xmile = SDJsonToXMILE(sdJson);
+
+            expect(xmile).toContain('<sim_specs method="RK4">');
+        });
     });
 
     describe('Array Dimensions', () => {

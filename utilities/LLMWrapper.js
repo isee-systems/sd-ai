@@ -3,7 +3,6 @@ import { GoogleGenAI } from "@google/genai";
 import Anthropic from "@anthropic-ai/sdk";
 import { OpenRouter } from "@openrouter/sdk";
 import { z } from "zod";
-import { zodResponseFormat } from "openai/helpers/zod";
 import { extractJsonFromContent } from "./jsonUtils.js";
 import TokenUsageReporter, { Provider } from "./TokenUsageReporter.js";
 import config from "../config.js";
@@ -387,6 +386,40 @@ export class LLMWrapper {
     "overflow": "QUEUE only: If true, an automatic queue overflow flow is created to handle items that cannot enter because the queue is full."
   };
 
+  // Field descriptions for the quantitative engine's response schema. The
+  // quantitative system prompt (QuantitativeEngineBrain.generateSystemPrompt)
+  // carries the modelling rules, so these only say what each field is — every
+  // rule lives in exactly one place. Entries not overridden here are already
+  // single-copy definitions. The agent's tools keep SCHEMA_STRINGS, whose
+  // descriptions are their only source of these rules.
+  static QUANT_SCHEMA_STRINGS = {
+    ...LLMWrapper.SCHEMA_STRINGS,
+    "from": "The cause.",
+    "to": "The effect.",
+    "polarity": "'+' if a change in from moves to in the same direction, '-' if in the opposite direction.",
+    "relationship": "A causal link from a cause (from) to an effect (to).",
+    "name": "The name of the variable.",
+    "type": "stock, flow, or variable (an auxiliary).",
+    "equation": "The XMILE equation. For a stock, its initial value.",
+    "inflows": "Stocks only: the flows that add to this stock.",
+    "outflows": "Stocks only: the flows that remove from this stock.",
+    "uniflow": "Flows only: true if this flow can never be negative.",
+    "crossLevelGhostOf": "Cross-level ghosts only: the module-qualified name of the source variable. Empty otherwise.",
+    "dimension": "An array dimension.",
+    "dimensionType": "'labels' (named elements) or 'numeric' (elements '1' through size).",
+    "dimensionName": "The dimension's name.",
+    "dimensionSize": "The number of elements.",
+    "dimensionElements": "The element names.",
+    "arrayDimensions": "Every array dimension used in the model.",
+    "variableDimensions": "The dimensions this variable is arrayed over, in order. Empty for a scalar variable.",
+    "arrayElementEquation": "An equation for specific elements of an arrayed variable.",
+    "arrayEquationForElements": "One element name per dimension, in the order of the variable's dimensions, e.g. ['North','Q1'].",
+    "variableArrayEquation": "Element-specific equations for an arrayed variable.",
+    "subType": "The sub-type of this stock, flow, or variable; 'none' for ordinary ones.",
+    "additionalProperties": "Settings for the sub-type, or for a flow into a conveyor that sets spreadFlow, one entry per setting. Empty otherwise.",
+    "settingValue": "The setting's value: an equation string for equation settings, 'true' or 'false' for on/off settings, or the chosen option for spreadFlow."
+  };
+
   generateSeldonResponseSchema(includeFeedbackInformationRequired) {
       let responseDescription = "The text containing the response. This text can only contain simple HTML formatted text.  Use only the HTML tags <h4>, <h5>, <h6>, <ol>, <ul>, <li>, <a>, <b>, <i>, <br>, <p> and <span>. Do not use markdown, LaTeX or any other kind of formatting.";
 
@@ -504,57 +537,80 @@ export class LLMWrapper {
       return Relationships;
   }
 
-  generateQuantitativeSDJSONResponseSchema(mentorMode, supportsArrays, supportsSubTypes) {
-      const TypeEnum = z.enum(["stock", "flow", "variable"]).describe(LLMWrapper.SCHEMA_STRINGS.type);
-      const PolarityEnum = z.enum(["+", "-"]).describe(LLMWrapper.SCHEMA_STRINGS.polarity);
-      const Dimension = LLMWrapper.dimensionSchema();
-      const GraphicalFunction = LLMWrapper.graphicalFunctionSchema().describe(LLMWrapper.SCHEMA_STRINGS.gfEquation);
-      const Relationship = z.object(LLMWrapper.relationshipSchemaBase()).describe(LLMWrapper.SCHEMA_STRINGS.relationship);
-      const Relationships = z.array(Relationship).describe(LLMWrapper.SCHEMA_STRINGS.relationships);
-      const ArrayElementEquation = LLMWrapper.arrayElementEquationSchema().describe(LLMWrapper.SCHEMA_STRINGS.arrayElementEquation);
+  // Key order is generation order, and it is deliberate: the model commits to the
+  // time frame and array dimensions (specs) and module layout before writing
+  // variables; within a variable it decides what the variable is (type, subType,
+  // dimensions, units, wiring) before writing its equation; and within a
+  // relationship it reasons before choosing the polarity, so the reasoning can
+  // inform the choice instead of justifying it after the fact.
+  //
+  // Every field is required and none is nullable. Sub-types are optional by nature,
+  // so they are expressed as data instead: subType has a 'none' value, and
+  // additionalProperties is a list of {property, value} settings, empty when there
+  // are none. Optional and nullable fields are what providers ration in structured
+  // outputs (Anthropic caps both, OpenAI strict mode forbids optional ones), so a
+  // schema without them fits every provider however many settings are added.
+  // settingsToAdditionalProperties turns the list back into the object the rest of
+  // the system uses.
+  generateQuantitativeSDJSONResponseSchema(mentorMode, supportsArrays, supportsModules, supportsSubTypes) {
+      const strings = LLMWrapper.QUANT_SCHEMA_STRINGS;
+      const base = LLMWrapper.relationshipSchemaBase(strings);
+      const Relationship = z.object({
+        from: base.from,
+        to: base.to,
+        reasoning: base.reasoning,
+        polarityReasoning: base.polarityReasoning,
+        polarity: base.polarity
+      }).describe(strings.relationship);
 
       const variableObj = {
-        name: z.string().describe(LLMWrapper.SCHEMA_STRINGS.name),
-        equation: z.string().describe(LLMWrapper.SCHEMA_STRINGS.equation),
-        inflows: z.array(z.string()).describe(LLMWrapper.SCHEMA_STRINGS.inflows),
-        outflows: z.array(z.string()).describe(LLMWrapper.SCHEMA_STRINGS.outflows),
-        graphicalFunction: GraphicalFunction,
-        type: TypeEnum,
-        uniflow: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.uniflow),
-        crossLevelGhostOf: z.string().describe(LLMWrapper.SCHEMA_STRINGS.crossLevelGhostOf),
-        documentation: z.string().describe(LLMWrapper.SCHEMA_STRINGS.documentation),
-        units: z.string().describe(LLMWrapper.SCHEMA_STRINGS.units)
+        name: z.string().describe(strings.name),
+        type: z.enum(["stock", "flow", "variable"]).describe(strings.type)
       };
-
-      if (supportsArrays) {
-        variableObj.dimensions = z.array(z.string()).describe(LLMWrapper.SCHEMA_STRINGS.variableDimensions);
-        variableObj.arrayEquations = z.array(ArrayElementEquation).describe(LLMWrapper.SCHEMA_STRINGS.variableArrayEquation);
-      }
-
       if (supportsSubTypes) {
-        variableObj.subType = LLMWrapper.subTypeSchema().optional();
-        variableObj.additionalProperties = LLMWrapper.additionalPropertiesSchema().describe(LLMWrapper.SCHEMA_STRINGS.additionalProperties).optional();
+        variableObj.subType = z.enum([...LLMWrapper.subTypeSchema(strings).options, "none"]).describe(strings.subType);
       }
+      if (supportsArrays) {
+        variableObj.dimensions = z.array(z.string()).describe(strings.variableDimensions);
+      }
+      variableObj.units = z.string().describe(strings.units);
+      variableObj.inflows = z.array(z.string()).describe(strings.inflows);
+      variableObj.outflows = z.array(z.string()).describe(strings.outflows);
+      if (supportsModules) {
+        variableObj.crossLevelGhostOf = z.string().describe(strings.crossLevelGhostOf);
+      }
+      variableObj.equation = z.string().describe(strings.equation);
+      if (supportsArrays) {
+        variableObj.arrayEquations = z.array(LLMWrapper.arrayElementEquationSchema(strings).describe(strings.arrayElementEquation)).describe(strings.variableArrayEquation);
+      }
+      variableObj.graphicalFunction = LLMWrapper.graphicalFunctionSchema(strings).describe(strings.gfEquation);
+      if (supportsSubTypes) {
+        const settings = Object.keys(LLMWrapper.additionalPropertiesSchema(strings).shape);
+        const settingName = z.enum(settings).describe(
+          `The setting:\n${settings.map(s => `- ${s}: ${strings[s]}`).join('\n')}`);
+        variableObj.additionalProperties = z.array(z.object({
+          property: settingName,
+          value: z.string().describe(strings.settingValue)
+        })).describe(strings.additionalProperties);
+      }
+      variableObj.uniflow = z.boolean().describe(strings.uniflow);
+      variableObj.documentation = z.string().describe(strings.documentation);
 
-      const Variable = z.object(variableObj);
-      const Variables = z.array(Variable).describe(LLMWrapper.SCHEMA_STRINGS.variables);
-
-      const simSpecsObj = LLMWrapper.simSpecsSchemaBase();
+      const simSpecsObj = LLMWrapper.simSpecsSchemaBase(strings);
       if (!supportsArrays) delete simSpecsObj.arrayDimensions;
-      const SimSpecs = z.object(simSpecsObj).describe(LLMWrapper.SCHEMA_STRINGS.simSpecs);
 
-      const Module = LLMWrapper.moduleSchema();
+      const modelObj = {
+        specs: z.object(simSpecsObj).describe(strings.simSpecs)
+      };
+      if (supportsModules) {
+        modelObj.modules = z.array(LLMWrapper.moduleSchema(strings)).describe(strings.modules);
+      }
+      modelObj.variables = z.array(z.object(variableObj)).describe(strings.variables);
+      modelObj.relationships = z.array(Relationship).describe(strings.relationships);
+      modelObj.explanation = z.string().describe(mentorMode ? strings.mentorModeQuantExplanation : strings.quantExplanation);
+      modelObj.title = z.string().describe(strings.title);
 
-      const Model = z.object({
-        variables: Variables,
-        relationships: Relationships,
-        explanation: z.string().describe(mentorMode ? LLMWrapper.SCHEMA_STRINGS.mentorModeQuantExplanation: LLMWrapper.SCHEMA_STRINGS.quantExplanation),
-        title: z.string().describe(LLMWrapper.SCHEMA_STRINGS.title),
-        specs: SimSpecs,
-        modules: z.array(Module).describe(LLMWrapper.SCHEMA_STRINGS.modules)
-      });
-
-      return Model;
+      return z.object(modelObj);
   }
 
   generateQuantitativeSDCodeResponseSchema(mentorMode) {
@@ -862,8 +918,20 @@ export class LLMWrapper {
       model
     };
 
+    // Strict mode needs every field required, so optional fields go out as
+    // required-but-nullable (see #makeSchemaStrict) and the nulls are stripped from
+    // the answer below. zodResponseFormat can't be used here: it throws on an
+    // optional field instead of converting it. For a schema with no optional
+    // fields the result is the same schema zodResponseFormat would send.
     if (zodSchema) {
-      completionParams.response_format = zodResponseFormat(zodSchema, "sdai_schema");
+      completionParams.response_format = {
+        type: "json_schema",
+        json_schema: {
+          name: "sdai_schema",
+          strict: true,
+          schema: LLMWrapper.#makeSchemaStrict(z.toJSONSchema(zodSchema, { target: 'draft-7' }))
+        }
+      };
     } else if (this.#jsonObjectMode) {
       completionParams.response_format = { type: "json_object" };
     }
@@ -909,6 +977,13 @@ export class LLMWrapper {
     if (!message.content && reasoningText) {
       const extracted = extractJsonFromContent(reasoningText);
       return { ...message, content: extracted ? JSON.stringify(extracted) : reasoningText };
+    }
+    if (message.content && zodSchema) {
+      try {
+        return { ...message, content: JSON.stringify(LLMWrapper.#stripNullValues(JSON.parse(message.content))) };
+      } catch {
+        // Not parseable JSON — return as-is rather than dropping the response.
+      }
     }
     return message;
   }
@@ -984,8 +1059,16 @@ export class LLMWrapper {
       completionParams.fallbacks = 'default';
     }
 
+    // Cache the system prompt. It is the large, stable part of every request (the
+    // quantitative engine's runs to ~6K tokens), and the other providers already
+    // cache their prefixes automatically. A prompt below the model's minimum
+    // cacheable length is silently not cached, so short prompts are unaffected.
     if (claudeMessages.system) {
-      completionParams.system = claudeMessages.system;
+      completionParams.system = [{
+        type: 'text',
+        text: claudeMessages.system,
+        cache_control: { type: 'ephemeral' }
+      }];
     }
 
     // An effort level runs with adaptive thinking, which only permits
@@ -1020,7 +1103,7 @@ export class LLMWrapper {
     if (zodSchema) {
       outputConfig.format = {
         type: "json_schema",
-        schema: LLMWrapper.#makeClaudeSchemaStrict(zodSchema.toJSONSchema())
+        schema: LLMWrapper.#makeSchemaStrict(zodSchema.toJSONSchema())
       };
     }
     if (reasoningEffort) {
@@ -1069,7 +1152,7 @@ export class LLMWrapper {
     let content = textBlock ? textBlock.text : null;
 
     // Structured outputs went out with every optional field forced to
-    // required-but-nullable (see #makeClaudeSchemaStrict), so the model emits
+    // required-but-nullable (see #makeSchemaStrict), so the model emits
     // explicit nulls for absent optionals. Strip them so downstream sees the same
     // shape the other providers produce. Guarded: if it isn't valid JSON (it always
     // should be under a schema), leave the raw text untouched.
@@ -1183,15 +1266,18 @@ export class LLMWrapper {
     return claudeMessages;
   }
 
-  // Anthropic compiles a structured-output schema into a grammar and caps the
-  // number of OPTIONAL parameters (keys absent from an object's `required`) at 24
-  // across the whole schema; our quantitative schema has 26 and 400s. Rewrite the
-  // schema so every property is `required`, expressing former optionality as
-  // "required but may be null" (anyOf with a null branch). This drops the optional
-  // count to zero — the same transform OpenAI strict mode applies, which is why the
-  // OpenAI/Gemini paths never hit this. Only used on the Claude path. Mutates and
+  // Rewrite a schema so every property is `required`, expressing former
+  // optionality as "required but may be null" (anyOf with a null branch). Used on
+  // the two paths whose structured outputs reject optional fields:
+  //   - Claude compiles the schema into a grammar and caps OPTIONAL parameters
+  //     (keys absent from an object's `required`) at 24 across the whole schema;
+  //     the quantitative schema with sub-types on has 26 and 400s.
+  //   - OpenAI strict mode requires every property to be required; the openai
+  //     helper (zodResponseFormat) throws on an optional field rather than
+  //     converting it.
+  // Gemini accepts optional fields, so its path sends the schema as-is. Mutates and
   // returns the (freshly generated, unshared) schema.
-  static #makeClaudeSchemaStrict(schema) {
+  static #makeSchemaStrict(schema) {
     const makeNullable = (node) => {
       if (node && typeof node === 'object'
           && Array.isArray(node.anyOf) && node.anyOf.some((s) => s && s.type === 'null')) {
@@ -1236,7 +1322,7 @@ export class LLMWrapper {
     return schema;
   }
 
-  // Counterpart to #makeClaudeSchemaStrict: the model returns explicit nulls for the
+  // Counterpart to #makeSchemaStrict: the model returns explicit nulls for the
   // fields we forced to be required-but-nullable. Recursively drop null-valued keys
   // so callers get the same shape the other providers produce (optional fields
   // simply absent). Safe because none of our schemas declare a field nullable, so
@@ -1256,115 +1342,137 @@ export class LLMWrapper {
     return value;
   }
 
-  static moduleSchema() {
+  static moduleSchema(strings) {
     return z.object({
-      name: z.string().describe(LLMWrapper.SCHEMA_STRINGS.moduleName),
-      parentModule: z.string().describe(LLMWrapper.SCHEMA_STRINGS.parentModule)
+      name: z.string().describe(strings.moduleName),
+      parentModule: z.string().describe(strings.parentModule)
     });
   }
 
-  static relationshipSchemaBase() {
+  static relationshipSchemaBase(strings) {
     return {
-      from: z.string().describe(LLMWrapper.SCHEMA_STRINGS.from),
-      to: z.string().describe(LLMWrapper.SCHEMA_STRINGS.to),
-      polarity: z.enum(["+", "-"]).describe(LLMWrapper.SCHEMA_STRINGS.polarity),
-      reasoning: z.string().describe(LLMWrapper.SCHEMA_STRINGS.reasoning),
-      polarityReasoning: z.string().describe(LLMWrapper.SCHEMA_STRINGS.polarityReasoning)
+      from: z.string().describe(strings.from),
+      to: z.string().describe(strings.to),
+      polarity: z.enum(["+", "-"]).describe(strings.polarity),
+      reasoning: z.string().describe(strings.reasoning),
+      polarityReasoning: z.string().describe(strings.polarityReasoning)
     };
   }
 
-  static dimensionSchema() {
+  static dimensionSchema(strings) {
     return z.object({
-      type: z.enum(["labels", "numeric"]).describe(LLMWrapper.SCHEMA_STRINGS.dimensionType),
-      name: z.string().describe(LLMWrapper.SCHEMA_STRINGS.dimensionName),
-      size: z.number().describe(LLMWrapper.SCHEMA_STRINGS.dimensionSize),
-      elements: z.array(z.string()).describe(LLMWrapper.SCHEMA_STRINGS.dimensionElements)
-    }).describe(LLMWrapper.SCHEMA_STRINGS.dimension);
+      type: z.enum(["labels", "numeric"]).describe(strings.dimensionType),
+      name: z.string().describe(strings.dimensionName),
+      size: z.number().describe(strings.dimensionSize),
+      elements: z.array(z.string()).describe(strings.dimensionElements)
+    }).describe(strings.dimension);
   }
 
-  static simSpecsSchemaBase() {
+  static simSpecsSchemaBase(strings) {
     return {
-      startTime: z.number().describe(LLMWrapper.SCHEMA_STRINGS.startTime),
-      stopTime: z.number().describe(LLMWrapper.SCHEMA_STRINGS.stopTime),
-      dt: z.number().describe(LLMWrapper.SCHEMA_STRINGS.dt),
-      timeUnits: z.string().describe(LLMWrapper.SCHEMA_STRINGS.timeUnits),
-      integrationMethod: z.enum(["Euler", "RK4"]).describe(LLMWrapper.SCHEMA_STRINGS.integrationMethod),
-      arrayDimensions: z.array(LLMWrapper.dimensionSchema()).describe(LLMWrapper.SCHEMA_STRINGS.arrayDimensions)
+      startTime: z.number().describe(strings.startTime),
+      stopTime: z.number().describe(strings.stopTime),
+      dt: z.number().describe(strings.dt),
+      timeUnits: z.string().describe(strings.timeUnits),
+      integrationMethod: z.enum(["Euler", "RK4"]).describe(strings.integrationMethod),
+      arrayDimensions: z.array(LLMWrapper.dimensionSchema(strings)).describe(strings.arrayDimensions)
     };
   }
 
-  static graphicalFunctionSchema() {
+  static graphicalFunctionSchema(strings) {
     return z.object({
       points: z.array(z.object({
-        x: z.number().describe(LLMWrapper.SCHEMA_STRINGS.gfPointX),
-        y: z.number().describe(LLMWrapper.SCHEMA_STRINGS.gfPointY)
-      }).describe(LLMWrapper.SCHEMA_STRINGS.gfPoint))
+        x: z.number().describe(strings.gfPointX),
+        y: z.number().describe(strings.gfPointY)
+      }).describe(strings.gfPoint))
     });
   }
 
-  static arrayElementEquationSchema() {
+  static arrayElementEquationSchema(strings) {
     return z.object({
-      equation: z.string().describe(LLMWrapper.SCHEMA_STRINGS.equation),
-      forElements: z.array(z.string()).describe(LLMWrapper.SCHEMA_STRINGS.arrayEquationForElements)
+      equation: z.string().describe(strings.equation),
+      forElements: z.array(z.string()).describe(strings.arrayEquationForElements)
     });
   }
 
-  static subTypeSchema() {
+  static subTypeSchema(strings) {
     return z.enum([
       "queue", "oven", "conveyor", "nonNegative",
       "discreteOutflow", "conveyorLeakage", "queueOutflow", "queueOverflow",
       "delayVariable"
-    ]).describe(LLMWrapper.SCHEMA_STRINGS.subType);
+    ]).describe(strings.subType);
   }
 
-  static additionalPropertiesSchema() {
+  static additionalPropertiesSchema(strings) {
     return z.object({
       // CONVEYOR + OVEN
-      processTime: z.string().describe(LLMWrapper.SCHEMA_STRINGS.processTime).optional(),
-      capacity: z.string().describe(LLMWrapper.SCHEMA_STRINGS.capacity).optional(),
-      inflowLimit: z.string().describe(LLMWrapper.SCHEMA_STRINGS.inflowLimit).optional(),
-      fillTime: z.string().describe(LLMWrapper.SCHEMA_STRINGS.fillTime).optional(),
-      cleanTime: z.string().describe(LLMWrapper.SCHEMA_STRINGS.cleanTime).optional(),
-      leakFraction: z.string().describe(LLMWrapper.SCHEMA_STRINGS.leakFraction).optional(),
-      exponential: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.exponential).optional(),
-      leakZoneStart: z.string().describe(LLMWrapper.SCHEMA_STRINGS.leakZoneStart).optional(),
-      leakZoneEnd: z.string().describe(LLMWrapper.SCHEMA_STRINGS.leakZoneEnd).optional(),
-      leakIntegers: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.leakIntegers).optional(),
-      sample: z.string().describe(LLMWrapper.SCHEMA_STRINGS.sample).optional(),
-      arrest: z.string().describe(LLMWrapper.SCHEMA_STRINGS.arrest).optional(),
+      processTime: z.string().describe(strings.processTime).optional(),
+      capacity: z.string().describe(strings.capacity).optional(),
+      inflowLimit: z.string().describe(strings.inflowLimit).optional(),
+      fillTime: z.string().describe(strings.fillTime).optional(),
+      cleanTime: z.string().describe(strings.cleanTime).optional(),
+      leakFraction: z.string().describe(strings.leakFraction).optional(),
+      exponential: z.boolean().describe(strings.exponential).optional(),
+      leakZoneStart: z.string().describe(strings.leakZoneStart).optional(),
+      leakZoneEnd: z.string().describe(strings.leakZoneEnd).optional(),
+      leakIntegers: z.boolean().describe(strings.leakIntegers).optional(),
+      sample: z.string().describe(strings.sample).optional(),
+      arrest: z.string().describe(strings.arrest).optional(),
       // CONVEYOR-only
-      spreadFlow: z.enum(["none", "even", "destination", "distribution", "source"]).describe(LLMWrapper.SCHEMA_STRINGS.spreadFlow).optional(),
-      distribEq: z.string().describe(LLMWrapper.SCHEMA_STRINGS.distribEq).optional(),
-      ignorePrevZones: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.ignorePrevZones).optional(),
-      forceLeakFraction: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.forceLeakFraction).optional(),
+      spreadFlow: z.enum(["none", "even", "destination", "distribution", "source"]).describe(strings.spreadFlow).optional(),
+      distribEq: z.string().describe(strings.distribEq).optional(),
+      ignorePrevZones: z.boolean().describe(strings.ignorePrevZones).optional(),
+      forceLeakFraction: z.boolean().describe(strings.forceLeakFraction).optional(),
       // QUEUE
-      fifoEnabled: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.fifoEnabled).optional(),
-      oneAtATime: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.oneAtATime).optional(),
-      splitBatches: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.splitBatches).optional(),
-      discrete: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.discrete).optional(),
-      roundRobin: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.roundRobin).optional(),
-      queueOutflowPriority: z.string().describe(LLMWrapper.SCHEMA_STRINGS.queueOutflowPriority).optional(),
-      purgeEq: z.string().describe(LLMWrapper.SCHEMA_STRINGS.purgeEq).optional(),
-      overflow: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.overflow).optional()
+      fifoEnabled: z.boolean().describe(strings.fifoEnabled).optional(),
+      oneAtATime: z.boolean().describe(strings.oneAtATime).optional(),
+      splitBatches: z.boolean().describe(strings.splitBatches).optional(),
+      discrete: z.boolean().describe(strings.discrete).optional(),
+      roundRobin: z.boolean().describe(strings.roundRobin).optional(),
+      queueOutflowPriority: z.string().describe(strings.queueOutflowPriority).optional(),
+      purgeEq: z.string().describe(strings.purgeEq).optional(),
+      overflow: z.boolean().describe(strings.overflow).optional()
     });
   }
 
-  static variableSchemaBase() {
+  // The quantitative schema carries additionalProperties as a list of
+  // {property, value} settings with every value a string (see
+  // generateQuantitativeSDJSONResponseSchema). These convert between that list and
+  // the object form additionalPropertiesSchema describes, which is what every other
+  // part of the system reads and writes. On/off settings go back to booleans; an
+  // empty list becomes no additionalProperties at all.
+  static settingsToAdditionalProperties(settings) {
+    const shape = LLMWrapper.additionalPropertiesSchema(LLMWrapper.SCHEMA_STRINGS).shape;
+    const result = {};
+    for (const { property, value } of settings) {
+      if (!(property in shape)) continue;
+      result[property] = shape[property].unwrap() instanceof z.ZodBoolean
+        ? String(value).trim().toLowerCase() === 'true'
+        : value;
+    }
+    return Object.keys(result).length > 0 ? result : undefined;
+  }
+
+  static additionalPropertiesToSettings(additionalProperties) {
+    return Object.entries(additionalProperties ?? {}).map(([property, value]) => ({ property, value: String(value) }));
+  }
+
+  static variableSchemaBase(strings) {
     return {
-      name: z.string().describe(LLMWrapper.SCHEMA_STRINGS.name),
-      type: z.enum(["stock", "flow", "variable"]).describe(LLMWrapper.SCHEMA_STRINGS.type),
-      equation: z.string().describe(LLMWrapper.SCHEMA_STRINGS.equation).optional(),
-      documentation: z.string().describe(LLMWrapper.SCHEMA_STRINGS.documentation).optional(),
-      units: z.string().describe(LLMWrapper.SCHEMA_STRINGS.units).optional(),
-      uniflow: z.boolean().describe(LLMWrapper.SCHEMA_STRINGS.uniflow).optional(),
-      inflows: z.array(z.string()).describe(LLMWrapper.SCHEMA_STRINGS.inflows).optional(),
-      outflows: z.array(z.string()).describe(LLMWrapper.SCHEMA_STRINGS.outflows).optional(),
-      dimensions: z.array(z.string()).describe(LLMWrapper.SCHEMA_STRINGS.variableDimensions).optional(),
-      arrayEquations: z.array(LLMWrapper.arrayElementEquationSchema()).describe(LLMWrapper.SCHEMA_STRINGS.variableArrayEquation).optional(),
-      crossLevelGhostOf: z.string().describe(LLMWrapper.SCHEMA_STRINGS.crossLevelGhostOf).optional(),
-      graphicalFunction: LLMWrapper.graphicalFunctionSchema().describe(LLMWrapper.SCHEMA_STRINGS.gfEquation).optional(),
-      subType: LLMWrapper.subTypeSchema().optional(),
-      additionalProperties: LLMWrapper.additionalPropertiesSchema().describe(LLMWrapper.SCHEMA_STRINGS.additionalProperties).optional()
+      name: z.string().describe(strings.name),
+      type: z.enum(["stock", "flow", "variable"]).describe(strings.type),
+      equation: z.string().describe(strings.equation).optional(),
+      documentation: z.string().describe(strings.documentation).optional(),
+      units: z.string().describe(strings.units).optional(),
+      uniflow: z.boolean().describe(strings.uniflow).optional(),
+      inflows: z.array(z.string()).describe(strings.inflows).optional(),
+      outflows: z.array(z.string()).describe(strings.outflows).optional(),
+      dimensions: z.array(z.string()).describe(strings.variableDimensions).optional(),
+      arrayEquations: z.array(LLMWrapper.arrayElementEquationSchema(strings)).describe(strings.variableArrayEquation).optional(),
+      crossLevelGhostOf: z.string().describe(strings.crossLevelGhostOf).optional(),
+      graphicalFunction: LLMWrapper.graphicalFunctionSchema(strings).describe(strings.gfEquation).optional(),
+      subType: LLMWrapper.subTypeSchema(strings).optional(),
+      additionalProperties: LLMWrapper.additionalPropertiesSchema(strings).describe(strings.additionalProperties).optional()
     };
   }
 

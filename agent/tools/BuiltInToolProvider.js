@@ -302,9 +302,17 @@ export class BuiltInToolProvider {
       // Register via MCP's own registerTool so MCP 1.29's zod-v4-aware converter
       // builds the advertised schema (preserving field descriptions and full
       // structure). registerTool takes the raw zod shape and wraps it internally.
+      //
+      // anthropic/alwaysLoad is what createSdkMcpServer's `alwaysLoad` option sets on
+      // each tool: the CLI never defers it behind ToolSearch. Deferral depends on where
+      // the CLI thinks it is talking — off behind our loopback CredentialProxy (every
+      // deployed worker), on against api.anthropic.com (in-process eval runs) — so
+      // without this an eval's agent spent a ToolSearch round trip before its first
+      // model tool call while production's never did.
       const registered = server.registerTool(toolName, {
         description: toolDef.description,
-        inputSchema: toolDef.inputSchema.shape
+        inputSchema: toolDef.inputSchema.shape,
+        _meta: { 'anthropic/alwaysLoad': true }
       }, sdkHandler);
       count++;
 

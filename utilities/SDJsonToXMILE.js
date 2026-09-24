@@ -163,7 +163,9 @@ function SDJsonToXMILE(sdJson, options = {}) {
  */
 function buildSimSpecs(specs) {
     const lines = [];
-    lines.push('  <sim_specs>');
+    lines.push(specs.integrationMethod
+        ? `  <sim_specs method="${escapeXml(specs.integrationMethod)}">`
+        : '  <sim_specs>');
     lines.push(`    <start>${specs.startTime !== undefined ? specs.startTime : 0}</start>`);
     lines.push(`    <stop>${specs.stopTime !== undefined ? specs.stopTime : 100}</stop>`);
     lines.push(`    <dt>${specs.dt !== undefined ? specs.dt : 1}</dt>`);

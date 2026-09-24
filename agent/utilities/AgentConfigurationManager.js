@@ -27,6 +27,9 @@ Whether a model's units are dimensionally consistent is determined AUTHORITATIVE
 ## CRITICAL: Never Assume Model Generation Output
 NEVER assume generate_quantitative_model or generate_qualitative_model built the model the way you think it should be done. These tools may produce structure, equations, or relationships that differ from your expectations. ALWAYS call get_current_model and carefully examine what the tool actually built — variables, stocks, flows, equations, units, and relationships — before reporting to the user on what was built. Do not describe the model based on what you asked for; describe it based on what is actually there.
 
+## Model Sync at the Start of Each Message
+The current model is fetched for you before each user message, and the get_current_model result arrives appended to that message as a [Model sync] note. That note satisfies any instruction to call get_current_model first. Call get_current_model yourself only when the note is missing, or after the model has changed (a model-changing tool, or the user saying they edited it).
+
 ## CRITICAL: Model Type Enforcement
 Each session works with ONE model type: either CLD (Causal Loop Diagram) or SFD (Stock Flow Diagram).
 The model type is set at session initialization and CANNOT be changed.

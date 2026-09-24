@@ -1038,6 +1038,36 @@ describe('QuantitativeEngineBrain', () => {
       expect(queueStock.additionalProperties.fifoEnabled).toBe(true);
     });
 
+    it('should turn the schema\'s settings list back into an additionalProperties object', async () => {
+      const originalResponse = {
+        variables: [
+          {
+            name: 'queue stock',
+            type: 'stock',
+            subType: 'queue',
+            equation: '0',
+            inflows: [],
+            outflows: [],
+            additionalProperties: [
+              { property: 'fifoEnabled', value: 'true' },
+              { property: 'discrete', value: 'False' },
+              { property: 'purgeEq', value: 'service time' }
+            ]
+          },
+          { name: 'service time', type: 'variable', subType: 'none', equation: '5', additionalProperties: [] }
+        ],
+        relationships: []
+      };
+
+      const result = await quantitativeEngine.processResponse(originalResponse);
+
+      const queueStock = result.variables.find(v => v.name === 'queue stock');
+      expect(queueStock.additionalProperties).toEqual({ fifoEnabled: true, discrete: false, purgeEq: 'service_time' });
+      const plain = result.variables.find(v => v.name === 'service time');
+      expect(plain).not.toHaveProperty('subType');
+      expect(plain).not.toHaveProperty('additionalProperties');
+    });
+
     it('should not touch additionalProperties when variable has no subType', async () => {
       const originalResponse = {
         variables: [

@@ -391,9 +391,11 @@ ${lines.join('\n')}`;
       // request-build time, because the Agent SDK constructs the request itself --
       // so the base64 travels worker -> claude CLI stdio here. Unavoidable on this
       // route.
+      // Never deferred behind ToolSearch — see the same flag in BuiltInToolProvider.
       server.registerTool(unprefixedName, {
         description: toolDef.description,
-        inputSchema: toolDef.inputSchema?.shape ?? {}
+        inputSchema: toolDef.inputSchema?.shape ?? {},
+        _meta: { 'anthropic/alwaysLoad': true }
       }, async (args) => toMcpContentResult(await toolDef.handler(args), this.mediaStore));
       count++;
     }

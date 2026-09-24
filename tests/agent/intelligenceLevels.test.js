@@ -421,8 +421,49 @@ describe('intelligence ladder — provider request shapes', () => {
 
     const req = create.mock.calls[0][0];
     expect(req.model).toBe(LEGACY.anthropicModel);
-    expect(req.thinking).toEqual(LEGACY.anthropicThinking);
+    // The legacy thinking config, plus the binding control that lets replayed
+    // thinking blocks survive this route's history edits.
+    expect(req.thinking).toEqual({
+      ...LEGACY.anthropicThinking,
+      block_binding: { prefix_mismatch_behavior: 'drop_block' }
+    });
     expect(req.output_config).toEqual({ effort: LEGACY.anthropicEffort });
+  });
+
+  it('sends the binding-controls beta header, auto-caching and room for thinking', async () => {
+    orc = makeOrc('anthropic', 'standard');
+    const create = stubAnthropic(orc);
+
+    await orc.startConversationAnthropicManual('hi');
+
+    const [req, options] = create.mock.calls[0];
+    expect(options).toEqual({ headers: { 'anthropic-beta': 'thinking-binding-controls-2026-08-01' } });
+    expect(req.cache_control).toEqual({ type: 'ephemeral' });
+    expect(req.max_tokens).toBe(16000);
+  });
+
+  it('replays signed thinking blocks in place and drops unsigned ones', async () => {
+    orc = makeOrc('anthropic', 'standard');
+    const thinking = { type: 'thinking', thinking: '', signature: 'sig-1' };
+    const redacted = { type: 'redacted_thinking', data: 'opaque' };
+    const create = jest.fn()
+      .mockResolvedValueOnce({
+        content: [thinking, redacted, { type: 'tool_use', id: 't1', name: 'get_current_model', input: {} }],
+        stop_reason: 'tool_use', usage: { input_tokens: 1, output_tokens: 1 }
+      })
+      .mockResolvedValueOnce({
+        content: [{ type: 'thinking', thinking: 'cut off' }, { type: 'text', text: 'done' }],
+        stop_reason: 'end_turn', usage: { input_tokens: 1, output_tokens: 1 }
+      });
+    orc.anthropic = { messages: { create } };
+
+    await orc.startConversationAnthropicManual('hi');
+
+    const history = sessionManager.getConversationContext(sessionId);
+    const assistants = history.filter(m => m.role === 'assistant');
+    expect(assistants[0].content.map(b => b.type)).toEqual(['thinking', 'redacted_thinking', 'tool_use']);
+    expect(assistants[0].content[0]).toEqual(thinking);
+    expect(assistants[1].content.map(b => b.type)).toEqual(['text']);
   });
 
   it('sends a legacy client (no intelligence) exactly the pre-feature Gemini request', async () => {

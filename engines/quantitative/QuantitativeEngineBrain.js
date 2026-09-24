@@ -61,6 +61,13 @@ FLOW SUB-TYPES — leave 'equation' empty; automatically computed:
 - 'queueOutflow': Output from a queue.
 - 'queueOverflow': Overflow from a full queue (requires overflow: true on the queue).
 
+VARIABLE SUB-TYPE - unlike the discrete-entity sub-types above, set this whenever it applies, even when sub-types were not requested:
+- 'delayVariable': A plain variable whose equation uses a DELAY or SMTH builtin (DELAY1, DELAY3, DELAY N, SMTH1, SMTH3, or any other DELAY/SMTH variant).
+
+Set 'subType' to 'none' for every other stock, flow, and variable.
+
+'additionalProperties' is a list of settings, each a property name and its value; leave it empty for variables with no settings.
+
 REGULAR FLOWS entering a conveyor may set additionalProperties:
 - spreadFlow: how inflow distributes along the conveyor ('none', 'even', 'destination', 'distribution', 'source').
 - distribEq: required when spreadFlow is 'distribution'.
@@ -106,7 +113,10 @@ WHEN USING ARRAYS - DIMENSION AND EQUATION REQUIREMENTS:
 When constructing models with arrayed variables, you MUST follow these rules:
 1. ALL array dimensions MUST be defined in the specs.arrayDimensions list before being referenced
 2. Each dimension MUST have a unique name (singular, alphanumeric only)
-3. For label dimensions: specify element names; for numeric dimensions: specify size
+3. Every dimension has a type ('labels' or 'numeric'), a name, a size, and its elements:
+   - 'labels' dimensions: give meaningful element names (e.g. North, South) and set size to their count
+   - 'numeric' dimensions: set size; the elements are '1' through size
+   - Element names use only letters and numbers - no punctuation or symbols
 4. Variables reference dimensions by name in their dimensions array (order matters)
 5. NEVER remove dimensions from existing arrayed variables unless explicitly directed to do so by the end user
 6. Arrayed variables MUST have equations for ALL element combinations:
@@ -162,6 +172,9 @@ Provide equations for every variable:
 - This is the XMILE standard and is NON-NEGOTIABLE - equations with spaces in variable names will FAIL
 - CONSTANT HANDLING: All equations should be simple enough to explain in plain language and must NEVER include hard-coded physical, empirical, or arbitrary constants (e.g. 9.81, 0.05, 3.14159, 100) directly inside the equation — abstract every arbitrary value into a clearly named variable. Dimensionless numbers are permitted ONLY when they serve a fundamental structural, geometric, or algorithmic purpose in the formula: complements/inversions (e.g. 1 - x), boundary/clipping limits (e.g. MAX(0, x), MIN(1, x)), structural divisions and averages (e.g. x / 2), and constants required by standard mathematical identities (e.g. the 2 and 4 in the quadratic formula, or exponents like x^2).
 - Every variable referenced in an equation MUST have its own equation, type, and appear in the relationships list
+- A stock's equation is its initial value only - never use INTEG
+- NEVER use IF THEN ELSE or any other conditional function inside an equation
+- The // operator is available: it divides like /, but returns 0 when the denominator is 0
 - UNIFLOW CONSTRAINT FOR FLOWS:
   * Mark a flow as uniflow=true when it represents a one-directional process that should never be negative
   * When uniflow=true, if the flow equation produces a negative value during simulation, it will be automatically constrained to zero
@@ -169,6 +182,8 @@ Provide equations for every variable:
   * Use uniflow=false for bidirectional flows that can legitimately go negative: net migration, balance adjustments, corrections
   * Setting uniflow correctly prevents physically impossible negative flows (e.g., negative births) while allowing valid negative flows
 - GRAPHICAL FUNCTION BEST PRACTICES:
+  * A variable with a graphical (table or lookup) function gets an equation that is an algebraic expression of only the function's inputs; its graphical function points map that input to the output
+  * Any equation that uses a graphical function's output references only that variable's name, never a function-call form
   * For all non-time based graphical functions: Design the function so that normal input produces normal output and include the point (1, 1) in your graphical function to ensure that when the input variable equals 1, the output equals 1
   * This normalization principle allows the function to express deviations from normal behavior in both directions
   * Example: A "productivity multiplier from experience" function should pass through (1, 1) so that normal experience (input=1) yields normal productivity (output=1)
@@ -204,12 +219,12 @@ Here is a complete example of a properly structured array model with two dimensi
             {
                 "elements": ["BGO", "NYC"],
                 "name": "Location",
-                "type": "label"
+                "type": "labels"
             },
             {
                 "elements": ["Pizza", "Kebab", "Sandwich"],
                 "name": "Product",
-                "type": "label"
+                "type": "labels"
             }
         ],
         "dt": 0.25,
@@ -834,6 +849,16 @@ NEVER identify feedback loops for the user in explanatory text. Let users discov
         const stocks = [];
 
         for (const v of originalResponse.variables) {
+            // Sub-types arrive in the schema's all-required form ('none', and a
+            // list of settings); give them the optional object shape everything
+            // downstream expects.
+            if (v.subType === 'none') delete v.subType;
+            if (Array.isArray(v.additionalProperties)) {
+                const additionalProperties = LLMWrapper.settingsToAdditionalProperties(v.additionalProperties);
+                if (additionalProperties) v.additionalProperties = additionalProperties;
+                else delete v.additionalProperties;
+            }
+
             if (!v.name) continue;
 
             variablesByFoldedName.set(projectUtils.caseFold(v.name), v);
@@ -892,7 +917,7 @@ NEVER identify feedback loops for the user in explanatory text. Let users discov
         //start with the system prompt
         const { underlyingModel, systemRole, temperature, reasoningEffort } = this.#llmWrapper.getLLMParameters();
         let systemPrompt = this.#data.systemPrompt;
-        let responseFormat = this.#llmWrapper.generateQuantitativeSDJSONResponseSchema(this.#data.mentorMode, this.#data.supportsArrays, this.#data.supportsSubTypes);
+        let responseFormat = this.#llmWrapper.generateQuantitativeSDJSONResponseSchema(this.#data.mentorMode, this.#data.supportsArrays, this.#data.supportsModules, this.#data.supportsSubTypes);
 
         if (!this.#llmWrapper.model.hasStructuredOutput) {
             throw new Error("Unsupported LLM " + this.#data.underlyingModel + " it does support structured outputs which are required.");
@@ -918,7 +943,17 @@ NEVER identify feedback loops for the user in explanatory text. Let users discov
 
         // Check if lastModel has actual content (variables or relationships)
         if (lastModel && (lastModel.variables?.length > 0 || lastModel.relationships?.length > 0)) {
-            messages.push({ role: "assistant", content: JSON.stringify(lastModel, null, 2) });
+            // Shown in the shape the response schema asks for, so the model's own
+            // prior answer does not contradict the format it must answer in.
+            const priorModel = this.#data.supportsSubTypes
+                ? {
+                    ...lastModel,
+                    variables: lastModel.variables.map(v => v.additionalProperties
+                        ? { ...v, additionalProperties: LLMWrapper.additionalPropertiesToSettings(v.additionalProperties) }
+                        : v)
+                }
+                : lastModel;
+            messages.push({ role: "assistant", content: JSON.stringify(priorModel, null, 2) });
 
             if (this.#data.assistantPrompt)
                 messages.push({ role: "user", content: this.#data.assistantPrompt });

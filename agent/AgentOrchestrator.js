@@ -124,6 +124,27 @@ const SDK_WRITE_TOOLS = ['Write', 'Edit', 'NotebookEdit', 'Bash'];
 // tools/networkConfinement.js.
 const SDK_WEB_TOOLS = ['WebFetch', 'WebSearch'];
 
+// Preset tools that cannot do anything in this headless, settings-free query, withheld
+// from every agent so their schemas stop riding on each request and the model stops
+// reaching for them. Chosen as a deny list rather than by setting `tools`, which would
+// also drop whatever the preset adds next — and among those kept are TodoWrite/Task*
+// and Agent, which an agent can genuinely use on a long build.
+//
+// - AskUserQuestion: nothing can answer it headless. It used to be intercepted by
+//   aborting the query, which told the client the user had pressed stop; without it
+//   the agent asks in text and ends its turn normally.
+// - Skill: settingSources is [] so there are no skills to load.
+// - EnterPlanMode / ExitPlanMode: plan mode is an approval flow with no approver
+//   under bypassPermissions.
+// - NotebookEdit: there are no notebooks.
+// - EnterWorktree / ExitWorktree, CronCreate / CronDelete / CronList, RemoteTrigger,
+//   PushNotification: CLI-session features with no meaning inside a worker.
+const SDK_UNUSABLE_TOOLS = [
+  'AskUserQuestion', 'Skill', 'EnterPlanMode', 'ExitPlanMode', 'NotebookEdit',
+  'EnterWorktree', 'ExitWorktree', 'CronCreate', 'CronDelete', 'CronList',
+  'RemoteTrigger', 'PushNotification',
+];
+
 // The environment the Agent SDK gives the `claude` CLI subprocess it spawns.
 //
 // Without this the subprocess inherits the worker's process.env, which is how
@@ -419,7 +440,18 @@ export class AgentOrchestrator {
       // stale, so clear it here for all routes rather than in each of them.
       this.stopRequested = false;
 
-      await this.#fetchCurrentModel();
+      // The turn-start fetch's result travels with the message, so the agent starts
+      // the turn already holding what get_current_model would tell it and does not
+      // spend a client round trip and an LLM iteration asking again. It is the tool's
+      // own answer — the path the model was written to plus its errors and unit
+      // verdict — never the model itself, which stays on disk.
+      // An empty message means "continue"; the note would make it non-empty and hide
+      // that from the routes' empty-message fallbacks, so spell the request out first.
+      const modelSync = await this.#fetchCurrentModel();
+      if (modelSync) {
+        const request = userMessage?.trim() ? userMessage : 'Please continue.';
+        userMessage = `${request}\n\n${modelSync}`;
+      }
 
       const isManual = loopStyle === 'manual';
       if (isManual && previousAgentContext?.length > 0) {
@@ -572,8 +604,21 @@ export class AgentOrchestrator {
     const model = this.#resolveNativeModel();
     // Adaptive thinking controls depth via `effort` (output_config) rather than a token
     // budget — budget_tokens is removed on Opus 4.7+/Sonnet 4.6 and would 400.
-    const thinking = this.#resolveAnthropicThinking();
-    const thinkingEnabled = thinking?.type !== 'disabled';
+    const resolvedThinking = this.#resolveAnthropicThinking();
+    const thinkingEnabled = resolvedThinking?.type !== 'disabled';
+    // Thinking blocks are replayed with the history (see processAgentResponseAnthropicManual),
+    // and on preserved-thinking models each one is bound to the exact prefix it was
+    // produced under. This history is not append-only — cleanupContext summarizes it
+    // and the tool list follows model state — so a replayed block can find its prefix
+    // changed. drop_block makes the API discard such a block and proceed instead of
+    // answering 400 (the default for accounts created on or after 2026-08-31). Models
+    // that do not enforce the check accept the same body.
+    const thinking = thinkingEnabled
+      ? { ...resolvedThinking, block_binding: { prefix_mismatch_behavior: 'drop_block' } }
+      : resolvedThinking;
+    const requestOptions = thinkingEnabled
+      ? { headers: { 'anthropic-beta': 'thinking-binding-controls-2026-08-01' } }
+      : undefined;
     const effort = this.#resolveEffort();
 
     while (true) {
@@ -597,7 +642,14 @@ export class AgentOrchestrator {
         try {
           const response = await anthropic.messages.create({
             model,
-            max_tokens: 8192,
+            // Thinking draws on the same budget as the answer, so 8192 could be spent
+            // before the reply was done and cost an iteration on "continue". 16000 is
+            // the ceiling that keeps a non-streaming request clear of SDK timeouts.
+            max_tokens: 16000,
+            // Automatic caching: a breakpoint on the last message, so each iteration of
+            // a tool loop reads the whole prior conversation from cache instead of just
+            // the system prompt and tools (their own breakpoints make 3 of the 4 allowed).
+            cache_control: { type: 'ephemeral' },
             system: systemBlocks,
             // Image bytes are attached to a copy here and thrown away with the
             // request. `messages` is the live session context, so hydrating it in
@@ -609,7 +661,12 @@ export class AgentOrchestrator {
             // sending `{effort: undefined}` so the API applies its own default.
             ...(thinkingEnabled && effort ? { output_config: { effort } } : {}),
             tools: tools.length > 0 ? tools : undefined
-          });
+          }, requestOptions);
+
+          const dropped = response.input_transformations?.filter(t => t.type === 'thinking_dropped') ?? [];
+          if (dropped.length > 0) {
+            logger.debug(`Anthropic Manual: API dropped ${dropped.length} replayed thinking block(s): ${dropped.map(t => `${t.path} (${t.reason})`).join(', ')}`);
+          }
 
           // Reported against the pinned model rather than whatever the session resolves
           // to now, so a level change mid-turn can't misattribute this call's cost.
@@ -829,11 +886,12 @@ export class AgentOrchestrator {
         abortController: this.abortController,
         systemPrompt: systemPrompt,
         model: this.#resolveNativeModel(),
-        maxTokens: 8192,
         maxTurns: maxIterations,
         mcpServers: mcpServers,
         allowedTools: allowedTools,
-        ...(canWriteToLocalSandbox ? {} : { disallowedTools: SDK_WRITE_TOOLS }),
+        disallowedTools: canWriteToLocalSandbox
+          ? SDK_UNUSABLE_TOOLS
+          : [...SDK_UNUSABLE_TOOLS, ...SDK_WRITE_TOOLS],
         permissionMode: 'bypassPermissions',
         cwd: sessionTempDir,
         env: anthropicSdkSubprocessEnv(),
@@ -859,7 +917,8 @@ export class AgentOrchestrator {
         // Omitted entirely when the level defines no effort — see the manual loop.
         ...(anthropicSdkThinking?.type !== 'disabled' && anthropicSdkEffort
           ? { effort: anthropicSdkEffort } : {}),
-        compact: true  // Enable automatic compaction
+        // No output-token or compaction options: the SDK's Options has neither a
+        // `maxTokens` nor a `compact`, and the CLI auto-compacts on its own.
       };
 
       // If we have an SDK session ID, resume the conversation
@@ -1415,6 +1474,12 @@ model tools.`;
         ));
 
         assistantContent.push({ type: 'text', text: block.text });
+      } else if (block.type === 'redacted_thinking' || (block.type === 'thinking' && block.signature)) {
+        // Kept verbatim and in position, signature included, so the next iteration
+        // of a tool loop still has the reasoning that chose the tool. Never shown to
+        // the client, and every other consumer of this history reads text blocks only.
+        // An unsigned block is one a max_tokens cutoff truncated; it cannot be replayed.
+        assistantContent.push(block);
       } else if (block.type === 'tool_use') {
         hasToolCalls = true;
 
@@ -3667,13 +3732,23 @@ ${lines.join('\n')}`);
     logger.debug(`[orchestrator:${this.sessionId}] Message queued (depth: ${this.#pendingMessages.length})`);
   }
 
+  /**
+   * Sync the client's model before a turn and return a note carrying the
+   * get_current_model result for the agent, or null when there is nothing to hand
+   * over (no such tool on this session, or the fetch failed — the agent then calls
+   * the tool itself, as its prompt tells it to when no note is present).
+   */
   async #fetchCurrentModel() {
     const tool = this.builtInToolProvider.getTools().tools.get_current_model;
-    if (!tool) return;
+    if (!tool) return null;
     const result = await tool.handler({});
+    const text = result.content?.[0]?.text;
     if (result.isError) {
-      logger.warn(`Failed to fetch current model before processing request: ${result.content?.[0]?.text ?? 'unknown error'}`);
+      logger.warn(`Failed to fetch current model before processing request: ${text ?? 'unknown error'}`);
+      return null;
     }
+    if (!text) return null;
+    return `[Model sync: get_current_model was called for you at the start of this message. Its result: ${text}]`;
   }
 
   #resetAnthropicSdkUsageAccumulator() {

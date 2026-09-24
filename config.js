@@ -67,7 +67,7 @@ const config = {
     */
     "agentSessionTempDir": process.env.AGENT_SESSION_TEMP_DIR || null, // Optional custom temp directory for session files (defaults to OS tmpdir/sd-agent)
     "agentMaxTokensForEngines": 32_000, // Maximum tokens before force switching to file-based editing
-    "agentMaxContextTokens": 32_000, // Maximum tokens for conversation history sent to Claude API
+    "agentMaxContextTokens": 128_000, // Maximum tokens for conversation history sent to Claude API
     "agentDefaultProvider": 'anthropic', // Default LLM provider when client does not specify one — any id in agentProviders below
 
     /*
