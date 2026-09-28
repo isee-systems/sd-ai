@@ -56,10 +56,10 @@
                 "baselineTokenUsage": 10000
             }
         },
-        "quantitative-claude-sonnet-5": {
+        "quantitative-claude-sonnet-5-5": {
             "engine": "quantitative",
             "additionalParameters": {
-                "underlyingModel": "claude-sonnet-5"
+                "underlyingModel": "claude-sonnet-5-5"
             },
             "limits": {
                 "baselineTokenUsage": 10000

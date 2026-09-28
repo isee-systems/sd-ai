@@ -49,7 +49,7 @@ const config = {
         {label: "Claude Fable 5.1", value: 'claude-fable-5-1'},
         {label: "Claude Fable 5", value: 'claude-fable-5'},
         {label: "Claude Opus 5.5", value: 'claude-opus-5-5'},
-        {label: "Claude Sonnet 5", value: 'claude-sonnet-5'},
+        {label: "Claude Sonnet 5.5", value: 'claude-sonnet-5-5'},
         {label: "Claude Haiku 4.5", value: 'claude-haiku-4-5'},
         {label: "Qwen3.8 Max", value: 'qwen/qwen3.8-max'},
         {label: "Qwen3.7 Plus", value: 'qwen/qwen3.7-plus'},
@@ -93,7 +93,7 @@ const config = {
     "nativeAgentProviders": {
         anthropic: {
             displayName: 'Claude',
-            model: 'claude-sonnet-5',
+            model: 'claude-sonnet-5-5',
             summaryModel: 'claude-haiku-4-5'
         },
         google: {
@@ -186,11 +186,11 @@ const config = {
             anthropic: [
                 { id: 'standard', label: 'Standard',
                   description: 'Balanced quality and cost. Recommended for most work.',
-                  model: 'claude-sonnet-5', effort: 'medium' },
+                  model: 'claude-sonnet-5-5' },
                 { id: 'high', label: 'High',
                   description: 'A more capable model with deeper reasoning.',
                   model: 'claude-opus-5-5', effort: 'high' },
-                // No effort: Fable always thinks, and we want its own default depth.
+                // No effort on standard or maximum: use each model's own default depth.
                 { id: 'maximum', label: 'Maximum',
                   description: 'The most capable model available. Use it for the hardest problems.',
                   model: 'claude-fable-5-1' }
@@ -275,11 +275,9 @@ const config = {
     get agentProviders() {
         return [...Object.keys(this.nativeAgentProviders), ...Object.keys(this.openRouterAgentProviders)];
     },
-    // Effort/thinking fallbacks for a provider with NO agentIntelligence ladder.
-    // Providers that do have one take their effort from the selected level instead,
-    // and a level may omit effort entirely to defer to the provider's own default —
-    // so these are the floor, not the setting most requests actually use.
-    "agentAnthropicEffort": "medium",
+    // Thinking fallbacks for a provider with NO agentIntelligence ladder. Effort has
+    // no fallback: a provider without a ladder, or a level that omits effort, sends
+    // none and gets the provider's own default.
     "agentAnthropicThinking": { type: "adaptive" }, // Opus 4.7+/Sonnet 4.6 use adaptive thinking; depth is controlled by effort (budget_tokens is removed and 400s)
     "agentGeminiThinking": { thinkingLevel: ThinkingLevel.MEDIUM },
     /*

@@ -56,10 +56,10 @@
                 "baselineTokenUsage": 10000
             }
         },
-        "Seldon-claude-sonnet-5": {
+        "Seldon-claude-sonnet-5-5": {
             "engine": "Seldon",
             "additionalParameters": {
-                "underlyingModel": "claude-sonnet-5"
+                "underlyingModel": "claude-sonnet-5-5"
             },
             "limits": {
                 "baselineTokenUsage": 10000

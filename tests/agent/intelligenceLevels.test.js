@@ -38,8 +38,7 @@ const MAXIMUM_MODEL = config.agentIntelligence.providers.anthropic
   .find((l) => l.id === 'maximum').model;
 
 const LEGACY = {
-  anthropicModel: 'claude-sonnet-5',
-  anthropicEffort: 'medium',
+  anthropicModel: 'claude-sonnet-5-5',
   anthropicThinking: { type: 'adaptive' },
   geminiModel: 'gemini-3.8-flash',
   geminiToolBuildNormal: 'gemini-3.8-flash low',
@@ -233,7 +232,7 @@ describe('intelligence ladder — config shape guards', () => {
 
   it('never exposes a model cheaper than the default rung', () => {
     // "Users shouldn't be able to specify haiku": no rung may undercut the floor.
-    const cheapestByProvider = { anthropic: 'claude-sonnet-5' };
+    const cheapestByProvider = { anthropic: 'claude-sonnet-5-5' };
     for (const [provider, floor] of Object.entries(cheapestByProvider)) {
       const models = getLadder(provider).map(l => l.model);
       expect(models[0]).toBe(floor);
@@ -427,7 +426,7 @@ describe('intelligence ladder — provider request shapes', () => {
       ...LEGACY.anthropicThinking,
       block_binding: { prefix_mismatch_behavior: 'drop_block' }
     });
-    expect(req.output_config).toEqual({ effort: LEGACY.anthropicEffort });
+    expect(req).not.toHaveProperty('output_config');
   });
 
   it('sends the binding-controls beta header, auto-caching and room for thinking', async () => {
@@ -522,7 +521,7 @@ describe('intelligence ladder — provider request shapes', () => {
       await orc.startConversationAnthropicManual('hi');
       const req = create.mock.calls[0][0];
       expect(req.model).toBe(config.nativeAgentProviders.anthropic.model);
-      expect(req.output_config).toEqual({ effort: config.agentAnthropicEffort });
+      expect(req).not.toHaveProperty('output_config');
     } finally {
       config.agentIntelligence = original;
     }
@@ -586,7 +585,7 @@ describe('intelligence ladder — changing level mid-conversation', () => {
     orc.setIntelligence('maximum');
     await orc.startConversationAnthropicManual('second');
 
-    expect(create.mock.calls[0][0].model).toBe('claude-sonnet-5');
+    expect(create.mock.calls[0][0].model).toBe('claude-sonnet-5-5');
     expect(create.mock.calls[1][0].model).toBe(MAXIMUM_MODEL);
   });
 
@@ -615,7 +614,7 @@ describe('intelligence ladder — changing level mid-conversation', () => {
     expect(create.mock.calls.length).toBeGreaterThan(1);
     const models = create.mock.calls.map(([req]) => req.model);
     expect(new Set(models).size).toBe(1);
-    expect(models[0]).toBe('claude-sonnet-5');
+    expect(models[0]).toBe('claude-sonnet-5-5');
 
     // ...and the change is not lost — it applies to the next turn.
     await orc.startConversationAnthropicManual('again');

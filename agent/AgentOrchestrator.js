@@ -2637,9 +2637,7 @@ ${lines.join('\n')}`);
    * request; on the Anthropic path the latter risks a 400.
    */
   #resolveEffort() {
-    const level = this.#resolveLevelConfig();
-    if (level) return level.effort;              // may legitimately be undefined
-    return config.agentAnthropicEffort;           // no ladder -> pre-feature constant
+    return this.#resolveLevelConfig()?.effort;   // may legitimately be undefined
   }
 
   /** Anthropic `thinking` config; a level may override the shared default. */
