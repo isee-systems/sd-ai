@@ -2,9 +2,9 @@
  * Chart parameters for the leaderboard views.
  *
  * Scores and costs are magnitudes, so they get a sequential ramp: one hue, more-is-darker.
- * The two engine families on the cost chart are an identity distinction, so they get the
- * first two categorical slots — the only place on these pages where hue means "which",
- * not "how much".
+ * Engine families on the scatter charts are an identity distinction, so they get the
+ * categorical slots — the only place on these pages where hue means "which", not "how
+ * much".
  *
  * Colours are the validated defaults; the ramp is quoted at the steps it is sampled at
  * rather than inlined at the call sites, so re-theming is one edit here.
@@ -25,8 +25,14 @@ export const SEQUENTIAL_BLUE = [
  */
 export const INK_FLIP_AT = 0.5;
 
-/** Categorical slots 1 and 2 — used only to tell the engine families apart. */
-export const CATEGORICAL = ['#2a78d6', '#eb6834'];
+/**
+ * Categorical slots 1-3 (blue, orange, aqua) — used only to tell engine families apart.
+ * Three, because on a scatter every pair of points can sit side by side and these are the
+ * slots that stay distinguishable for every pair, colour-vision deficiency included; a
+ * fourth (yellow) is confused with orange. Families past three fold into "Other". Aqua
+ * sits below 3:1 against the page, which the charts' direct labels and the table cover.
+ */
+export const CATEGORICAL = ['#2a78d6', '#eb6834', '#1baf7a'];
 
 /** Chart chrome, so axes and gridlines stay recessive against the page. */
 export const CHROME = {

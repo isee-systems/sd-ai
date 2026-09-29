@@ -300,8 +300,71 @@ describe('QuantitativeErrorFixing Evaluate', () => {
       )).toHaveLength(1);
     });
 
-    it('still rejects an equation whose operator is malformed', async () => {
-      expect(await compare('Susceptible_population//Total_population', 'Susceptible_population/Total_population')).toHaveLength(1);
+    it('accepts safe division for plain division', async () => {
+      // "//" is safe division in SD-JSON, not a malformed operator.
+      expect(await compare('Susceptible_population//Total_population', 'Susceptible_population/Total_population')).toEqual([]);
+      expect(await compare('Susceptible_population // Total_population', 'Susceptible_population/Total_population')).toEqual([]);
+    });
+
+    it('still rejects a division whose operands differ', async () => {
+      expect(await compare('Total_population//Susceptible_population', 'Susceptible_population/Total_population')).toHaveLength(1);
+    });
+  });
+
+  describe('equations routed through a helper auxiliary', () => {
+    // The v2 sum-error fix: the error model's "net flow" helper turned into an auxiliary
+    // holding the sum, and the sum variable pointed at it. That computes what the reference
+    // computes, and was scored wrong only because the text was one name instead of the sum.
+    const sum = 'Symptomatic_infectious+Presymptomatic_infectious+Asymptomatic_infectious';
+    const correctVars = [{ name: 'Infectious population', type: 'variable', equation: sum }];
+    const run = (generatedVars) => evaluate({ model: { variables: generatedVars } }, { correctModel: { variables: correctVars }, errorExplanations: [] });
+
+    it('accepts an alias to a helper auxiliary the correct model lacks', async () => {
+      expect(await run([
+        { name: 'Infectious population', type: 'variable', equation: 'Infectious_population_net_flow' },
+        { name: 'Infectious population net flow', type: 'variable', equation: sum }
+      ])).toEqual([]);
+    });
+
+    it('follows a chain of helpers', async () => {
+      expect(await run([
+        { name: 'Infectious population', type: 'variable', equation: 'helper_a' },
+        { name: 'helper a', type: 'variable', equation: 'helper_b' },
+        { name: 'helper b', type: 'variable', equation: sum }
+      ])).toEqual([]);
+    });
+
+    it('does not look through a flow or stock', async () => {
+      const failures = await run([
+        { name: 'Infectious population', type: 'variable', equation: 'Infectious_population_net_flow' },
+        { name: 'Infectious population net flow', type: 'flow', equation: sum }
+      ]);
+      expect(failures).toHaveLength(1);
+      expect(failures[0].type).toBe('Incorrect equation');
+    });
+
+    it('does not look through a variable the correct model defines', async () => {
+      const failures = await evaluate(
+        { model: { variables: [
+          { name: 'a', type: 'variable', equation: 'b' },
+          { name: 'b', type: 'variable', equation: 'x+y' }
+        ] } },
+        { correctModel: { variables: [
+          { name: 'a', type: 'variable', equation: 'x+y' },
+          { name: 'b', type: 'variable', equation: 'x+y' }
+        ] }, errorExplanations: [] }
+      );
+      expect(failures).toHaveLength(1);
+      expect(failures[0].details).toContain('"a"');
+    });
+
+    it('terminates on a cycle of helpers', async () => {
+      const failures = await run([
+        { name: 'Infectious population', type: 'variable', equation: 'helper_a' },
+        { name: 'helper a', type: 'variable', equation: 'helper_b' },
+        { name: 'helper b', type: 'variable', equation: 'helper_a' }
+      ]);
+      expect(failures).toHaveLength(1);
     });
   });
 

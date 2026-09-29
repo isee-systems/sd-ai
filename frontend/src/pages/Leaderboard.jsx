@@ -279,49 +279,95 @@ function Leaderboard() {
       )
     : [];
 
+  /* ------------------------------------------------------------ engine families */
+
+  // Which engine family a point belongs to is an identity distinction, so both scatter
+  // charts give it hue, from the same fixed slots. On a scatter any two points can sit
+  // side by side, and only the first three categorical slots stay distinguishable for
+  // every pair (colour-vision deficiency included), so families past three fold into a
+  // muted "Other" rather than growing the palette. Slots are assigned from the whole
+  // board, not the filtered view, so a filter never repaints the families that survive
+  // it. Family names are compared case-insensitively: "Seldon" and "seldon" are one engine.
+  const familyKey = (engine) => labelFor(engine).toLowerCase();
+  const familyTally = allEngines.reduce((acc, e) => {
+    const key = familyKey(e);
+    acc[key] ??= { count: 0, names: {} };
+    acc[key].count += 1;
+    acc[key].names[labelFor(e)] = (acc[key].names[labelFor(e)] ?? 0) + 1;
+    return acc;
+  }, {});
+  const familyOrder = Object.entries(familyTally)
+    .sort((a, b) => b[1].count - a[1].count || a[0].localeCompare(b[0]))
+    .map(([key]) => key);
+  const familyColor = new Map(familyOrder.slice(0, CATEGORICAL.length).map((key, i) => [key, CATEGORICAL[i]]));
+  // Shown under its most common spelling.
+  const familyName = new Map(
+    familyOrder.map((key) => [key, Object.entries(familyTally[key].names).sort((a, b) => b[1] - a[1])[0][0]])
+  );
+  const seriesOf = (engine) => (familyColor.has(familyKey(engine)) ? familyKey(engine) : 'other');
+
+  /**
+   * One scatter trace per engine family, in slot order with "Other" last, so both charts
+   * share colours, legend and marks. An engine still carrying results from a caveated
+   * generation is drawn hollow: the fill is the only thing that changes, so the family
+   * stays readable while the chart does not present a flagged score as equal footing.
+   */
+  const familyTraces = (engines, { x, y, customdata, hovertemplate }) => {
+    const series = [...familyOrder.filter((key) => familyColor.has(key)), 'other'];
+    return series
+      .map((key) => {
+        const members = engines.filter((e) => seriesOf(e) === key);
+        if (members.length === 0) return null;
+        const color = familyColor.get(key) ?? CHROME.muted;
+        return {
+          x: members.map(x),
+          y: members.map(y),
+          text: members.map((e) => e.llmModel),
+          customdata: members.map(customdata),
+          name: key === 'other' ? 'Other' : familyName.get(key),
+          mode: 'markers+text',
+          type: 'scatter',
+          textposition: 'top center',
+          textfont: { ...CHART_FONT, size: 10, color: CHROME.textSecondary },
+          marker: {
+            size: 13,
+            color: members.map((e) => (isCaveated(e) ? '#ffffff' : color)),
+            symbol: members.map((e) => (isCaveated(e) ? 'circle-open-dot' : 'circle')),
+            // A surface ring keeps two points that land on each other readable as two;
+            // a hollow point keeps its family colour on the ring instead.
+            line: { width: 2, color: members.map((e) => (isCaveated(e) ? color : '#ffffff')) },
+          },
+          hovertemplate,
+        };
+      })
+      .filter(Boolean);
+  };
+
   /* ------------------------------------------------------------------- cost chart */
 
   // Results predating cost tracking have none, and a board can be entirely unpriced.
   const priced = ranked.filter((e) => e.costPerTest != null);
 
-  // Which engine family a point belongs to is an identity distinction, so it gets hue.
-  // Two families are direct-labelled and legended; a longer tail folds into a muted
-  // "Other" rather than growing the palette.
-  const familyCounts = priced.reduce((acc, e) => {
-    acc[e.engineName] = (acc[e.engineName] ?? 0) + 1;
-    return acc;
-  }, {});
-  const namedFamilies = Object.entries(familyCounts)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, CATEGORICAL.length)
-    .map(([name]) => name);
-  const familyOf = (engine) => (namedFamilies.includes(engine.engineName) ? engine.engineName : 'Other');
-  const costSeries = [...namedFamilies, ...(priced.some((e) => familyOf(e) === 'Other') ? ['Other'] : [])];
-
-  const costTraces = costSeries.map((family, i) => {
-    const members = priced.filter((e) => familyOf(e) === family);
-    return {
-      x: members.map((e) => e.score),
-      y: members.map((e) => e.costPerTest),
-      text: members.map((e) => e.llmModel),
-      customdata: members.map((e) => [e.configName, e.costTotal, e.costUnpricedCalls]),
-      name: engineLabelOf.get(family) ?? family,
-      mode: 'markers+text',
-      type: 'scatter',
-      textposition: 'top center',
-      textfont: { ...CHART_FONT, size: 10, color: CHROME.textSecondary },
-      marker: {
-        size: 13,
-        color: namedFamilies.includes(family) ? CATEGORICAL[i] : CHROME.muted,
-        // A surface ring keeps two points that land on each other readable as two.
-        line: { width: 2, color: '#ffffff' },
-      },
-      hovertemplate:
-        '<b>%{customdata[0]}</b><br>%{text}<br>' +
-        'Score: %{x:.1%}<br>Cost/test: $%{y:.4f}<br>' +
-        'Benchmark total: $%{customdata[1]:.2f}<extra></extra>',
-    };
+  const costTraces = familyTraces(priced, {
+    x: (e) => e.score,
+    y: (e) => e.costPerTest,
+    customdata: (e) => [e.configName, e.costTotal, e.costUnpricedCalls],
+    hovertemplate:
+      '<b>%{customdata[0]}</b><br>%{text}<br>' +
+      'Score: %{x:.1%}<br>Cost/test: $%{y:.4f}<br>' +
+      'Benchmark total: $%{customdata[1]:.2f}<extra></extra>',
   });
+
+  /* ------------------------------------------------------------------ speed chart */
+
+  const speedTraces = familyTraces(ranked, {
+    x: (e) => e.score,
+    y: (e) => e.speed,
+    customdata: (e) => e.configName,
+    hovertemplate: '<b>%{customdata}</b><br>%{text}<br>Score: %{x:.1%}<br>Avg time: %{y:.1f}s<extra></extra>',
+  });
+
+  const hasHollow = ranked.some(isCaveated);
 
   const unpricedNote = ranked.length - priced.length;
 
@@ -965,36 +1011,7 @@ function Leaderboard() {
         subtitle="Overall score against average wall-clock time per test."
       >
         <Plot
-          data={[
-            {
-              x: ranked.map((e) => e.score),
-              y: ranked.map((e) => e.speed),
-              text: ranked.map((e) =>
-                e.engineName === 'qualitative-zero'
-                  ? `${e.llmModel}`
-                  : `${engineLabelOf.get(e.engineName)} (${e.llmModel})`
-              ),
-              customdata: ranked.map((e) => e.configName),
-              mode: 'markers+text',
-              type: 'scatter',
-              textposition: 'right center',
-              hovertemplate:
-                '<b>%{customdata}</b><br>Score: %{x:.1%}<br>Avg time: %{y:.1f}s<extra></extra>',
-              marker: {
-                size: 12,
-                opacity: 0.7,
-                // Engines still carrying results from a caveated generation are
-                // drawn in that warning colour, so the chart doesn't present a
-                // flagged score as though it were on equal footing.
-                color: ranked.map((e) => {
-                  if (e.engineName === 'qualitative-zero') return 'rgba(102, 102, 102, 0.8)';
-                  return isCaveated(e) ? 'rgba(217, 143, 38, 0.82)' : 'rgba(186, 72, 72, 0.82)';
-                }),
-                line: { width: 0 },
-              },
-              textfont: { ...CHART_FONT, size: 10 },
-            },
-          ]}
+          data={speedTraces}
           layout={{
             autosize: true,
             xaxis: {
@@ -1016,9 +1033,10 @@ function Leaderboard() {
               linecolor: CHROME.axis,
               tickfont: { ...CHART_FONT, color: CHROME.muted },
             },
-            margin: { t: 10, r: 30, b: 50, l: 80 },
+            margin: { t: 10, r: 30, b: 60, l: 80 },
             font: CHART_FONT,
-            showlegend: false,
+            showlegend: speedTraces.length > 1,
+            legend: { orientation: 'h', y: -0.12, font: { ...CHART_FONT, size: 11 } },
             hovermode: 'closest',
             plot_bgcolor: 'rgba(0,0,0,0)',
             paper_bgcolor: 'rgba(0,0,0,0)',
@@ -1027,6 +1045,12 @@ function Leaderboard() {
           style={{ width: '100%', height: '760px' }}
           useResizeHandler={true}
         />
+        {hasHollow && (
+          <p className="text-xs text-gray-500 mt-2">
+            Hollow markers are engines still carrying results from an earlier generation of
+            the benchmark; see the caveat above.
+          </p>
+        )}
       </Panel>
     </div>
   );

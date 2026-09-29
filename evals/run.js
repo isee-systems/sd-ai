@@ -420,10 +420,12 @@ const runSingleTest = async (
     inProgress.add(name);
     engineBar.update({ inProgress: printProgress(inProgress) });
 
-    const additionalParameters = {
+    // A deep copy for the same reason as the input model below: every config's copy of a
+    // test shares these objects, and an engine may write to what it is handed.
+    const additionalParameters = structuredClone({
       ...test.engineConfig.additionalParameters,
       ...test.testParams.additionalParameters,
-    };
+    });
 
     if (experiment.verbose === 2) {
       console.log(additionalParameters)
@@ -501,9 +503,14 @@ const runSingleTest = async (
           // price of producing this response, not just the outermost request.
           // The stopwatch starts here: both rate limiters and the backoff hold are above.
           const generationStart = Date.now();
+          // Every engine config's copy of a test shares one test object, so the input model
+          // is handed over as a deep copy. Merlin's eval client edits its session model in
+          // place; handed the shared object, its repair of the injected error became the
+          // input every later config saw (19 of 20 v2 rows of COVID-19 lookup error 1 were
+          // given an already-fixed model).
           const generated = await withCostAccounting(() => instance.generate(
             test.testParams["prompt"],
-            test.testParams["currentModel"],
+            test.testParams["currentModel"] === undefined ? undefined : structuredClone(test.testParams["currentModel"]),
             additionalParameters
           ));
           // Siblings awaiting this same promise report the generation they are grading,

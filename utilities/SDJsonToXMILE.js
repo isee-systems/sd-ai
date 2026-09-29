@@ -46,7 +46,13 @@ function convertSafeDivisionInModel(model) {
  */
 function SDJsonToXMILE(sdJson, options = {}) {
     // Handle case where sdJson has a 'model' property (like in eval files)
-    const model = sdJson.model || sdJson;
+    const input = sdJson.model || sdJson;
+    // Modules given as bare names (['herd']) rather than {name, parentModule} objects are
+    // read as top-level modules. Read as objects they had no name, and every module variable
+    // vanished from the XMILE.
+    const model = Array.isArray(input.modules)
+        ? { ...input, modules: input.modules.map((m) => typeof m === 'string' ? { name: m, parentModule: '' } : { ...m, parentModule: m.parentModule || '' }) }
+        : input;
 
     // Validate input
     if (!model.variables || !Array.isArray(model.variables)) {
@@ -156,6 +162,162 @@ function SDJsonToXMILE(sdJson, options = {}) {
     lines.push('</xmile>');
 
     return lines.join('\n');
+}
+
+/**
+ * The identity of a variable name for matching references: case-insensitive, with spaces,
+ * underscores and line breaks all the same separator.
+ * @param {string} name A name in any of its spellings
+ * @returns {string} The matching key
+ */
+function referenceKey(name) {
+    return String(name).replace(/\\[nr]/g, ' ').replace(/[\s_]+/g, '_').replace(/^_|_$/g, '').toLowerCase();
+}
+
+/**
+ * Write a local name as an XMILE equation identifier, quoting it when it is not a plain word.
+ * @param {string} name The local variable name
+ * @returns {string} The identifier
+ */
+function equationIdentifier(name) {
+    const identifier = utils.xmileName(name.trim());
+    return /^[\p{L}_][\p{L}\p{N}_$]*$/u.test(identifier) ? identifier : `"${identifier.replace(/"/g, '')}"`;
+}
+
+const referenceIndexes = new WeakMap();
+
+/**
+ * Index the model's variables for resolving equation references, once per model.
+ * @param {Object} model The SD-JSON model
+ * @returns {{byModuleLocal: Map, byJoined: Map, ghostBySource: Map}} The index
+ */
+function referenceIndex(model) {
+    if (referenceIndexes.has(model)) return referenceIndexes.get(model);
+    const byModuleLocal = new Map();
+    const byJoined = new Map();
+    const ghostBySource = new Map();
+    for (const variable of model.variables) {
+        if (typeof variable.name !== 'string') continue;
+        const dot = variable.name.indexOf('.');
+        const module = dot === -1 ? '' : variable.name.slice(0, dot);
+        const local = dot === -1 ? variable.name : variable.name.slice(dot + 1);
+        const entry = { variable, module, local };
+        byModuleLocal.set(`${referenceKey(module)}|${referenceKey(local)}`, entry);
+        if (module) byJoined.set(referenceKey(`${module}_${local}`), entry);
+        if (variable.crossLevelGhostOf) {
+            ghostBySource.set(`${referenceKey(module)}|${referenceKey(variable.crossLevelGhostOf)}`, entry);
+        }
+    }
+    const index = { byModuleLocal, byJoined, ghostBySource };
+    referenceIndexes.set(model, index);
+    return index;
+}
+
+/**
+ * Resolve one reference in an equation to the XMILE identifier it means in the module the
+ * equation belongs to.
+ *
+ * SD-JSON names module variables "module.local name", and engines write references in more
+ * than one way: the local name (hare_density), the full name with spaces (lions.birth rate),
+ * or the module joined by an underscore (marticatenes_enhancement_rate). XMILE only knows the
+ * local identifier inside a module, so every spelling is resolved to it. A reference to
+ * another module's variable goes through the ghost that mirrors it when there is one, and is
+ * otherwise written module-qualified. A variable never resolves to itself, since an equation
+ * that names its own variable means a same-named variable elsewhere.
+ * @param {string} text The reference as written
+ * @param {Object} variable The variable whose equation this is
+ * @param {string} currentModule The immediate module the variable is in ('' at top level)
+ * @param {Object} model The SD-JSON model
+ * @returns {string|undefined} The identifier, or undefined when the text names no variable
+ */
+function resolveReference(text, variable, currentModule, model) {
+    const { byModuleLocal, byJoined, ghostBySource } = referenceIndex(model);
+    const here = referenceKey(currentModule);
+    const key = referenceKey(text);
+
+    const local = byModuleLocal.get(`${here}|${key}`);
+    if (local && local.variable !== variable) return equationIdentifier(local.local);
+
+    const writeTarget = (target) => {
+        if (!target || target.variable === variable) return undefined;
+        if (referenceKey(target.module) === here) return equationIdentifier(target.local);
+        const ghost = ghostBySource.get(`${here}|${referenceKey(target.variable.name)}`);
+        if (ghost) return equationIdentifier(ghost.local);
+        if (!target.module) return equationIdentifier(target.local);
+        return `${equationIdentifier(target.module)}.${equationIdentifier(target.local)}`;
+    };
+
+    const dot = text.indexOf('.');
+    if (dot !== -1) {
+        const qualified = writeTarget(byModuleLocal.get(`${referenceKey(text.slice(0, dot))}|${referenceKey(text.slice(dot + 1))}`));
+        if (qualified) return qualified;
+    }
+    return writeTarget(byJoined.get(key)) ?? writeTarget(byModuleLocal.get(`|${key}`));
+}
+
+/**
+ * Rewrite every variable reference in an equation into XMILE identifiers for its module.
+ * Names may contain spaces, so each run of words is matched longest first against the model's
+ * variables; words that name no variable (builtins, keywords) pass through unchanged, as do
+ * numbers and operators.
+ * @param {string} equation The SD-JSON equation
+ * @param {Object} variable The variable whose equation this is
+ * @param {string} currentModule The immediate module of the variable ('' at top level)
+ * @param {Object} model The SD-JSON model
+ * @returns {string} The XMILE equation
+ */
+function translateEquation(equation, variable, currentModule, model) {
+    if (typeof equation !== 'string' || equation === '') return equation;
+    const word = /^[\p{L}_$][\p{L}\p{N}_$]*(?:\.[\p{L}_$][\p{L}\p{N}_$]*)*/u;
+    const number = /^(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?/;
+    let out = '';
+    let i = 0;
+    while (i < equation.length) {
+        const rest = equation.slice(i);
+        if (rest[0] === '"') {
+            const end = equation.indexOf('"', i + 1);
+            if (end === -1) { out += rest; break; }
+            const resolved = resolveReference(equation.slice(i + 1, end), variable, currentModule, model);
+            out += resolved ?? equation.slice(i, end + 1);
+            i = end + 1;
+        } else if (number.test(rest) && !/[\p{L}_$]/u.test(equation[i - 1] || '')) {
+            const match = rest.match(number)[0];
+            out += match;
+            i += match.length;
+        } else if (word.test(rest)) {
+            // Gather the run of words separated by single spaces, then take the longest
+            // prefix of it that names a variable.
+            const words = [];
+            let j = i;
+            while (words.length < 8) {
+                const found = equation.slice(j).match(word);
+                if (!found) break;
+                words.push({ text: found[0], end: j + found[0].length });
+                const gap = equation.slice(words[words.length - 1].end).match(/^[ \t]+/);
+                if (!gap) break;
+                j = words[words.length - 1].end + gap[0].length;
+            }
+            let consumed = false;
+            for (let n = words.length; n >= 1; n--) {
+                const text = equation.slice(i, words[n - 1].end);
+                const resolved = resolveReference(text, variable, currentModule, model);
+                if (resolved) {
+                    out += resolved;
+                    i = words[n - 1].end;
+                    consumed = true;
+                    break;
+                }
+            }
+            if (!consumed) {
+                out += words[0].text;
+                i = words[0].end;
+            }
+        } else {
+            out += rest[0];
+            i += 1;
+        }
+    }
+    return out;
 }
 
 /**
@@ -326,13 +488,26 @@ function buildModuleLevel(moduleNode, currentPath, variablesByModule, ghostConne
     moduleNode.children.forEach(childModule => {
         lines.push(`${indent}  <module name="${escapeNameAttribute(childModule.name)}">`);
 
-        // Add connect tags for this module's ghost variables
+        // Add connect tags for this module's ghost variables. Stella lists each binding on
+        // both modules it joins, with both ends module-qualified in XMILE identifier form
+        // (to="Housing.Population" from="Population.Population"). These were written with
+        // raw SD-JSON names ("chickens.foxes count"), which name nothing in the XMILE.
         const moduleConnections = ghostConnections.filter(conn =>
             conn.targetModule === childModule.fullPath || conn.sourceModule === childModule.fullPath
         );
 
+        const qualifiedIdentifier = (name, modulePath) => {
+            const module = modulePath.split('.').pop();
+            const local = utils.xmileName(getLocalName(name, modulePath));
+            return module ? `${utils.xmileName(module)}.${local}` : local;
+        };
         moduleConnections.forEach(conn => {
-            lines.push(`${indent}    <connect to="${escapeXml(conn.target)}" from="${escapeXml(conn.source)}"/>`);
+            const to = qualifiedIdentifier(conn.target, conn.targetModule);
+            const from = qualifiedIdentifier(conn.source, conn.sourceModule);
+            // Stella writes each binding as <connect> and again as <connect2>; <connect2> is
+            // the authoritative one, and <connect> is kept for older readers.
+            lines.push(`${indent}    <connect to="${escapeXml(to)}" from="${escapeXml(from)}"/>`);
+            lines.push(`${indent}    <connect2 to="${escapeXml(to)}" from="${escapeXml(from)}"/>`);
         });
 
         lines.push(`${indent}  </module>`);
@@ -402,21 +577,35 @@ function buildVariable(variable, model, currentModule = '') {
  * @returns {string} Local name
  */
 function getLocalName(fullName, currentModule) {
+    return untrimmedLocalName(fullName, currentModule).trim();
+}
+
+/**
+ * The local name before trimming. Kept separate so the surrounding whitespace an engine leaves
+ * in a name ("associates. rookies promotions") is dropped in one place: XMILE ignores it, but
+ * utils.xmileName turned it into a leading underscore, so a ghost's name and its connect
+ * disagreed and the ghost never received its value.
+ */
+function untrimmedLocalName(fullName, currentModule) {
     if (!currentModule) {
         return fullName;
     }
 
+    // Module names match as XMILE names do, ignoring case and space/underscore spelling: a
+    // model declaring module "lions" names its variables "Lions.count". A case-sensitive
+    // match kept the prefix, so the variable came out named "Lions.count" inside its own
+    // module and nothing could reference it.
+    const parts = fullName.split('.');
+    const pathParts = currentModule.split('.');
+
     // Try full module path first (e.g., "A.B.x" -> "x" when currentModule is "A.B")
-    const fullPrefix = currentModule + '.';
-    if (fullName.startsWith(fullPrefix)) {
-        return fullName.substring(fullPrefix.length);
+    if (parts.length > pathParts.length && pathParts.every((p, i) => referenceKey(p) === referenceKey(parts[i]))) {
+        return parts.slice(pathParts.length).join('.');
     }
 
     // Try simple module name (e.g., "B.x" -> "x" when currentModule is "A.B")
-    const simpleModuleName = currentModule.split('.').pop();
-    const simplePrefix = simpleModuleName + '.';
-    if (fullName.startsWith(simplePrefix)) {
-        return fullName.substring(simplePrefix.length);
+    if (parts.length > 1 && referenceKey(parts[0]) === referenceKey(pathParts[pathParts.length - 1])) {
+        return parts.slice(1).join('.');
     }
 
     return fullName;
@@ -484,7 +673,7 @@ function buildStock(stock, model, currentModule = '') {
 
     // Equation (initial value) - ghost variables have no equation
     if (stock.equation && !stock.crossLevelGhostOf) {
-        lines.push(`        <eqn>${escapeXml(stock.equation)}</eqn>`);
+        lines.push(`        <eqn>${escapeXml(translateEquation(stock.equation, stock, currentModule.split('.').pop(), model))}</eqn>`);
     }
 
     // Inflows
@@ -547,7 +736,7 @@ function buildFlow(flow, model, currentModule = '') {
     // Ghost variables have no equation - connections are handled via <connect> tags
     if (!flow.crossLevelGhostOf) {
         // Equation - generate NAN equation if missing
-        let equation = flow.equation;
+        let equation = translateEquation(flow.equation, flow, currentModule.split('.').pop(), model);
         if (!equation) {
             equation = generateNanEquation(flow.name, model);
         }
@@ -592,7 +781,7 @@ function buildAuxiliary(aux, model, currentModule = '') {
     // Ghost variables do NOT have equations - connections are handled via <connect> tags
     if (!aux.crossLevelGhostOf) {
         // Get equation - either existing or generate NAN equation from relationships
-        let equation = aux.equation;
+        let equation = translateEquation(aux.equation, aux, currentModule.split('.').pop(), model);
         if (!equation) {
             equation = generateNanEquation(aux.name, model);
         }
@@ -611,8 +800,9 @@ function buildAuxiliary(aux, model, currentModule = '') {
         // on plain variables, and without the length check that empty object would be
         // treated as a real lookup, suppressing the numeric <eqn> and producing an
         // equation-less <aux> that fails to load in the simulator.
-        if (aux.graphicalFunction && aux.graphicalFunction.points && aux.graphicalFunction.points.length > 0) {
-            lines.push(...buildGraphicalFunction(aux.graphicalFunction, equation));
+        const gfPoints = graphicalFunctionPoints(aux.graphicalFunction);
+        if (gfPoints.length > 0) {
+            lines.push(...buildGraphicalFunction({ points: gfPoints }, equation));
         } else if (equation) {
             // Regular equation
             lines.push(`        <eqn>${escapeXml(equation)}</eqn>`);
@@ -656,6 +846,25 @@ function generateNanEquation(varName, model) {
 
     // Generate NAN equation with all causes
     return `NAN(${causes.join(',')})`;
+}
+
+/**
+ * The points of a graphical function. SD-JSON writes { points: [...] }, but older model files
+ * (the modular-modification eval inputs among them) write the bare array, and engines handed
+ * such a model carry it through. Reading only the object form dropped those lookups silently:
+ * the variable was simulated as its raw input, and Merlin's predator-prey runs diverged to
+ * -Infinity within one time unit.
+ * @param {Object|Array|undefined} graphicalFunction The variable's graphicalFunction field
+ * @returns {Array<{x: number, y: number}>} Its points, or an empty array
+ */
+function graphicalFunctionPoints(graphicalFunction) {
+    const points = Array.isArray(graphicalFunction) ? graphicalFunction
+        : (graphicalFunction && Array.isArray(graphicalFunction.points)) ? graphicalFunction.points
+        : [];
+    // A lookup needs at least two points to be a curve. Engines leave single-point
+    // placeholders ({points: [{x: 0, y: 0}]}) on plain variables just as they leave empty
+    // ones; read as a lookup, one overrode "count = 150" with 0 and failed to load in PySD.
+    return points.length >= 2 ? points : [];
 }
 
 /**

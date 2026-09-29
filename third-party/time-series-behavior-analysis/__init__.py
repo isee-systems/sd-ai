@@ -278,6 +278,40 @@ def _detect_oscillation_fallback(ts: np.ndarray) -> Dict[str, Any]:
     }
 
 
+def _swings_hold_steady(ts: np.ndarray, min_ratio: float) -> bool:
+    """
+    True when a series oscillates at least twice without its swings shrinking.
+
+    The series is detrended, split at its crossings of zero into half-cycles, and the
+    largest deviation in each is its swing. The first and last half-cycles are dropped,
+    since a run starts and ends partway through one. The swings hold steady when the
+    later half of them is at least min_ratio of the earlier half.
+    """
+    y = np.asarray(ts, dtype=float)
+    n = y.size
+    if n < 8:
+        return False
+    x = np.arange(n, dtype=float)
+    beta, _ = _ols_fit(np.column_stack([x, np.ones_like(x)]), y)
+    resid = y - (beta[0] * x + beta[1])
+    scale = float(np.max(np.abs(resid)))
+    if scale < 1e-12:
+        return False
+    signs = np.sign(resid)
+    crossings = np.nonzero(np.diff(signs) != 0)[0]
+    if crossings.size < 5:
+        return False
+    swings = [float(np.max(np.abs(resid[a + 1:b + 1]))) for a, b in zip(crossings[:-1], crossings[1:])]
+    # Ignore sign flips from noise hovering at zero: a real half-cycle swings visibly.
+    swings = [s for s in swings if s > 0.1 * scale]
+    if len(swings) < 4:
+        return False
+    half = len(swings) // 2
+    early = float(np.mean(swings[:half]))
+    late = float(np.mean(swings[-half:]))
+    return late >= min_ratio * early
+
+
 def _overshoot_model(y: np.ndarray, x: np.ndarray, peak_pos_grid: np.ndarray, decay_rate_grid: np.ndarray, steady_state_grid: np.ndarray) -> Tuple[float, int]:
     """
     Climate overshoot model: S-curve rise to peak, then exponential decay to steady state.
@@ -430,8 +464,13 @@ def classify_timeseries_shape_and_scale(
     sig_grid = np.linspace(0.05, 0.30, 18)
     t_grid = np.linspace(0.15, 0.85, 29)
 
-    # Frequencies in "cycles over [0,1]": 1..max_freq_cycles
-    f_grid = np.arange(1, max(2, max_freq_cycles + 1), dtype=float)
+    # Frequencies in "cycles over [0,1]": 1..max_freq_cycles, widened to the cycle count the
+    # series itself shows. A grid stopping at 6 cycles cannot fit a steady wave with 7 or 8,
+    # and the damped sine then won by default: a constant-amplitude spring run for 8 periods
+    # was labelled "dampening" at 95%. Each full cycle crosses the mean twice.
+    observed_cycles = int(np.ceil(np.count_nonzero(np.diff(np.sign(y_shape)) != 0) / 2.0))
+    top_cycles = min(max(max_freq_cycles, observed_cycles + 1), n_resample // 4)
+    f_grid = np.arange(1, max(2, top_cycles + 1), dtype=float)
     d_grid = np.linspace(0.5, 8.0, 20)
     
     # Overshoot model grids
@@ -463,6 +502,23 @@ def classify_timeseries_shape_and_scale(
     for label, (sse, k) in fits.items():
         aic = _aic_from_sse(sse=sse, n=n, k=k)
         aicc_scores[label] = _aicc(aic=aic, n=n, k=k)
+
+    # A monotone series never reverses, so it cannot be any kind of oscillation. The
+    # damped sine can still win the AICc race on one: a long exponential decay that
+    # spends most of its run flat near zero is fit better by a heavily damped wave
+    # than by the exponential grid, and a textbook first-order decay run for ten
+    # time constants came back "dampening_trending_down". Drop the oscillatory
+    # families from selection instead of letting a curve fit contradict the data.
+    # The tolerance absorbs floating-point noise on a plateau, not real reversals.
+    mono_tol = 1e-9 * (range_val + 1e-12)
+    is_monotone = bool(np.all(diffs >= -mono_tol) or np.all(diffs <= mono_tol))
+    if is_monotone:
+        aicc_scores = {k: v for k, v in aicc_scores.items() if k not in ("oscillating", "dampening")}
+    elif _swings_hold_steady(y_raw, 0.85):
+        # Dampening means the swings shrink. A steady but non-sinusoidal wave (an exact
+        # Lotka-Volterra cycle, whose peaks repeat to the digit) is fit better by the damped
+        # sine's extra freedom than by a pure sine, and was labelled "dampening" at 95%.
+        aicc_scores = {k: v for k, v in aicc_scores.items() if k != "dampening"}
 
     probs = _weights_from_scores(aicc_scores)
     best_label = max(probs.items(), key=lambda kv: kv[1])[0]

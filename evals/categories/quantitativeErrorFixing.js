@@ -19,7 +19,7 @@ import { validateEvaluationResult } from '../evaluationSchema.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const prompt = `Please analyze the given model for formulation errors. Please take into account the style of existing formulations i.e. pipeline delays vs. exponential delays etc. If the given model contains formulation errors please fix each formulation error you identify and generate an explanation that contains a listing of all errors, why they were an error, and how you fixed them.  Do not add any new variables, or change the name of any existing variables.  Under no circumstances are you to add new relationships or feedback loops to this model.`;
+const prompt = `Please analyze the given model for formulation errors. Please take into account the style of existing formulations i.e. pipeline delays vs. exponential delays etc. If the given model contains formulation errors please fix each formulation error you identify and generate an explanation that contains a listing of all errors, why they were an error, and how you fixed them.  Do not add any new variables, or change the name of any existing variables.  Do not add new feedback mechanisms to this model.  Correcting an erroneous equation may require it to reference different existing variables than it does now, and may leave a variable that existed only because of the error unused; both are allowed.`;
 
 /**
  * Generate a test case for a COVID-19 model with errors
@@ -83,9 +83,12 @@ const findVariable = function(variables, name) {
  * @returns {boolean} True when the two equations are the same equation
  */
 const compareEquations = function(eq1, eq2) {
+    // "//" is SD-JSON's safe division, the same division with a guard against a zero
+    // denominator, so a/b and a//b are the same formulation. Engines routinely write it,
+    // and scoring it as a different equation failed otherwise correct repairs.
     const normalize = (eq) => {
         if (eq === undefined || eq === null) return '';
-        return eq.toString().replace(/\s+/g, '').toLowerCase();
+        return eq.toString().replace(/\s+/g, '').toLowerCase().replace(/\/\//g, '/');
     };
 
     const a = normalize(eq1);
@@ -112,6 +115,41 @@ const compareEquations = function(eq1, eq2) {
         return termsA.every((term, i) => { return term === termsB[i] });
 
     return false;
+};
+
+/**
+ * Compare a generated equation to the expected one, looking through helper auxiliaries.
+ *
+ * The sum-error models carry a helper the correct model lacks ("Total population net flow",
+ * a flow summing the stocks that feeds a "Total population" stock). Turning the helper into
+ * an auxiliary and pointing the sum at it — Total population = Total_population_net_flow —
+ * computes exactly what the reference computes, but a textual match against the sum failed
+ * it. So when the generated equation is nothing but the name of another variable, and that
+ * variable is an auxiliary the correct model does not have, its equation stands in for the
+ * name. Only such helpers are looked through: aliasing a variable the correct model defines
+ * is a different formulation, and flows and stocks are not pass-throughs.
+ *
+ * @param {Object} generatedVar The generated variable whose equation is being checked
+ * @param {Object} correctVar The matching variable in the correct model
+ * @param {Array<Object>} generatedVars Every variable in the generated model
+ * @param {Array<Object>} correctVars Every variable in the correct model
+ * @returns {boolean} True when the equations match directly or through helper auxiliaries
+ */
+const equationMatchesThroughHelpers = function(generatedVar, correctVar, generatedVars, correctVars) {
+    const seen = new Set();
+    let equation = generatedVar.equation;
+    while (true) {
+        if (compareEquations(equation, correctVar.equation))
+            return true;
+
+        const reference = (equation ?? '').toString().trim();
+        const helper = findVariable(generatedVars, reference);
+        if (!helper || helper.type !== 'variable' || findVariable(correctVars, helper.name) || seen.has(helper.name))
+            return false;
+
+        seen.add(helper.name);
+        equation = helper.equation;
+    }
 };
 
 /**
@@ -248,7 +286,7 @@ export const evaluate = async function(generatedResponse, groundTruth) {
 
         // Check equation correctness for variables with equations
         if (correctVar.equation) {
-            if (!compareEquations(generatedVar.equation, correctVar.equation)) {
+            if (!equationMatchesThroughHelpers(generatedVar, correctVar, generatedVars, correctVars)) {
                 failures.push({
                     type: "Incorrect equation",
                     details: `Variable "${correctVar.name}" has incorrect equation.\nExpected: ${correctVar.equation}\nGot: ${generatedVar.equation}`
@@ -315,10 +353,10 @@ export const evaluate = async function(generatedResponse, groundTruth) {
 export const methodology = () => ({
     howItWorks: [
         `Debugging someone else's formulations is ordinary modeling work, and it is testable because the correct model can be written down first. A single correct COVID epidemiological model is the reference; each test hands the engine a copy of it with specific formulation errors injected, and asks for the errors to be found, fixed, and explained — what was wrong, why it was wrong, and how it was fixed.`,
-        `The prompt is deliberately constraining: respect the existing formulation style (pipeline versus exponential delays and so on), add no variables, rename nothing, and under no circumstances add relationships or feedback loops. Without that, an engine could "fix" the model by rebuilding it, and the repair could not be told apart from a rewrite.`,
+        `The prompt is deliberately constraining: respect the existing formulation style (pipeline versus exponential delays and so on), add no variables, rename nothing, and add no new feedback mechanisms; an erroneous equation may be rewired to reference different existing variables. Without that, an engine could "fix" the model by rebuilding it, and the repair could not be told apart from a rewrite.`,
         `The three groups are the three families of injected error: delay formulations, lookup (graphical function) formulations, and sum/aggregation formulations. Each test's expectations carry both the correct model and the list of errors that were injected, each naming a variable and stating the problem with it.`,
         `Grading compares the returned model against the correct model variable by variable. Every variable in the correct model must be present, with the same type; where the correct variable has an equation, the returned equation must match; stocks must retain every inflow and outflow the correct model gives them; and where the correct variable declares units, the returned units must match. Variable and flow names are compared ignoring case and whitespace, so formatting differences are not treated as errors.`,
-        `Equations are compared textually, because an equation's form is part of what this category measures: DELAY3(Infection, tau) and Exposed/tau compute similar things, and only one of them is the pipeline delay the prompt asked to preserve. Whitespace and case are ignored, and two allowances keep bookkeeping out of the score — the same number written two ways (1.7e+07 and 17000000) counts as equal, and so does a plain sum whose terms are listed in a different order.`,
+        `Equations are compared textually, because an equation's form is part of what this category measures: DELAY3(Infection, tau) and Exposed/tau compute similar things, and only one of them is the pipeline delay the prompt asked to preserve. Whitespace and case are ignored, and four allowances keep bookkeeping out of the score — the same number written two ways (1.7e+07 and 17000000) counts as equal, so does safe division (//) for plain division (/), so does a plain sum whose terms are listed in a different order, and so does an equation that only names a helper auxiliary the correct model lacks, which is compared through that helper's equation.`,
         `Only if the model is entirely correct does grading go on to the explanation. The engine's explanation and a numbered list of the injected errors go to a fixed judge model (the configured eval model, independent of the engine under test) in a structured-output call that returns which errors the text identifies and explains — exact wording is not required, but the variable must be named and the nature of the error explained. A silent repair therefore does not pass: the engine has to be able to say what was wrong.`
     ],
     criteria: [

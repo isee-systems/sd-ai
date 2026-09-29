@@ -10,6 +10,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import { flattenXmileModules } from './flattenXmileModules.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -30,6 +31,123 @@ function truncateForError(output) {
     return `${output.slice(0, MAX_ERROR_OUTPUT_CHARS)}... [truncated, ${output.length} chars total]`;
 }
 
+/**
+ * Spell out the XMILE builtin constants that PySD's XMILE reader does not implement.
+ *
+ * XMILE defines PI as a builtin constant written bare, and Stella accepts it, but PySD's XMILE
+ * grammar reads a bare PI as a reference to a variable named pi and refuses to load the model
+ * (KeyError 'pi'). That failed physically correct pendulum answers in the v2 evals, so the
+ * constant is substituted into the equations before PySD sees them. A model that defines its own
+ * pi variable is left untouched, since there PI means that variable. PI() with parentheses is
+ * already understood by PySD and is left alone too.
+ * @param {string} xmileContent The XMILE model
+ * @returns {string} The XMILE model with bare PI replaced by its value
+ */
+function resolveBuiltinConstants(xmileContent) {
+    if (/<(?:aux|stock|flow)\s[^>]*name\s*=\s*"pi"/i.test(xmileContent)) {
+        return xmileContent;
+    }
+    return xmileContent.replace(/<eqn>[\s\S]*?<\/eqn>/g, (equation) => {
+        return equation.replace(/\bPI\b(?!\s*\()/gi, String(Math.PI));
+    });
+}
+
+// PySD only integrates with Euler: its XMILE reader never reads sim_specs' method, so a model
+// written for RK4 is silently run with Euler at the RK4 step, and an oscillator's amplitude grows
+// without bound (a 30 degree pendulum swung to 74 degrees). Euler's error shrinks only in proportion
+// to the step, so such models run at a step up to this many times finer...
+const MAX_RK_REFINEMENT = 100;
+// ...but never beyond this many steps in total. Past roughly 600k steps PySD stops partway and
+// still reports success, and the output of every step comes back over the pipe.
+const MAX_REFINED_STEPS = 200000;
+
+/**
+ * Decode the XML escapes that can appear in a name attribute, and XMILE's \n and \r escapes,
+ * into the name PySD reports for the element.
+ * @param {string} attribute The raw name attribute
+ * @returns {string} The element name as PySD knows it
+ */
+function decodeNameAttribute(attribute) {
+    return attribute
+        .replace(/\\[nr]/g, ' ')
+        .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'")
+        .replace(/&amp;/g, '&');
+}
+
+/**
+ * The XMILE identity of a name: case-insensitive, with spaces, underscores and line breaks all
+ * the same separator. PySD matches element names exactly, so "angular velocity",
+ * "Angular_Velocity" and "angular_velocity" are three different requests to it and one variable
+ * to XMILE.
+ * @param {string} name A variable name in any of its spellings
+ * @returns {string} The canonical form of the name
+ */
+function canonicalName(name) {
+    return String(name).replace(/\\[nr]/g, ' ').replace(/[\s_]+/g, '_').replace(/^_|_$/g, '').toLowerCase();
+}
+
+/**
+ * Map every model element's canonical name to the name PySD knows it by.
+ * @param {string} xmileContent The XMILE model
+ * @returns {Map<string, string>} Canonical name to PySD element name
+ */
+function elementNames(xmileContent) {
+    const names = new Map();
+    for (const match of xmileContent.matchAll(/<(?:stock|flow|aux)\s[^>]*?name\s*=\s*"([^"]*)"/g)) {
+        const name = decodeNameAttribute(match[1]);
+        names.set(canonicalName(name), name);
+    }
+    return names;
+}
+
+/**
+ * Read the numeric run specs from sim_specs. Anything that is not a plain number (an expression,
+ * a missing element) yields undefined for that field, which turns off what depends on it.
+ * @param {string} xmileContent The XMILE model
+ * @returns {{method: string, start: number, stop: number, dt: number}} The run specs
+ */
+function readSimSpecs(xmileContent) {
+    const specs = xmileContent.match(/<sim_specs\b([^>]*)>([\s\S]*?)<\/sim_specs>/);
+    if (!specs) {
+        return { method: '', start: undefined, stop: undefined, dt: undefined };
+    }
+    const number = (tag) => {
+        const element = specs[2].match(new RegExp(`<${tag}\\b([^>]*)>([^<]*)</${tag}>`));
+        if (!element) return undefined;
+        const value = Number(element[2].trim());
+        if (element[2].trim() === '' || !Number.isFinite(value)) return undefined;
+        return /reciprocal\s*=\s*"true"/i.test(element[1]) ? 1 / value : value;
+    };
+    const method = (specs[1].match(/\bmethod\s*=\s*"([^"]*)"/i) || [])[1] || '';
+    return { method, start: number('start'), stop: number('stop'), dt: number('dt') };
+}
+
+/**
+ * How many times finer than its own step to run a model, so that PySD's Euler stands in for the
+ * Runge-Kutta method the model asked for. Euler models run as written.
+ * @param {{method: string, start: number, stop: number, dt: number}} specs The run specs
+ * @returns {number} The refinement factor, 1 for no refinement
+ */
+function rkRefinement(specs) {
+    if (!/^rk/i.test(specs.method.trim())) return 1;
+    if (![specs.start, specs.stop, specs.dt].every(Number.isFinite) || specs.dt <= 0 || specs.stop <= specs.start) return 1;
+    const steps = (specs.stop - specs.start) / specs.dt;
+    return Math.max(1, Math.min(MAX_RK_REFINEMENT, Math.floor(MAX_REFINED_STEPS / steps)));
+}
+
+/**
+ * Replace the model's step with a finer one. The reciprocal attribute is dropped because the
+ * new step is written as the step itself.
+ * @param {string} xmileContent The XMILE model
+ * @param {number} dt The step to run at
+ * @returns {string} The XMILE model with its step replaced
+ */
+function withTimeStep(xmileContent, dt) {
+    return xmileContent.replace(/(<sim_specs\b[^>]*>[\s\S]*?)<dt\b[^>]*>[^<]*<\/dt>/, (whole, before) => {
+        return `${before}<dt>${dt}</dt>`;
+    });
+}
+
 class PySDSimulator {
     /**
      * Create a new PySD simulator instance
@@ -41,7 +159,16 @@ class PySDSimulator {
             throw new Error('xmileContent must be a non-empty string');
         }
 
-        this.xmileContent = xmileContent;
+        const flat = flattenXmileModules(xmileContent);
+        const resolved = resolveBuiltinConstants(flat.xmile);
+        this.specs = readSimSpecs(resolved);
+        this.refinement = rkRefinement(this.specs);
+        this.xmileContent = this.refinement > 1 ? withTimeStep(resolved, this.specs.dt / this.refinement) : resolved;
+        this.elementNames = elementNames(resolved);
+        // A module variable can still be asked for by its qualified name (chickens.count).
+        for (const [qualified, flatName] of flat.aliases) {
+            this.elementNames.set(qualified, flatName);
+        }
         this.pythonCommand = pythonCommand;
 
         // Path to the Python simulator script
@@ -78,13 +205,50 @@ class PySDSimulator {
             throw new Error('variables must be a non-empty array');
         }
 
+        // Ask PySD for each variable by the model's own spelling of its name, and hand the
+        // series back under the spelling the caller used.
+        const requested = variables.map((name) => {
+            return this.elementNames.get(canonicalName(name)) ?? name;
+        });
+
         const input = {
             model_content: this.xmileContent,
-            variables: variables
+            variables: requested
         };
 
         const result = await this._executePython(input);
-        return result.results;
+        const raw = result.results;
+
+        // A refined run returns every fine step; keep only the model's own time grid.
+        const keep = (series) => {
+            return this.refinement > 1 ? series.filter((_, i) => { return i % this.refinement === 0 }) : series;
+        };
+
+        const results = { time: keep(raw.time) };
+        variables.forEach((name, i) => {
+            results[name] = keep(raw[requested[i]]);
+        });
+
+        this._assertRunReachedStop(results.time);
+        return results;
+    }
+
+    /**
+     * Reject a run that ended before its stop time. PySD can stop partway through a long run
+     * and still report success, and a series that covers only part of the run would otherwise
+     * be graded as if it were the whole of it.
+     * @private
+     * @param {number[]} time The time series the run returned
+     */
+    _assertRunReachedStop(time) {
+        const { stop, dt } = this.specs;
+        if (!Number.isFinite(stop) || !Number.isFinite(dt) || !time || time.length === 0) {
+            return;
+        }
+        const last = time[time.length - 1];
+        if (last < stop - dt / 2) {
+            throw new Error(`Simulation ended early: PySD stopped at time ${last} of a run to ${stop}.`);
+        }
     }
 
     /**

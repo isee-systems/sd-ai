@@ -600,6 +600,89 @@ describe('SDJsonToXMILE', () => {
         });
     });
 
+    describe('Equation references', () => {
+        // Equations were copied through verbatim while variable names were converted, so any
+        // reference not already written as the XMILE local identifier named nothing. Merlin
+        // wrote valid SD-JSON such as "lions.birth rate * lions.count" and its models could
+        // not be simulated.
+        const convert = (variables, modules) => SDJsonToXMILE({ model: { variables, modules, relationships: [] } });
+        const eqnOf = (xmile, model, name) => {
+            const section = model ? xmile.slice(xmile.indexOf(`<model name="${model}">`)) : xmile;
+            const element = section.match(new RegExp(`<(?:stock|flow|aux) name="${name}"[^>]*>([\\s\\S]*?)</(?:stock|flow|aux)>`));
+            return element && (element[1].match(/<eqn>([\s\S]*?)<\/eqn>/) || [])[1];
+        };
+        const threeModules = [
+            { name: 'lions.count', type: 'stock', equation: '50', inflows: ['lions.births'] },
+            { name: 'lions.birth rate', type: 'variable', equation: '0.1' },
+            { name: 'lions.births', type: 'flow', equation: 'lions.birth rate * lions.count' },
+            { name: 'foxes.count', type: 'stock', equation: '200', outflows: ['foxes.predation'] },
+            { name: 'foxes.lions count', type: 'variable', equation: '', crossLevelGhostOf: 'lions.count' },
+            { name: 'foxes.predation', type: 'flow', equation: '0.002 * lions.count * count' },
+            { name: 'foxes.decline', type: 'flow', equation: 'foxes_count * 0.1' }
+        ];
+        const modules = [{ name: 'lions', parentModule: '' }, { name: 'foxes', parentModule: '' }];
+
+        test('writes a qualified name with spaces as the local identifier in its own module', () => {
+            expect(eqnOf(convert(threeModules, modules), 'lions', 'births')).toBe('birth_rate * count');
+        });
+
+        test('routes a reference to another module through the ghost that mirrors it', () => {
+            expect(eqnOf(convert(threeModules, modules), 'foxes', 'predation')).toBe('0.002 * lions_count * count');
+        });
+
+        test('reads a module joined by an underscore as a qualified name', () => {
+            expect(eqnOf(convert(threeModules, modules), 'foxes', 'decline')).toBe('count * 0.1');
+        });
+
+        test('leaves plain identifiers, numbers, builtins and keywords of a flat model alone', () => {
+            const xmile = convert([
+                { name: 'level', type: 'stock', equation: '1E3' },
+                { name: 'birth rate', type: 'variable', equation: '0.02' },
+                { name: 'births', type: 'flow', equation: 'IF TIME > 5 THEN DELAY3(level * birth_rate, 2) ELSE 0' },
+                { name: 'deaths', type: 'flow', equation: 'birth rate * level' }
+            ]);
+            expect(eqnOf(xmile, null, 'births')).toBe('IF TIME &gt; 5 THEN DELAY3(level * birth_rate, 2) ELSE 0');
+            expect(eqnOf(xmile, null, 'deaths')).toBe('birth_rate * level');
+            expect(eqnOf(xmile, null, 'level')).toBe('1E3');
+        });
+
+        test('writes ghost connections in XMILE identifiers', () => {
+            expect(convert(threeModules, modules)).toContain('<connect to="foxes.lions_count" from="lions.count"/>');
+        });
+
+        test('matches a variable\'s module prefix to its module regardless of case', () => {
+            const xmile = convert([{ name: 'Lions.count', type: 'stock', equation: '10' }], [{ name: 'lions', parentModule: '' }]);
+            expect(xmile).toContain('<stock name="count"');
+            expect(xmile).not.toContain('name="Lions.count"');
+        });
+
+        test('trims the whitespace an engine leaves around a local name', () => {
+            const xmile = convert([
+                { name: 'a.rate', type: 'flow', equation: '1' },
+                { name: 'b. a rate', type: 'flow', equation: '', crossLevelGhostOf: 'a.rate' }
+            ], [{ name: 'a', parentModule: '' }, { name: 'b', parentModule: '' }]);
+            expect(xmile).toContain('<flow name="a_rate" access="input">');
+            expect(xmile).toContain('<connect2 to="b.a_rate" from="a.rate"/>');
+        });
+
+        test('treats a single-point graphical function as no lookup', () => {
+            const xmile = convert([{ name: 'size', type: 'variable', equation: '150', graphicalFunction: { points: [{ x: 0, y: 0 }] } }]);
+            expect(xmile).not.toContain('<gf>');
+            expect(eqnOf(xmile, null, 'size')).toBe('150');
+        });
+
+        test('accepts a graphical function written as a bare array of points', () => {
+            const xmile = convert([{ name: 'effect', type: 'variable', equation: 'x', graphicalFunction: [{ x: 0, y: 1 }, { x: 1, y: 0 }] }]);
+            expect(xmile).toContain('<xpts>0,1</xpts>');
+        });
+
+        test('accepts modules listed as bare names', () => {
+            const xmile = convert([{ name: 'herd.size', type: 'stock', equation: '5' }], ['herd']);
+            expect(xmile).toContain('<model name="herd">');
+            expect(xmile).toContain('<stock name="size"');
+        });
+    });
+
     describe('Custom Options', () => {
         test('should accept custom vendor and product names', () => {
             const sdJson = {

@@ -289,7 +289,8 @@ export const groups = {
             policy measures, and socioeconomic factors. Disease transmission drives infection rates, which create pressure 
             for policy interventions like lockdowns and mask mandates. These interventions reduce transmission but also 
             cause economic hardship and mental health impacts. Economic stress can undermine compliance with health measures, 
-            while prolonged restrictions lead to "pandemic fatigue" that reduces public cooperation. Healthcare system capacity 
+            while prolonged restrictions lead to "pandemic fatigue" that reduces public cooperation. Rising disease transmission 
+            fills hospitals and uses up the healthcare capacity that remains available for new patients. Healthcare system capacity 
             affects mortality rates, and when overwhelmed, drives more aggressive policy responses. Public trust in government 
             and health authorities influences compliance with measures. Political considerations balance health outcomes against 
             economic and social costs. Vaccination campaigns provide a path out of restrictions but face issues of supply, 

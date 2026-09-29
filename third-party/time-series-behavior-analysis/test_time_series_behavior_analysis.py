@@ -455,6 +455,70 @@ class TestIntegration:
         result = classify_timeseries_shape_and_scale(y.tolist())
         assert result["shape"]["base_shape"] in ["exponential"]
 
+    @pytest.mark.parametrize("time_constants", [4, 6, 8, 10, 15])
+    def test_long_exponential_decay_is_not_dampening(self, time_constants):
+        """A first-order decay run for many time constants is still exponential.
+
+        Past ~7 time constants the flat tail let the damped sine win the AICc race,
+        labelling a monotone series an oscillation (the v2 Exponential Decay eval).
+        """
+        dt, tau = 0.25, 5.0
+        y, x = [], 100.0
+        for _ in range(int(time_constants * tau / dt) + 1):
+            y.append(x)
+            x -= dt * x / tau
+        result = classify_timeseries_shape_and_scale(y)
+        assert result["shape"]["best_label"] == "exponential_decline"
+
+    @pytest.mark.parametrize("cycles", [7, 8, 12, 20])
+    def test_steady_wave_beyond_six_cycles_is_oscillating(self, cycles):
+        """A constant-amplitude wave is oscillating however many cycles the run holds.
+
+        The frequency grid stopped at 6 cycles, so at 7-8 the damped sine won by default
+        (an undamped spring run for 8 periods came back "dampening").
+        """
+        t = np.linspace(0, 1, 401)
+        result = classify_timeseries_shape_and_scale((10 * np.cos(2 * np.pi * cycles * t)).tolist())
+        assert result["shape"]["best_label"] == "oscillating"
+
+    def test_steady_lotka_volterra_cycle_is_oscillating(self):
+        """An exact Lotka-Volterra orbit repeats its peaks, so it is not dampening.
+
+        Its non-sinusoidal wave let the damped sine's extra freedom win (95% "dampening").
+        """
+        def rates(s):
+            prey, predators = s
+            predation = 0.005 * prey * predators
+            return np.array([0.1 * prey - predation, 0.2 * predation - 0.05 * predators])
+        dt, s, prey = 0.125, np.array([80.0, 20.0]), [80.0]
+        for _ in range(1600):
+            k1 = rates(s); k2 = rates(s + dt / 2 * k1); k3 = rates(s + dt / 2 * k2); k4 = rates(s + dt * k3)
+            s = s + dt / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
+            prey.append(s[0])
+        result = classify_timeseries_shape_and_scale(prey)
+        assert result["shape"]["best_label"] == "oscillating"
+
+    @pytest.mark.parametrize("decay", [0.5, 1.0, 4.0])
+    def test_shrinking_swings_stay_dampening(self, decay):
+        t = np.linspace(0, 1, 401)
+        y = np.exp(-decay * t) * np.cos(2 * np.pi * 8 * t)
+        result = classify_timeseries_shape_and_scale(y.tolist())
+        assert result["shape"]["base_shape"] == "dampening"
+
+    @pytest.mark.parametrize("cycles", [8, 12])
+    def test_damped_wave_beyond_six_cycles_is_dampening(self, cycles):
+        t = np.linspace(0, 1, 401)
+        y = np.exp(-4 * t) * np.cos(2 * np.pi * cycles * t)
+        result = classify_timeseries_shape_and_scale(y.tolist())
+        assert result["shape"]["base_shape"] == "dampening"
+
+    def test_damped_oscillation_still_dampening(self):
+        """The monotone guard must not touch a series that really reverses."""
+        t = np.linspace(0, 20, 400)
+        y = 10 + 5 * np.exp(-0.15 * t) * np.sin(2 * t)
+        result = classify_timeseries_shape_and_scale(y.tolist())
+        assert result["shape"]["base_shape"] in ["dampening", "oscillating"]
+
     def test_random_walk_flags_complex(self):
         """Random walk may trigger possibly_complex flag."""
         rng = np.random.default_rng(42)

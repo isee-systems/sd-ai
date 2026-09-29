@@ -421,7 +421,7 @@ export class LLMWrapper {
   };
 
   generateSeldonResponseSchema(includeFeedbackInformationRequired) {
-      let responseDescription = "The text containing the response. This text can only contain simple HTML formatted text.  Use only the HTML tags <h4>, <h5>, <h6>, <ol>, <ul>, <li>, <a>, <b>, <i>, <br>, <p> and <span>. Do not use markdown, LaTeX or any other kind of formatting.";
+      let responseDescription = "The text containing the response. This text can only contain simple HTML formatted text.  Use only the HTML tags <h4>, <h5>, <h6>, <ol>, <ul>, <li>, <a>, <b>, <i>, <br>, <p> and <span>. Do not use markdown, LaTeX or any other kind of formatting. To quote a word, phrase or variable name, use curly quotation marks (“ and ”) or the HTML entity &quot;, never the straight double-quote character.";
 
       const shape = {};
 
