@@ -52,7 +52,7 @@ export class ModelCapabilities {
           this.hasStructuredOutput = false;
       }
       this.hasSystemMode = lowerModelName !== 'o1-mini';
-      this.hasTemperature = !lowerModelName.startsWith('o') && !lowerModelName.startsWith('gpt-5');
+      this.hasTemperature = !lowerModelName.startsWith('o') && !lowerModelName.startsWith('gpt-5') && !lowerModelName.startsWith('gpt-6');
       if (isOpenRouter || lowerModelName.includes('gemini') || lowerModelName.includes('llama') || lowerModelName.includes('claude') || lowerModelName.includes('deepseek')) {
           this.systemModeUser = 'system';
       } else {

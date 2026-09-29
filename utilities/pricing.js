@@ -221,7 +221,7 @@ export const gemini = {
 // Source: https://developers.openai.com/api/docs/pricing
 // Reasoning tokens are billed at the output token rate and are already included
 // in completion_tokens, so they must not be double-counted.
-// cachedTokens (cache reads) and cacheWriteTokens (cache writes, GPT-5.6+) are
+// cachedTokens (cache reads) and cacheWriteTokens (cache writes, GPT-5.6+ and GPT-6) are
 // disjoint subsets of inputTokens, each billed at its own rate instead of input.
 // Aliases resolve before the pricing lookup.
 export const openaiAliases = {
@@ -230,6 +230,27 @@ export const openaiAliases = {
 };
 
 export const openai = {
+  // GPT-6 family: Astra (flagship), Sol (6.1 supersedes 6), Luna. Same long-context
+  // rule as gpt-5.5/5.6 — over 272K input tokens the WHOLE request bills at 2x input
+  // and cache rates and 1.5x output.
+  'gpt-6-astra': [
+    { maxInputTokens: 272000, inputTokens: 10.00, cachedTokens: 1.00, cacheWriteTokens: 12.50, outputTokens: 50.00 },
+    {                         inputTokens: 20.00, cachedTokens: 2.00, cacheWriteTokens: 25.00, outputTokens: 75.00 },
+  ],
+  // 0.10 is 0.05x input, not the 0.1x every other OpenAI model uses — gpt-6-sol at the
+  // same input rate reads cache at 0.20. Stated here because it looks like a typo otherwise.
+  'gpt-6.1-sol': [
+    { maxInputTokens: 272000, inputTokens: 2.00, cachedTokens: 0.10, cacheWriteTokens: 2.50, outputTokens: 10.00 },
+    {                         inputTokens: 4.00, cachedTokens: 0.20, cacheWriteTokens: 5.00, outputTokens: 15.00 },
+  ],
+  'gpt-6-sol': [
+    { maxInputTokens: 272000, inputTokens: 2.00, cachedTokens: 0.20, cacheWriteTokens: 2.50, outputTokens: 10.00 },
+    {                         inputTokens: 4.00, cachedTokens: 0.40, cacheWriteTokens: 5.00, outputTokens: 15.00 },
+  ],
+  'gpt-6-luna': [
+    { maxInputTokens: 272000, inputTokens: 0.10, cachedTokens: 0.01, cacheWriteTokens: 0.125, outputTokens: 0.50 },
+    {                         inputTokens: 0.20, cachedTokens: 0.02, cacheWriteTokens: 0.25, outputTokens: 0.75 },
+  ],
   // GPT-5.6 family (GA 2026-07-09): three flagship tiers — Sol/Terra/Luna.
   // Repriced 2026-07-30: Terra cut ~20% and Luna ~80%; Sol unchanged.
   // Like gpt-5.5, prompts over 272K input tokens are billed at the higher
@@ -257,10 +278,12 @@ export const openai = {
     cachedTokens: 0.075,
     outputTokens: 4.50,
   },
+  // Priced at the most expensive flagship (gpt-6-astra) so an unknown model over-reports.
   default: {
     inputTokens: 10.00,
     cachedTokens: 1.00,
-    outputTokens: 45.00,
+    cacheWriteTokens: 12.50,
+    outputTokens: 50.00,
   },
 };
 
