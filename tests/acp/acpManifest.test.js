@@ -76,7 +76,9 @@ describe('ACP manifest', () => {
     expect(earlier.agents.some(a => a.id === 'claude')).toBe(true);
     expect(earlier.configOptions.hide.mode).toEqual(expect.arrayContaining(['bypassPermissions', 'yolo', 'agent-full-access', 'full-access']));
     expect(earlier.agents.filter(a => a.enabled).map(a => a.id).sort())
-      .toEqual(['claude', 'codex-acp', 'gemini', 'github-copilot-cli']);
+      .toEqual(['amp-acp', 'antigravity-acp', 'auggie', 'claude', 'cline', 'codex-acp', 'cursor', 'devin',
+                'factory-droid', 'gemini', 'github-copilot-cli', 'glm-acp-agent', 'goose', 'junie', 'kilo', 'kimi',
+                'minimax-code', 'mistral-vibe', 'opencode', 'qwen-code']);
     // No default mode may be one that stops asking.
     for (const mode of earlier.configOptions.defaults.mode) expect(earlier.configOptions.hide.mode).not.toContain(mode);
   });

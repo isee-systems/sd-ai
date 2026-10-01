@@ -11,8 +11,24 @@
   "enabledAgents": [
     "claude-acp",
     "codex-acp",
+    "github-copilot-cli",
+    "antigravity-acp",
     "gemini",
-    "github-copilot-cli"
+    "cursor",
+    "junie",
+    "mistral-vibe",
+    "qwen-code",
+    "kimi",
+    "devin",
+    "amp-acp",
+    "auggie",
+    "factory-droid",
+    "cline",
+    "opencode",
+    "kilo",
+    "goose",
+    "glm-acp-agent",
+    "minimax-code"
   ],
   "agentOverrides": {
     "claude-acp": {
@@ -42,6 +58,21 @@
     "antigravity-acp": {
       "signInText": "sign in with your Google account (your Google AI subscription) when Antigravity asks, then press Reconnect.",
       "preferredAuthMethod": "oauth-personal"
+    },
+    "cursor": {
+      "signInText": "open a terminal and run `cursor-agent login`, then press Reconnect."
+    },
+    "auggie": {
+      "signInText": "open a terminal and run `auggie login`, then press Reconnect."
+    },
+    "opencode": {
+      "signInText": "open a terminal and run `opencode auth login`, then press Reconnect."
+    },
+    "goose": {
+      "signInText": "open a terminal and run `goose configure` to choose a provider and sign in, then press Reconnect."
+    },
+    "qwen-code": {
+      "signInText": "open a terminal, run `qwen` and sign in when it asks, then press Reconnect."
     }
   },
   "tools": {},
