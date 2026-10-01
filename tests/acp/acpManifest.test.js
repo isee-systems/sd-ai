@@ -74,13 +74,14 @@ describe('ACP manifest', () => {
     expect(earlier.compatibility).toEqual({ minProtocol: 1, minClientVersions: {}, message: '', url: '' });
     expect(earlier.defaultPersona).toBe('socrates');
     expect(earlier.agents.some(a => a.id === 'claude')).toBe(true);
-    expect(earlier.configOptions.hide.mode).toEqual(expect.arrayContaining(['bypassPermissions', 'yolo', 'agent-full-access', 'full-access']));
+    // Minimal: the manifest sets nothing in the agents' own settings and hides none of their choices
+    // (bypass-permission modes included); each starts as the user configured it.
+    expect(earlier.configOptions.defaults ?? {}).toEqual({});
+    expect(earlier.configOptions.hide ?? {}).toEqual({});
     expect(earlier.agents.filter(a => a.enabled).map(a => a.id).sort())
       .toEqual(['amp-acp', 'antigravity-acp', 'auggie', 'claude', 'cline', 'codex-acp', 'cursor', 'devin',
                 'factory-droid', 'gemini', 'github-copilot-cli', 'glm-acp-agent', 'goose', 'junie', 'kilo', 'kimi',
                 'minimax-code', 'mistral-vibe', 'opencode', 'qwen-code']);
-    // No default mode may be one that stops asking.
-    for (const mode of earlier.configOptions.defaults.mode) expect(earlier.configOptions.hide.mode).not.toContain(mode);
   });
 
   test('the protocol is versioned and every supported protocol has a builder', () => {

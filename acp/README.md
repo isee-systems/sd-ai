@@ -78,8 +78,15 @@ their next fetch. To switch off one assistant rather than whole clients, take it
 
 **Which assistants are offered.** `enabledAgents` lists the ACP Registry ids clients offer; every other
 registry entry is still in the manifest, switched off, so turning one on is a one-line change here.
-Without the key every launchable entry is on. Hide an assistant's no-approval modes in
-`configOptions.hide`, and never put one in `configOptions.defaults`.
+Without the list every launchable entry is on.
+
+**Keep what the manifest applies to the assistants minimal.** It sets none of their own settings
+(model, effort, mode) and hides none of their choices, bypass-permission modes included: each
+assistant starts as the user configured it. `configOptions.describe` (tooltip text) and the
+overrides that only change what the client shows (names, sign-in text, the preselected sign-in
+method) are fine. `configOptions.defaults` (values set at session start) and `configOptions.hide`
+(values removed from the client's choices) exist for when one is truly needed; the tests expect
+both empty.
 
 **No sd-ai AI tokens are ever spent for these clients.** Building the manifest only reads prompt
 text and tool schemas from this repo (its only network access is the ACP Registry and npm metadata),

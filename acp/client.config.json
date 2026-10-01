@@ -165,35 +165,9 @@
   "permissions": {
     "default": "ask",
     "autoAllow": [],
-    "hideOptions": [
-      "bypass permissions"
-    ]
+    "hideOptions": []
   },
   "configOptions": {
-    "hide": {
-      "mode": [
-        "bypassPermissions",
-        "yolo",
-        "agent-full-access",
-        "full-access",
-        "https://agentclientprotocol.com/protocol/session-modes#autopilot",
-        "autopilot"
-      ],
-      "allow_all": [
-        "on",
-        "true"
-      ]
-    },
-    "defaults": {
-      "effort": "medium",
-      "mode": [
-        "auto",
-        "auto_edit",
-        "default",
-        "agent",
-        "https://agentclientprotocol.com/protocol/session-modes#agent"
-      ]
-    },
     "describe": {
       "model": {
         "": "Which model answers. Larger models are more capable on hard modeling problems, and slower, and use more of your account's usage.",
@@ -217,7 +191,12 @@
         "default": "Asks before it edits files or runs commands.",
         "acceptEdits": "Edits files in its working folder without asking; still asks before running commands.",
         "plan": "Plans only: reads and proposes, changes nothing until you approve its plan.",
-        "auto": "The assistant decides which of its actions are safe to run without asking."
+        "auto": "The assistant decides which of its actions are safe to run without asking.",
+        "bypassPermissions": "Runs every action, including commands and file changes anywhere, without asking. Use with care.",
+        "yolo": "Runs every action, including commands and file changes anywhere, without asking. Use with care.",
+        "agent-full-access": "Runs every action, including commands and file changes anywhere, without asking. Use with care.",
+        "full-access": "Runs every action, including commands and file changes anywhere, without asking. Use with care.",
+        "autopilot": "Runs every action, including commands and file changes anywhere, without asking. Use with care."
       },
       "fast": {
         "": "Faster responses from the same model, at a higher cost in usage.",
