@@ -1019,8 +1019,8 @@ Those two built-ins are only offered when the client can actually use them, whic
 `supportsMedia: true` on `initialize_session`, **and** at least one declared tool with a media
 contract. The flag alone is not enough — a client that can display images but registers nowhere to
 put one would get an image generator whose output is a dead end. This is why no agent needs to know
-about media: a client that registers its media tools conditionally (Stella registers them only for
-interface authoring) automatically withholds `generate_image` from a plain modeling session with
+about media: a client that registers its media tools conditionally (only for interface authoring,
+say) automatically withholds `generate_image` from a plain modeling session with
 Merlin or Socrates, and offers it during interface work, without either side naming an agent.
 
 When the agent calls a custom tool, the server sends a `tool_call_request` and the client must respond with `tool_call_response`.

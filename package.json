@@ -39,7 +39,9 @@
     "evals:collect": "node evals/collect.js",
     "evals:regrade": "node evals/regrade.js",
     "test": "NODE_OPTIONS=\"--experimental-vm-modules\" jest",
-    "test:coverage": "NODE_OPTIONS=\"--experimental-vm-modules\" jest --coverage --collectCoverageFrom='**/*.js' --collectCoverageFrom='!**/node_modules/**' --collectCoverageFrom='!**/tests/**'"
+    "test:coverage": "NODE_OPTIONS=\"--experimental-vm-modules\" jest --coverage --collectCoverageFrom='**/*.js' --collectCoverageFrom='!**/node_modules/**' --collectCoverageFrom='!**/tests/**'",
+    "acp:manifest": "node acp/cli.js",
+    "acp:snapshot": "node acp/cli.js --snapshot"
   },
   "type": "module",
   "devDependencies": {

@@ -12,6 +12,8 @@ import v1EngineGenerate from './routes/v1/engineGenerate.js'
 import v1EvalsList from './routes/v1/evalsList.js'
 import v1EvalsTestDetails from './routes/v1/evalsTestDetails.js'
 import v1Leaderboard from './routes/v1/leaderboard.js'
+import v1AcpManifest from './routes/v1/acpManifest.js'
+import { start as startAcpManifest } from './acp/manifestStore.js'
 
 import { createHealthRouter } from './routes/health.js';
 import versionRouter from './routes/version.js';
@@ -44,8 +46,12 @@ apiRouter.use("/engines/", v1EngineGenerate); //:engine/generate
 apiRouter.use("/evals", v1EvalsList);
 apiRouter.use("/evals", v1EvalsTestDetails);
 apiRouter.use("/leaderboard", v1Leaderboard);
+apiRouter.use("/acp", v1AcpManifest); // ACP manifest for client applications
 
 app.use("/api/v1", apiRouter);
+
+// Rebuilt from this deployment's own agent configs on every start (see acp/manifestStore.js).
+startAcpManifest();
 
 // Create HTTP server for REST API
 const server = createServer(app);
