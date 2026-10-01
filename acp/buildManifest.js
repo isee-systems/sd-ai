@@ -129,7 +129,12 @@ export function launchFor(agent) {
   return [null, [], 'no distribution the client can use'];
 }
 
-export function buildAgents(registry, overrides = {}) {
+/**
+ * enabledAgents: the registry ids clients offer. The rest are still listed, switched off, so turning
+ * one on is a config change here. Omitted, every launchable entry is on. An override's own "enabled"
+ * wins over either.
+ */
+export function buildAgents(registry, overrides = {}, enabledAgents = undefined) {
   const agents = [];
   const skipped = [];
   for (const agent of registry) {
@@ -137,7 +142,7 @@ export function buildAgents(registry, overrides = {}) {
     const entry = {
       id: agent.id,
       displayName: displayName(agent.name || agent.id),
-      enabled: true,
+      enabled: Array.isArray(enabledAgents) ? enabledAgents.includes(agent.id) : true,
       command,
       args,
       installUrl: agent.website || agent.repository || '',
@@ -280,7 +285,7 @@ export function loadClientConfig() {
  * cannot be replayed to re-enable a switched-off agent); the build time in seconds does that.
  */
 export function buildManifest({ registry, personas, config, engineBriefs = {}, toolDefinitions = [], now = new Date() }) {
-  const { agents } = buildAgents(registry, config.agentOverrides);
+  const { agents } = buildAgents(registry, config.agentOverrides, config.enabledAgents);
   return {
     // The envelope: the same in every protocol, forever, so any client can read it.
     protocol: 1,

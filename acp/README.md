@@ -13,7 +13,7 @@ It is rebuilt on every server start, and every 6 hours, from:
 |---|---|
 | `agent/config/*.md` | `personas` — edit an agent here and clients get it on the next deploy |
 | ACP Registry (live; `registry-snapshot.json` if offline) | `agents`: the assistant table |
-| `client.config.json` | overrides, default agent, setting tooltips and defaults, permissions |
+| `client.config.json` | which assistants are enabled (`enabledAgents`), overrides, default agent, setting tooltips and defaults, permissions |
 | `standInTools` + `agent/tools/builtin` | `standInTools`: the real definitions of the sd-ai tools the agents call, each with its stand-in recipe (`howToRespond`, `brief`, `include`, `acceptsImage`) — add a tool here and clients serve it with no client release |
 | `engines/*` prompts | `engineBriefs`: what the client hands the user's assistant in place of sd-ai's engines (Seldon, mentor, runs comparison, LTM narrative, quantitative, qualitative) |
 
@@ -73,8 +73,13 @@ A client that speaks a protocol below `minProtocol`, or a build of a client olde
 cut-off is in the envelope it reaches clients whatever protocol they speak, holds while they
 are offline (they cache it), and cannot be undone by their bundled copy or a replayed older manifest.
 Raising `minProtocol` above `PROTOCOL` switches every client off. Lowering a value un-cuts clients on
-their next fetch. To switch off one assistant rather than whole clients, override it with
-`"enabled": false` in `agentOverrides`.
+their next fetch. To switch off one assistant rather than whole clients, take it out of
+`enabledAgents` (or override it with `"enabled": false` in `agentOverrides`).
+
+**Which assistants are offered.** `enabledAgents` lists the ACP Registry ids clients offer; every other
+registry entry is still in the manifest, switched off, so turning one on is a one-line change here.
+Without the key every launchable entry is on. Hide an assistant's no-approval modes in
+`configOptions.hide`, and never put one in `configOptions.defaults`.
 
 **No sd-ai AI tokens are ever spent for these clients.** Building the manifest only reads prompt
 text and tool schemas from this repo (its only network access is the ACP Registry and npm metadata),
@@ -88,6 +93,7 @@ server, and they still refuse an agent whose command is a shell, an interpreter 
 
 ## Commands
 
-- `npm run acp:manifest -- --out acp_manifest.json` — build. A client's bundled fallback copy can
-  be made this way.
+- `npm run acp:manifest -- --out acp_manifest.json` — build. A client's bundled fallback copy is
+  made this way (add `--offline` to build from the committed snapshot); regenerate it rather than
+  editing it by hand, so the server and the bundled copy agree.
 - `npm run acp:snapshot` — refresh `registry-snapshot.json` from the live registry; commit it.

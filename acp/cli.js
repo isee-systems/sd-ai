@@ -30,7 +30,7 @@ const manifest = buildManifest({
   registry, personas: loadPersonas(), config,
   engineBriefs: await loadEngineBriefs(), toolDefinitions: await loadToolDefinitions(config.standInTools || {}),
 });
-const { skipped } = buildAgents(registry, config.agentOverrides);
+const { skipped } = buildAgents(registry, config.agentOverrides, config.enabledAgents);
 const bytes = serializeManifest(manifest);
 console.log(`${manifest.agents.length} agents, ${manifest.personas.length} personas, serial ${manifest.serial}` +
             (skipped.length ? `; skipped (not launchable as an installed program): ${skipped.join(', ')}` : ''));

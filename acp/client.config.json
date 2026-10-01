@@ -8,6 +8,12 @@
   },
   "defaultPersona": "socrates",
   "instructions": "",
+  "enabledAgents": [
+    "claude-acp",
+    "codex-acp",
+    "gemini",
+    "github-copilot-cli"
+  ],
   "agentOverrides": {
     "claude-acp": {
       "id": "claude",
@@ -24,7 +30,8 @@
       "signInText": "Google's subscription sign-in for Gemini CLI has been retired (Google now offers Antigravity for that). Use Vertex AI, or set GEMINI_API_KEY in your shell profile (aistudio.google.com/apikey), then press Reconnect.",
       "hideAuthMethods": [
         "oauth-personal"
-      ]
+      ],
+      "minAgentVersion": "0.33.0-0"
     },
     "codex-acp": {
       "signInText": "open a terminal and run `codex login` (or set OPENAI_API_KEY)."
@@ -135,14 +142,25 @@
     "hide": {
       "mode": [
         "bypassPermissions",
-        "yolo"
+        "yolo",
+        "agent-full-access",
+        "full-access",
+        "https://agentclientprotocol.com/protocol/session-modes#autopilot",
+        "autopilot"
+      ],
+      "allow_all": [
+        "on",
+        "true"
       ]
     },
     "defaults": {
       "effort": "medium",
       "mode": [
         "auto",
-        "auto_edit"
+        "auto_edit",
+        "default",
+        "agent",
+        "https://agentclientprotocol.com/protocol/session-modes#agent"
       ]
     },
     "describe": {

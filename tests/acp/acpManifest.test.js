@@ -28,6 +28,18 @@ describe('ACP manifest', () => {
     expect(validArgs(['& calc'])).toBe(false);
   });
 
+  test('only the configured agents are enabled; the rest are listed switched off', () => {
+    const registry = [
+      { id: 'claude-acp', name: 'Claude Agent', distribution: { npx: { package: '@x/claude-agent-acp' } }, _npmBin: 'claude-agent-acp' },
+      { id: 'goose', name: 'Goose', distribution: { binary: { 'darwin-aarch64': { cmd: './goose', args: ['acp'] } } } },
+    ];
+    const { agents } = buildAgents(registry, { goose: {} }, ['claude-acp']);
+    expect(agents.find(a => a.id === 'claude-acp').enabled).toBe(true);
+    expect(agents.find(a => a.id === 'goose').enabled).toBe(false);
+    expect(buildAgents(registry, { goose: { enabled: true } }, []).agents.find(a => a.id === 'goose').enabled).toBe(true);
+    expect(buildAgents(registry).agents.every(a => a.enabled)).toBe(true);
+  });
+
   test('registry entries become launchable agents, with configured overrides', () => {
     const registry = [
       { id: 'claude-acp', name: 'Claude Agent', distribution: { npx: { package: '@x/claude-agent-acp@1.0.0' } }, _npmBin: 'claude-agent-acp' },
@@ -62,7 +74,11 @@ describe('ACP manifest', () => {
     expect(earlier.compatibility).toEqual({ minProtocol: 1, minClientVersions: {}, message: '', url: '' });
     expect(earlier.defaultPersona).toBe('socrates');
     expect(earlier.agents.some(a => a.id === 'claude')).toBe(true);
-    expect(earlier.configOptions.hide.mode).toContain('bypassPermissions');
+    expect(earlier.configOptions.hide.mode).toEqual(expect.arrayContaining(['bypassPermissions', 'yolo', 'agent-full-access', 'full-access']));
+    expect(earlier.agents.filter(a => a.enabled).map(a => a.id).sort())
+      .toEqual(['claude', 'codex-acp', 'gemini', 'github-copilot-cli']);
+    // No default mode may be one that stops asking.
+    for (const mode of earlier.configOptions.defaults.mode) expect(earlier.configOptions.hide.mode).not.toContain(mode);
   });
 
   test('the protocol is versioned and every supported protocol has a builder', () => {
