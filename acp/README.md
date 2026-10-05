@@ -95,8 +95,10 @@ on the user's own account, does the work an sd-ai engine would have done.
 
 ## Signing
 
-The manifest is not signed yet; signing is planned. Until then clients rely on HTTPS to this
-server, and they still refuse an agent whose command is a shell, an interpreter or a package runner.
+The manifest is not signed, and won't be: clients rely on HTTPS to the server they trust to know a
+manifest is genuine. Serve it over HTTPS only. A client should warn its user before using a manifest
+from any other server (or over plain HTTP), since the manifest decides which programs the client
+launches; clients still refuse an agent whose command is a shell, an interpreter or a package runner.
 
 ## Commands
 

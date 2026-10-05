@@ -1,7 +1,7 @@
 /**
  * Holds the ACP manifest this deployment serves. Built once when the server starts -- so every
  * deploy rebuilds it from the code it ships with -- and refreshed periodically so ACP Registry
- * changes reach the client without a deploy. Not signed yet.
+ * changes reach the client without a deploy. Not signed: clients rely on HTTPS to this server.
  */
 
 import logger from '../utilities/logger.js';
