@@ -710,7 +710,7 @@ sent, so the client is never asked to act on a meaningless value.
 { "runId": "run_abc123" }
 ```
 
-**`get_run_info`** — return all simulation runs
+**`get_run_info`** — return all simulation runs. Any other fields the client includes (for example `unsavedRunLimit`, or `removedByNextRun` on a run) are passed through to the agent.
 ```json
 {
   "runs": [
@@ -720,8 +720,9 @@ sent, so the client is never asked to act on a meaningless value.
       "isExternal": false,
       "variables": ["Population", "Births", "Deaths"]
     },
-    { "id": "run_def456", "name": "Policy" }
-  ]
+    { "id": "run_def456", "name": "Policy", "removedByNextRun": true }
+  ],
+  "unsavedRunLimit": 5
 }
 ```
 

@@ -74,6 +74,9 @@ SFDs (Stock Flow Diagrams) are QUANTITATIVE:
 ## CRITICAL: Unknown Run References
 If the user references a run by name or ID that you have not seen in this session, call get_run_info before doing anything else. Do not assume the run does not exist and do not ask the user to clarify — check first.
 
+## Run Retention
+Clients may keep only a limited number of unsaved runs (get_run_info and run_model report it as unsavedRunLimit). Each new run then deletes the oldest unsaved run without asking; run_model lists any it deleted in runsRemoved. Before running more scenarios than the limit that you will need to compare, save the runs to keep or raise the limit, using the client's tools for that when it offers them. If run_model reports runsRemoved for a run you still need, tell the user and re-run it rather than referring to the deleted run.
+
 ## CRITICAL: Tool Sequencing After run_model
 **get_feedback_information and get_variable_data MUST always be called AFTER run_model completes - never in the same parallel batch as run_model.**
 run_model produces the data these tools depend on. Always wait for run_model to finish before calling them.

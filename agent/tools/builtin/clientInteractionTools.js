@@ -119,7 +119,7 @@ export function createUpdateModelTool(sessionManager, sessionId, sendToClient) {
  */
 export function createRunModelTool(sessionManager, sessionId, sendToClient) {
   return {
-    description: 'Run the model simulation in the client. Returns a runId for the completed run.',
+    description: 'Run the model simulation in the client. Returns a runId for the completed run. Only the most recent unsaved runs are kept (unsavedRunLimit, when the client reports it): if this run pushed older unsaved runs out, they are deleted and listed in runsRemoved.',
     supportedModes: ['sfd', 'cld'],
     inputSchema: z.object({}),
     handler: async () => {
@@ -162,7 +162,7 @@ export function createRunModelTool(sessionManager, sessionId, sendToClient) {
  */
 export function createGetRunInfoTool(sessionManager, sessionId, sendToClient) {
   return {
-    description: 'Get information about all simulation runs. Returns a list of run objects, where each run object contains an id, name, and optional metadata.',
+    description: 'Get information about all simulation runs. Returns a list of run objects, where each run object contains an id, name, and optional metadata. When the client limits how many unsaved runs it keeps, it also returns unsavedRunLimit and marks with removedByNextRun the runs the next run_model will delete; save a run or raise the limit (if the client offers tools for that) before running more scenarios than the limit.',
     supportedModes: ['sfd'],
     inputSchema: z.object({}),
     handler: async () => {
@@ -190,10 +190,12 @@ export function createGetRunInfoTool(sessionManager, sessionId, sendToClient) {
         });
 
         const runInfo = await resultPromise;
-        const parsed = GetRunInfoResponseSchema.parse({ runs: runInfo.runs || [] });
+        // Keep whatever else the client reports alongside the runs (such as how many
+        // unsaved runs it keeps) -- the agent needs it to avoid losing runs.
+        const parsed = GetRunInfoResponseSchema.parse({ ...runInfo, runs: runInfo?.runs || [] });
 
         return createSuccessResponse({
-          runs: parsed.runs,
+          ...parsed,
           count: parsed.runs.length
         });
       } catch (error) {
