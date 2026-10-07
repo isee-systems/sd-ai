@@ -83,7 +83,8 @@ export class ModelCapabilities {
   // Which Claude models accept `thinking: {type: "adaptive"}`. Sending adaptive
   // to a model that doesn't support it (Sonnet 4.5, Haiku 4.5, Opus 4.5 and
   // earlier) is a 400, so we only auto-enable thinking where it's accepted:
-  // the Fable/Mythos models (always-on), plus Sonnet and Opus from 4.6 onward.
+  // the Fable/Mythos models (always-on), Sonnet and Opus from 4.6 onward, and
+  // Haiku from 5.5 onward.
   get supportsAdaptiveThinking() {
       const n = this.name.toLowerCase();
       if (n.includes('fable') || n.includes('mythos')) return true;
@@ -93,7 +94,8 @@ export class ModelCapabilities {
       // The minor is optional because the 5 generation dropped it (claude-opus-5,
       // claude-sonnet-5); a missing minor counts as 0, which is fine since those
       // ids are all major-version bumps past the threshold.
-      const thresholds = { sonnet: [4, 6], opus: [4, 6] };
+      // Haiku skipped the 4.6 generation; Haiku 5.5 is its first adaptive release.
+      const thresholds = { sonnet: [4, 6], opus: [4, 6], haiku: [5, 5] };
       for (const [family, [minMajor, minMinor]] of Object.entries(thresholds)) {
           const m = n.match(new RegExp(`${family}-(\\d+)(?:-(\\d+))?`));
           if (m) {

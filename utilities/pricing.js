@@ -100,6 +100,13 @@ export const anthropic = {
     cacheReadInputTokens: 0.30,
     outputTokens: 15.00,
   },
+  // The only Claude model priced by prompt length. The 100K threshold is on the whole
+  // prompt — uncached input plus cache reads and writes — which is what
+  // TokenUsageReporter passes as the tier selector for Anthropic.
+  'claude-haiku-5-5': [
+    { maxInputTokens: 100000, inputTokens: 0.10, cacheCreation5mInputTokens: 0.125, cacheCreation1hInputTokens: 0.20, cacheReadInputTokens: 0.01, outputTokens: 0.50 },
+    {                         inputTokens: 0.50, cacheCreation5mInputTokens: 0.625, cacheCreation1hInputTokens: 1.00, cacheReadInputTokens: 0.05, outputTokens: 2.50 },
+  ],
   'claude-haiku-4-5': {
     inputTokens: 1.00,
     cacheCreation5mInputTokens: 1.25,

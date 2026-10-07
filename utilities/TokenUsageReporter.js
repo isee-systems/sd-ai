@@ -247,7 +247,12 @@ class TokenUsageReporter {
       return typeof tokens.providerCost === 'number' ? { total: tokens.providerCost } : null;
     }
 
-    const pricing = getPricing(provider, model, tokens.inputTokens);
+    // Anthropic reports cache reads and writes outside input_tokens, but a
+    // prompt-length tier (Claude Haiku 5.5) is chosen on the whole prompt.
+    const promptTokens = provider === Provider.ANTHROPIC
+      ? tokens.inputTokens + tokens.cacheCreation5mInputTokens + tokens.cacheCreation1hInputTokens + tokens.cacheReadInputTokens
+      : tokens.inputTokens;
+    const pricing = getPricing(provider, model, promptTokens);
     if (!pricing) return null;
 
     const per = (count, rate) => (count / 1_000_000) * rate;

@@ -50,7 +50,7 @@ const config = {
         {label: "Claude Fable 5", value: 'claude-fable-5'},
         {label: "Claude Opus 5.5", value: 'claude-opus-5-5'},
         {label: "Claude Sonnet 5.5", value: 'claude-sonnet-5-5'},
-        {label: "Claude Haiku 4.5", value: 'claude-haiku-4-5'},
+        {label: "Claude Haiku 5.5", value: 'claude-haiku-5-5'},
         {label: "Qwen3.8 Max", value: 'qwen/qwen3.8-max'},
         {label: "Qwen3.7 Plus", value: 'qwen/qwen3.7-plus'},
         {label: "Deepseek v4 Pro", value: 'deepseek/deepseek-v4-pro'},
@@ -94,7 +94,7 @@ const config = {
         anthropic: {
             displayName: 'Claude',
             model: 'claude-sonnet-5-5',
-            summaryModel: 'claude-haiku-4-5'
+            summaryModel: 'claude-haiku-5-5'
         },
         google: {
             displayName: 'Gemini',
