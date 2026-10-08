@@ -1,6 +1,7 @@
 import {
   buildManifest, buildAgents, parsePersona, loadPersonas, loadRegistrySnapshot, loadClientConfig, serializeManifest,
   validCommand, validArgs, buildCompatibility, protocolFor, PROTOCOL, BUILDERS, displayName, stripVersion, binFromPackageJson,
+  binaryCommand, launchByPlatform,
 } from '../../acp/buildManifest.js';
 
 describe('ACP manifest', () => {
@@ -54,6 +55,29 @@ describe('ACP manifest', () => {
     expect(claude.executableEnv).toEqual({ CLAUDE_CODE_EXECUTABLE: 'claude' });
     expect(agents.find(a => a.id === 'gemini').args).toEqual(['--acp']);
     expect(agents.find(a => a.id === 'bin')).toMatchObject({ command: 'bin-acp', displayName: 'Bin' });
+  });
+
+  test('a binary agent launched differently on a platform says so in commandByPlatform / argsByPlatform', () => {
+    const agy = { id: 'antigravity-acp', name: 'Google Antigravity', distribution: { binary: {
+      'darwin-aarch64': { cmd: './agy_acp_server.par' },
+      'linux-x86_64': { cmd: './agy_acp_server.par', args: ['--uid='] },
+      'windows-x86_64': { cmd: './agy_acp_server.exe' },
+    } } };
+    const cursor = { id: 'cursor', name: 'Cursor', distribution: { binary: {
+      'darwin-aarch64': { cmd: './dist-package/cursor-agent' },
+      'windows-x86_64': { cmd: './dist-package\\cursor-agent.cmd' },
+    } } };
+    const { agents } = buildAgents([agy, cursor]);
+    expect(agents.find(a => a.id === 'antigravity-acp')).toMatchObject({
+      command: 'agy_acp_server.par', commandByPlatform: { windows: 'agy_acp_server' },
+      args: [], argsByPlatform: { linux: ['--uid='] },
+    });
+    // Same name everywhere once the Windows extension is gone: nothing to say.
+    expect(agents.find(a => a.id === 'cursor').commandByPlatform).toBeUndefined();
+    expect(agents.find(a => a.id === 'cursor').argsByPlatform).toBeUndefined();
+    expect(binaryCommand('./bin\\devin.exe')).toBe('devin');
+    expect(binaryCommand('./coco-1.0/cortex')).toBe('cortex');
+    expect(launchByPlatform({ distribution: { npx: { package: 'x' } } })).toEqual({ commandByPlatform: {}, argsByPlatform: {} });
   });
 
   test('helpers', () => {

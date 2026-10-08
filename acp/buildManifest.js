@@ -114,12 +114,47 @@ export function loadRegistrySnapshot() {
   return JSON.parse(readFileSync(join(HERE, 'registry-snapshot.json'), 'utf8'));
 }
 
+// A binary target's executable as the client names it: no directory (registry cmds use / and \), and
+// no Windows extension, which the client's search adds back (.exe, then a .cmd / .bat shim).
+export function binaryCommand(cmd) {
+  return (cmd || '').split(/[\\/]/).pop().replace(/\.(exe|cmd|bat)$/i, '');
+}
+
+// Client platform -> registry targets, the first one present used (the arm build on mac, x86 elsewhere).
+const BINARY_TARGETS = {
+  mac: ['darwin-aarch64', 'darwin-x86_64'],
+  windows: ['windows-x86_64', 'windows-aarch64'],
+  linux: ['linux-x86_64', 'linux-aarch64'],
+};
+
+/**
+ * A binary entry's executable and arguments on each platform where they differ from the mac ones, e.g.
+ * Antigravity's agy_acp_server.exe on Windows and its --uid= on linux. Clients use them as
+ * "commandByPlatform" and "argsByPlatform".
+ */
+export function launchByPlatform(agent) {
+  const binary = agent.distribution?.binary;
+  const commandByPlatform = {};
+  const argsByPlatform = {};
+  if (!binary) return { commandByPlatform, argsByPlatform };
+  const [command, args] = launchFor(agent);
+  for (const [platform, targets] of Object.entries(BINARY_TARGETS)) {
+    const target = targets.map(t => binary[t]).find(Boolean);
+    if (!target) continue;
+    const name = binaryCommand(target.cmd);
+    if (name && name !== command && validCommand(name)) commandByPlatform[platform] = name;
+    const platformArgs = target.args || [];
+    if (JSON.stringify(platformArgs) !== JSON.stringify(args) && validArgs(platformArgs)) argsByPlatform[platform] = platformArgs;
+  }
+  return { commandByPlatform, argsByPlatform };
+}
+
 /** [command, args, how] for a registry entry; command is null when the client cannot launch it. */
 export function launchFor(agent) {
   const dist = agent.distribution || {};
   if (dist.binary) {
     const target = dist.binary['darwin-aarch64'] || Object.values(dist.binary)[0] || {};
-    return [basename(target.cmd || '').replace(/\.exe$/, ''), target.args || [], 'binary'];
+    return [binaryCommand(target.cmd), target.args || [], 'binary'];
   }
   if (dist.npx) return [agent._npmBin || null, dist.npx.args || [], 'npm:' + stripVersion(dist.npx.package)];
   if (dist.uvx) {
@@ -139,12 +174,15 @@ export function buildAgents(registry, overrides = {}, enabledAgents = undefined)
   const skipped = [];
   for (const agent of registry) {
     const [command, args] = launchFor(agent);
+    const { commandByPlatform, argsByPlatform } = launchByPlatform(agent);
     const entry = {
       id: agent.id,
       displayName: displayName(agent.name || agent.id),
       enabled: Array.isArray(enabledAgents) ? enabledAgents.includes(agent.id) : true,
       command,
+      ...(Object.keys(commandByPlatform).length ? { commandByPlatform } : {}),
       args,
+      ...(Object.keys(argsByPlatform).length ? { argsByPlatform } : {}),
       installUrl: agent.website || agent.repository || '',
       signInText: '',
       platforms: ['mac', 'windows', 'linux'],
