@@ -120,7 +120,8 @@ export function createUpdateModelTool(sessionManager, sessionId, sendToClient) {
 export function createRunModelTool(sessionManager, sessionId, sendToClient) {
   return {
     description: 'Run the model simulation in the client. Returns a runId for the completed run. Only the most recent unsaved runs are kept (unsavedRunLimit, when the client reports it): if this run pushed older unsaved runs out, they are deleted and listed in runsRemoved.',
-    supportedModes: ['sfd', 'cld'],
+    // A causal loop diagram has no behavior to simulate.
+    supportedModes: ['sfd'],
     inputSchema: z.object({}),
     handler: async () => {
       try {

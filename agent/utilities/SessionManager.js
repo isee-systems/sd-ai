@@ -554,9 +554,11 @@ export class SessionManager {
     session.clientTools = tools || [];
     session.context = context || {};
     session.clientId = clientId;
-    session.supportsArrays = capabilities.supportsArrays ?? false;
+    // A causal loop diagram is qualitative: it has no arrays and no conveyors, ovens or queues,
+    // whatever the client says it could do in stock and flow mode.
+    session.supportsArrays = mode === 'sfd' && (capabilities.supportsArrays ?? false);
     session.supportsModules = capabilities.supportsModules ?? false;
-    session.supportsSubTypes = capabilities.supportsSubTypes ?? false;
+    session.supportsSubTypes = mode === 'sfd' && (capabilities.supportsSubTypes ?? false);
     session.supportsMedia = capabilities.supportsMedia ?? false;
     this.updateClientModel(sessionId, model);
 

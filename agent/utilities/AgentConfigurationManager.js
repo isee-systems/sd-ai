@@ -138,6 +138,7 @@ CLDs (Causal Loop Diagrams) are QUALITATIVE ONLY:
 - CLDs show causal structure and feedback loops but have NO quantitative behavior
 - NEVER run simulations on CLDs (no run_model, no get_variable_data)
 - NEVER create visualizations for CLDs (no create_visualization)
+- NEVER put arrays (dimensions), conveyors, ovens or queues in a CLD
 - CLDs are for conceptual exploration and understanding causal relationships only
 - CLDs help identify feedback loop structure before building quantitative models
 `;

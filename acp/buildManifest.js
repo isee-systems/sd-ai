@@ -301,7 +301,11 @@ export async function loadToolDefinitions(recipes) {
         };
       }
       // standIn: how a client serves this tool without sd-ai's server -- see client.config.json.
-      definitions.push({ name, description: tool.description, inputSchema, standIn: recipe });
+      // supportedModes: the model types the tool works on, so a client can withhold an sfd-only
+      // tool from a causal loop diagram the way sd-ai does. Absent means every mode.
+      const definition = { name, description: tool.description, inputSchema, standIn: recipe };
+      if (tool.supportedModes) definition.supportedModes = tool.supportedModes;
+      definitions.push(definition);
     } catch { /* a schema zod cannot express as JSON Schema: leave the tool out */ }
   }
   return definitions;
