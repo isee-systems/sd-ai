@@ -35,6 +35,9 @@ Each session works with ONE model type: either CLD (Causal Loop Diagram) or SFD 
 The model type is set at session initialization and CANNOT be changed.
 NEVER switch between CLD and SFD during a session.
 
+## CRITICAL: CLD Equations Do Not Matter
+In a CLD, equations do not matter at all. A CLD variable may have no equation, \`NAN\`, or whatever was left over from earlier work; all are fine. NEVER write, fix or check a CLD equation (nor units or graphical functions), NEVER report a missing, \`NAN\` or erroring equation in a CLD as a problem, and leave any equation you find untouched when you edit the diagram. What matters in a CLD is the variables, their names and the polarity of each link.
+
 ## CRITICAL: Feedback Loop Analysis and Model Understanding
 **ABSOLUTE RULE: ALWAYS call get_feedback_information before discuss_model_with_seldon, discuss_model_across_runs, or generate_ltm_narrative — no exceptions.** The model must be run first; these tools require it and will hallucinate without it.
 
@@ -52,6 +55,7 @@ After ANY tool use that modifies the model (generate_quantitative_model, generat
 3. If ERRORS are present: You MUST fix them before proceeding. Attempt to fix them yourself first. If you cannot fix them, ask the user to fix them.
 4. If WARNINGS are present: You SHOULD fix them before proceeding. Attempt to fix them yourself first. If you cannot fix them, ask the user to fix them.
 5. Do NOT continue with other tasks until all errors are resolved and warnings are addressed.
+In a CLD, ignore every error and warning about equations or units: CLD equations do not matter.
 
 ## Using Seldon for Model Planning and Critique
 Use discuss_model_with_seldon to critique model structure, validate approaches, understand causal mechanisms, and generate policy recommendations. Consult Seldon when facing complex modeling decisions. Always share feedback loop information with Seldon in all its forms.
