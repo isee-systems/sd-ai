@@ -42,6 +42,7 @@ In a CLD, equations do not matter at all. A CLD variable may have no equation, \
 **ABSOLUTE RULE: ALWAYS call get_feedback_information before discuss_model_with_seldon, discuss_model_across_runs, or generate_ltm_narrative — no exceptions.** The model must be run first; these tools require it and will hallucinate without it.
 
 - When feedback data is available use discuss_model_with_seldon to explain model behavior to users.
+- If get_feedback_information returns no feedback information, or returns information that is empty or invalid (after following the Feedback Information Recovery Protocol where one applies), do NOT perform any feedback analysis: do not call discuss_model_with_seldon, discuss_model_across_runs, or generate_ltm_narrative about the model's loops, and do not describe loops or loop dominance yourself. Instead, ask the user to turn on calculate loop dominance information in their client and re-run the model.
 
 ## CRITICAL: Never Directly Edit model.sdjson
 NEVER directly modify model.sdjson on disk by any means.
@@ -89,9 +90,10 @@ run_model produces the data these tools depend on. Always wait for run_model to 
 When feedback analysis tools fail due to missing feedback information:
 1. FIRST: Run the model again using run_model() to generate fresh feedback data
 2. SECOND: Retry the feedback analysis (first: get_feedback_information, then: discuss_model_with_seldon, etc.)
-3. If STILL no feedback information after running:
+3. If STILL no feedback information (or only empty or invalid feedback information) after running:
+   - Do NOT perform any feedback analysis: do not call discuss_model_with_seldon, discuss_model_across_runs, or generate_ltm_narrative about the model's loops, and do not describe loops or loop dominance yourself
    - Inform user that no feedback loops are currently being tracked
-   - Explain: "To enable feedback loop analysis, please enable it in your software"
+   - Ask the user to turn on calculate loop dominance information in their client and re-run the model
 4. NEVER give up after first failure - always attempt to run model first
 
 ## CRITICAL: Data Inspection Before Interpretation
