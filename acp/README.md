@@ -13,7 +13,7 @@ It is rebuilt on every server start, and every 6 hours, from:
 |---|---|
 | `agent/config/*.md` | `personas` — edit an agent here and clients get it on the next deploy |
 | ACP Registry (live; `registry-snapshot.json` if offline) | `agents`: the assistant table |
-| `client.config.json` | which assistants are enabled (`enabledAgents`), overrides, default agent, setting tooltips and defaults, permissions |
+| `client.config.json` | which assistants are enabled (`enabledAgents`) and which the client may install (`installable`, `runtimes`), overrides, default agent, setting tooltips and defaults, permissions |
 | `standInTools` + `agent/tools/builtin` | `standInTools`: the real definitions of the sd-ai tools the agents call, each with its stand-in recipe (`howToRespond`, `brief`, `include`, `acceptsImage`) — add a tool here and clients serve it with no client release |
 | `engines/*` prompts | `engineBriefs`: what the client hands the user's assistant in place of sd-ai's engines (Seldon, mentor, runs comparison, LTM narrative, quantitative, qualitative) |
 
@@ -79,6 +79,22 @@ their next fetch. To switch off one assistant rather than whole clients, take it
 **Which assistants are offered.** `enabledAgents` lists the ACP Registry ids clients offer; every other
 registry entry is still in the manifest, switched off, so turning one on is a one-line change here.
 Without the list every launchable entry is on.
+
+**Installing an assistant for the user.** An agent listed in `installable` carries `install`: the
+steps a client runs, when the user asks it to, to install that assistant into a folder of the client's
+own (nothing system-wide). Each step has a `kind`:
+
+| kind | Fields | Does |
+|---|---|---|
+| `runtime` | `name` (`node`), `version`, `archives: {<registry target>: {url, sha256, bin}}` | downloads the archive for the user's platform from `runtimes`, refuses it unless its sha256 matches, unpacks it |
+| `npm` | `packages: ["@scope/name@1.2.3", ...]` | installs exactly those versions with that runtime's npm |
+
+`install.env` holds variables set when the assistant runs from that install. Only exact versions and
+checksummed https downloads are allowed (the build fails otherwise). A client that does not know a
+step's kind does not offer the install, so new kinds can be added later without a protocol bump — an
+`archive` step for the registry's binary agents (which already give `archive` + `sha256` per target),
+`uv` for uvx ones. Today only Claude is listed: `claude-agent-acp` at the registry's version, plus
+Claude Code itself, on Node.
 
 **Keep what the manifest applies to the assistants minimal.** It sets none of their own settings
 (model, effort, mode) and hides none of their choices, bypass-permission modes included: each

@@ -1,7 +1,7 @@
 import {
   buildManifest, buildAgents, parsePersona, loadPersonas, loadRegistrySnapshot, loadClientConfig, serializeManifest,
   validCommand, validArgs, buildCompatibility, protocolFor, PROTOCOL, BUILDERS, displayName, stripVersion, binFromPackageJson,
-  binaryCommand, launchByPlatform,
+  binaryCommand, launchByPlatform, installFor, runtimeStep, validPinnedPackage,
 } from '../../acp/buildManifest.js';
 
 describe('ACP manifest', () => {
@@ -78,6 +78,46 @@ describe('ACP manifest', () => {
     expect(binaryCommand('./bin\\devin.exe')).toBe('devin');
     expect(binaryCommand('./coco-1.0/cortex')).toBe('cortex');
     expect(launchByPlatform({ distribution: { npx: { package: 'x' } } })).toEqual({ commandByPlatform: {}, argsByPlatform: {} });
+  });
+
+  test('only installable agents with exact versions say how to install them', () => {
+    const node = { version: '24.1.0', archives: { 'darwin-aarch64': { url: 'https://nodejs.org/n.tar.gz', sha256: 'a'.repeat(64), bin: 'bin' } } };
+    const installable = { 'claude-acp': { extraPackages: ['@anthropic-ai/claude-code@2.1.0'], env: { DISABLE_AUTOUPDATER: '1' } } };
+    const claude = { id: 'claude-acp', name: 'Claude Agent', distribution: { npx: { package: '@x/claude-agent-acp@1.0.0' } }, _npmBin: 'claude-agent-acp' };
+    expect(installFor(claude, installable, { node })).toEqual({
+      steps: [
+        { kind: 'runtime', name: 'node', version: '24.1.0', archives: { 'darwin-aarch64': { url: 'https://nodejs.org/n.tar.gz', sha256: 'a'.repeat(64), bin: 'bin' } } },
+        { kind: 'npm', packages: ['@x/claude-agent-acp@1.0.0', '@anthropic-ai/claude-code@2.1.0'] },
+      ],
+      env: { DISABLE_AUTOUPDATER: '1' },
+    });
+    // Not listed, no exact version, or not an npm package (yet): no install.
+    expect(installFor({ ...claude, id: 'other' }, installable, { node })).toBeUndefined();
+    expect(installFor({ ...claude, distribution: { npx: { package: '@x/claude-agent-acp' } } }, installable, { node })).toBeUndefined();
+    expect(installFor({ id: 'claude-acp', distribution: { binary: {} } }, installable, { node })).toBeUndefined();
+    const { agents } = buildAgents([claude], {}, undefined, { installable, runtimes: { node } });
+    expect(agents[0].install.steps.map(s => s.kind)).toEqual(['runtime', 'npm']);
+  });
+
+  test('install steps are exact and checksummed, or the build fails', () => {
+    for (const bad of ['x', 'x@^1.0.0', 'x@latest', '@x/y@1', 'x@1.0.0 && rm', '@X/y@1.0.0']) expect(validPinnedPackage(bad)).toBe(false);
+    for (const good of ['x@1.0.0', '@scope/name@1.2.3', '@scope/name@1.0.0-beta.2']) expect(validPinnedPackage(good)).toBe(true);
+    const archive = { url: 'https://nodejs.org/n.tar.gz', sha256: 'a'.repeat(64), bin: 'bin' };
+    expect(() => runtimeStep('node', { version: '24', archives: { 'darwin-aarch64': archive } })).toThrow();
+    expect(() => runtimeStep('node', { version: '24.1.0', archives: { 'darwin-aarch64': { ...archive, url: 'http://x' } } })).toThrow();
+    expect(() => runtimeStep('node', { version: '24.1.0', archives: { 'darwin-aarch64': { ...archive, sha256: 'abc' } } })).toThrow();
+    expect(() => runtimeStep('node', { version: '24.1.0', archives: { 'darwin-aarch64': { ...archive, bin: '../x' } } })).toThrow();
+    expect(() => runtimeStep('node', { version: '24.1.0', archives: { 'mars-z80': archive } })).toThrow();
+    expect(() => runtimeStep('node', { version: '24.1.0', archives: {} })).toThrow();
+  });
+
+  test('the committed config makes Claude, and only Claude, installable', () => {
+    const manifest = buildManifest({ registry: loadRegistrySnapshot(), personas: [], config: loadClientConfig() });
+    expect(manifest.agents.filter(a => a.install).map(a => a.id)).toEqual(['claude']);
+    const install = manifest.agents.find(a => a.id === 'claude').install;
+    expect(Object.keys(install.steps[0].archives).sort())
+      .toEqual(['darwin-aarch64', 'darwin-x86_64', 'linux-aarch64', 'linux-x86_64', 'windows-aarch64', 'windows-x86_64']);
+    expect(install.steps[1].packages.every(validPinnedPackage)).toBe(true);
   });
 
   test('helpers', () => {

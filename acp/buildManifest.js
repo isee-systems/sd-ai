@@ -9,9 +9,11 @@
  *                               with acp/registry-snapshot.json as the offline fallback
  *   - acp/client.config.json -> everything else (overrides, defaults, tooltips, permissions)
  *
- * The client never downloads or runs a package manager: an npx entry becomes the executable that
- * package installs, a binary entry its executable name, a uvx entry the package name. The client
- * offers an entry only when that executable is installed on the user's machine.
+ * An npx entry becomes the executable that package installs, a binary entry its executable name, a
+ * uvx entry the package name, and the client offers the entry when that executable is installed on
+ * the user's machine. For the agents listed in client.config.json "installable" the entry also says
+ * how the client can install it itself ("install", see installFor): exact versions and checksums
+ * only, into a folder of the client's own. Nothing else is ever downloaded or installed.
  *
  * Pure apart from fetchRegistry/loadPersonas; signing is in signManifest.js.
  */
@@ -164,17 +166,79 @@ export function launchFor(agent) {
   return [null, [], 'no distribution the client can use'];
 }
 
+// What an install step may name: one exact npm version (a range or a tag would install something
+// nobody looked at), an https download with its sha256, and environment variables in the launch
+// rules' character set.
+const PINNED_NPM = /^(@[a-z0-9][a-z0-9._-]{0,63}\/)?[a-z0-9][a-z0-9._-]{0,127}@\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
+const SHA256 = /^[0-9a-f]{64}$/;
+const ENV_NAME = /^[A-Z_][A-Z0-9_]*$/;
+const SAFE_RELATIVE_DIR = /^([A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*)?$/;
+
+export function validPinnedPackage(spec) {
+  return typeof spec === 'string' && PINNED_NPM.test(spec);
+}
+
+/**
+ * A runtime the client installs for agents that need one (node for npm packages), from
+ * client.config.json "runtimes". archives: per registry target (darwin-aarch64, windows-x86_64, ...)
+ * the https url, its sha256, and bin, the folder of the runtime's programs once the archive's single
+ * top-level folder is removed ("" for the top). A bad entry is a mistake in this repo: the build fails.
+ */
+export function runtimeStep(name, runtime) {
+  if (!runtime || typeof runtime.version !== 'string' || !/^\d+\.\d+\.\d+$/.test(runtime.version))
+    throw new Error(`runtimes.${name}: needs an exact "version"`);
+  const archives = {};
+  for (const [target, archive] of Object.entries(runtime.archives || {})) {
+    if (!Object.values(BINARY_TARGETS).flat().includes(target))
+      throw new Error(`runtimes.${name}.archives: unknown target "${target}"`);
+    if (typeof archive.url !== 'string' || !archive.url.startsWith('https://') || !SHA256.test(archive.sha256 || '')
+        || !SAFE_RELATIVE_DIR.test(archive.bin ?? '') || (archive.bin ?? '').split('/').includes('..'))
+      throw new Error(`runtimes.${name}.archives.${target}: needs an https url, its sha256 and a plain relative bin`);
+    archives[target] = { url: archive.url, sha256: archive.sha256, bin: archive.bin ?? '' };
+  }
+  if (!Object.keys(archives).length) throw new Error(`runtimes.${name}: no archives`);
+  return { kind: 'runtime', name, version: runtime.version, archives };
+}
+
+/**
+ * How a client installs an agent itself, or undefined when it does not (the agent is not in
+ * "installable", or the registry gives no exact version). Steps, run in order, each with a kind:
+ *
+ *   { kind: 'runtime', name: 'node', version, archives }   (runtimeStep)
+ *   { kind: 'npm', packages: ['@scope/name@1.2.3', ...] }  installed with that runtime's npm
+ *
+ * plus env: variables set when the agent is launched from that install (Claude Code's own updater
+ * off: the client owns that version). A client that meets a kind it does not know does not offer
+ * the install, so a kind can be added later (an archive step for binary agents, uv for uvx ones)
+ * without breaking the clients already out there.
+ */
+export function installFor(agent, installable = {}, runtimes = {}) {
+  const options = installable[agent.id];
+  if (!options) return undefined;
+  const packages = agent.distribution?.npx ? [agent.distribution.npx.package, ...(options.extraPackages || [])] : [];
+  if (!packages.length || !packages.every(validPinnedPackage)) return undefined;
+  const install = { steps: [runtimeStep('node', runtimes.node), { kind: 'npm', packages }] };
+  const env = options.env || {};
+  for (const [name, value] of Object.entries(env)) {
+    if (!ENV_NAME.test(name) || !validArgs([value]))
+      throw new Error(`installable.${agent.id}.env.${name}: not NAME -> plain value`);
+  }
+  if (Object.keys(env).length) install.env = env;
+  return install;
+}
+
 /**
  * enabledAgents: the registry ids clients offer. The rest are still listed, switched off, so turning
  * one on is a config change here. Omitted, every launchable entry is on. An override's own "enabled"
  * wins over either.
  */
-export function buildAgents(registry, overrides = {}, enabledAgents = undefined) {
+export function buildAgents(registry, overrides = {}, enabledAgents = undefined, { installable = {}, runtimes = {} } = {}) {
   const agents = [];
   const skipped = [];
   for (const agent of registry) {
     const [command, args] = launchFor(agent);
     const { commandByPlatform, argsByPlatform } = launchByPlatform(agent);
+    const install = installFor(agent, installable, runtimes);
     const entry = {
       id: agent.id,
       displayName: displayName(agent.name || agent.id),
@@ -186,6 +250,7 @@ export function buildAgents(registry, overrides = {}, enabledAgents = undefined)
       installUrl: agent.website || agent.repository || '',
       signInText: '',
       platforms: ['mac', 'windows', 'linux'],
+      ...(install ? { install } : {}),
       ...(overrides[agent.id] || {}),
     };
     if (!validCommand(entry.command) || !validArgs(entry.args)) {
@@ -327,7 +392,8 @@ export function loadClientConfig() {
  * cannot be replayed to re-enable a switched-off agent); the build time in seconds does that.
  */
 export function buildManifest({ registry, personas, config, engineBriefs = {}, toolDefinitions = [], now = new Date() }) {
-  const { agents } = buildAgents(registry, config.agentOverrides, config.enabledAgents);
+  const { agents } = buildAgents(registry, config.agentOverrides, config.enabledAgents,
+                                 { installable: config.installable, runtimes: config.runtimes });
   return {
     // The envelope: the same in every protocol, forever, so any client can read it.
     protocol: 1,
