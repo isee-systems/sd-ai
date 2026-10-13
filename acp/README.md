@@ -81,20 +81,31 @@ registry entry is still in the manifest, switched off, so turning one on is a on
 Without the list every launchable entry is on.
 
 **Installing an assistant for the user.** An agent listed in `installable` carries `install`: the
-steps a client runs, when the user asks it to, to install that assistant into a folder of the client's
-own (nothing system-wide). Each step has a `kind`:
+steps a client runs, when the user asks it to, to install that assistant into a folder of the
+client's own (nothing system-wide). Clients run two generic kinds of step, and nothing
+package-manager specific — so any agent, however it is distributed, is made installable here, with
+no client release:
 
 | kind | Fields | Does |
 |---|---|---|
-| `runtime` | `name` (`node`), `version`, `archives: {<registry target>: {url, sha256, bin}}` | downloads the archive for the user's platform from `runtimes`, refuses it unless its sha256 matches, unpacks it |
-| `npm` | `packages: ["@scope/name@1.2.3", ...]` | installs exactly those versions with that runtime's npm |
+| `download` | `label`, `archives: {<registry target>: {url, sha256, bin}}`, `into` (`agent` or `runtime`), `name` + `version` (a runtime), `strip` | downloads the archive for the user's platform, refuses it unless its sha256 matches, unpacks it into the agent's install or a shared runtime folder (reused by every agent on it); `strip` removes a single top-level folder; `bin` goes on the install's PATH |
+| `run` | `label`, `program`, `args`, `env`, `clearEnv`, `path`, `timeoutMinutes` | runs a program from inside the install — never a system program or a shell — on a PATH with the install's folders first, without the user's variables named in `clearEnv`; `path` names the folders it leaves programs in |
 
-`install.env` holds variables set when the assistant runs from that install. Only exact versions and
-checksummed https downloads are allowed (the build fails otherwise). A client that does not know a
-step's kind does not offer the install, so new kinds can be added later without a protocol bump — an
-`archive` step for the registry's binary agents (which already give `archive` + `sha256` per target),
-`uv` for uvx ones. Today only Claude is listed: `claude-agent-acp` at the registry's version, plus
-Claude Code itself, on Node.
+Templates may use `{agent}` (this install's folder), `{runtime:<name>}` (a runtime an earlier step
+downloaded) and `{temp}` (scratch space, deleted after); between them, only the launch rules' safe
+characters. `byPlatform: {mac|windows|linux: {...}}` replaces a step's fields on one platform.
+`install.env` holds variables set when the assistant runs from that install. `checkInstall` applies
+the clients' rules at build time, so a manifest never says something a client would refuse.
+
+Generated today: an npx agent is node (`runtimes.node`, `strip`ped into a runtime) then npm
+(`node npm-cli.js install --prefix {agent} <exact versions>` with the user's npm configuration
+cleared); a binary agent is its own archive, unpacked as the registry lays it out. A uvx agent would
+be uv's archive then `uv tool install` with `UV_*` pointed into `{agent}` — a generator here, not a
+client change. Listed: Claude (`claude-agent-acp` at the registry's version plus Claude Code), Codex
+and Copilot (npm, on Node), and Antigravity (its archive). A binary entry whose registry archives carry no `sha256` (Antigravity's do
+not) gets the hash pinned for each exact url in `installable.<id>.sha256`; a target with no checksum
+is not offered, so when the registry moves to a new release, pin its archives
+(`curl -sSf <url> | shasum -a 256`) and deploy.
 
 **Keep what the manifest applies to the assistants minimal.** It sets none of their own settings
 (model, effort, mode) and hides none of their choices, bypass-permission modes included: each

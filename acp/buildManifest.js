@@ -12,8 +12,8 @@
  * An npx entry becomes the executable that package installs, a binary entry its executable name, a
  * uvx entry the package name, and the client offers the entry when that executable is installed on
  * the user's machine. For the agents listed in client.config.json "installable" the entry also says
- * how the client can install it itself ("install", see installFor): exact versions and checksums
- * only, into a folder of the client's own. Nothing else is ever downloaded or installed.
+ * how the client can install it itself ("install", see installFor): generic download and run steps,
+ * exact versions and checksums only, into a folder of the client's own.
  *
  * Pure apart from fetchRegistry/loadPersonas; signing is in signManifest.js.
  */
@@ -178,11 +178,53 @@ export function validPinnedPackage(spec) {
   return typeof spec === 'string' && PINNED_NPM.test(spec);
 }
 
+// A template in an install step, as clients check it: placeholders ({agent}, {temp},
+// {runtime:<name>}) and between them only the launch rules' safe characters.
+const TEMPLATE_PLACEHOLDER = /\{(agent|temp|runtime:[a-z0-9_-]{1,32})\}/g;
+const TEMPLATE_TEXT = /^[A-Za-z0-9._=:/@+, -]*$/;
+const INSIDE_INSTALL = /^\{(agent|runtime:[a-z0-9_-]{1,32})\}(\/|$)/;
+
+export function validTemplate(text) {
+  return typeof text === 'string' && text.length <= 1024 && TEMPLATE_TEXT.test(text.replace(TEMPLATE_PLACEHOLDER, ''));
+}
+
+function insideInstall(path) {
+  return validTemplate(path) && INSIDE_INSTALL.test(path) && !path.split('/').includes('..');
+}
+
 /**
- * A runtime the client installs for agents that need one (node for npm packages), from
- * client.config.json "runtimes". archives: per registry target (darwin-aarch64, windows-x86_64, ...)
- * the https url, its sha256, and bin, the folder of the runtime's programs once the archive's single
- * top-level folder is removed ("" for the top). A bad entry is a mistake in this repo: the build fails.
+ * Checks an install as clients will, so a manifest never says something they would refuse: a
+ * mistake in this repo, so the build fails. Each platform's byPlatform override is checked too.
+ */
+export function checkInstall(install, where) {
+  for (const step of install.steps) {
+    for (const variant of [step, ...Object.values(step.byPlatform || {}).map(o => ({ ...step, ...o }))]) {
+      const bad = why => { throw new Error(`${where}: ${step.label || step.kind}: ${why}`); };
+      if (!variant.label) bad('no label');
+      if (variant.kind === 'download') {
+        for (const a of Object.values(variant.archives || {}))
+          if (!a.url?.startsWith('https://') || !SHA256.test(a.sha256 || '') || ('bin' in a && (!SAFE_RELATIVE_DIR.test(a.bin) || a.bin.split('/').includes('..'))))
+            bad('archive is not https with its sha256 and a plain bin');
+      } else if (variant.kind === 'run') {
+        if (!insideInstall(variant.program)) bad('program is not inside the install');
+        if (!(variant.args || []).every(validTemplate)) bad('an argument a client would refuse');
+        if (!(variant.path || []).every(insideInstall)) bad('a path folder outside the install');
+        for (const [name, value] of Object.entries(variant.env || {}))
+          if (!ENV_NAME.test(name) || !validTemplate(value)) bad('an env entry a client would refuse');
+      } else {
+        bad(`unknown kind "${variant.kind}"`);
+      }
+    }
+  }
+  return install;
+}
+
+/**
+ * Downloads a runtime the client installs for agents that need one (node for npm packages), from
+ * client.config.json "runtimes", into a folder of its own that every agent on it shares. archives:
+ * per registry target (darwin-aarch64, windows-x86_64, ...) the https url, its sha256, and bin, the
+ * folder of the runtime's programs once the archive's single top-level folder is removed ("" for the
+ * top). A bad entry is a mistake in this repo: the build fails.
  */
 export function runtimeStep(name, runtime) {
   if (!runtime || typeof runtime.version !== 'string' || !/^\d+\.\d+\.\d+$/.test(runtime.version))
@@ -197,34 +239,95 @@ export function runtimeStep(name, runtime) {
     archives[target] = { url: archive.url, sha256: archive.sha256, bin: archive.bin ?? '' };
   }
   if (!Object.keys(archives).length) throw new Error(`runtimes.${name}: no archives`);
-  return { kind: 'runtime', name, version: runtime.version, archives };
+  const host = new URL(Object.values(archives)[0].url).host;
+  return {
+    kind: 'download', label: `${runtime.displayName || name} ${runtime.version} (from ${host})`,
+    into: 'runtime', name, version: runtime.version, strip: true, archives,
+  };
+}
+
+/**
+ * Installs exact npm package versions into the agent's folder, by the node runtime's own npm, from
+ * the public registry, with none of the user's npm configuration (only their proxy reaches it).
+ */
+export function npmStep(packages) {
+  const args = npmCli => [npmCli, 'install', '--prefix', '{agent}', '--omit=dev', '--no-audit', '--no-fund',
+    '--no-update-notifier', '--loglevel=error', '--registry=https://registry.npmjs.org/',
+    '--userconfig={temp}/npmrc-user', '--globalconfig={temp}/npmrc-global', '--cache={temp}/npm-cache', ...packages];
+  return {
+    kind: 'run',
+    label: packages.map(p => { const at = p.lastIndexOf('@'); return `${p.slice(0, at)} ${p.slice(at + 1)}`; }).join(', ') + ' (from npmjs.com)',
+    program: '{runtime:node}/bin/node',
+    args: args('{runtime:node}/lib/node_modules/npm/bin/npm-cli.js'),
+    clearEnv: ['npm_config_*', 'NODE_OPTIONS', 'NODE_PATH'],
+    path: ['{agent}/node_modules/.bin'],
+    byPlatform: { windows: { program: '{runtime:node}/node.exe', args: args('{runtime:node}/node_modules/npm/bin/npm-cli.js') } },
+  };
 }
 
 /**
  * How a client installs an agent itself, or undefined when it does not (the agent is not in
- * "installable", or the registry gives no exact version). Steps, run in order, each with a kind:
+ * "installable", or nothing exact to install: no pinned version, no checksum).
  *
- *   { kind: 'runtime', name: 'node', version, archives }   (runtimeStep)
- *   { kind: 'npm', packages: ['@scope/name@1.2.3', ...] }  installed with that runtime's npm
+ * Clients run two generic kinds of step, so how an agent is installed is decided here, never in a
+ * client (see README.md, "Installing an assistant for the user"):
  *
- * plus env: variables set when the agent is launched from that install (Claude Code's own updater
- * off: the client owns that version). A client that meets a kind it does not know does not offer
- * the install, so a kind can be added later (an archive step for binary agents, uv for uvx ones)
- * without breaking the clients already out there.
+ *   { kind: 'download', label, archives, into: 'agent' | 'runtime', name, version, strip }
+ *   { kind: 'run', label, program, args, env, clearEnv, path, timeoutMinutes, byPlatform }
+ *
+ * An npx agent is node (runtimeStep) and then npm (npmStep); a binary agent its own archive
+ * (archiveStep). A uvx agent would be uv's archive and then `uv tool install` into {agent}, with no
+ * client change; it is not generated yet. env: variables set when the agent is launched from the
+ * install (Claude Code's own updater off: the client owns that version).
  */
 export function installFor(agent, installable = {}, runtimes = {}) {
   const options = installable[agent.id];
   if (!options) return undefined;
-  const packages = agent.distribution?.npx ? [agent.distribution.npx.package, ...(options.extraPackages || [])] : [];
-  if (!packages.length || !packages.every(validPinnedPackage)) return undefined;
-  const install = { steps: [runtimeStep('node', runtimes.node), { kind: 'npm', packages }] };
+  let install;
+  if (agent.distribution?.npx) {
+    const packages = [agent.distribution.npx.package, ...(options.extraPackages || [])];
+    if (!packages.every(validPinnedPackage)) return undefined;
+    install = { steps: [runtimeStep('node', runtimes.node), npmStep(packages)] };
+  } else if (agent.distribution?.binary) {
+    const step = archiveStep(agent, options.sha256);
+    if (!step) return undefined;
+    install = { steps: [step] };
+  } else {
+    return undefined;
+  }
   const env = options.env || {};
   for (const [name, value] of Object.entries(env)) {
     if (!ENV_NAME.test(name) || !validArgs([value]))
       throw new Error(`installable.${agent.id}.env.${name}: not NAME -> plain value`);
   }
   if (Object.keys(env).length) install.env = env;
-  return install;
+  return checkInstall(install, `installable.${agent.id}`);
+}
+
+/**
+ * A binary agent's own archive, downloaded into its folder and unpacked as the registry lays it out
+ * (its cmd is relative to the archive's root, so nothing is stripped): per registry target its https
+ * url, its sha256 -- the registry's, or for an entry that gives none, the one pinned for that exact
+ * url in client.config.json (installable.<id>.sha256: { url: sha256 }) -- and bin, the folder its
+ * program is in. A target with no checksum is left out, so a new release the registry points at is
+ * not offered until its archives are pinned. Null when no target is left.
+ */
+export function archiveStep(agent, pinned = {}) {
+  const archives = {};
+  for (const [target, binary] of Object.entries(agent.distribution?.binary || {})) {
+    if (!Object.values(BINARY_TARGETS).flat().includes(target)) continue;
+    const url = binary.archive;
+    const sha256 = binary.sha256 || pinned[url];
+    const parts = (binary.cmd || '').replace(/\\/g, '/').split('/').filter(p => p && p !== '.');
+    const bin = parts.slice(0, -1).join('/');
+    if (typeof url !== 'string' || !url.startsWith('https://') || !SHA256.test(sha256 || '')) continue;
+    if (!parts.length || !SAFE_RELATIVE_DIR.test(bin) || parts.includes('..')) continue;
+    archives[target] = { url, sha256, bin };
+  }
+  if (!Object.keys(archives).length) return null;
+  const version = agent.version ? ` ${agent.version}` : '';
+  const host = new URL(Object.values(archives)[0].url).host;
+  return { kind: 'download', label: `${agent.name || agent.id}${version} (from ${host})`, into: 'agent', archives };
 }
 
 /**

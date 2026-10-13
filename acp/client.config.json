@@ -30,7 +30,7 @@
     "glm-acp-agent",
     "minimax-code"
   ],
-  "_installableComment": "agents the client may install itself, into a folder of its own, when the user asks it to (an npx entry: the registry's exact package version, plus extraPackages, with runtimes.node). Bump a pin here and deploy: clients offer the update.",
+  "_installableComment": "agents the client may install itself, into a folder of its own, when the user asks it to. An npx entry: the registry's exact package version, plus extraPackages, on runtimes.node. A binary entry: the registry's archives, each with the registry's sha256 or, where it gives none, the one pinned here for that exact url (sha256: {url: hash}; a new release is offered once its archives are pinned). Bump a pin here and deploy: clients offer the update.",
   "installable": {
     "claude-acp": {
       "extraPackages": [
@@ -39,7 +39,19 @@
       "env": {
         "DISABLE_AUTOUPDATER": "1"
       }
-    }
+    },
+    "antigravity-acp": {
+      "sha256": {
+        "https://dl.google.com/agy-extensions/releases/macos/agy-acp-server-1.2.1-darwin-arm64.zip": "0fab9938812e6b32b3b543e65e4f3a0025ceef755413db13542d9a9b81ea803c",
+        "https://dl.google.com/agy-extensions/releases/macos/agy-acp-server-1.2.1-darwin-x86_64.zip": "d09bf99bdea7b82021e1afcff829da35e4aa583d8f0984ef364dc3a7c064e07e",
+        "https://dl.google.com/agy-extensions/releases/windows/agy-acp-server-1.2.1-windows-x86_64.zip": "9b82493819bc14613baa76264d55ad307ddd8ab4a8d6e110edb32da35498c07b",
+        "https://dl.google.com/agy-extensions/releases/windows/agy-acp-server-1.2.1-windows-arm64.zip": "21db37ae246284053212f2670e05c4de8d6ee9488b000bf304e1fe4ea191f7b8",
+        "https://dl.google.com/agy-extensions/releases/linux/agy-acp-server-1.2.1-linux-x86_64.zip": "9fbf0bd584a26478161f637cabd75113f72541c842d148f578ef1a6a9edcb843",
+        "https://dl.google.com/agy-extensions/releases/linux/agy-acp-server-1.2.1-linux-arm64.zip": "7e7ef4088bc185e1af4204029e0f4ec4210af20724f3ff262186ac0bcea6aa0e"
+      }
+    },
+    "codex-acp": {},
+    "github-copilot-cli": {}
   },
   "_runtimesComment": "runtimes the client installs for installable agents. Official archives only, each with the sha256 from that release's SHASUMS256.txt; bin is the programs' folder once the archive's top-level folder is removed.",
   "runtimes": {
@@ -76,7 +88,8 @@
           "sha256": "724282c3b43aec998aa9527380465b45d229e021b58035f5f4f63095eabfe5d5",
           "bin": "bin"
         }
-      }
+      },
+      "displayName": "Node.js"
     }
   },
   "agentOverrides": {
@@ -99,10 +112,10 @@
       "minAgentVersion": "0.33.0-0"
     },
     "codex-acp": {
-      "signInText": "open a terminal and run `codex login` (or set OPENAI_API_KEY)."
+      "signInText": "sign in with your ChatGPT account when Codex asks (or set OPENAI_API_KEY in your shell profile), then press Reconnect."
     },
     "github-copilot-cli": {
-      "signInText": "open a terminal, run `copilot` and type /login."
+      "signInText": "sign in with your GitHub account when Copilot asks (it needs a GitHub Copilot plan), then press Reconnect."
     },
     "antigravity-acp": {
       "signInText": "sign in with your Google account (your Google AI subscription) when Antigravity asks, then press Reconnect.",

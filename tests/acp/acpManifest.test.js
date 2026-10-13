@@ -1,7 +1,7 @@
 import {
   buildManifest, buildAgents, parsePersona, loadPersonas, loadRegistrySnapshot, loadClientConfig, serializeManifest,
   validCommand, validArgs, buildCompatibility, protocolFor, PROTOCOL, BUILDERS, displayName, stripVersion, binFromPackageJson,
-  binaryCommand, launchByPlatform, installFor, runtimeStep, validPinnedPackage,
+  binaryCommand, launchByPlatform, installFor, runtimeStep, validPinnedPackage, archiveStep, npmStep, checkInstall, validTemplate,
 } from '../../acp/buildManifest.js';
 
 describe('ACP manifest', () => {
@@ -80,28 +80,41 @@ describe('ACP manifest', () => {
     expect(launchByPlatform({ distribution: { npx: { package: 'x' } } })).toEqual({ commandByPlatform: {}, argsByPlatform: {} });
   });
 
-  test('only installable agents with exact versions say how to install them', () => {
-    const node = { version: '24.1.0', archives: { 'darwin-aarch64': { url: 'https://nodejs.org/n.tar.gz', sha256: 'a'.repeat(64), bin: 'bin' } } };
+  test('an npm agent installs as two generic steps: node, then npm', () => {
+    const node = { version: '24.1.0', displayName: 'Node.js', archives: { 'darwin-aarch64': { url: 'https://nodejs.org/n.tar.gz', sha256: 'a'.repeat(64), bin: 'bin' } } };
     const installable = { 'claude-acp': { extraPackages: ['@anthropic-ai/claude-code@2.1.0'], env: { DISABLE_AUTOUPDATER: '1' } } };
     const claude = { id: 'claude-acp', name: 'Claude Agent', distribution: { npx: { package: '@x/claude-agent-acp@1.0.0' } }, _npmBin: 'claude-agent-acp' };
-    expect(installFor(claude, installable, { node })).toEqual({
-      steps: [
-        { kind: 'runtime', name: 'node', version: '24.1.0', archives: { 'darwin-aarch64': { url: 'https://nodejs.org/n.tar.gz', sha256: 'a'.repeat(64), bin: 'bin' } } },
-        { kind: 'npm', packages: ['@x/claude-agent-acp@1.0.0', '@anthropic-ai/claude-code@2.1.0'] },
-      ],
-      env: { DISABLE_AUTOUPDATER: '1' },
+    const install = installFor(claude, installable, { node });
+    expect(install.env).toEqual({ DISABLE_AUTOUPDATER: '1' });
+    expect(install.steps[0]).toEqual({
+      kind: 'download', label: 'Node.js 24.1.0 (from nodejs.org)', into: 'runtime', name: 'node', version: '24.1.0', strip: true,
+      archives: { 'darwin-aarch64': { url: 'https://nodejs.org/n.tar.gz', sha256: 'a'.repeat(64), bin: 'bin' } },
     });
-    // Not listed, no exact version, or not an npm package (yet): no install.
+    const npm = install.steps[1];
+    expect(npm).toMatchObject({ kind: 'run', program: '{runtime:node}/bin/node', path: ['{agent}/node_modules/.bin'],
+                                label: '@x/claude-agent-acp 1.0.0, @anthropic-ai/claude-code 2.1.0 (from npmjs.com)' });
+    expect(npm.args.slice(0, 4)).toEqual(['{runtime:node}/lib/node_modules/npm/bin/npm-cli.js', 'install', '--prefix', '{agent}']);
+    expect(npm.args.slice(-2)).toEqual(['@x/claude-agent-acp@1.0.0', '@anthropic-ai/claude-code@2.1.0']);
+    expect(npm.byPlatform.windows.program).toBe('{runtime:node}/node.exe');
+    expect(npm.byPlatform.windows.args[0]).toBe('{runtime:node}/node_modules/npm/bin/npm-cli.js');
+    // Not listed, no exact version, or a distribution not generated yet (uvx): no install.
     expect(installFor({ ...claude, id: 'other' }, installable, { node })).toBeUndefined();
     expect(installFor({ ...claude, distribution: { npx: { package: '@x/claude-agent-acp' } } }, installable, { node })).toBeUndefined();
-    expect(installFor({ id: 'claude-acp', distribution: { binary: {} } }, installable, { node })).toBeUndefined();
-    const { agents } = buildAgents([claude], {}, undefined, { installable, runtimes: { node } });
-    expect(agents[0].install.steps.map(s => s.kind)).toEqual(['runtime', 'npm']);
+    expect(installFor({ id: 'claude-acp', distribution: { uvx: { package: 'x==1.0' } } }, installable, { node })).toBeUndefined();
   });
 
-  test('install steps are exact and checksummed, or the build fails', () => {
+  test('installs are checked as clients check them, or the build fails', () => {
     for (const bad of ['x', 'x@^1.0.0', 'x@latest', '@x/y@1', 'x@1.0.0 && rm', '@X/y@1.0.0']) expect(validPinnedPackage(bad)).toBe(false);
     for (const good of ['x@1.0.0', '@scope/name@1.2.3', '@scope/name@1.0.0-beta.2']) expect(validPinnedPackage(good)).toBe(true);
+    for (const good of ['{agent}', '--cache={temp}/npm-cache', '{runtime:node}/bin/node', 'x==1.0']) expect(validTemplate(good)).toBe(true);
+    for (const bad of ['{home}', '$HOME', 'a;b', '`id`', '%APPDATA%', '{agent']) expect(validTemplate(bad)).toBe(false);
+    const run = { kind: 'run', label: 'x', program: '{agent}/bin/x', args: [] };
+    expect(() => checkInstall({ steps: [run] }, 't')).not.toThrow();
+    expect(() => checkInstall({ steps: [{ ...run, program: '/bin/sh' }] }, 't')).toThrow();
+    expect(() => checkInstall({ steps: [{ ...run, program: '{temp}/x' }] }, 't')).toThrow();
+    expect(() => checkInstall({ steps: [{ ...run, args: ['a;b'] }] }, 't')).toThrow();
+    expect(() => checkInstall({ steps: [{ ...run, byPlatform: { windows: { program: 'C:/Windows/cmd.exe' } } }] }, 't')).toThrow();
+    expect(() => checkInstall({ steps: [{ kind: 'flatpak', label: 'x' }] }, 't')).toThrow();
     const archive = { url: 'https://nodejs.org/n.tar.gz', sha256: 'a'.repeat(64), bin: 'bin' };
     expect(() => runtimeStep('node', { version: '24', archives: { 'darwin-aarch64': archive } })).toThrow();
     expect(() => runtimeStep('node', { version: '24.1.0', archives: { 'darwin-aarch64': { ...archive, url: 'http://x' } } })).toThrow();
@@ -111,13 +124,36 @@ describe('ACP manifest', () => {
     expect(() => runtimeStep('node', { version: '24.1.0', archives: {} })).toThrow();
   });
 
-  test('the committed config makes Claude, and only Claude, installable', () => {
+  test('a binary agent installs as one download, checksummed by the registry or pinned per url', () => {
+    const sha = 'b'.repeat(64);
+    const agent = { id: 'bin', name: 'Bin', version: '1.2.1', distribution: { binary: {
+      'darwin-aarch64': { archive: 'https://x.test/mac.zip', cmd: './bin-acp' },
+      'windows-x86_64': { archive: 'https://x.test/win.zip', cmd: './dist\\bin-acp.exe', sha256: 'c'.repeat(64) },
+      'linux-x86_64': { archive: 'https://x.test/linux.zip', cmd: './bin-acp' },
+    } } };
+    expect(archiveStep(agent, { 'https://x.test/mac.zip': sha })).toEqual({ kind: 'download', label: 'Bin 1.2.1 (from x.test)', into: 'agent', archives: {
+      'darwin-aarch64': { url: 'https://x.test/mac.zip', sha256: sha, bin: '' },
+      'windows-x86_64': { url: 'https://x.test/win.zip', sha256: 'c'.repeat(64), bin: 'dist' },
+    } });
+    // Nothing checksummed (a new release, not yet pinned): no install.
+    expect(archiveStep({ ...agent, distribution: { binary: { 'darwin-aarch64': agent.distribution.binary['darwin-aarch64'] } } })).toBeNull();
+    expect(installFor(agent, { bin: { sha256: { 'https://x.test/mac.zip': sha } } }).steps.map(s => s.kind)).toEqual(['download']);
+    expect(archiveStep({ distribution: { binary: { 'darwin-aarch64': { archive: 'http://x.test/a.zip', cmd: './a', sha256: sha } } } })).toBeNull();
+    expect(archiveStep({ distribution: { binary: { 'darwin-aarch64': { archive: 'https://x.test/a.zip', cmd: '../a', sha256: sha } } } })).toBeNull();
+  });
+
+  test('the committed config makes Claude, Antigravity, Codex and Copilot installable, in generic steps only', () => {
     const manifest = buildManifest({ registry: loadRegistrySnapshot(), personas: [], config: loadClientConfig() });
-    expect(manifest.agents.filter(a => a.install).map(a => a.id)).toEqual(['claude']);
-    const install = manifest.agents.find(a => a.id === 'claude').install;
-    expect(Object.keys(install.steps[0].archives).sort())
-      .toEqual(['darwin-aarch64', 'darwin-x86_64', 'linux-aarch64', 'linux-x86_64', 'windows-aarch64', 'windows-x86_64']);
-    expect(install.steps[1].packages.every(validPinnedPackage)).toBe(true);
+    expect(manifest.agents.filter(a => a.install).map(a => a.id).sort()).toEqual(['antigravity-acp', 'claude', 'codex-acp', 'github-copilot-cli']);
+    for (const id of ['codex-acp', 'github-copilot-cli'])
+      expect(manifest.agents.find(a => a.id === id).install.steps.map(s => s.kind)).toEqual(['download', 'run']);
+    const all = ['darwin-aarch64', 'darwin-x86_64', 'linux-aarch64', 'linux-x86_64', 'windows-aarch64', 'windows-x86_64'];
+    const claude = manifest.agents.find(a => a.id === 'claude').install;
+    expect(claude.steps.map(s => s.kind)).toEqual(['download', 'run']);
+    expect(Object.keys(claude.steps[0].archives).sort()).toEqual(all);
+    const agy = manifest.agents.find(a => a.id === 'antigravity-acp').install;
+    expect(agy.steps.map(s => s.kind)).toEqual(['download']);
+    expect(Object.keys(agy.steps[0].archives).sort()).toEqual(all);
   });
 
   test('helpers', () => {
