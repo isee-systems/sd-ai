@@ -101,19 +101,40 @@ Generated today: an npx agent is node (`runtimes.node`, `strip`ped into a runtim
 (`node npm-cli.js install --prefix {agent} <exact versions>` with the user's npm configuration
 cleared); a binary agent is its own archive, unpacked as the registry lays it out. A uvx agent would
 be uv's archive then `uv tool install` with `UV_*` pointed into `{agent}` — a generator here, not a
-client change. Listed: Claude (`claude-agent-acp` at the registry's version plus Claude Code), Codex
-and Copilot (npm, on Node), and Antigravity (its archive). A binary entry whose registry archives carry no `sha256` (Antigravity's do
-not) gets the hash pinned for each exact url in `installable.<id>.sha256`; a target with no checksum
-is not offered, so when the registry moves to a new release, pin its archives
-(`curl -sSf <url> | shasum -a 256`) and deploy.
+client change. Listed: Claude (`claude-agent-acp` plus Claude Code), Codex and Copilot (npm, on
+Node), and Antigravity (its archive).
 
-**Keep what the manifest applies to the assistants minimal.** It sets none of their own settings
-(model, effort, mode) and hides none of their choices, bypass-permission modes included: each
-assistant starts as the user configured it. `configOptions.describe` (tooltip text) and the
-overrides that only change what the client shows (names, sign-in text, the preselected sign-in
-method) are fine. `configOptions.defaults` (values set at session start) and `configOptions.hide`
-(values removed from the client's choices) exist for when one is truly needed; the tests expect
-both empty.
+**Always up to date, with nothing pinned by hand.** Every build (on start, then every 6 hours)
+works out what moves on before it replaces the manifest being served (`resolveInstalls`), so a new
+release never makes an install drop out:
+
+- the agents themselves: the registry's current version (npm packages are exact in the registry);
+- companion packages that follow their agent: Claude Code is the version the adapter's Agent SDK
+  was made for (`claudeCodeVersion`), via `extraPackages: [{package, versionFrom, fallback}]`;
+- tracked runtimes: Node moves to the newest release of `track.major`, with checksums from that
+  release's `SHASUMS256.txt`;
+- archives the registry gives no checksum for (Antigravity's): the server downloads each new url
+  once and hashes it (cached in `ACP_ARCHIVE_HASH_CACHE`, default the temp folder). A hash pinned
+  in `installable.<id>.sha256` still wins, and one that disagrees drops that target.
+
+What cannot be reached keeps the configured values (`version`/`archives`, `fallback`), which is also
+what offline builds (`--offline`, the client's bundled copy) use. An installable agent that still
+ends up with no install is logged as a warning. The first build after a deploy does not wait for
+archives to be hashed (nothing would be served meanwhile); it is built again once they are. When the
+manifest's steps for an agent a client installed change, the client asks the user whether to update
+it (or, if they turned on updating automatically, updates it in the background).
+`claudeCodeVersion` is read from the Agent SDK version npm would install, and when the adapter gives
+the SDK only as a range, that SDK version is pinned in the install beside Claude Code.
+
+**What the manifest sets on the assistants.** It hides none of their choices, and leaves their
+settings to the user, with one exception: the main assistants (Claude, Codex, Copilot, Antigravity)
+start in a mode that asks less (`agentOverrides.<id>.configDefaults`): Claude `auto` and Codex
+`agent` (auto review) decide for themselves what is safe to run without asking, Copilot `autopilot`
+runs commands without asking, and Antigravity `auto_edit` edits files without asking but still asks
+before running a command (its only mode that never asks, `yolo`, approves everything) -- so a modeling
+session is not a stream of permission prompts. A mode the user picks in the client always wins, and
+other assistants start as the user configured them. `configOptions.defaults` (the same for every
+assistant) and `configOptions.hide` stay empty; the tests check all of this.
 
 **No sd-ai AI tokens are ever spent for these clients.** Building the manifest only reads prompt
 text and tool schemas from this repo (its only network access is the ACP Registry and npm metadata),

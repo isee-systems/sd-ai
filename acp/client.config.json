@@ -30,11 +30,18 @@
     "glm-acp-agent",
     "minimax-code"
   ],
-  "_installableComment": "agents the client may install itself, into a folder of its own, when the user asks it to. An npx entry: the registry's exact package version, plus extraPackages, on runtimes.node. A binary entry: the registry's archives, each with the registry's sha256 or, where it gives none, the one pinned here for that exact url (sha256: {url: hash}; a new release is offered once its archives are pinned). Bump a pin here and deploy: clients offer the update.",
+  "_installableComment": "agents the client may install itself, into a folder of its own, when the user asks it to; clients keep what they installed up to date with this manifest. An npx entry: the registry's exact package version, plus extraPackages (exact, or following the agent's own package: versionFrom, with a fallback for offline builds), on runtimes.node. A binary entry: the registry's archives, each with the registry's sha256, else one pinned here for that exact url (sha256: {url: hash}), else the one the server works out by downloading it.",
   "installable": {
     "claude-acp": {
       "extraPackages": [
-        "@anthropic-ai/claude-code@2.1.296"
+        {
+          "package": "@anthropic-ai/claude-code",
+          "versionFrom": {
+            "dependency": "@anthropic-ai/claude-agent-sdk",
+            "field": "claudeCodeVersion"
+          },
+          "fallback": "2.1.296"
+        }
       ],
       "env": {
         "DISABLE_AUTOUPDATER": "1"
@@ -53,7 +60,7 @@
     "codex-acp": {},
     "github-copilot-cli": {}
   },
-  "_runtimesComment": "runtimes the client installs for installable agents. Official archives only, each with the sha256 from that release's SHASUMS256.txt; bin is the programs' folder once the archive's top-level folder is removed.",
+  "_runtimesComment": "runtimes the client installs for installable agents. Official archives only. track: the build moves to the newest release of that major line, with checksums from its SHASUMS256.txt; version/archives are what is used when that cannot be reached (offline builds). bin is the programs' folder once the archive's top-level folder is removed.",
   "runtimes": {
     "node": {
       "version": "24.21.0",
@@ -89,7 +96,11 @@
           "bin": "bin"
         }
       },
-      "displayName": "Node.js"
+      "displayName": "Node.js",
+      "track": {
+        "major": 24,
+        "dist": "https://nodejs.org/dist/"
+      }
     }
   },
   "agentOverrides": {
@@ -99,7 +110,12 @@
       "executableEnv": {
         "CLAUDE_CODE_EXECUTABLE": "claude"
       },
-      "signInText": "open a terminal, run `claude` and sign in (type /login if it does not ask). An Anthropic API key, Amazon Bedrock or Google Vertex set up for Claude Code also works."
+      "signInText": "open a terminal, run `claude` and sign in (type /login if it does not ask). An Anthropic API key, Amazon Bedrock or Google Vertex set up for Claude Code also works.",
+      "configDefaults": {
+        "mode": [
+          "auto"
+        ]
+      }
     },
     "github-copilot": {
       "displayName": "GitHub Copilot Language Server"
@@ -112,14 +128,30 @@
       "minAgentVersion": "0.33.0-0"
     },
     "codex-acp": {
-      "signInText": "sign in with your ChatGPT account when Codex asks (or set OPENAI_API_KEY in your shell profile), then press Reconnect."
+      "signInText": "sign in with your ChatGPT account when Codex asks (or set OPENAI_API_KEY in your shell profile), then press Reconnect.",
+      "configDefaults": {
+        "mode": [
+          "agent"
+        ]
+      }
     },
     "github-copilot-cli": {
-      "signInText": "sign in with your GitHub account when Copilot asks (it needs a GitHub Copilot plan), then press Reconnect."
+      "signInText": "sign in with your GitHub account when Copilot asks (it needs a GitHub Copilot plan), then press Reconnect.",
+      "configDefaults": {
+        "mode": [
+          "https://agentclientprotocol.com/protocol/session-modes#autopilot",
+          "autopilot"
+        ]
+      }
     },
     "antigravity-acp": {
       "signInText": "sign in with your Google account (your Google AI subscription) when Antigravity asks, then press Reconnect.",
-      "preferredAuthMethod": "oauth-personal"
+      "preferredAuthMethod": "oauth-personal",
+      "configDefaults": {
+        "mode": [
+          "auto_edit"
+        ]
+      }
     },
     "cursor": {
       "signInText": "open a terminal and run `cursor-agent login`, then press Reconnect."
@@ -267,5 +299,6 @@
       }
     }
   },
-  "flags": {}
+  "flags": {},
+  "_configDefaultsComment": "agentOverrides.<id>.configDefaults: the mode (or other option) a main assistant starts in when the user has not chosen one in the client: Claude auto and Codex agent (each decides what is safe to run without asking), Copilot autopilot (runs commands without asking), Antigravity auto_edit (edits without asking; still asks before commands -- its only mode that does not ask is yolo, which approves everything). Clients older than per-agent defaults ignore it and keep asking."
 }

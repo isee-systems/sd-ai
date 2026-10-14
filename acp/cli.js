@@ -11,7 +11,7 @@ import { writeFileSync } from 'fs';
 import { join } from 'path';
 import {
   REPO_ROOT, buildManifest, buildAgents, serializeManifest, fetchRegistry, loadRegistrySnapshot, loadPersonas,
-  loadClientConfig, loadEngineBriefs, loadToolDefinitions,
+  loadClientConfig, loadEngineBriefs, loadToolDefinitions, resolveInstalls,
 } from './buildManifest.js';
 
 const args = process.argv.slice(2);
@@ -25,12 +25,17 @@ if (flag('--snapshot')) {
   console.log(`acp/registry-snapshot.json: ${registry.length} registry entries`);
 }
 
-const config = loadClientConfig();
+// Live, the newest of everything that moves on (runtimes, companion packages, archives' checksums);
+// offline, as configured.
+const config = flag('--offline') ? loadClientConfig()
+  : await resolveInstalls(registry, loadClientConfig(), { log: message => console.log(message), hashDeadlineMs: 30 * 60 * 1000 });
 const manifest = buildManifest({
   registry, personas: loadPersonas(), config,
   engineBriefs: await loadEngineBriefs(), toolDefinitions: await loadToolDefinitions(config.standInTools || {}),
 });
-const { skipped } = buildAgents(registry, config.agentOverrides, config.enabledAgents);
+const { skipped, notInstallable } = buildAgents(registry, config.agentOverrides, config.enabledAgents,
+                                                { installable: config.installable, runtimes: config.runtimes });
+if (notInstallable.length) console.warn(`listed as installable but not offered (no exact version or checksum): ${notInstallable.join(', ')}`);
 const bytes = serializeManifest(manifest);
 console.log(`${manifest.agents.length} agents, ${manifest.personas.length} personas, serial ${manifest.serial}` +
             (skipped.length ? `; skipped (not launchable as an installed program): ${skipped.join(', ')}` : ''));

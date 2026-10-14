@@ -85,6 +85,12 @@ async function fetchJson(url, timeoutMs = 15000) {
   return response.json();
 }
 
+async function fetchText(url, timeoutMs = 15000) {
+  const response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs), headers: { 'User-Agent': 'sd-ai-acp-manifest' } });
+  if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`);
+  return response.text();
+}
+
 async function npmBin(pkg) {
   const name = stripVersion(pkg);
   const version = pkg.slice(name.length).replace(/^@/, '') || 'latest';
@@ -287,7 +293,7 @@ export function installFor(agent, installable = {}, runtimes = {}) {
   if (!options) return undefined;
   let install;
   if (agent.distribution?.npx) {
-    const packages = [agent.distribution.npx.package, ...(options.extraPackages || [])];
+    const packages = [agent.distribution.npx.package, ...(options.extraPackages || []).map(extraPackageFallback)];
     if (!packages.every(validPinnedPackage)) return undefined;
     install = { steps: [runtimeStep('node', runtimes.node), npmStep(packages)] };
   } else if (agent.distribution?.binary) {
@@ -346,6 +352,7 @@ export function archiveStep(agent, pinned = {}) {
  * restart does not download every archive again.
  */
 const archiveHashes = new Map();
+const hashing = new Map();   // url -> the download hashing it now
 const ARCHIVE_HASH_CACHE = process.env.ACP_ARCHIVE_HASH_CACHE || join(tmpdir(), 'sd-ai-acp-archive-hashes.json');
 const MAX_ARCHIVE_BYTES = 2 * 1024 * 1024 * 1024;
 
@@ -389,9 +396,14 @@ export async function hashMissingArchives(registry, installable = {}, { hash = h
       const url = binary.archive;
       if (typeof url !== 'string' || !url.startsWith('https://') || binary.sha256 || archiveHashes.has(url)) continue;
       try {
-        const sha256 = await hash(url);
-        archiveHashes.set(url, sha256);
+        // One download per url, however many builds want it at once.
+        if (!hashing.has(url)) hashing.set(url, hash(url).finally(() => hashing.delete(url)));
+        const sha256 = await hashing.get(url);
+        // New to this caller either way, so it counts: the caller that rebuilds on what it learned
+        // may be the one that only waited for another's download.
         learned++;
+        if (archiveHashes.has(url)) continue;   // recorded by the caller that started the download
+        archiveHashes.set(url, sha256);
         if (pinned[url] && pinned[url] !== sha256) log(`ACP archive ${url}: sha256 ${sha256} is not the pinned ${pinned[url]}; not offered`);
         else log(`ACP archive ${url}: sha256 ${sha256}`);
       } catch (error) {
@@ -413,6 +425,122 @@ export function forgetArchiveHashes() {
 }
 
 /**
+ * An extra package an agent's install needs beside its own, as client.config.json gives it: an exact
+ * "name@version", or one whose version follows the agent's own package -- {package, versionFrom:
+ * {dependency, field}, fallback}: the version is the field of that dependency's package.json, at the
+ * version the agent's package depends on. Claude Code follows claude-agent-acp that way, through the
+ * claudeCodeVersion its Agent SDK was made for, so the two are always the pair Anthropic shipped
+ * together. resolveExtraPackages works it out (network); without it, the fallback.
+ */
+export function extraPackageFallback(extra) {
+  return typeof extra === 'string' ? extra : `${extra.package}@${extra.fallback}`;
+}
+
+const EXACT_VERSION = /^=?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)$/;
+
+/**
+ * The version npm installs today for a dependency range a package.json gives: an exact version as is;
+ * ^x.y.z and ~x.y.z as the newest stable release they allow; anything else, undefined.
+ */
+export async function versionForRange(name, range, { fetchJsonImpl = fetchJson } = {}) {
+  const exact = EXACT_VERSION.exec(range);
+  if (exact) return exact[1];
+  const loose = /^([\^~])(\d+)\.(\d+)\.(\d+)$/.exec(range);
+  if (!loose) return undefined;
+  const [op, major, minor, patch] = [loose[1], Number(loose[2]), Number(loose[3]), Number(loose[4])];
+  const allows = ([a, b, c]) => {
+    if (a !== major || (a - major || b - minor || c - patch) < 0) return false;
+    if (op === '~' || major === 0) return b === minor && (op === '~' || minor > 0 || c === patch);
+    return true;
+  };
+  const packument = await fetchJsonImpl(NPM_REGISTRY + name.replace('/', '%2F'));
+  const newest = Object.keys(packument.versions || {})
+    .filter(version => /^\d+\.\d+\.\d+$/.test(version))
+    .map(version => version.split('.').map(Number))
+    .filter(allows)
+    .sort((x, y) => x[0] - y[0] || x[1] - y[1] || x[2] - y[2])
+    .pop();
+  return newest?.join('.');
+}
+
+/**
+ * The exact packages one extra package comes to. Following its agent through a dependency the agent
+ * only gives a range for, that dependency is pinned beside it, at the version it was worked out from:
+ * npm then installs that one rather than a newer release made for another Claude Code.
+ */
+export async function resolveExtraPackages(agentPackage, extra, { fetchJsonImpl = fetchJson } = {}) {
+  if (typeof extra === 'string') return [extra];
+  try {
+    const name = stripVersion(agentPackage);
+    const meta = await fetchJsonImpl(NPM_REGISTRY + name.replace('/', '%2F') + '/' + agentPackage.slice(name.length + 1));
+    const dependency = extra.versionFrom.dependency;
+    const range = String(meta.dependencies?.[dependency] || '');
+    const depVersion = await versionForRange(dependency, range, { fetchJsonImpl });
+    if (!depVersion) return [extraPackageFallback(extra)];
+    const dep = await fetchJsonImpl(NPM_REGISTRY + dependency.replace('/', '%2F') + '/' + depVersion);
+    const specs = [`${extra.package}@${dep[extra.versionFrom.field]}`];
+    if (!EXACT_VERSION.test(range)) specs.unshift(`${dependency}@${depVersion}`);
+    return specs.every(validPinnedPackage) ? specs : [extraPackageFallback(extra)];
+  } catch {
+    return [extraPackageFallback(extra)];
+  }
+}
+
+/**
+ * The newest release of a runtime's line, when its config says to track one ({track: {major, dist}}):
+ * Node's newest 24.x from nodejs.org, its archives' urls moved to that version and their checksums
+ * read from the release's own SHASUMS256.txt. All or nothing: a release missing one of the archives
+ * keeps the pinned one, as does any failure to reach nodejs.org.
+ */
+export async function resolveNodeRuntime(runtime, { fetchJsonImpl = fetchJson, fetchTextImpl = fetchText } = {}) {
+  const track = runtime?.track;
+  if (!track?.major || !track?.dist?.startsWith('https://')) return runtime;
+  const index = await fetchJsonImpl(track.dist + 'index.json');
+  const newest = index.find(release => release.version?.startsWith(`v${track.major}.`));
+  const version = newest?.version.slice(1);
+  if (!version || !/^\d+\.\d+\.\d+$/.test(version) || version === runtime.version) return runtime;
+  const sums = new Map((await fetchTextImpl(`${track.dist}v${version}/SHASUMS256.txt`)).split('\n')
+    .map(line => line.trim().split(/\s+/)).filter(parts => parts.length === 2).map(([sha, file]) => [file, sha]));
+  const archives = {};
+  for (const [target, archive] of Object.entries(runtime.archives || {})) {
+    const url = archive.url.split(runtime.version).join(version);
+    const sha256 = sums.get(url.split('/').pop());
+    if (!url.startsWith(track.dist) || !SHA256.test(sha256 || '')) return runtime;
+    archives[target] = { ...archive, url, sha256 };
+  }
+  return { ...runtime, version, archives };
+}
+
+/**
+ * client.config.json as the build should use it, with everything that moves on worked out from
+ * the network: the tracked runtimes' newest releases, extra packages that follow their agent, and
+ * the checksums of new archives (hashMissingArchives -- waited for up to hashDeadlineMs, and left
+ * running past it). What cannot be worked out stays as configured.
+ */
+export async function resolveInstalls(registry, config, { fetchJsonImpl = fetchJson, fetchTextImpl = fetchText, hash = hashArchive,
+                                                           log = () => {}, hashDeadlineMs = 3 * 60 * 1000 } = {}) {
+  const resolved = structuredClone(config);
+  try {
+    if (config.runtimes?.node) resolved.runtimes.node = await resolveNodeRuntime(config.runtimes.node, { fetchJsonImpl, fetchTextImpl });
+  } catch (error) {
+    log(`ACP runtime node: could not check for a newer release (${error.message}); using ${config.runtimes.node.version}`);
+  }
+  for (const [id, options] of Object.entries(config.installable || {})) {
+    const agentPackage = registry.find(agent => agent.id === id)?.distribution?.npx?.package;
+    if (!agentPackage || !options.extraPackages) continue;
+    resolved.installable[id].extraPackages = (await Promise.all(options.extraPackages.map(extra =>
+      resolveExtraPackages(agentPackage, extra, { fetchJsonImpl })))).flat();
+  }
+  let timer;
+  await Promise.race([
+    hashMissingArchives(registry, config.installable, { hash, log }),
+    new Promise(resolve => { timer = setTimeout(resolve, hashDeadlineMs); }),
+  ]);
+  clearTimeout(timer);
+  return resolved;
+}
+
+/**
  * enabledAgents: the registry ids clients offer. The rest are still listed, switched off, so turning
  * one on is a config change here. Omitted, every launchable entry is on. An override's own "enabled"
  * wins over either.
@@ -420,10 +548,12 @@ export function forgetArchiveHashes() {
 export function buildAgents(registry, overrides = {}, enabledAgents = undefined, { installable = {}, runtimes = {} } = {}) {
   const agents = [];
   const skipped = [];
+  const notInstallable = [];   // listed in installable, but with nothing exact to install: worth a warning
   for (const agent of registry) {
     const [command, args] = launchFor(agent);
     const { commandByPlatform, argsByPlatform } = launchByPlatform(agent);
     const install = installFor(agent, installable, runtimes);
+    if (installable[agent.id] && !install) notInstallable.push(agent.id);
     const entry = {
       id: agent.id,
       displayName: displayName(agent.name || agent.id),
@@ -444,7 +574,7 @@ export function buildAgents(registry, overrides = {}, enabledAgents = undefined,
     }
     agents.push(entry);
   }
-  return { agents, skipped };
+  return { agents, skipped, notInstallable };
 }
 
 /** One sd-ai agent config (frontmatter + prompt) as a client persona. */

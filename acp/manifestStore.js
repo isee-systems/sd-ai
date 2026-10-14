@@ -7,7 +7,7 @@
 import logger from '../utilities/logger.js';
 import {
   BUILDERS, protocolFor, serializeManifest, fetchRegistry, loadRegistrySnapshot, loadPersonas, loadClientConfig,
-  loadEngineBriefs, loadToolDefinitions, hashMissingArchives,
+  loadEngineBriefs, loadToolDefinitions, hashMissingArchives, resolveInstalls, buildAgents,
 } from './buildManifest.js';
 
 const REFRESH_MS = 6 * 60 * 60 * 1000;
@@ -26,7 +26,18 @@ export async function rebuild({ live = true, registry = null } = {}) {
     }
   }
 
-  const config = loadClientConfig();
+  // What moves on -- runtimes, companion packages, new archives' checksums -- worked out before the
+  // manifest is replaced: until then the previous one is served, so a new release never makes an
+  // install drop out of it, not even for a moment. With none served yet (the first build after a
+  // deploy) archives are not waited for -- the route would answer 503 meanwhile -- and the manifest
+  // is built again once they are hashed (hashInBackground).
+  const log = message => logger.info(`[acp] ${message}`);
+  const config = live ? await resolveInstalls(registry, loadClientConfig(), { log, hashDeadlineMs: current ? undefined : 0 })
+                      : loadClientConfig();
+  const { notInstallable } = buildAgents(registry, config.agentOverrides, config.enabledAgents,
+                                         { installable: config.installable, runtimes: config.runtimes });
+  if (notInstallable.length)
+    logger.warn(`[acp] listed as installable but not offered (no exact version or checksum yet): ${notInstallable.join(', ')}`);
   const inputs = {
     registry, personas: loadPersonas(), config,
     engineBriefs: await loadEngineBriefs(), toolDefinitions: await loadToolDefinitions(config.standInTools || {}),
@@ -42,7 +53,7 @@ export async function rebuild({ live = true, registry = null } = {}) {
     logger.info(`[acp] manifest protocol ${protocol} ready: ${manifest.agents.length} agents, ${manifest.personas.length} personas, serial ${manifest.serial}`);
   }
   current = built;
-  hashInBackground(registry, config.installable);
+  if (notInstallable.length) hashInBackground(registry, config.installable);
   return current;
 }
 
@@ -56,7 +67,7 @@ function hashInBackground(registry, installable) {
   if (hashing) return;
   hashing = true;
   hashMissingArchives(registry, installable, { log: message => logger.info(`[acp] ${message}`) })
-    .then(learned => (learned ? rebuild({ registry }) : null))
+    .then(learned => (learned ? rebuild({ registry, live: true }) : null))
     .catch(error => logger.error(`[acp] hashing archives failed: ${error.message}`))
     .finally(() => { hashing = false; });
 }

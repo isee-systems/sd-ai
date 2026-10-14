@@ -1,7 +1,7 @@
 import {
   buildManifest, buildAgents, parsePersona, loadPersonas, loadRegistrySnapshot, loadClientConfig, serializeManifest,
   validCommand, validArgs, buildCompatibility, protocolFor, PROTOCOL, BUILDERS, displayName, stripVersion, binFromPackageJson,
-  binaryCommand, launchByPlatform, installFor, runtimeStep, validPinnedPackage, archiveStep, npmStep, checkInstall, validTemplate, hashMissingArchives, hashArchive, forgetArchiveHashes, learnedArchiveHash,
+  binaryCommand, launchByPlatform, installFor, runtimeStep, validPinnedPackage, archiveStep, npmStep, checkInstall, validTemplate, hashMissingArchives, hashArchive, forgetArchiveHashes, learnedArchiveHash, resolveExtraPackages, versionForRange, resolveNodeRuntime, resolveInstalls,
 } from '../../acp/buildManifest.js';
 
 describe('ACP manifest', () => {
@@ -171,6 +171,92 @@ describe('ACP manifest', () => {
     forgetArchiveHashes();
   });
 
+  test('Claude Code follows the adapter: the version its Agent SDK was made for', async () => {
+    const extra = { package: '@anthropic-ai/claude-code', versionFrom: { dependency: '@anthropic-ai/claude-agent-sdk', field: 'claudeCodeVersion' }, fallback: '2.1.0' };
+    const npm = {
+      'https://registry.npmjs.org/@agentclientprotocol%2Fclaude-agent-acp/0.90.0': { dependencies: { '@anthropic-ai/claude-agent-sdk': '0.3.296' } },
+      'https://registry.npmjs.org/@anthropic-ai%2Fclaude-agent-sdk/0.3.296': { claudeCodeVersion: '2.1.296' },
+    };
+    const fetchJsonImpl = async url => { if (!npm[url]) throw new Error('404 ' + url); return npm[url]; };
+    expect(await resolveExtraPackages('@agentclientprotocol/claude-agent-acp@0.90.0', extra, { fetchJsonImpl })).toEqual(['@anthropic-ai/claude-code@2.1.296']);
+    // Unreachable, or nothing exact to go on: the fallback.
+    expect(await resolveExtraPackages('@agentclientprotocol/claude-agent-acp@0.91.0', extra, { fetchJsonImpl })).toEqual(['@anthropic-ai/claude-code@2.1.0']);
+    npm['https://registry.npmjs.org/@anthropic-ai%2Fclaude-agent-sdk/0.3.296'] = { claudeCodeVersion: 'latest' };
+    expect(await resolveExtraPackages('@agentclientprotocol/claude-agent-acp@0.90.0', extra, { fetchJsonImpl })).toEqual(['@anthropic-ai/claude-code@2.1.0']);
+    expect(await resolveExtraPackages('x@1.0.0', 'y@2.0.0')).toEqual(['y@2.0.0']);
+    // A range: the SDK npm would install today, pinned beside the Claude Code it was made for.
+    npm['https://registry.npmjs.org/@agentclientprotocol%2Fclaude-agent-acp/0.92.0'] = { dependencies: { '@anthropic-ai/claude-agent-sdk': '^0.3.296' } };
+    npm['https://registry.npmjs.org/@anthropic-ai%2Fclaude-agent-sdk'] = { versions: { '0.3.290': {}, '0.3.296': {}, '0.3.301': {}, '0.4.0': {}, '0.3.302-beta.1': {} } };
+    npm['https://registry.npmjs.org/@anthropic-ai%2Fclaude-agent-sdk/0.3.301'] = { claudeCodeVersion: '2.1.301' };
+    expect(await resolveExtraPackages('@agentclientprotocol/claude-agent-acp@0.92.0', extra, { fetchJsonImpl }))
+      .toEqual(['@anthropic-ai/claude-agent-sdk@0.3.301', '@anthropic-ai/claude-code@2.1.301']);
+  });
+
+  test('a dependency range comes to the version npm would install', async () => {
+    const versions = { versions: Object.fromEntries(['1.2.3', '1.2.9', '1.3.0', '2.0.0', '0.0.4', '0.0.5', '1.4.0-rc.1'].map(v => [v, {}])) };
+    const impl = { fetchJsonImpl: async () => versions };
+    expect(await versionForRange('p', '1.2.3', impl)).toBe('1.2.3');
+    expect(await versionForRange('p', '=1.2.3', impl)).toBe('1.2.3');
+    expect(await versionForRange('p', '^1.2.3', impl)).toBe('1.3.0');
+    expect(await versionForRange('p', '~1.2.3', impl)).toBe('1.2.9');
+    expect(await versionForRange('p', '^0.0.4', impl)).toBe('0.0.4');
+    expect(await versionForRange('p', '^1.9.0', impl)).toBeUndefined();
+    expect(await versionForRange('p', '>=1.0.0', impl)).toBeUndefined();
+  });
+
+  test('Node moves to the newest release of its line, checksums from its SHASUMS256.txt, or stays put', async () => {
+    const runtime = { version: '24.1.0', track: { major: 24, dist: 'https://nodejs.org/dist/' }, archives: {
+      'darwin-aarch64': { url: 'https://nodejs.org/dist/v24.1.0/node-v24.1.0-darwin-arm64.tar.gz', sha256: 'a'.repeat(64), bin: 'bin' },
+      'windows-x86_64': { url: 'https://nodejs.org/dist/v24.1.0/node-v24.1.0-win-x64.zip', sha256: 'b'.repeat(64), bin: '' },
+    } };
+    const index = [{ version: 'v26.0.0' }, { version: 'v24.9.0' }, { version: 'v24.8.0' }];
+    let sums = `${'c'.repeat(64)}  node-v24.9.0-darwin-arm64.tar.gz\n${'d'.repeat(64)}  node-v24.9.0-win-x64.zip\n`;
+    const impl = { fetchJsonImpl: async () => index, fetchTextImpl: async () => sums };
+    expect(await resolveNodeRuntime(runtime, impl)).toEqual({ ...runtime, version: '24.9.0', archives: {
+      'darwin-aarch64': { url: 'https://nodejs.org/dist/v24.9.0/node-v24.9.0-darwin-arm64.tar.gz', sha256: 'c'.repeat(64), bin: 'bin' },
+      'windows-x86_64': { url: 'https://nodejs.org/dist/v24.9.0/node-v24.9.0-win-x64.zip', sha256: 'd'.repeat(64), bin: '' },
+    } });
+    // A release missing one of the archives keeps the pinned one; so does no track.
+    sums = `${'c'.repeat(64)}  node-v24.9.0-darwin-arm64.tar.gz\n`;
+    expect(await resolveNodeRuntime(runtime, impl)).toBe(runtime);
+    expect(await resolveNodeRuntime({ ...runtime, track: undefined }, impl)).toEqual({ ...runtime, track: undefined });
+  });
+
+  test('an archive hashed for one build counts as learned for every build that waited for it', async () => {
+    forgetArchiveHashes();
+    const url = 'https://example.com/agent-1.0.0.tar.gz';
+    const registry = [{ id: 'bin', distribution: { binary: { 'darwin-aarch64': { archive: url, cmd: './agent' } } } }];
+    let finish;
+    let downloads = 0;
+    const hash = () => { downloads++; return new Promise(resolve => { finish = resolve; }); };
+    const first = hashMissingArchives(registry, { bin: {} }, { hash });
+    const second = hashMissingArchives(registry, { bin: {} }, { hash });
+    finish('e'.repeat(64));
+    expect(await first).toBe(1);
+    expect(await second).toBe(1);
+    expect(downloads).toBe(1);
+    forgetArchiveHashes();
+  });
+
+  test('installs resolve before the build, and one that cannot be offered is reported', async () => {
+    forgetArchiveHashes();
+    const config = loadClientConfig();
+    const registry = loadRegistrySnapshot();
+    const offline = { fetchJsonImpl: async () => { throw new Error('offline'); }, fetchTextImpl: async () => { throw new Error('offline'); },
+                      hash: async () => { throw new Error('offline'); } };
+    const resolved = await resolveInstalls(registry, config, offline);
+    // Offline: as configured.
+    expect(resolved.runtimes.node.version).toBe(config.runtimes.node.version);
+    expect(resolved.installable['claude-acp'].extraPackages).toEqual(['@anthropic-ai/claude-code@' + config.installable['claude-acp'].extraPackages[0].fallback]);
+    // An installable binary agent on a release nobody has hashed or pinned is reported, not silently dropped.
+    const moved = registry.map(a => a.id !== 'antigravity-acp' ? a : { ...a, distribution: { binary: Object.fromEntries(
+      Object.entries(a.distribution.binary).map(([t, b]) => [t, { ...b, archive: b.archive.replace(/1\.2\.1/g, '9.9.9') }])) } });
+    expect(buildAgents(moved, config.agentOverrides, config.enabledAgents, { installable: config.installable, runtimes: config.runtimes }).notInstallable)
+      .toEqual(['antigravity-acp']);
+    expect(buildAgents(registry, config.agentOverrides, config.enabledAgents, { installable: config.installable, runtimes: config.runtimes }).notInstallable)
+      .toEqual([]);
+  });
+
   test('hashArchive streams what the url serves into its sha256', async () => {
     const body = new TextEncoder().encode('archive bytes');
     const fakeFetch = async () => ({ ok: true, body: (async function* () { yield body.slice(0, 4); yield body.slice(4); })() });
@@ -215,6 +301,12 @@ describe('ACP manifest', () => {
     // (bypass-permission modes included); each starts as the user configured it.
     expect(earlier.configOptions.defaults ?? {}).toEqual({});
     expect(earlier.configOptions.hide ?? {}).toEqual({});
+    // The main assistants start in their own no-prompt mode; the rest as the user configured them.
+    const modes = Object.fromEntries(earlier.agents.filter(a => a.configDefaults).map(a => [a.id, a.configDefaults.mode]));
+    expect(modes).toEqual({
+      claude: ['auto'], 'codex-acp': ['agent'], 'antigravity-acp': ['auto_edit'],
+      'github-copilot-cli': ['https://agentclientprotocol.com/protocol/session-modes#autopilot', 'autopilot'],
+    });
     expect(earlier.agents.filter(a => a.enabled).map(a => a.id).sort())
       .toEqual(['amp-acp', 'antigravity-acp', 'auggie', 'claude', 'cline', 'codex-acp', 'cursor', 'devin',
                 'factory-droid', 'gemini', 'github-copilot-cli', 'glm-acp-agent', 'goose', 'junie', 'kilo', 'kimi',
