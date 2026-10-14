@@ -1,7 +1,7 @@
 import {
   buildManifest, buildAgents, parsePersona, loadPersonas, loadRegistrySnapshot, loadClientConfig, serializeManifest,
   validCommand, validArgs, buildCompatibility, protocolFor, PROTOCOL, BUILDERS, displayName, stripVersion, binFromPackageJson,
-  binaryCommand, launchByPlatform, installFor, runtimeStep, validPinnedPackage, archiveStep, npmStep, checkInstall, validTemplate,
+  binaryCommand, launchByPlatform, installFor, runtimeStep, validPinnedPackage, archiveStep, npmStep, checkInstall, validTemplate, hashMissingArchives, hashArchive, forgetArchiveHashes, learnedArchiveHash,
 } from '../../acp/buildManifest.js';
 
 describe('ACP manifest', () => {
@@ -140,6 +140,43 @@ describe('ACP manifest', () => {
     expect(installFor(agent, { bin: { sha256: { 'https://x.test/mac.zip': sha } } }).steps.map(s => s.kind)).toEqual(['download']);
     expect(archiveStep({ distribution: { binary: { 'darwin-aarch64': { archive: 'http://x.test/a.zip', cmd: './a', sha256: sha } } } })).toBeNull();
     expect(archiveStep({ distribution: { binary: { 'darwin-aarch64': { archive: 'https://x.test/a.zip', cmd: '../a', sha256: sha } } } })).toBeNull();
+  });
+
+  test('a binary agent whose archives carry no checksum stays installable across releases: the server hashes them', async () => {
+    forgetArchiveHashes();
+    const agent = { id: 'agy', name: 'Agy', version: '9.0.0', distribution: { binary: {
+      'darwin-aarch64': { archive: 'https://x.test/agy-9.0.0-mac.zip', cmd: './agy' },
+      'windows-x86_64': { archive: 'https://x.test/agy-9.0.0-win.zip', cmd: './agy.exe' },
+    } } };
+    // A new release nobody has pinned: not installable until its archives are hashed.
+    expect(archiveStep(agent, {})).toBeNull();
+    const fetched = [];
+    const learned = await hashMissingArchives([agent], { agy: {} }, { hash: async url => { fetched.push(url); return url.includes('mac') ? 'd'.repeat(64) : 'e'.repeat(64); } });
+    expect(learned).toBe(2);
+    expect(archiveStep(agent, {}).archives).toEqual({
+      'darwin-aarch64': { url: 'https://x.test/agy-9.0.0-mac.zip', sha256: 'd'.repeat(64), bin: '' },
+      'windows-x86_64': { url: 'https://x.test/agy-9.0.0-win.zip', sha256: 'e'.repeat(64), bin: '' },
+    });
+    // Each url is hashed once; agents that are not installable are never downloaded.
+    expect(await hashMissingArchives([agent], { agy: {} }, { hash: async url => { fetched.push(url); return 'f'.repeat(64); } })).toBe(0);
+    expect(await hashMissingArchives([{ ...agent, id: 'other' }], { agy: {} }, { hash: async url => { fetched.push(url); return 'f'.repeat(64); } })).toBe(0);
+    expect(fetched).toHaveLength(2);
+    // A hash pinned in the config wins; one that disagrees with what the server saw drops that target.
+    expect(archiveStep(agent, { 'https://x.test/agy-9.0.0-mac.zip': 'd'.repeat(64) }).archives['darwin-aarch64'].sha256).toBe('d'.repeat(64));
+    expect(Object.keys(archiveStep(agent, { 'https://x.test/agy-9.0.0-mac.zip': 'c'.repeat(64) }).archives)).toEqual(['windows-x86_64']);
+    // One that cannot be fetched is tried again next time.
+    forgetArchiveHashes();
+    expect(await hashMissingArchives([agent], { agy: {} }, { hash: async () => { throw new Error('offline'); } })).toBe(0);
+    expect(learnedArchiveHash('https://x.test/agy-9.0.0-mac.zip')).toBeUndefined();
+    forgetArchiveHashes();
+  });
+
+  test('hashArchive streams what the url serves into its sha256', async () => {
+    const body = new TextEncoder().encode('archive bytes');
+    const fakeFetch = async () => ({ ok: true, body: (async function* () { yield body.slice(0, 4); yield body.slice(4); })() });
+    const { createHash } = await import('crypto');
+    expect(await hashArchive('https://x.test/a.zip', { fetchImpl: fakeFetch })).toBe(createHash('sha256').update('archive bytes').digest('hex'));
+    await expect(hashArchive('https://x.test/a.zip', { fetchImpl: async () => ({ ok: false, status: 404 }) })).rejects.toThrow('404');
   });
 
   test('the committed config makes Claude, Antigravity, Codex and Copilot installable, in generic steps only', () => {

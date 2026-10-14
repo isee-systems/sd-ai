@@ -18,7 +18,9 @@
  * Pure apart from fetchRegistry/loadPersonas; signing is in signManifest.js.
  */
 
-import { readFileSync, readdirSync, existsSync } from 'fs';
+import { readFileSync, readdirSync, existsSync, writeFileSync } from 'fs';
+import { createHash } from 'crypto';
+import { tmpdir } from 'os';
 import { join, dirname, basename } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -317,7 +319,12 @@ export function archiveStep(agent, pinned = {}) {
   for (const [target, binary] of Object.entries(agent.distribution?.binary || {})) {
     if (!Object.values(BINARY_TARGETS).flat().includes(target)) continue;
     const url = binary.archive;
-    const sha256 = binary.sha256 || pinned[url];
+    // The registry's, else one pinned here, else the one this server worked out itself (hashMissingArchives).
+    // A pinned hash wins, and one that disagrees with the worked-out hash drops the target: the vendor's
+    // file changed under an unchanged url, which no client should be handed.
+    const learned = archiveHashes.get(url);
+    if (pinned[url] && learned && pinned[url] !== learned) continue;
+    const sha256 = binary.sha256 || pinned[url] || learned;
     const parts = (binary.cmd || '').replace(/\\/g, '/').split('/').filter(p => p && p !== '.');
     const bin = parts.slice(0, -1).join('/');
     if (typeof url !== 'string' || !url.startsWith('https://') || !SHA256.test(sha256 || '')) continue;
@@ -328,6 +335,81 @@ export function archiveStep(agent, pinned = {}) {
   const version = agent.version ? ` ${agent.version}` : '';
   const host = new URL(Object.values(archives)[0].url).host;
   return { kind: 'download', label: `${agent.name || agent.id}${version} (from ${host})`, into: 'agent', archives };
+}
+
+/**
+ * Checksums for installable binary agents whose registry archives carry none (Antigravity's): url ->
+ * sha256, worked out by downloading each archive once (hashMissingArchives). Clients then refuse any
+ * bytes but these, so every client installs exactly what this server saw over HTTPS from the vendor.
+ * This is what keeps such an agent installable across the vendor's releases with nobody pinning
+ * hashes by hand; a hash pinned in client.config.json still wins. Kept in a file as well, so a
+ * restart does not download every archive again.
+ */
+const archiveHashes = new Map();
+const ARCHIVE_HASH_CACHE = process.env.ACP_ARCHIVE_HASH_CACHE || join(tmpdir(), 'sd-ai-acp-archive-hashes.json');
+const MAX_ARCHIVE_BYTES = 2 * 1024 * 1024 * 1024;
+
+function loadArchiveHashes() {
+  try {
+    for (const [url, sha256] of Object.entries(JSON.parse(readFileSync(ARCHIVE_HASH_CACHE, 'utf8'))))
+      if (url.startsWith('https://') && SHA256.test(sha256)) archiveHashes.set(url, sha256);
+  } catch { /* none yet */ }
+}
+loadArchiveHashes();
+
+export function learnedArchiveHash(url) {
+  return archiveHashes.get(url);
+}
+
+/** The sha256 of what url serves, streamed: never held in memory or written to disk. */
+export async function hashArchive(url, { fetchImpl = fetch, timeoutMs = 15 * 60 * 1000 } = {}) {
+  const response = await fetchImpl(url, { signal: AbortSignal.timeout(timeoutMs), headers: { 'User-Agent': 'sd-ai-acp-manifest' } });
+  if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`);
+  const hash = createHash('sha256');
+  let bytes = 0;
+  for await (const chunk of response.body) {
+    bytes += chunk.length;
+    if (bytes > MAX_ARCHIVE_BYTES) throw new Error(`${url}: larger than ${MAX_ARCHIVE_BYTES} bytes`);
+    hash.update(chunk);
+  }
+  return hash.digest('hex');
+}
+
+/**
+ * Works out the checksum of every https archive an installable binary agent's registry entry gives
+ * none for (and none is pinned or already known), one at a time. Returns how many it learned; one
+ * that fails is tried again next time.
+ */
+export async function hashMissingArchives(registry, installable = {}, { hash = hashArchive, log = () => {} } = {}) {
+  let learned = 0;
+  for (const agent of registry) {
+    if (!installable[agent.id]) continue;
+    const pinned = installable[agent.id].sha256 || {};
+    for (const binary of Object.values(agent.distribution?.binary || {})) {
+      const url = binary.archive;
+      if (typeof url !== 'string' || !url.startsWith('https://') || binary.sha256 || archiveHashes.has(url)) continue;
+      try {
+        const sha256 = await hash(url);
+        archiveHashes.set(url, sha256);
+        learned++;
+        if (pinned[url] && pinned[url] !== sha256) log(`ACP archive ${url}: sha256 ${sha256} is not the pinned ${pinned[url]}; not offered`);
+        else log(`ACP archive ${url}: sha256 ${sha256}`);
+      } catch (error) {
+        log(`ACP archive ${url}: could not hash (${error.message}); trying again on the next refresh`);
+      }
+    }
+  }
+  if (learned && process.env.JEST_WORKER_ID === undefined) {
+    try {
+      writeFileSync(ARCHIVE_HASH_CACHE, JSON.stringify(Object.fromEntries(archiveHashes), null, 2));
+    } catch { /* the cache is only a saving */ }
+  }
+  return learned;
+}
+
+/** Tests only. */
+export function forgetArchiveHashes() {
+  archiveHashes.clear();
 }
 
 /**
