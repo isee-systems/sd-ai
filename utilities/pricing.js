@@ -131,6 +131,13 @@ export const anthropic = {
 // separate and much higher rate than text output. Absent for a text-only model,
 // where it costs nothing because no image tokens are ever reported.
 export const gemini = {
+  // Introductory pricing through 2026-11-30. On 2026-12-01 it doubles to
+  // 4.00 / 0.20 / 20.00 — update this entry then.
+  'gemini-4-argon': {
+    inputTokens: 2.00,
+    cachedTokens: 0.10,
+    outputTokens: 10.00,
+  },
   'gemini-3.1-pro-preview': [
     { maxInputTokens: 200000, inputTokens: 2.00, cachedTokens: 0.20, outputTokens: 12.00 },
     {                         inputTokens: 4.00, cachedTokens: 0.40, outputTokens: 18.00 },

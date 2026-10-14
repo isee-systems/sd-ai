@@ -678,8 +678,8 @@ export class LLMWrapper {
     if (!this.model.hasTemperature) {
       temperature = undefined;
     }
-    // Gemini-3 models really don't want you messing with temperature!
-    if (underlyingModel.startsWith('gemini-3')) {
+    // Gemini-3 and later models really don't want you messing with temperature!
+    if (underlyingModel.startsWith('gemini-3') || underlyingModel.startsWith('gemini-4')) {
       temperature = undefined;
     }
 
