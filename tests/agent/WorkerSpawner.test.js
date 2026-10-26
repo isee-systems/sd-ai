@@ -9,6 +9,7 @@
  */
 
 import { jest } from '@jest/globals';
+import { ChildProcess } from 'child_process';
 import { mkdirSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -67,15 +68,22 @@ describe('WorkerSpawner.spawn', () => {
     expect(typeof worker.kill).toBe('function');
   });
 
-  it('returned process has a pid', async () => {
+  // Which shape comes back depends on the host: a forked ChildProcess without
+  // bwrap, an IpcWorker with it. IpcWorker exposes no pid on purpose — killWorker
+  // in WebSocket.js treats a numeric pid as a process group it may kill.
+  it('exposes a pid for a forked worker and none for a bwrap worker', async () => {
     const { worker } = await spawn();
-    expect(typeof worker.pid).toBe('number');
-    expect(worker.pid).toBeGreaterThan(0);
+    if (worker instanceof ChildProcess) {
+      expect(typeof worker.pid).toBe('number');
+      expect(worker.pid).toBeGreaterThan(0);
+    } else {
+      expect(worker.pid).toBeUndefined();
+    }
   });
 
-  it('returned process is initially alive (exitCode is null)', async () => {
+  it('returned worker is initially connected', async () => {
     const { worker } = await spawn();
-    expect(worker.exitCode).toBeNull();
+    expect(worker.connected).toBe(true);
   });
 
   it('can send IPC messages without throwing', async () => {
@@ -119,10 +127,11 @@ describe('WorkerSpawner.spawn', () => {
     expect(exitCode.signal === 'SIGKILL' || exitCode.code !== undefined).toBe(true);
   }, 8000);
 
-  it('each spawned worker gets its own process (distinct pids)', async () => {
+  it('each spawned worker gets its own process', async () => {
     const { worker: w1 } = await spawn('sess_a');
     const { worker: w2 } = await spawn('sess_b');
-    expect(w1.pid).not.toBe(w2.pid);
+    expect(w1).not.toBe(w2);
+    if (w1 instanceof ChildProcess) expect(w1.pid).not.toBe(w2.pid);
   });
 });
 
