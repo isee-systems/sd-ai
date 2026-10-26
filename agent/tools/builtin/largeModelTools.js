@@ -27,7 +27,7 @@ Available sections:
   * type="numeric": elements auto-generated as ['1','2','3'...]
   * type="labels": elements are user-defined meaningful names like ['North','South','East','West']
 - variables: array of variables with schema: {name, type (stock|flow|variable), equation, documentation, units, uniflow, inflows, outflows, dimensions, arrayEquations, crossLevelGhostOf, graphicalFunction, subType?, additionalProperties?}
-- relationships: array of relationships with schema: {from, to, polarity (+|-|""), reasoning, polarityReasoning}
+- relationships: array of relationships with schema: {from, to, polarity (+|-|""), reasoning, polarityReasoning, delay?}. delay: true means the arrow carries a delay mark.
 - modules: module hierarchy with schema: {name, parentModule}. IMPORTANT: The modules array only defines the hierarchical structure (which modules exist and their parent-child relationships). It does NOT tell you which variables belong to a module - variable membership is determined by the variable name prefix (e.g., "Finance.revenue" belongs to the Finance module).
 
 Module handling:
@@ -399,6 +399,9 @@ function relationshipsMutator(operation, data) {
       if (!r.from || !r.to) {
         return 'Error: Relationships must have "from" and "to" fields';
       }
+      if (r.delay !== undefined && typeof r.delay !== 'boolean') {
+        return `Error: Relationship delay must be true or false, got "${r.delay}"`;
+      }
     }
 
     if (operation === 'add') {
@@ -532,9 +535,11 @@ export function createEditRelationshipsTool(sessionManager, sessionId, sendToCli
   return {
     description: `Edit the relationships section of the model. A relationship is a causal arrow from one variable to another with a polarity (+ or -). data is always an array of relationship objects. Each object must include 'from' and 'to'. Other fields are interpreted by operation:
 
-- add: include polarity and (optionally) reasoning/polarityReasoning for each new relationship
+- add: include polarity and (optionally) reasoning/polarityReasoning/delay for each new relationship
 - update: 'from' and 'to' locate the existing relationship; other fields you include replace those values
 - remove: only 'from' and 'to' are read; other fields are ignored
+
+Delay marks: set delay: true on a relationship whose effect takes significant time to appear compared with the other links (the arrow gets a delay mark, ||); delay: false removes the mark. Mark the delays that matter to the diagram's dynamics, not every link.
 
 CRITICAL: Every variable referenced inside an additionalProperties equation on a discrete-entity element (e.g. processTime, capacity, leakFraction, purgeEq, queueOutflowPriority) REQUIRES a relationship arrow FROM that referenced variable TO the element.`,
     supportedModes: ['sfd', 'cld'],

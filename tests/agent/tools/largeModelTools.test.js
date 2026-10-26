@@ -715,3 +715,62 @@ describe('per-section edit tools normalization', () => {
     });
   });
 });
+
+// ─── delay marks ────────────────────────────────────────────────────────────
+
+describe('relationship delay marks', () => {
+  let tempDir;
+  let session;
+
+  const MODEL = {
+    variables: [
+      { name: 'a', type: 'variable' },
+      { name: 'b', type: 'variable' },
+    ],
+    relationships: [
+      { from: 'a', to: 'b', polarity: '+' },
+      { from: 'b', to: 'a', polarity: '-' },
+    ],
+  };
+
+  function makeTool() {
+    writeFileSync(join(tempDir, 'model.sdjson'), JSON.stringify(MODEL));
+    let sent = null;
+    session = { mode: 'cld', context: {}, pendingModelRequests: new Map() };
+    const sendToClient = async (msg) => {
+      if (msg.type !== 'update_model') return;
+      sent = JSON.parse(JSON.stringify(msg.modelData));
+      setTimeout(() => {
+        const pending = session.pendingModelRequests.get(msg.requestId);
+        if (pending) {
+          clearTimeout(pending.timeout);
+          pending.resolve({});
+        }
+      }, 0);
+    };
+    const sessionManager = {
+      getSession: () => session,
+      getSessionTempDir: () => tempDir,
+      updateClientModel: () => ({}),
+    };
+    return { tool: createEditRelationshipsTool(sessionManager, SESSION_ID, sendToClient), sent: () => sent };
+  }
+
+  beforeEach(() => { tempDir = mkdtempSync(join(tmpdir(), 'sd-ai-test-')); });
+  afterEach(() => { rmSync(tempDir, { recursive: true, force: true }); });
+
+  it('sets a delay mark on an existing relationship', async () => {
+    const { tool, sent } = makeTool();
+    parseResult(await tool.handler({ operation: 'update', data: [{ from: 'b', to: 'a', delay: true }] }));
+    const rel = sent().relationships.find(r => r.from === 'b' && r.to === 'a');
+    expect(rel.delay).toBe(true);
+    expect(rel.polarity).toBe('-');
+  });
+
+  it('rejects a delay that is not a boolean', async () => {
+    const { tool, sent } = makeTool();
+    const result = await tool.handler({ operation: 'update', data: [{ from: 'b', to: 'a', delay: 'yes' }] });
+    expect(result.isError).toBe(true);
+    expect(sent()).toBeNull();
+  });
+});

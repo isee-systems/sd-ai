@@ -102,7 +102,8 @@ Contains the engines used by [Stella](https://www.iseesystems.com/store/products
         from: <string>, # The variable the connection starts with
         to: <string>, # The variable the connection ends with
         polarity: <string>, # "+" or "-" or ""
-        polarityReasoning?: <string> # Explanation for why this polarity was chosen
+        polarityReasoning?: <string>, # Explanation for why this polarity was chosen
+        delay?: <boolean> # true: the arrow carries a delay mark (see below)
     }],
     modules?: [{ # Module definitions for hierarchical model organization
         name: <string>, # Simple module name (alphanumeric + underscores only)
@@ -126,6 +127,9 @@ Contains the engines used by [Stella](https://www.iseesystems.com/store/products
 }
 ```
 ? denotes an optional attribute
+
+### Delay marks
+`delay` on a relationship says whether its arrow carries a delay mark (||): the effect of `from` on `to` takes significant time to appear. It is a mark on the diagram, used mostly in causal loop diagrams, and changes no equation. A client sends `delay: true` for a marked arrow and leaves the field out for an unmarked one. When a model is sent to a client, a relationship without `delay` keeps its arrow's mark as it is, so engines that know nothing of delay marks do not erase them; `false` removes a mark.
 
 ### Model diagnostics: `errors` and `unitWarnings`
 `errors` and `unitWarnings` are **client-populated** fields returned on the model (e.g. by `get_current_model`). They are set by the client's simulation engine — the server never computes them — and are the **authoritative** source of truth for a model's validation state:

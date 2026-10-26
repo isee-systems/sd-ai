@@ -1180,7 +1180,7 @@ usable on any model that has something in it (`requiresModelContent`, see *Model
 is what makes them the way to fix a structure the agent did not author, such as an inserted assembly.
 - **read_model_section** — Read a section of a large model without loading it entirely
 - **edit_variables** — Add, update, or remove variables in place, including equations and units
-- **edit_relationships** — Add, update, or remove relationships in place
+- **edit_relationships** — Add, update, or remove relationships in place, including their delay marks
 - **edit_specs** — Update simulation specs (startTime, stopTime, dt, timeUnits, arrayDimensions) in place
 - **edit_modules** — Add, update, or remove modules in place
 

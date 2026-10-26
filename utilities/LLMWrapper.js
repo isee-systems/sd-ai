@@ -297,6 +297,7 @@ export class LLMWrapper {
     "reasoning": "This is an explanation for why this relationship exists",
     "polarity": "There are two possible kinds of relationships.  The first are relationships with positive polarity that are represented with a + symbol.  In relationships with positive polarity (+) a change in the from variable causes a change in the same direction in the to variable.  For example, in a relationship with positive polarity (+), a decrease in the from variable, would lead to a decrease in the to variable.  The second kind of relationship are those with negative polarity that are represented with a - symbol.  In relationships with negative polarity (-) a change in the from variable causes a change in the opposite direction in the to variable.  For example, in a relationship with negative polarity (-) an increase in the from variable, would lead to a decrease in the to variable.",
     "polarityReasoning": "This is the reason for why the polarity for this relationship was chosen",
+    "delay": "True if the effect of from on to takes significant time to appear compared with the other links in the diagram, so the arrow carries a delay mark (||). False removes the mark. Leave it out to keep the arrow's current mark.",
     "relationship": "This is a relationship between two variables, from and to (from is the cause, to is the effect).  The relationship also contains a polarity which describes how a change in the from variable impacts the to variable",
 
     "relationships": "The list of relationships you think are appropriate to satisfy my request based on all of the information I have given you",
@@ -1357,7 +1358,8 @@ export class LLMWrapper {
       to: z.string().describe(strings.to),
       polarity: z.enum(["+", "-"]).describe(strings.polarity),
       reasoning: z.string().describe(strings.reasoning),
-      polarityReasoning: z.string().describe(strings.polarityReasoning)
+      polarityReasoning: z.string().describe(strings.polarityReasoning),
+      delay: z.boolean().describe(strings.delay)
     };
   }
 
