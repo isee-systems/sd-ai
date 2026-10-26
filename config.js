@@ -58,11 +58,11 @@ const config = {
         {label: "Qwen3.8 Max", value: 'qwen/qwen3.8-max'},
         {label: "Qwen3.7 Plus", value: 'qwen/qwen3.7-plus'},
         {label: "Deepseek v4 Pro", value: 'deepseek/deepseek-v4-pro'},
-        {label: "Deepseek v4 Flash", value: 'deepseek/deepseek-v4-flash'},
+        {label: "Deepseek v4.1 Flash", value: 'deepseek/deepseek-v4.1-flash'},
         // Native DeepSeek API models (routed directly to DEEPSEEK_API_KEY, not OpenRouter)
         /*{label: "Deepseek v4 Pro (API)", value: 'deepseek-v4-pro'},
         {label: "Deepseek v4 Flash (API)", value: 'deepseek-v4-flash'},*/
-        {label: "Kimi K3", value: 'moonshotai/kimi-k3'},
+        {label: "Kimi K3.1 Pro", value: 'moonshotai/kimi-k3.1-pro'},
         {label: "GLM 5.3", value: 'z-ai/glm-5.3'},
     ],
 
@@ -135,12 +135,12 @@ const config = {
         deepseek: {
             displayName: 'Deepseek',
             model: 'deepseek/deepseek-v4-pro',
-            summaryModel: 'deepseek/deepseek-v4-flash'
+            summaryModel: 'deepseek/deepseek-v4.1-flash'
         },
         moonshotai: {
             displayName: 'Kimi',
-            model: 'moonshotai/kimi-k3',
-            summaryModel: 'moonshotai/kimi-k3'
+            model: 'moonshotai/kimi-k3.1-pro',
+            summaryModel: 'moonshotai/kimi-k3.1-pro'
         },
         zai: {
             displayName: 'GLM',
