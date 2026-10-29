@@ -850,3 +850,16 @@ describe('SessionManager', () => {
     });
   });
 });
+
+describe('SessionManager.toolErrorMessage', () => {
+  it.each([
+    ['a bare string', 'boom', 'boom'],
+    ['{ error: string }', { error: 'boom' }, 'boom'],
+    ['{ error: { message } }', { error: { message: 'boom' } }, 'boom'],
+    ['{ error: true, message }', { error: true, message: 'boom' }, 'boom'],
+    ['an unrecognized object', { error: true, code: 7 }, '{"error":true,"code":7}'],
+    ['nothing', undefined, 'Tool call failed'],
+  ])('reads %s', (_label, result, expected) => {
+    expect(SessionManager.toolErrorMessage(result)).toBe(expected);
+  });
+});

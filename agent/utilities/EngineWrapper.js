@@ -25,6 +25,17 @@ import SeldonILEUserBrain from '../../engines/seldon-ile-user/SeldonILEUserBrain
 const hasText = (value) => typeof value === 'string' && value.trim().length > 0;
 
 /**
+ * Engines report failure by returning `{ err }` rather than throwing. Surface
+ * it as a thrown error so callers return `success: false` instead of a success
+ * with an undefined model/output.
+ */
+export function throwIfEngineFailed(result) {
+  if (result?.err) {
+    throw new Error(String(result.err).replace(/^Error: /, ''));
+  }
+}
+
+/**
  * Every engine assembles an LLM request from a fixed set of inputs, and several
  * push the user prompt unconditionally. When the prompt is empty and nothing
  * else supplies content, the request collapses to a bare system instruction:
@@ -72,6 +83,7 @@ export async function callQuantitativeEngine(prompt, currentModel, parameters = 
 
     // Call generate method
     const result = await engine.generate(prompt, currentModel, parameters);
+    throwIfEngineFailed(result);
 
     return {
       success: true,
@@ -97,6 +109,7 @@ export async function callQualitativeEngine(prompt, currentModel, parameters = {
 
     const engine = new QualitativeEngine(parameters);
     const result = await engine.generate(prompt, currentModel, parameters);
+    throwIfEngineFailed(result);
 
     return {
       success: true,
@@ -131,6 +144,7 @@ export async function callSeldonEngine(prompt, model, feedbackContent, parameter
     seldonParams.systemPrompt = SeldonEngineBrain.DEFAULT_SYSTEM_PROMPT + beBrief 
 
     const result = await engine.generate(prompt, model, seldonParams);
+    throwIfEngineFailed(result);
 
     return {
       success: true,
@@ -166,6 +180,7 @@ export async function callSeldonILEEngine(prompt, model, runName, parameters = {
 
 
     const result = await engine.generate(prompt, model, seldonParams);
+    throwIfEngineFailed(result);
 
     return {
       success: true,
@@ -191,6 +206,7 @@ export async function callDocumentationEngine(model, parameters = {}) {
 
     // Documentation engine typically doesn't need a prompt
     const result = await engine.generate('', model, parameters);
+    throwIfEngineFailed(result);
 
     return {
       success: true,
@@ -221,6 +237,7 @@ export async function callLTMEngine(model, feedbackContent, parameters = {}) {
     };
 
     const result = await engine.generate('', model, ltmParams);
+    throwIfEngineFailed(result);
 
     return {
       success: true,
@@ -255,6 +272,7 @@ export async function callSeldonMentorEngine(prompt, model, feedbackContent, par
     mentorParams.systemPrompt = SeldonEngineBrain.MENTOR_SYSTEM_PROMPT + beBrief
 
     const result = await engine.generate(prompt, model, mentorParams);
+    throwIfEngineFailed(result);
 
     return {
       success: true,

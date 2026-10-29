@@ -138,7 +138,7 @@ export function workerCredentials() {
  * WebSocket.js uses (.send, on('message'), .connected, .stdout, .stderr,
  * .kill, on('exit'), on('error')).
  */
-class IpcWorker extends EventEmitter {
+export class IpcWorker extends EventEmitter {
   #proc = null;
   #server;
   #socketPath;
@@ -181,9 +181,13 @@ class IpcWorker extends EventEmitter {
       for (const chunk of this.#sendQueue) socket.write(chunk);
       this.#sendQueue = [];
 
+      // Decode as a stream: per-chunk toString() splits multi-byte UTF-8
+      // characters that straddle a chunk boundary into U+FFFD, corrupting
+      // non-ASCII text (e.g. variable names) on its way to the client.
+      socket.setEncoding('utf8');
       let buf = '';
       socket.on('data', (d) => {
-        buf += d.toString();
+        buf += d;
         let nl;
         while ((nl = buf.indexOf('\n')) !== -1) {
           const line = buf.slice(0, nl).trim();
@@ -523,9 +527,10 @@ export class WorkerSpawner {
             throw err;
           }
           if (proc.stderr) {
+            proc.stderr.setEncoding('utf8');
             let buf = '';
             proc.stderr.on('data', (chunk) => {
-              buf += chunk.toString();
+              buf += chunk;
               let nl;
               while ((nl = buf.indexOf('\n')) !== -1) {
                 const line = buf.slice(0, nl);

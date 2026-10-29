@@ -1110,8 +1110,10 @@ print('Visualization saved')
       let stdout = '';
       let stderr = '';
 
-      pythonProcess.stdout.on('data', (data) => { stdout += data.toString(); });
-      pythonProcess.stderr.on('data', (data) => { stderr += data.toString(); });
+      pythonProcess.stdout.setEncoding('utf8');
+      pythonProcess.stderr.setEncoding('utf8');
+      pythonProcess.stdout.on('data', (data) => { stdout += data; });
+      pythonProcess.stderr.on('data', (data) => { stderr += data; });
 
       pythonProcess.on('close', (code) => {
         if (code !== 0) {

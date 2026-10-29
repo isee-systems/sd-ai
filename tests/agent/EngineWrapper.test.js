@@ -1,4 +1,4 @@
-import { assertGenerationInput, assertDiscussionPrompt } from '../../agent/utilities/EngineWrapper.js';
+import { assertGenerationInput, assertDiscussionPrompt, throwIfEngineFailed } from '../../agent/utilities/EngineWrapper.js';
 
 describe('assertGenerationInput', () => {
   const emptyModel = { variables: [], relationships: [] };
@@ -59,5 +59,15 @@ describe('assertDiscussionPrompt', () => {
 
   it('accepts a real question', () => {
     expect(() => assertDiscussionPrompt('What are the key feedback loops?')).not.toThrow();
+  });
+});
+
+describe('throwIfEngineFailed', () => {
+  it('throws the engine error without the stringified "Error: " prefix', () => {
+    expect(() => throwIfEngineFailed({ err: 'Error: model overloaded' })).toThrow(/^model overloaded$/);
+  });
+
+  it('passes a successful result through', () => {
+    expect(() => throwIfEngineFailed({ output: { feedbackInformationRequired: false } })).not.toThrow();
   });
 });

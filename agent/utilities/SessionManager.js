@@ -943,7 +943,9 @@ ${conversationText}`;
           messages: [{ role: 'user', content: summaryPrompt }]
         });
         reporter.report({ provider: Provider.ANTHROPIC, model, usage: response.usage, clientKey: false, source }).catch(() => {});
-        summaryText = response.content[0].text;
+        // The first block is not always text (e.g. a thinking block), so join
+        // every text block rather than reading content[0].
+        summaryText = (response.content ?? []).filter(b => b?.type === 'text').map(b => b.text).join('');
       }
 
       logger.log(`Created message history summary: ${summaryText.substring(0, 100)}...`);
@@ -1072,13 +1074,32 @@ ${conversationText}`;
   // exactly one consumer (DynamicToolProvider.requestClientExecution), while the
   // pendingModelRequests and pendingFeedbackRequests paths resolve separately and
   // still hand back a bare result.
+  /**
+   * Turn a client's error payload into a readable message. Clients send a bare
+   * string, `{ error: '...' }`, `{ error: { message } }` or `{ error: true, message }`;
+   * anything else is serialized so the agent still sees what came back.
+   */
+  static toolErrorMessage(result) {
+    if (typeof result === 'string') return result;
+    const error = result?.error;
+    if (typeof error === 'string' && error) return error;
+    if (typeof error?.message === 'string' && error.message) return error.message;
+    if (typeof result?.message === 'string' && result.message) return result.message;
+    if (result === undefined || result === null) return 'Tool call failed';
+    try {
+      return JSON.stringify(result);
+    } catch {
+      return 'Tool call failed';
+    }
+  }
+
   resolvePendingToolCall(sessionId, callId, result, isError = false, media = []) {
     const session = this.getSession(sessionId);
     if (session) {
       const pendingCall = session.pendingToolCalls.get(callId);
       if (pendingCall) {
         if (isError) {
-          pendingCall.reject(new Error(typeof result === 'string' ? result : (result?.error || 'Tool call failed')));
+          pendingCall.reject(new Error(SessionManager.toolErrorMessage(result)));
         } else {
           pendingCall.resolve({ result, media });
         }

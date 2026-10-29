@@ -376,6 +376,23 @@ describe('SessionManager.cleanupContext (Anthropic)', () => {
     expect(sessionManager.anthropic.messages.create).toHaveBeenCalled();
   });
 
+  it('uses the text block when the Anthropic response does not lead with one', async () => {
+    sessionManager.anthropic.messages.create.mockResolvedValue({
+      content: [{ type: 'thinking', thinking: '...' }, { type: 'text', text: 'Real summary.' }],
+      usage: { input_tokens: 10, output_tokens: 20 }
+    });
+
+    for (let i = 0; i < 5; i++) {
+      sessionManager.addToConversationHistory(sessionId, userTextMsg(`Message ${i}`));
+      sessionManager.addToConversationHistory(sessionId, assistantTextMsg(`Response ${i}`));
+    }
+
+    await sessionManager.cleanupContext(sessionId, 1, 'anthropic');
+
+    const context = sessionManager.getConversationContext(sessionId);
+    expect(context[0].content).toMatch(/Real summary\./);
+  });
+
   it('uses a fallback summary message when Anthropic call fails', async () => {
     sessionManager.anthropic.messages.create.mockRejectedValue(new Error('API error'));
 
