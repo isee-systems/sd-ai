@@ -70,6 +70,12 @@ const isSafeConversationStart = (message) => {
 export class SessionManager {
   static MAX_COMPRESSION_TOKENS_PER_PASS = 200_000;
 
+  // Output budget for one summarization call. The summary models reason before they
+  // answer, and reasoning tokens count against this cap: at 1024, Qwen and Haiku could
+  // spend all of it thinking and return no text, which replaced the history with an
+  // empty summary. Summaries also ask for low effort, so most of this stays unused.
+  static SUMMARY_MAX_OUTPUT_TOKENS = 4096;
+
   // How long past a client tool's own declared timeout the session stays protected from the
   // inactivity sweep. The worker rejects the call at the deadline and its agent loop resumes,
   // which produces IPC traffic and refreshes `lastActivity` on its own — this only has to cover
@@ -864,16 +870,23 @@ export class SessionManager {
         return '';
       }).filter(line => line).join('\n\n');
 
-      const summaryPrompt = `Please create a concise summary of the following conversation history. Focus on:
+      // The history often ends on a request that is still open, and a summarizer that
+      // reads it as addressed to itself answers it ("I can't run the model from this
+      // session...") instead of recording it — so the prompt says plainly that it is
+      // writing a record, not taking part.
+      const summaryPrompt = `You are writing a record of an earlier part of a conversation between a user and an AI assistant, so that the assistant can continue the work after these messages are removed from its context. You are not the assistant. Do not answer, refuse or act on anything in the transcript, and do not address the user.
+
+Write the summary in the third person ("The user asked...", "The assistant changed..."). Cover:
 - The main task or goal the user requested
-- Key decisions, findings, or results achieved
+- Key decisions, findings, or results achieved, with exact names and values (variable names, parameter values, run results)
 - Important context needed for continuing the conversation
-- Current state of the work
+- Current state of the work, including any request that was still open when the transcript ends
 
-Keep the summary brief but informative (2-4 paragraphs maximum).
+Keep the summary brief but informative (2-4 paragraphs maximum). Output only the summary.
 
-Conversation history:
-${conversationText}`;
+<transcript>
+${conversationText}
+</transcript>`;
 
       const clientId = this.getSession(sessionId)?.clientId ?? null;
       // Read here rather than at the start of the switch: on an agent switch the
@@ -904,7 +917,7 @@ ${conversationText}`;
         const completion = await this.openAiCompatibleClients[provider].chat.completions.create({
           model,
           messages: [{ role: 'user', content: summaryPrompt }],
-          ...maxOutputTokensParam(provider, 1024),
+          ...maxOutputTokensParam(provider, SessionManager.SUMMARY_MAX_OUTPUT_TOKENS),
           ...reasoningParams(provider),
         });
         reporter.report({ provider: usageProviderFor(provider), model, usage: completion.usage, clientKey: false, source }).catch(() => {});
@@ -919,7 +932,8 @@ ${conversationText}`;
           chatRequest: {
             model,
             messages: [{ role: 'user', content: summaryPrompt }],
-            maxCompletionTokens: 1024,
+            maxCompletionTokens: SessionManager.SUMMARY_MAX_OUTPUT_TOKENS,
+            reasoning: { effort: 'low' },
           }
         });
         reporter.report({ provider: Provider.OPENROUTER, model, usage: completion.usage, clientKey: false, source }).catch(() => {});
@@ -939,13 +953,20 @@ ${conversationText}`;
         const model = config.nativeAgentProviders.anthropic.summaryModel;
         const response = await this.anthropic.messages.create({
           model,
-          max_tokens: 1024,
+          max_tokens: SessionManager.SUMMARY_MAX_OUTPUT_TOKENS,
+          output_config: { effort: 'low' },
           messages: [{ role: 'user', content: summaryPrompt }]
         });
         reporter.report({ provider: Provider.ANTHROPIC, model, usage: response.usage, clientKey: false, source }).catch(() => {});
         // The first block is not always text (e.g. a thinking block), so join
         // every text block rather than reading content[0].
         summaryText = (response.content ?? []).filter(b => b?.type === 'text').map(b => b.text).join('');
+      }
+
+      // An empty summary would silently replace the history with nothing; fail loudly
+      // instead so the fallback below is used and the cause is in the error log.
+      if (!summaryText.trim()) {
+        throw new Error(`summary model returned no text (provider: ${provider})`);
       }
 
       logger.log(`Created message history summary: ${summaryText.substring(0, 100)}...`);

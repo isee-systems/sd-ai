@@ -393,6 +393,19 @@ describe('SessionManager.cleanupContext (Anthropic)', () => {
     expect(context[0].content).toMatch(/Real summary\./);
   });
 
+  it('asks Anthropic for low effort within the summary budget', async () => {
+    for (let i = 0; i < 5; i++) {
+      sessionManager.addToConversationHistory(sessionId, userTextMsg(`Message ${i}`));
+      sessionManager.addToConversationHistory(sessionId, assistantTextMsg(`Response ${i}`));
+    }
+
+    await sessionManager.cleanupContext(sessionId, 1, 'anthropic');
+
+    const callArgs = sessionManager.anthropic.messages.create.mock.calls[0][0];
+    expect(callArgs.max_tokens).toBe(SessionManager.SUMMARY_MAX_OUTPUT_TOKENS);
+    expect(callArgs.output_config).toEqual({ effort: 'low' });
+  });
+
   it('uses a fallback summary message when Anthropic call fails', async () => {
     sessionManager.anthropic.messages.create.mockRejectedValue(new Error('API error'));
 
@@ -478,7 +491,27 @@ describe('SessionManager.cleanupContext (OpenRouter)', () => {
     const callArgs = sessionManager.openRouter.chat.send.mock.calls[0][0];
     expect(callArgs.chatRequest.model).toMatch(/qwen/);
     expect(callArgs.chatRequest.messages[0].role).toBe('user');
-    expect(callArgs.chatRequest.maxCompletionTokens).toBe(1024);
+    expect(callArgs.chatRequest.maxCompletionTokens).toBe(SessionManager.SUMMARY_MAX_OUTPUT_TOKENS);
+    // Reasoning tokens count against the cap, so the summary asks for little of it.
+    expect(callArgs.chatRequest.reasoning).toEqual({ effort: 'low' });
+  });
+
+  it('uses the fallback instead of an empty summary when the model returns no text', async () => {
+    // A reasoning model that spends its whole budget thinking returns no content.
+    sessionManager.openRouter.chat.send.mockResolvedValue({
+      choices: [{ message: { content: '', reasoning: 'thinking...' }, finishReason: 'length' }],
+      usage: { prompt_tokens: 10, completion_tokens: 4096, cost: 0.0001 }
+    });
+
+    for (let i = 0; i < 5; i++) {
+      sessionManager.addToConversationHistory(sessionId, userTextMsg(`Message ${i}`));
+      sessionManager.addToConversationHistory(sessionId, assistantTextMsg(`Response ${i}`));
+    }
+
+    await sessionManager.cleanupContext(sessionId, 1, 'qwen');
+
+    const context = sessionManager.getConversationContext(sessionId);
+    expect(context[0].content).toMatch(/condensed/);
   });
 
   it('uses a fallback summary message when OpenRouter call fails', async () => {
@@ -586,10 +619,10 @@ describe.each([...OPENAI_COMPATIBLE_PROVIDERS])('SessionManager.cleanupContext (
     // OpenAI's own API rejects max_tokens for the GPT-5 family; the others take it.
     const callArgs = createMock().mock.calls[0][0];
     if (provider === 'openai') {
-      expect(callArgs.max_completion_tokens).toBe(1024);
+      expect(callArgs.max_completion_tokens).toBe(SessionManager.SUMMARY_MAX_OUTPUT_TOKENS);
       expect(callArgs.max_tokens).toBeUndefined();
     } else {
-      expect(callArgs.max_tokens).toBe(1024);
+      expect(callArgs.max_tokens).toBe(SessionManager.SUMMARY_MAX_OUTPUT_TOKENS);
       expect(callArgs.max_completion_tokens).toBeUndefined();
     }
   });

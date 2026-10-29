@@ -62,6 +62,10 @@ function suppliesOwnCredentials(req) {
 }
 
 router.post("/:engine/generate", async (req, res) => {
+    // Express 5 leaves req.body undefined when no body parser ran (no JSON body),
+    // where Express 4 gave {}; every read below assumes an object.
+    req.body ??= {};
+
     // Allowlist, not existsSync on a caller-built path — see engineRegistry.js.
     if (!engineNames().has(req.params.engine)) {
         return res.status(404).send({

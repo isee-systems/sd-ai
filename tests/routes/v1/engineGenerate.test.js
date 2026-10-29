@@ -41,6 +41,14 @@ describe('EngineGenerate Route', () => {
       expect(response.body.message).toContain('failed');
     });
 
+    it('should answer a request with no body instead of crashing', async () => {
+      process.env.AUTHENTICATION_KEY = 'test-auth-key';
+
+      const response = await request(app).post('/quantitative/generate');
+
+      expect(response.status).toBe(403);
+    });
+
     it('should accept request with valid authentication header', async () => {
       process.env.AUTHENTICATION_KEY = 'test-auth-key';
       

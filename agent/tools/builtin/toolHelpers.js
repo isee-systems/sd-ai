@@ -88,7 +88,15 @@ export function sanitizeSchemaForGemini(schema) {
 
   const out = {};
   for (const [k, v] of Object.entries(schema)) {
-    if (k === 'exclusiveMinimum' && typeof v === 'number') {
+    if (k === 'type' && Array.isArray(v)) {
+      // Gemini's `type` holds one value; a list (Stella's model-test tools declare
+      // ['number', 'string']) makes context-cache creation 400. Spell it as anyOf,
+      // with a 'null' member carried by `nullable`.
+      const types = v.filter(t => t !== 'null');
+      if (types.length !== v.length) out.nullable = true;
+      if (types.length === 1) out.type = types[0];
+      else if (types.length > 1) out.anyOf = types.map(t => ({ type: t }));
+    } else if (k === 'exclusiveMinimum' && typeof v === 'number') {
       out.minimum = v;
     } else if (k === 'exclusiveMaximum' && typeof v === 'number') {
       out.maximum = v;
