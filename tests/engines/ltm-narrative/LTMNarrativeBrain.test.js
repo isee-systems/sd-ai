@@ -98,7 +98,7 @@ describe('LTMNarrativeBrain', () => {
       expect(result.reasoningEffort).toBe('low');
     });
 
-    it('should set system role to user and temperature to 1 when model lacks system mode', () => {
+    it('should set system role to user when model lacks system mode', () => {
       const brainWithoutSystemMode = new LTMNarrativeBrain({
         openAIKey: 'test-key',
         anthropicKey: 'test-claude-key',
@@ -110,10 +110,9 @@ describe('LTMNarrativeBrain', () => {
       const result = brainWithoutSystemMode.setupLLMParameters('Test prompt', null);
 
       expect(result.messages[0].role).toBe('system');
-      expect(result.temperature).toBeUndefined();
     });
 
-    it('should set temperature to undefined when model lacks temperature support', () => {
+    it('should not include a temperature in the LLM parameters', () => {
       const brainWithO3 = new LTMNarrativeBrain({
         openAIKey: 'test-key',
         anthropicKey: 'test-claude-key',
@@ -124,7 +123,7 @@ describe('LTMNarrativeBrain', () => {
 
       const result = brainWithO3.setupLLMParameters('Test prompt', null);
 
-      expect(result.temperature).toBeUndefined();
+      expect(result).not.toHaveProperty('temperature');
     });
 
     it('should include background knowledge in messages when provided', () => {
@@ -301,7 +300,7 @@ describe('LTMNarrativeBrain', () => {
 
       expect(result).toHaveProperty('messages');
       expect(result).toHaveProperty('model');
-      expect(result).toHaveProperty('temperature');
+      expect(result).not.toHaveProperty('temperature');
       expect(result).toHaveProperty('reasoningEffort');
       expect(result).toHaveProperty('responseFormat');
 

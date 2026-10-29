@@ -189,7 +189,7 @@ ${JSON.stringify(loopsForPrompt, null, 2)}
 Remember: output ONLY the SVG document, drawn at ${width}x${height}, reproducing every variable and link exactly.`;
 
     const vizLLM = new LLMWrapper({ clientId: this.clientId, source: this.#agentSource(), underlyingModel: options.underlyingModel });
-    const { temperature, underlyingModel: parsedModel, reasoningEffort } = vizLLM.getLLMParameters(0.2);
+    const { underlyingModel: parsedModel, reasoningEffort } = vizLLM.getLLMParameters();
 
     const messages = [
       { role: 'system', content: systemPrompt },
@@ -200,7 +200,7 @@ Remember: output ONLY the SVG document, drawn at ${width}x${height}, reproducing
     let lastError = null;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      const response = await vizLLM.createChatCompletion(messages, parsedModel, null, temperature, reasoningEffort);
+      const response = await vizLLM.createChatCompletion(messages, parsedModel, null, reasoningEffort);
       const raw = response.content || '';
       const svg = this.#extractSvgDocument(raw);
       const validation = this.#validateSvg(svg);
@@ -398,7 +398,7 @@ Generate ONLY working Python code, no explanations.`;
       // Construct a properly-configured LLMWrapper so getLLMParameters can parse the model
       // name and extract any thinking-level suffix (e.g., 'gemini-3-flash-preview low').
       const vizLLM = new LLMWrapper({ clientId: this.clientId, source: this.#agentSource(), underlyingModel: options.underlyingModel });
-      const { temperature, underlyingModel: parsedModel, reasoningEffort } = vizLLM.getLLMParameters(0.1);
+      const { underlyingModel: parsedModel, reasoningEffort } = vizLLM.getLLMParameters();
 
       // Create messages array.
       // systemPrompt is stable across requests and will be cached.
@@ -414,7 +414,6 @@ Generate ONLY working Python code, no explanations.`;
         messages,
         parsedModel,
         null, // no zodSchema
-        temperature,
         reasoningEffort
       );
 

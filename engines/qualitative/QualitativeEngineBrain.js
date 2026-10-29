@@ -190,7 +190,7 @@ You will conduct a multistep process:
 
     setupLLMParameters(userPrompt, lastModel) {
         //start with the system prompt
-        const { underlyingModel, systemRole, temperature, reasoningEffort } = this.#llmWrapper.getLLMParameters();
+        const { underlyingModel, systemRole, reasoningEffort } = this.#llmWrapper.getLLMParameters();
         let systemPrompt = this.#data.systemPrompt;
         let responseFormat = this.#llmWrapper.generateQualitativeSDJSONResponseSchema(this.#data.descriptionlessStructuredOutput);
 
@@ -234,7 +234,6 @@ You will conduct a multistep process:
             messages,
             model: underlyingModel,
             responseFormat: responseFormat,
-            temperature: temperature,
             reasoningEffort: reasoningEffort
         };
     }
@@ -255,7 +254,6 @@ You will conduct a multistep process:
             llmParams.messages,
             llmParams.model,
             llmParams.responseFormat,
-            llmParams.temperature,
             llmParams.reasoningEffort
         );
         if (originalResponse.refusal) {

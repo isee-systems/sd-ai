@@ -121,7 +121,7 @@ describe('GenerateDocumentationBrain', () => {
 
       expect(result).toHaveProperty('messages');
       expect(result).toHaveProperty('model');
-      expect(result).toHaveProperty('temperature');
+      expect(result).not.toHaveProperty('temperature');
       expect(result).toHaveProperty('reasoningEffort');
       expect(result).toHaveProperty('responseFormat');
 

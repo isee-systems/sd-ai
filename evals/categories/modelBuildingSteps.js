@@ -137,14 +137,13 @@ export const evaluate = async function(generatedResponse, expectations) {
 
     try {
         // Get LLM parameters
-        const { underlyingModel, temperature } = llm.getLLMParameters(0);
+        const { underlyingModel } = llm.getLLMParameters();
 
         // Call the LLM with structured output
         const response = await llm.createChatCompletion(
             messages,
             underlyingModel,
-            stepEvaluationSchema,
-            temperature
+            stepEvaluationSchema
         );
 
         // Parse the structured response

@@ -32,7 +32,6 @@ export const ANTHROPIC_REFUSAL_PREFIX = 'Anthropic declined the request';
 export class ModelCapabilities {
   hasStructuredOutput= true;
   hasSystemMode = true;
-  hasTemperature = true;
   systemModeUser = 'system';
 
   name = 'model';
@@ -52,7 +51,6 @@ export class ModelCapabilities {
           this.hasStructuredOutput = false;
       }
       this.hasSystemMode = lowerModelName !== 'o1-mini';
-      this.hasTemperature = !lowerModelName.startsWith('o') && !lowerModelName.startsWith('gpt-5') && !lowerModelName.startsWith('gpt-6');
       if (isOpenRouter || lowerModelName.includes('gemini') || lowerModelName.includes('llama') || lowerModelName.includes('claude') || lowerModelName.includes('deepseek')) {
           this.systemModeUser = 'system';
       } else {
@@ -116,7 +114,6 @@ export class LLMWrapper {
   #openRouterKey;
   #deepseekKey;
   #clientKey = false;
-  #temperatureOverride;
   #topP;
   #topK;
   #seed;
@@ -188,7 +185,6 @@ export class LLMWrapper {
       }
     }
 
-    this.#temperatureOverride = parameters.temperature ?? parameters.temp ?? parameters.temperatureOverride;
     this.#topP = parameters.top_p ?? parameters.topP;
     this.#topK = parameters.top_k ?? parameters.topK;
     this.#seed = parameters.seed ?? parameters.randomSeed;
@@ -626,14 +622,11 @@ export class LLMWrapper {
     return Model;
   }
 
-    static DEFAULT_TEMPERATURE = undefined; //by default keep temperature undefined
-
   /**
    * Gets the LLM parameters based on model capabilities
-   * @param {number} defaultTemperature - The default temperature to use (default: LLMWrapper.DEFAULT_TEMPERATURE)
-   * @returns {{underlyingModel: string, systemRole: string, temperature: number|undefined, reasoningEffort: string|undefined}}
+   * @returns {{underlyingModel: string, systemRole: string, reasoningEffort: string|undefined}}
    */
-  getLLMParameters(defaultTemperature = LLMWrapper.DEFAULT_TEMPERATURE) {
+  getLLMParameters() {
     let underlyingModel = this.model.name;
     let reasoningEffort = undefined;
 
@@ -671,20 +664,7 @@ export class LLMWrapper {
     // Determine system role
     let systemRole = this.model.hasSystemMode ? this.model.systemModeUser : 'user';
 
-    // Determine temperature
-    let temperature = this.#temperatureOverride ?? defaultTemperature;
-    if (!this.model.hasSystemMode) {
-      temperature = 1;
-    }
-    if (!this.model.hasTemperature) {
-      temperature = undefined;
-    }
-    // Gemini-3 and later models really don't want you messing with temperature!
-    if (underlyingModel.startsWith('gemini-3') || underlyingModel.startsWith('gemini-4')) {
-      temperature = undefined;
-    }
-
-    return { underlyingModel, systemRole, temperature, reasoningEffort };
+    return { underlyingModel, systemRole, reasoningEffort };
   }
 
   #collapseUserMessages(messages) {
@@ -741,7 +721,7 @@ export class LLMWrapper {
     return result;
   }
 
-  async createChatCompletion(messages, model, zodSchema = null, temperature = null, reasoningEffort = null) {
+  async createChatCompletion(messages, model, zodSchema = null, reasoningEffort = null) {
     let normalizedMessages = messages;
     // DeepSeek (and other strict upstreams) reject non-alternating turns, so
     // consecutive user messages must be collapsed into one. OpenRouter is included
@@ -760,19 +740,19 @@ export class LLMWrapper {
     }
 
     if (this.model.kind === ModelType.GEMINI) {
-      return await this.#createGeminiChatCompletion(normalizedMessages, model, effectiveSchema, temperature, reasoningEffort);
+      return await this.#createGeminiChatCompletion(normalizedMessages, model, effectiveSchema, reasoningEffort);
     } else if (this.model.kind === ModelType.CLAUDE) {
-      return await this.#createClaudeChatCompletion(normalizedMessages, model, effectiveSchema, temperature, reasoningEffort);
+      return await this.#createClaudeChatCompletion(normalizedMessages, model, effectiveSchema, reasoningEffort);
     } else if (this.model.kind === ModelType.OPEN_ROUTER) {
-      return await this.#createOpenRouterChatCompletion(normalizedMessages, model, effectiveSchema, temperature);
+      return await this.#createOpenRouterChatCompletion(normalizedMessages, model, effectiveSchema);
     } else if (this.model.kind === ModelType.DEEPSEEK) {
-      return await this.#createDeepSeekChatCompletion(normalizedMessages, model, effectiveSchema, temperature);
+      return await this.#createDeepSeekChatCompletion(normalizedMessages, model, effectiveSchema);
     }
 
-    return await this.#createOpenAIChatCompletion(normalizedMessages, model, effectiveSchema, temperature, reasoningEffort);
+    return await this.#createOpenAIChatCompletion(normalizedMessages, model, effectiveSchema, reasoningEffort);
   }
 
-  async #createOpenRouterChatCompletion(messages, model, zodSchema = null, temperature = null) {
+  async #createOpenRouterChatCompletion(messages, model, zodSchema = null) {
     const chatRequest = {
       model,
       messages: messages.map((m) => ({
@@ -794,9 +774,6 @@ export class LLMWrapper {
       chatRequest.responseFormat = { type: 'json_object' };
     }
 
-    if (temperature !== null && temperature !== undefined) {
-      chatRequest.temperature = temperature;
-    }
     if (this.#topP !== null && this.#topP !== undefined) {
       chatRequest.topP = this.#topP;
     }
@@ -837,7 +814,7 @@ export class LLMWrapper {
     return { ...message, content };
   }
 
-  async #createDeepSeekChatCompletion(messages, model, zodSchema = null, temperature = null) {
+  async #createDeepSeekChatCompletion(messages, model, zodSchema = null) {
     const chatRequest = {
       model,
       messages: messages.map((m) => ({
@@ -876,14 +853,6 @@ export class LLMWrapper {
       }
     }
 
-    if (temperature !== null && temperature !== undefined) {
-      chatRequest.temperature = temperature;
-    } else {
-      // DeepSeek's own evaluation recipes use temperature 0.7 (V3 tech report:
-      // math olympiad 16-run averaging at 0.7; maj@6 voting). Engines that pass no
-      // temperature get this deterministic-leaning default instead of the API's 1.0.
-      chatRequest.temperature = 0.7;
-    }
     if (this.#topP !== null && this.#topP !== undefined) {
       chatRequest.topP = this.#topP;
     }
@@ -915,7 +884,7 @@ export class LLMWrapper {
     return { ...message, content };
   }
 
-  async #createOpenAIChatCompletion(messages, model, zodSchema = null, temperature = null, reasoningEffort = null) {
+  async #createOpenAIChatCompletion(messages, model, zodSchema = null, reasoningEffort = null) {
     const completionParams = {
       messages,
       model
@@ -937,10 +906,6 @@ export class LLMWrapper {
       };
     } else if (this.#jsonObjectMode) {
       completionParams.response_format = { type: "json_object" };
-    }
-
-    if (temperature !== null && temperature !== undefined) {
-      completionParams.temperature = temperature;
     }
 
     if (reasoningEffort) {
@@ -991,7 +956,7 @@ export class LLMWrapper {
     return message;
   }
 
-  async #createGeminiChatCompletion(messages, model, zodSchema = null, temperature = null, reasoningEffort = null) {
+  async #createGeminiChatCompletion(messages, model, zodSchema = null, reasoningEffort = null) {
     const geminiMessages = this.convertMessagesToGeminiFormat(messages);
 
     // Set up request config
@@ -1006,10 +971,6 @@ export class LLMWrapper {
     // Add system instruction if present (as array of strings in config)
     if (geminiMessages.systemInstruction) {
       config.systemInstruction = [geminiMessages.systemInstruction];
-    }
-
-    if (temperature !== null && temperature !== undefined) {
-      config.temperature = temperature;
     }
 
     // Set thinking level if present (reasoningEffort is the thinking level for Gemini)
@@ -1035,7 +996,7 @@ export class LLMWrapper {
     };
   }
 
-  async #createClaudeChatCompletion(messages, model, zodSchema = null, temperature = null, reasoningEffort = null) {
+  async #createClaudeChatCompletion(messages, model, zodSchema = null, reasoningEffort = null) {
     const claudeMessages = this.convertMessagesToClaudeFormat(messages);
 
     const modelInfo = await this.#resolveAnthropicModelInfo(model);
@@ -1072,13 +1033,6 @@ export class LLMWrapper {
         text: claudeMessages.system,
         cache_control: { type: 'ephemeral' }
       }];
-    }
-
-    // An effort level runs with adaptive thinking, which only permits
-    // temperature=1 (and Opus 4.7/4.8 reject sampling params outright). So when an
-    // effort level is requested, omit temperature and let the model default it.
-    if (!reasoningEffort && temperature !== null && temperature !== undefined) {
-      completionParams.temperature = temperature;
     }
 
     // Claude models think by default: honor an explicit caller-provided thinking

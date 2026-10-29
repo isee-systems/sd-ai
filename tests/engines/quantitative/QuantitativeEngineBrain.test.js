@@ -1206,7 +1206,7 @@ describe('QuantitativeEngineBrain', () => {
       }).toThrow('Unsupported LLM o1-mini it does support structured outputs which are required.');
     });
 
-    it('should set system role to user and temperature to 1 when model lacks system mode', () => {
+    it('should set system role to user when model lacks system mode', () => {
       const engineWithoutSystemMode = new QuantitativeEngineBrain({
         openAIKey: 'test-key',
         anthropicKey: 'test-claude-key',
@@ -1217,20 +1217,19 @@ describe('QuantitativeEngineBrain', () => {
       const result = engineWithoutSystemMode.setupLLMParameters('Test prompt');
 
       expect(result.messages[0].role).toBe('system');
-      expect(result.temperature).toBeUndefined();
     });
 
-    it('should set temperature to undefined when model lacks temperature support', () => {
+    it('should not include a temperature in the LLM parameters', () => {
       const engineWithO3 = new QuantitativeEngineBrain({
         openAIKey: 'test-key',
         anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
-        underlyingModel: 'o3'  // o3 model doesn't support temperature
+        underlyingModel: 'o3'
       });
 
       const result = engineWithO3.setupLLMParameters('Test prompt');
 
-      expect(result.temperature).toBeUndefined();
+      expect(result).not.toHaveProperty('temperature');
     });
 
     it('should include background knowledge in messages when provided', () => {
@@ -1376,7 +1375,7 @@ describe('QuantitativeEngineBrain', () => {
       expect(result).toHaveProperty('messages');
       expect(result).toHaveProperty('model');
       expect(result).toHaveProperty('responseFormat');
-      expect(result).toHaveProperty('temperature');
+      expect(result).not.toHaveProperty('temperature');
       expect(result).toHaveProperty('reasoningEffort');
 
       expect(Array.isArray(result.messages)).toBe(true);

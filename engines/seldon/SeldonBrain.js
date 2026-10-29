@@ -206,7 +206,7 @@ As the world's best System Dynamics Modeler, you will consider and apply the Sys
     }
 
     setupLLMParameters(userPrompt, lastModel) {
-        const { underlyingModel, systemRole, temperature, reasoningEffort } = this.#llmWrapper.getLLMParameters();
+        const { underlyingModel, systemRole, reasoningEffort } = this.#llmWrapper.getLLMParameters();
 
         const isCLD = this.#isCLD(lastModel);
         const responseFormat = this.#llmWrapper.generateSeldonResponseSchema(!isCLD);
@@ -240,7 +240,7 @@ As the world's best System Dynamics Modeler, you will consider and apply the Sys
 
         messages.push({ role: "user", content: userPrompt });
 
-        return { messages, model: underlyingModel, temperature, reasoningEffort, responseFormat };
+        return { messages, model: underlyingModel, reasoningEffort, responseFormat };
     }
 
     async converse(userPrompt, lastModel) {
@@ -251,7 +251,6 @@ As the world's best System Dynamics Modeler, you will consider and apply the Sys
             llmParams.messages,
             llmParams.model,
             llmParams.responseFormat,
-            llmParams.temperature,
             llmParams.reasoningEffort
         );
 

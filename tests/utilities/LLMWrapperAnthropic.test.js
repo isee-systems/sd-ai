@@ -153,6 +153,20 @@ describe('asking for refusal fallbacks', () => {
   });
 });
 
+describe('sampling parameters', () => {
+  test('never sends temperature, even when the caller asks for one', async () => {
+    // API version 2026-10-21 rejects temperature, top_p and top_k on every model,
+    // so a request carrying one fails outright rather than sampling differently.
+    finalMessage = completeWith('claude-sonnet-5');
+
+    const wrapper = new LLMWrapper({ underlyingModel: 'claude-sonnet-5', temperature: 0.2 });
+    await wrapper.createChatCompletion(messages, 'claude-sonnet-5');
+
+    const params = streamSpy.mock.calls[0][0];
+    expect(params).not.toHaveProperty('temperature');
+  });
+});
+
 describe('usage attribution', () => {
   test('bills the model that answered, which a fallback makes different from the one asked for', async () => {
     modelInfo = { max_tokens: 128000, allowed_fallback_models: ['claude-opus-4-8'] };

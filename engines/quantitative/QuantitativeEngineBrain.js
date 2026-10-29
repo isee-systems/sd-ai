@@ -915,7 +915,7 @@ NEVER identify feedback loops for the user in explanatory text. Let users discov
 
     setupLLMParameters(userPrompt, lastModel) {
         //start with the system prompt
-        const { underlyingModel, systemRole, temperature, reasoningEffort } = this.#llmWrapper.getLLMParameters();
+        const { underlyingModel, systemRole, reasoningEffort } = this.#llmWrapper.getLLMParameters();
         let systemPrompt = this.#data.systemPrompt;
         let responseFormat = this.#llmWrapper.generateQuantitativeSDJSONResponseSchema(this.#data.mentorMode, this.#data.supportsArrays, this.#data.supportsModules, this.#data.supportsSubTypes);
 
@@ -966,7 +966,6 @@ NEVER identify feedback loops for the user in explanatory text. Let users discov
             messages,
             model: underlyingModel,
             responseFormat: responseFormat,
-            temperature: temperature,
             reasoningEffort: reasoningEffort
         };
     }
@@ -988,7 +987,6 @@ NEVER identify feedback loops for the user in explanatory text. Let users discov
             llmParams.messages,
             llmParams.model,
             llmParams.responseFormat,
-            llmParams.temperature,
             llmParams.reasoningEffort
         );
         if (originalResponse.refusal) {

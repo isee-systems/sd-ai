@@ -255,14 +255,13 @@ const judgeResultCache = new Map();
  */
 const runJudge = async function(generatedText, expectations) {
     const llm = new LLMWrapper({ underlyingModel: LLMWrapper.EVAL_MODEL });
-    const { underlyingModel, temperature } = llm.getLLMParameters(0);
+    const { underlyingModel } = llm.getLLMParameters();
     try {
         const messages = buildJudgeMessages(generatedText, expectations);
         const response = await llm.createChatCompletion(
             messages,
             underlyingModel,
-            policyGuidanceSchema,
-            temperature
+            policyGuidanceSchema
         );
         const parsed = JSON.parse(response.content);
         const insights = Array.isArray(parsed?.policyInsights) ? parsed.policyInsights : [];

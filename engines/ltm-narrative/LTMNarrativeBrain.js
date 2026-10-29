@@ -123,7 +123,7 @@ You can only use the information given to you by the user in your work. Any info
             throw new Error("Without active Loops that Matter Information I am unable to provide a feedback based explanation of behavior. Please turn LTM on and rerun the model.");
 
         //start with the system prompt
-        const { underlyingModel, systemRole, temperature, reasoningEffort } = this.#llmWrapper.getLLMParameters();
+        const { underlyingModel, systemRole, reasoningEffort } = this.#llmWrapper.getLLMParameters();
         let responseFormat = this.#llmWrapper.generateLTMNarrativeResponseSchema();
         let systemPrompt = this.#data.systemPrompt;
 
@@ -161,7 +161,6 @@ You can only use the information given to you by the user in your work. Any info
         return {
             messages,
             model: underlyingModel,
-            temperature: temperature,
             reasoningEffort: reasoningEffort,
             responseFormat: responseFormat
         };
@@ -175,7 +174,6 @@ You can only use the information given to you by the user in your work. Any info
             llmParams.messages,
             llmParams.model,
             llmParams.responseFormat,
-            llmParams.temperature,
             llmParams.reasoningEffort
         );
         if (originalResponse.refusal) {

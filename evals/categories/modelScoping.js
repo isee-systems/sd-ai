@@ -284,7 +284,7 @@ export const evaluate = async function(generatedResponse, expectations) {
     const llm = new LLMWrapper({
         underlyingModel: LLMWrapper.EVAL_MODEL
     });
-    const { underlyingModel, temperature } = llm.getLLMParameters(0);
+    const { underlyingModel } = llm.getLLMParameters();
 
     let decisionsByNumber;
     try {
@@ -292,8 +292,7 @@ export const evaluate = async function(generatedResponse, expectations) {
         const response = await llm.createChatCompletion(
             messages,
             underlyingModel,
-            scopingDecisionSchema,
-            temperature
+            scopingDecisionSchema
         );
 
         const parsed = JSON.parse(response.content);

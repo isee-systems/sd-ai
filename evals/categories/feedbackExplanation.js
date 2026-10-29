@@ -103,14 +103,13 @@ export const evaluate = async function(generatedResponse, expectations) {
             ];
 
             // Get LLM parameters
-            const { underlyingModel, temperature } = llm.getLLMParameters(0);
+            const { underlyingModel } = llm.getLLMParameters();
 
             // Call the LLM
             const response = await llm.createChatCompletion(
                 messages,
                 underlyingModel,
-                null,
-                temperature
+                null
             );
 
             // Check if the response indicates the fact is not present

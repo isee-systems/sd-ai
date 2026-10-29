@@ -276,15 +276,14 @@ export const evaluate = async function(generatedResponse, expectations) {
     const llm = new LLMWrapper({
         underlyingModel: LLMWrapper.EVAL_MODEL
     });
-    const { underlyingModel, temperature } = llm.getLLMParameters(0);
+    const { underlyingModel } = llm.getLLMParameters();
 
     try {
         const messages = buildQualityJudgeMessages(variables, model, allVariableNames, expectations);
         const response = await llm.createChatCompletion(
             messages,
             underlyingModel,
-            documentationQualitySchema,
-            temperature
+            documentationQualitySchema
         );
 
         const parsed = JSON.parse(response.content);

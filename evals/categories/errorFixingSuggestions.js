@@ -106,14 +106,13 @@ export const evaluate = async function(generatedResponse, expectations) {
         });
 
         // Get LLM parameters
-        const { underlyingModel, temperature } = llm.getLLMParameters(0);
+        const { underlyingModel } = llm.getLLMParameters();
 
         // Call the LLM with structured output
         const response = await llm.createChatCompletion(
             messages,
             underlyingModel,
-            structuredOutputSchema,
-            temperature
+            structuredOutputSchema
         );
 
         // Parse the structured response

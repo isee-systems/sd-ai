@@ -58,12 +58,12 @@ describe('Run Helpers', () => {
     it('should preserve non-limits properties on the config', () => {
       const engineConfig = {
         engine: 'myEngine',
-        additionalParameters: { temperature: 0.5 },
+        additionalParameters: { underlyingModel: 'gpt-5.2' },
       };
       const result = applyDefaultLimits(engineConfig);
 
       expect(result.engine).toBe('myEngine');
-      expect(result.additionalParameters).toEqual({ temperature: 0.5 });
+      expect(result.additionalParameters).toEqual({ underlyingModel: 'gpt-5.2' });
       expect(result.limits.tokensPerMinute).toBe(30000);
     });
 

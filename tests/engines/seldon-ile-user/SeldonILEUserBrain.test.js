@@ -57,17 +57,17 @@ describe('SeldonILEUserBrain', () => {
       expect(result.reasoningEffort).toBe('low');
     });
 
-    it('should set temperature to undefined when model lacks temperature support', () => {
+    it('should not include a temperature in the LLM parameters', () => {
       const brainWithO3 = new SeldonILEUserBrain({
         openAIKey: 'test-key',
         anthropicKey: 'test-claude-key',
         googleKey: 'test-google-key',
-        underlyingModel: 'o3'  // o3 model doesn't support temperature
+        underlyingModel: 'o3'
       });
 
       const result = brainWithO3.setupLLMParameters('Test prompt');
 
-      expect(result.temperature).toBeUndefined();
+      expect(result).not.toHaveProperty('temperature');
     });
 
     it('should include background knowledge in messages when provided', () => {
@@ -305,7 +305,7 @@ describe('SeldonILEUserBrain', () => {
 
       expect(result).toHaveProperty('messages');
       expect(result).toHaveProperty('model');
-      expect(result).toHaveProperty('temperature');
+      expect(result).not.toHaveProperty('temperature');
       expect(result).toHaveProperty('reasoningEffort');
       expect(result).toHaveProperty('responseFormat');
 

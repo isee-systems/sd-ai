@@ -294,7 +294,7 @@ describe('QualitativeEngineBrain', () => {
       expect(result.responseFormat).toBeUndefined();
     });
 
-    it('should set system role to user and temperature to 1 when model lacks system mode', () => {
+    it('should set system role to user when model lacks system mode', () => {
       const engineWithoutSystemMode = new QualitativeEngineBrain({
         openAIKey: 'test-key',
         anthropicKey: 'test-claude-key',
@@ -305,10 +305,9 @@ describe('QualitativeEngineBrain', () => {
       const result = engineWithoutSystemMode.setupLLMParameters('Test prompt');
 
       expect(result.messages[0].role).toBe('system');
-      expect(result.temperature).toBeUndefined();
     });
 
-    it('should set temperature to undefined when model lacks temperature support', () => {
+    it('should not include a temperature in the LLM parameters', () => {
       const engineWithO1 = new QualitativeEngineBrain({
         openAIKey: 'test-key',
         anthropicKey: 'test-claude-key',
@@ -318,7 +317,7 @@ describe('QualitativeEngineBrain', () => {
 
       const result = engineWithO1.setupLLMParameters('Test prompt');
 
-      expect(result.temperature).toBeUndefined();
+      expect(result).not.toHaveProperty('temperature');
     });
 
     it('should include background knowledge in messages when provided', () => {

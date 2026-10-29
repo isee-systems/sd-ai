@@ -162,7 +162,7 @@ Your documentation should be accessible to both technical and non-technical audi
         }
 
         // Start with the system prompt
-        const { underlyingModel, systemRole, temperature, reasoningEffort } = this.#llmWrapper.getLLMParameters();
+        const { underlyingModel, systemRole, reasoningEffort } = this.#llmWrapper.getLLMParameters();
         let responseFormat = this.#llmWrapper.generateDocumentationResponseSchema(
             this.#data.documentConnectors,
             this.#data.generatePolarity
@@ -212,7 +212,6 @@ Your documentation should be accessible to both technical and non-technical audi
         return {
             messages,
             model: underlyingModel,
-            temperature: temperature,
             reasoningEffort: reasoningEffort,
             responseFormat: responseFormat
         };
@@ -226,7 +225,6 @@ Your documentation should be accessible to both technical and non-technical audi
             llmParams.messages,
             llmParams.model,
             llmParams.responseFormat,
-            llmParams.temperature,
             llmParams.reasoningEffort
         );
 

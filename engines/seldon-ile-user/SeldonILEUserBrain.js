@@ -147,7 +147,7 @@ A dominant feedback process is one that drives more than 50% of the model's beha
 
     setupLLMParameters(userPrompt, lastModel) {
         //start with the system prompt
-        const { underlyingModel, systemRole, temperature, reasoningEffort } = this.#llmWrapper.getLLMParameters();
+        const { underlyingModel, systemRole, reasoningEffort } = this.#llmWrapper.getLLMParameters();
         let systemPrompt = this.#data.systemPrompt;
         let responseFormat = this.#llmWrapper.generateSeldonResponseSchema(true);
 
@@ -206,7 +206,6 @@ A dominant feedback process is one that drives more than 50% of the model's beha
         return {
             messages,
             model: underlyingModel,
-            temperature: temperature,
             reasoningEffort: reasoningEffort,
             responseFormat: responseFormat
         };
@@ -220,7 +219,6 @@ A dominant feedback process is one that drives more than 50% of the model's beha
             llmParams.messages,
             llmParams.model,
             llmParams.responseFormat,
-            llmParams.temperature,
             llmParams.reasoningEffort
         );
 

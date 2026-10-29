@@ -1128,7 +1128,7 @@ Please generate stock-and-flow models (SFDs) from user-provided queries to the b
     
     setupLLMParameters(userPrompt, lastModel) {
         // build system prompt
-        const { underlyingModel, systemRole, temperature, reasoningEffort } = this.#llmWrapper.getLLMParameters();
+        const { underlyingModel, systemRole, reasoningEffort } = this.#llmWrapper.getLLMParameters();
         let systemPrompt = this.#data.systemPrompt;
         let responseFormat = this.#llmWrapper.generateQuantitativeSDCodeResponseSchema(this.#data.mentorMode);
 
@@ -1174,7 +1174,6 @@ Please generate stock-and-flow models (SFDs) from user-provided queries to the b
             messages,
             model: underlyingModel,
             responseFormat: responseFormat,
-            temperature: temperature,
             reasoningEffort: reasoningEffort
         };
     }
@@ -1197,7 +1196,6 @@ Please generate stock-and-flow models (SFDs) from user-provided queries to the b
             llmParams.messages,
             llmParams.model,
             llmParams.responseFormat,
-            llmParams.temperature,
             llmParams.reasoningEffort
         );
 
