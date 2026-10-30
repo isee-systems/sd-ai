@@ -43,6 +43,20 @@ const HOP_BY_HOP = new Set([
   'te', 'trailer', 'transfer-encoding', 'upgrade', 'host',
 ]);
 
+/**
+ * A network error, readably. When every address for a host fails to connect, Node
+ * raises an AggregateError whose message is empty, which logged as a bare
+ * "upstream request failed: " under production load; its code and the individual
+ * failures are what say whether it was a refusal, a timeout or DNS.
+ */
+export function describeNetworkError(err) {
+  const parts = [err?.message, err?.code].filter(Boolean);
+  for (const inner of err?.errors ?? []) {
+    parts.push([inner?.code, inner?.address && `${inner.address}:${inner.port}`].filter(Boolean).join(' '));
+  }
+  return parts.filter(Boolean).join(' | ') || String(err);
+}
+
 class CredentialProxy {
   #server = null;
   #port = null;
@@ -199,6 +213,14 @@ class CredentialProxy {
           if (!HOP_BY_HOP.has(name.toLowerCase())) outHeaders[name] = value;
         }
         res.writeHead(upstreamRes.statusCode, outHeaders);
+        // A connection that drops after the response has started errors the
+        // response stream, not the request, and pipe() leaves the destination
+        // open — so without this the worker waits on a stream that will never
+        // end. Cut it so the client sees the failure.
+        upstreamRes.on('error', (err) => {
+          logger.error(`[credential-proxy] upstream response failed mid-stream: ${describeNetworkError(err)}`);
+          res.destroy(err);
+        });
         // Piped, never buffered: these responses are SSE streams and buffering
         // one would stall the agent until its whole turn finished.
         upstreamRes.pipe(res);
@@ -206,11 +228,17 @@ class CredentialProxy {
     );
 
     proxied.on('error', (err) => {
-      logger.error(`[credential-proxy] upstream request failed: ${err.message}`);
-      if (!res.headersSent) {
-        res.writeHead(502, { 'content-type': 'application/json' });
+      const reason = describeNetworkError(err);
+      logger.error(`[credential-proxy] upstream request failed: ${reason}`);
+      // Once the upstream's headers are relayed this is an SSE stream, and a JSON
+      // body appended to it is a corrupt event rather than an error. Cut the
+      // connection instead, which the client reports as the connection error it is.
+      if (res.headersSent) {
+        res.destroy(err);
+        return;
       }
-      res.end(JSON.stringify({ type: 'error', error: { type: 'api_error', message: `Upstream request failed: ${err.message}` } }));
+      res.writeHead(502, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ type: 'error', error: { type: 'api_error', message: `Upstream request failed: ${reason}` } }));
     });
 
     req.on('aborted', () => proxied.destroy());

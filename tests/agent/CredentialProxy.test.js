@@ -10,7 +10,7 @@
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from '@jest/globals';
 import http from 'http';
-import credentialProxy from '../../agent/utilities/CredentialProxy.js';
+import credentialProxy, { describeNetworkError } from '../../agent/utilities/CredentialProxy.js';
 
 // Stands in for api.anthropic.com and records what it was actually sent.
 let upstream;
@@ -167,5 +167,63 @@ describe('CredentialProxy', () => {
     await request('POST', '/v1/messages', { 'x-api-key': sentinel }, '{}');
 
     expect(received.url).toBe('/anthropic/v1/messages');
+  });
+});
+
+describe('CredentialProxy upstream failures', () => {
+  it('answers 502 naming the cause when upstream cannot be reached', async () => {
+    // A port nothing listens on: the connection is refused before any response.
+    const closed = http.createServer();
+    await new Promise((resolve) => closed.listen(0, '127.0.0.1', resolve));
+    const port = closed.address().port;
+    await new Promise((resolve) => closed.close(resolve));
+    process.env.ANTHROPIC_BASE_URL = `http://127.0.0.1:${port}`;
+    const sentinel = credentialProxy.issueToken('session-down');
+
+    const res = await request('POST', '/v1/messages', { 'x-api-key': sentinel }, '{}');
+
+    expect(res.status).toBe(502);
+    expect(JSON.parse(res.body).error.message).toMatch(/ECONNREFUSED/);
+  });
+
+  it('cuts a stream that fails part-way instead of appending JSON to it', async () => {
+    const flaky = http.createServer((req, res) => {
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      res.write('event: message_start\ndata: {}\n\n');
+      setTimeout(() => req.socket.destroy(), 20);
+    });
+    await new Promise((resolve) => flaky.listen(0, '127.0.0.1', resolve));
+    process.env.ANTHROPIC_BASE_URL = `http://127.0.0.1:${flaky.address().port}`;
+    const sentinel = credentialProxy.issueToken('session-flaky');
+
+    const outcome = await new Promise((resolve) => {
+      const req = http.request(`${credentialProxy.origin}/v1/messages`, { method: 'POST', headers: { 'x-api-key': sentinel } }, (res) => {
+        let body = '';
+        res.on('data', (d) => { body += d; });
+        res.on('end', () => resolve({ ended: true, body }));
+        res.on('error', () => resolve({ ended: false, body }));
+        res.on('aborted', () => resolve({ ended: false, body }));
+      });
+      req.on('error', () => resolve({ ended: false, body: '' }));
+      req.end('{}');
+    });
+    await new Promise((resolve) => flaky.close(resolve));
+
+    expect(outcome.ended).toBe(false);
+    expect(outcome.body).not.toMatch(/api_error/);
+  });
+
+  it('describes an AggregateError, whose own message is empty', () => {
+    const err = new AggregateError([
+      Object.assign(new Error('connect ETIMEDOUT'), { code: 'ETIMEDOUT', address: '160.79.104.10', port: 443 }),
+      Object.assign(new Error('connect ENETUNREACH'), { code: 'ENETUNREACH', address: '2607:6bc0::10', port: 443 })
+    ], '');
+    err.code = 'ETIMEDOUT';
+
+    const text = describeNetworkError(err);
+
+    expect(text).toMatch(/ETIMEDOUT/);
+    expect(text).toMatch(/160\.79\.104\.10:443/);
+    expect(text).toMatch(/ENETUNREACH/);
   });
 });

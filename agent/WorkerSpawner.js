@@ -569,6 +569,15 @@ export class WorkerSpawner {
           }
 
           const { code, signal } = earlyExit;
+          // The session's temp dir is the bwrap bind source and holds the IPC
+          // socket. If it is gone, the session was torn down while this worker was
+          // starting: a failure of this session, not evidence that bwrap is broken.
+          // Retrying would recreate the dir (mkdirSync above) for a dead session, and
+          // the cooldown below would refuse workers to every other session.
+          if (!existsSync(sessionTempDir)) {
+            credentialProxy.revokeToken(anthropicSentinel);
+            throw new Error(`Session ${sessionId} was torn down while its worker was starting`);
+          }
           if (attempt < MAX_ATTEMPTS) {
             logger.warn(
               `[worker:${sessionId}] bwrap exited early (code=${code} signal=${signal}) — attempt ${attempt}/${MAX_ATTEMPTS}, retrying in 3s...`

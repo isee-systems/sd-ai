@@ -40,6 +40,7 @@
 import { AgentOrchestrator } from './AgentOrchestrator.js';
 import { SessionManager } from './utilities/SessionManager.js';
 import { RagStore, createGeminiEmbedder } from './utilities/RagStore.js';
+import { TurnGate } from './utilities/TurnGate.js';
 import logger from '../utilities/logger.js';
 import config from '../config.js';
 import { join } from 'path';
@@ -72,7 +73,8 @@ class AgentWorker {
   // Per-worker RAG store (one session per worker). Created on initialize.
   #ragStore = null;
 
-  #conversationRunning = false;
+  // Which orchestrator's turn is running; see TurnGate for why this is not a boolean.
+  #turnGate = new TurnGate();
 
   // IPC send function — overridden by #setupSocketIpc when using bwrap sandbox
   #sendToMain = (msg) => process.send(msg);
@@ -209,6 +211,11 @@ class AgentWorker {
             ? { markdownContent: msg.agentConfig }
             : { path: join(__dirname, 'config', `${msg.agentId}.md`) };
           const provider = msg.provider ?? config.agentDefaultProvider;
+          // A turn still running on the outgoing agent would keep reading and writing
+          // the shared history in its own provider's format while the new agent works
+          // on it (a Gemini loop crashed on Claude-shaped messages this way). Stop it;
+          // the new agent's first message starts once it has wound down.
+          this.#turnGate.owner?.stopIteration();
           this.#orchestrator = new AgentOrchestrator(this.#sessionManager, SESSION_ID, (m) => this.#toClient(m), agentConfig, provider, msg.intelligence ?? null);
           break;
         }
@@ -227,21 +234,18 @@ class AgentWorker {
             this.#toClient({ type: 'error', sessionId: SESSION_ID, error: 'No agent selected', code: 'NO_AGENT' });
             break;
           }
-          if (this.#conversationRunning) {
-            this.#orchestrator.queueMessage(msg.message);
-            break;
-          }
-          // Pass the live session context whenever it has any history so SDK
-          // routes can inject prior turns on their first call. Covers both
-          // agent-switch handoffs and fresh sessions seeded with
-          // historicalMessages via initialize_session. SDK routes self-gate on
-          // their own session-id state, so re-passing on subsequent chats is a
-          // no-op for them.
-          const sessionCtx = this.#sessionManager.getConversationContext(SESSION_ID);
-          const previousContext = sessionCtx.length > 0 ? sessionCtx : null;
-          this.#conversationRunning = true;
-          this.#orchestrator.startConversation(msg.message, previousContext)
-            .finally(() => { this.#conversationRunning = false; });
+          this.#turnGate.submit(this.#orchestrator, msg.message, (orchestrator, message) => {
+            // Pass the live session context whenever it has any history so SDK
+            // routes can inject prior turns on their first call. Covers both
+            // agent-switch handoffs and fresh sessions seeded with
+            // historicalMessages via initialize_session. SDK routes self-gate on
+            // their own session-id state, so re-passing on subsequent chats is a
+            // no-op for them. Read when the turn starts, not when the message
+            // arrives: after an agent switch that is once the old turn has ended.
+            const sessionCtx = this.#sessionManager.getConversationContext(SESSION_ID);
+            const previousContext = sessionCtx.length > 0 ? sessionCtx : null;
+            return orchestrator.startConversation(message, previousContext);
+          });
           break;
         }
 

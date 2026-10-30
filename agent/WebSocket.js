@@ -446,6 +446,13 @@ export class WebSocketHandler {
         catch { /* prewarm rejected; fall through to fresh spawn below */ }
       }
 
+      // Checked again after the wait: under load a prewarm can take minutes, and
+      // #onClose awaits the same promise. If it won the race it has already killed
+      // the worker and deleted the session, and spawning "fresh" here would start a
+      // worker for a session that no longer exists — its bwrap retries then fail on
+      // the vanished temp dir and trip the sandbox cooldown for every session.
+      if (this.#ws.readyState !== 1) return;
+
       if (!this.#worker) {
         // Prewarm failed, or this is an agent-switch that just killed the
         // prior worker. Spawn fresh. Publish the in-flight spawn so

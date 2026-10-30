@@ -143,4 +143,29 @@ describe('WorkerSpawner bwrap cooldown (self-healing, not a permanent latch)', (
     expect(r3.ok).toBe(false);
     expect(r3.error).toBeInstanceOf(SandboxUnavailableError);
   }, 20_000);
+
+  it('does not blame the sandbox when the session was torn down mid-spawn', async () => {
+    // Seen in production under load: a client left while its worker was starting,
+    // teardown deleted the session's temp dir, and bwrap failed on the missing
+    // bind source. Three slow retries later the cooldown refused workers to every
+    // other session on that process.
+    jest.setSystemTime(10_000_000); // well past any cooldown armed above
+
+    const dir = makeTempDir();
+    mockSpawn.mockImplementation(() => {
+      rmSync(dir, { recursive: true, force: true }); // teardown wins the race
+      return makeFailingProc();
+    });
+    const r1 = await settle(WorkerSpawner.spawn('gone', dir));
+    expect(r1.ok).toBe(false);
+    expect(r1.error).not.toBeInstanceOf(SandboxUnavailableError);
+    expect(r1.error.message).toMatch(/torn down/);
+    expect(mockSpawn).toHaveBeenCalledTimes(1); // no retries for a dead session
+
+    // The next session still gets a real bwrap attempt: no cooldown was armed.
+    mockSpawn.mockReset();
+    mockSpawn.mockImplementation(() => makeFailingProc());
+    await settle(WorkerSpawner.spawn('next', makeTempDir()));
+    expect(mockSpawn).toHaveBeenCalled();
+  }, 20_000);
 });
